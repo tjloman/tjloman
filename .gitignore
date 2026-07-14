@@ -1,0 +1,10 @@
+# Godot generated cache/import data — never commit
+.godot/
+*.translation
+
+# Exported builds
+/builds/
+
+# OS junk
+.DS_Store
+Thumbs.db
