@@ -40,8 +40,9 @@ func _refresh_stack() -> void:
 	_stack.clear()
 	var shown: int = mini(food_count, 12)
 	for i in shown:
+		var layer := floorf(i / 6.0)
 		var m := Util.sphere(0.22, Color(0.9, 0.6, 0.2),
-			Vector3(randf_range(-0.8, 0.8), 0.5 + (i / 6) * 0.4, randf_range(-0.8, 0.8)))
+			Vector3(randf_range(-0.8, 0.8), 0.5 + layer * 0.4, randf_range(-0.8, 0.8)))
 		add_child(m)
 		_stack.append(m)
 
