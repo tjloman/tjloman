@@ -1,8 +1,10 @@
 class_name FoodStore
 extends Node3D
-## The village granary. Food stock is visualized as a stack of spheres.
+## The village granary, now with separate plant and meat stocks.
+## Stock is visualized as a pile: orange spheres = plants, red cubes = meat.
 
-var food_count := 10
+var plant_food := 10
+var meat_food := 0
 
 var _stack: Array[MeshInstance3D] = []
 
@@ -18,34 +20,54 @@ func _ready() -> void:
 	_refresh_stack()
 
 
-func add(amount: int) -> void:
-	food_count += amount
+func add(type: FoodItem.FoodType, amount: int) -> void:
+	if type == FoodItem.FoodType.PLANT:
+		plant_food += amount
+	else:
+		meat_food += amount
 	_refresh_stack()
 
 
-func take(amount: int) -> int:
-	var taken: int = mini(amount, food_count)
-	food_count -= taken
+## Takes up to `amount` food of the given type; returns how much was taken.
+func take(type: FoodItem.FoodType, amount: int) -> int:
+	var taken := 0
+	if type == FoodItem.FoodType.PLANT:
+		taken = mini(amount, plant_food)
+		plant_food -= taken
+	else:
+		taken = mini(amount, meat_food)
+		meat_food -= taken
 	_refresh_stack()
 	return taken
 
 
-func has_food() -> bool:
-	return food_count > 0
+func has(type: FoodItem.FoodType) -> bool:
+	return plant_food > 0 if type == FoodItem.FoodType.PLANT else meat_food > 0
+
+
+func total_food() -> int:
+	return plant_food + meat_food
 
 
 func _refresh_stack() -> void:
 	for m in _stack:
 		m.queue_free()
 	_stack.clear()
-	var shown: int = mini(food_count, 12)
-	for i in shown:
-		var layer := floorf(i / 6.0)
+	var shown_plants: int = mini(plant_food, 8)
+	var shown_meat: int = mini(meat_food, 8)
+	for i in shown_plants:
+		var layer := floorf(i / 4.0)
 		var m := Util.sphere(0.22, Color(0.9, 0.6, 0.2),
-			Vector3(randf_range(-0.8, 0.8), 0.5 + layer * 0.4, randf_range(-0.8, 0.8)))
+			Vector3(randf_range(-0.8, 0.0), 0.5 + layer * 0.4, randf_range(-0.8, 0.8)))
+		add_child(m)
+		_stack.append(m)
+	for i in shown_meat:
+		var layer := floorf(i / 4.0)
+		var m := Util.box(Vector3(0.3, 0.3, 0.3), Color(0.72, 0.22, 0.18),
+			Vector3(randf_range(0.1, 0.8), 0.5 + layer * 0.4, randf_range(-0.8, 0.8)))
 		add_child(m)
 		_stack.append(m)
 
 
 func hover_text() -> String:
-	return "Granary — %d food stored" % food_count
+	return "Granary — %d plants · %d meat" % [plant_food, meat_food]

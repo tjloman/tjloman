@@ -1,13 +1,19 @@
 class_name HUD
 extends CanvasLayer
-## Minimal godly dashboard: belief + prayer power bars, gesture legend,
-## hover tooltip that follows the cursor, announcements, F1 help.
+## The godly dashboard: belief, prayer power, and alignment bars; population
+## census; diet policy readout; gesture legend; hover tooltip; announcements;
+## F1 help.
 
 var village: Village
 var divine_hand: DivineHand
 
 var _belief_bar: ProgressBar
 var _prayer_bar: ProgressBar
+var _alignment_bar: ProgressBar
+var _alignment_fill: StyleBoxFlat
+var _alignment_label: Label
+var _census_label: Label
+var _diet_label: Label
 var _hover_label: Label
 var _message_label: Label
 var _message_timer := 0.0
@@ -23,6 +29,7 @@ func _ready() -> void:
 	_build_help_panel()
 
 	GameState.prayer_power_changed.connect(_on_prayer_changed)
+	GameState.alignment_changed.connect(_on_alignment_changed)
 	GameState.announcement.connect(_on_announcement)
 	if divine_hand != null:
 		divine_hand.hover_info_changed.connect(_on_hover_info)
@@ -41,6 +48,20 @@ func _build_bars() -> void:
 	vbox.add_child(_make_label("Prayer Power"))
 	_prayer_bar = _make_bar(Color(0.5, 0.7, 1.0))
 	vbox.add_child(_prayer_bar)
+
+	_alignment_label = _make_label("Alignment — Neutral")
+	vbox.add_child(_alignment_label)
+	_alignment_bar = _make_bar(Color(0.8, 0.8, 0.8))
+	_alignment_bar.max_value = 200.0  # alignment -100..100 mapped to 0..200
+	_alignment_bar.value = 100.0
+	_alignment_fill = _alignment_bar.get_theme_stylebox("fill") as StyleBoxFlat
+	vbox.add_child(_alignment_bar)
+
+	_census_label = _make_label("")
+	vbox.add_child(_census_label)
+
+	_diet_label = _make_label("")
+	vbox.add_child(_diet_label)
 
 
 func _make_label(text: String) -> Label:
@@ -107,24 +128,29 @@ func _build_help_panel() -> void:
 	help.text = """DIVINE CONTROLS
 
 Left mouse (on land) ....... grab & drag the world
-Left mouse (on things) ..... pick up food, rocks, villagers
-Release while moving ....... throw!
+Left mouse (on things) ..... pick up food, rocks, sheep, villagers
+Release while moving ....... throw! (hard landings hurt — and stain your soul)
 Right mouse (hold) ......... draw a miracle gesture
 Mouse wheel ................ zoom
 Middle mouse (drag) ........ rotate camera
 WASD / arrows .............. pan camera
 Q / E ...................... rotate camera
+1 / 2 / 3 / 4 .............. village diet: Vegan / Omnivore / Carnivore / Cannibal
 F1 ......................... toggle this help
 
 MIRACLES (drawn with right mouse held)
 Circle ..................... Food falls from the sky (20)
-Zigzag ..................... Rain blesses the crops (25)
-Vertical stroke ............ Lightning strikes (30)
+Zigzag ..................... Rain — crops grow 4x (25)
+Vertical stroke ............ Lightning — LETHAL up close (30)
 Horizontal stroke .......... Healing wave (15)
 
-Miracles seen by villagers raise Belief.
-Belief widens your influence and deepens your power.
-Worshippers at the totem restore Prayer Power."""
+THE WORLD
+Villagers age, marry in worship, bear children (9 months), and die.
+The dead leave corpses. What happens to corpses is... policy.
+Sheep are meat. Cannibal villages have other sources.
+Your alignment colors your hand and the influence ring.
+Your creature has its OWN morality — it learns from watching you.
+A monstrous creature will eat your villagers. A gentle one farms."""
 	help.add_theme_font_size_override("font_size", 15)
 	var margin := MarginContainer.new()
 	for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
@@ -137,6 +163,16 @@ Worshippers at the totem restore Prayer Power."""
 func _process(delta: float) -> void:
 	if village != null:
 		_belief_bar.value = village.belief
+		var adults := 0
+		var children := 0
+		for v in get_tree().get_nodes_in_group("villagers"):
+			if (v as Villager).is_adult():
+				adults += 1
+			else:
+				children += 1
+		_census_label.text = "Souls: %d adults, %d children — Year %d" \
+			% [adults, children, int(GameState.game_years)]
+		_diet_label.text = "Diet [1-4]: %s" % village.diet_name()
 	_hover_label.position = _hover_label.get_viewport().get_mouse_position() + Vector2(18, 18)
 
 	if _message_timer > 0.0:
@@ -153,6 +189,13 @@ func _unhandled_input(event: InputEvent) -> void:
 func _on_prayer_changed(value: float, max_value: float) -> void:
 	_prayer_bar.max_value = max_value
 	_prayer_bar.value = value
+
+
+func _on_alignment_changed(value: float) -> void:
+	_alignment_bar.value = value + 100.0
+	_alignment_label.text = "Alignment — %s" % GameState.alignment_word()
+	if _alignment_fill != null:
+		_alignment_fill.bg_color = GameState.alignment_color()
 
 
 func _on_announcement(text: String) -> void:

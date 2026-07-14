@@ -26,6 +26,9 @@ var ground_point := Vector3.ZERO
 # Recent hand positions, for computing throw velocity on release.
 var _pos_history: Array[Vector3] = []
 
+var _hand_material: StandardMaterial3D
+var _glow: OmniLight3D
+
 
 func _ready() -> void:
 	_build_hand_mesh()
@@ -34,27 +37,40 @@ func _ready() -> void:
 
 
 func _build_hand_mesh() -> void:
-	var hand_color := Color(1.0, 0.9, 0.65)
+	# One shared material so the whole hand recolors with the player's karma.
+	_hand_material = Util.mat(GameState.alignment_color())
 	# Palm.
-	add_child(Util.box(Vector3(0.9, 0.18, 1.0), hand_color, Vector3.ZERO))
+	_add_hand_part(Util.box(Vector3(0.9, 0.18, 1.0), Color.WHITE, Vector3.ZERO))
 	# Four fingers.
 	for i in 4:
 		var x := -0.33 + i * 0.22
 		var length := 0.55 if (i == 1 or i == 2) else 0.45
-		add_child(Util.box(
-			Vector3(0.16, 0.15, length), hand_color,
+		_add_hand_part(Util.box(
+			Vector3(0.16, 0.15, length), Color.WHITE,
 			Vector3(x, 0.0, -0.5 - length * 0.5)))
 	# Thumb.
-	var thumb := Util.box(Vector3(0.16, 0.15, 0.42), hand_color, Vector3(0.55, 0.0, 0.05))
+	var thumb := Util.box(Vector3(0.16, 0.15, 0.42), Color.WHITE, Vector3(0.55, 0.0, 0.05))
 	thumb.rotation_degrees.y = -40
-	add_child(thumb)
+	_add_hand_part(thumb)
 	# Faint divine glow.
-	var glow := OmniLight3D.new()
-	glow.light_color = Color(1.0, 0.95, 0.8)
-	glow.light_energy = 0.6
-	glow.omni_range = 4.0
-	glow.position = Vector3(0, 0.5, 0)
-	add_child(glow)
+	_glow = OmniLight3D.new()
+	_glow.light_color = Color(1.0, 0.95, 0.8)
+	_glow.light_energy = 0.6
+	_glow.omni_range = 4.0
+	_glow.position = Vector3(0, 0.5, 0)
+	add_child(_glow)
+	GameState.alignment_changed.connect(_on_alignment_changed)
+
+
+func _add_hand_part(part: MeshInstance3D) -> void:
+	part.material_override = _hand_material
+	add_child(part)
+
+
+func _on_alignment_changed(_value: float) -> void:
+	var c := GameState.alignment_color()
+	_hand_material.albedo_color = c
+	_glow.light_color = c
 
 
 func _physics_process(delta: float) -> void:

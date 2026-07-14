@@ -27,6 +27,9 @@ func _ready() -> void:
 	creature.position = Vector3(10, 0, 10)
 	add_child(creature)
 
+	_spawn_sheep_flock()
+	_start_fauna_breeding()
+
 	camera_rig = CameraRig.new()
 	add_child(camera_rig)
 
@@ -61,6 +64,10 @@ func _setup_input() -> void:
 		"cam_rotate_left": [KEY_Q],
 		"cam_rotate_right": [KEY_E],
 		"toggle_help": [KEY_F1],
+		"diet_vegan": [KEY_1],
+		"diet_omnivore": [KEY_2],
+		"diet_carnivore": [KEY_3],
+		"diet_cannibal": [KEY_4],
 	}
 	for action: String in actions:
 		if InputMap.has_action(action):
@@ -155,6 +162,49 @@ func _scatter_nature() -> void:
 		add_child(rock)
 
 
+func _spawn_sheep_flock() -> void:
+	for i in 8:
+		var sheep := Sheep.new()
+		var angle := randf() * TAU
+		var dist := randf_range(18.0, 45.0)
+		sheep.position = Vector3(cos(angle) * dist, 0.5, sin(angle) * dist)
+		add_child(sheep)
+
+
+## Sheep multiply slowly, as sheep do — so a carnivore village can survive
+## if it doesn't eat faster than the flock breeds.
+func _start_fauna_breeding() -> void:
+	var timer := Timer.new()
+	timer.wait_time = 45.0
+	timer.autostart = true
+	timer.timeout.connect(_breed_sheep)
+	add_child(timer)
+
+
+func _breed_sheep() -> void:
+	var flock := get_tree().get_nodes_in_group("animals")
+	if flock.size() < 2 or flock.size() >= 14:
+		return
+	var parent := flock[randi() % flock.size()] as Sheep
+	if not is_instance_valid(parent):
+		return
+	var lamb := Sheep.new()
+	lamb.position = parent.global_position + Vector3(randf_range(-1, 1), 0.5, randf_range(-1, 1))
+	add_child(lamb)
+
+
+## Diet policy hotkeys (1-4) apply to the village.
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("diet_vegan"):
+		village.set_diet(Village.Diet.VEGAN)
+	elif event.is_action_pressed("diet_omnivore"):
+		village.set_diet(Village.Diet.OMNIVORE)
+	elif event.is_action_pressed("diet_carnivore"):
+		village.set_diet(Village.Diet.CARNIVORE)
+	elif event.is_action_pressed("diet_cannibal"):
+		village.set_diet(Village.Diet.CANNIBAL)
+
+
 func _make_tree(pos: Vector3) -> Node3D:
 	var tree := Node3D.new()
 	tree.position = pos
@@ -185,10 +235,26 @@ func _run_smoke_test() -> void:
 		var ok := miracles.cast(miracle, Vector3(5, 0, 5))
 		print("SMOKE TEST: cast %s -> %s" % [miracle, ok])
 		await get_tree().create_timer(0.5).timeout
+	# Exercise diet policies and the karma systems.
+	for diet: Village.Diet in [Village.Diet.VEGAN, Village.Diet.CARNIVORE,
+			Village.Diet.CANNIBAL, Village.Diet.OMNIVORE]:
+		village.set_diet(diet)
+	print("SMOKE TEST: alignment after casts/diets = %.1f (%s)"
+		% [GameState.alignment, GameState.alignment_word()])
+
+	# Kill one villager to exercise death -> corpse.
+	var victim := get_tree().get_first_node_in_group("villagers") as Villager
+	victim.take_damage(999.0, true)
+	await get_tree().create_timer(1.0).timeout
+	print("SMOKE TEST: corpses=%d after a divine execution" %
+		get_tree().get_nodes_in_group("corpses").size())
+
 	await get_tree().create_timer(2.0).timeout
-	print("SMOKE TEST: villagers=%d creature_state=%s belief=%.1f" % [
+	print("SMOKE TEST: villagers=%d sheep=%d creature_state=%s creature_morality=%.1f belief=%.1f" % [
 		get_tree().get_nodes_in_group("villagers").size(),
+		get_tree().get_nodes_in_group("animals").size(),
 		creature.state_name(),
+		creature.morality,
 		village.belief,
 	])
 	print("SMOKE TEST OK")

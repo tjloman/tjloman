@@ -1,9 +1,9 @@
 class_name MiracleManager
 extends Node3D
-## Owns the miracle catalog: gesture mapping, prayer costs, and effects.
-## Add a new miracle by extending MIRACLES and adding a _cast_* method —
-## this table is the seam where "dozens of miracles, unlockable/improvable"
-## will plug in later.
+## Owns the miracle catalog: gesture mapping, prayer costs, karmic weight,
+## and effects. Add a new miracle by extending MIRACLES and adding a _cast_*
+## method — this table is the seam where "dozens of miracles, unlockable and
+## improvable" will plug in later.
 
 const MIRACLES := {
 	"circle": {"name": "food", "cost": 20.0},
@@ -11,6 +11,19 @@ const MIRACLES := {
 	"vline": {"name": "lightning", "cost": 30.0},
 	"hline": {"name": "heal", "cost": 15.0},
 }
+
+## How each miracle moves the player's karma, and what the creature learns
+## from watching it happen.
+const KARMA := {
+	"food": {"player": 2.0, "creature": 1.5},
+	"rain": {"player": 2.0, "creature": 1.5},
+	"heal": {"player": 3.0, "creature": 2.0},
+	"lightning": {"player": -4.0, "creature": -3.0},
+}
+
+const LIGHTNING_KILL_RADIUS := 3.0
+const LIGHTNING_BURN_RADIUS := 8.0
+const CREATURE_SIGHT_RANGE := 45.0
 
 var village: Village
 
@@ -37,9 +50,19 @@ func cast(miracle: String, pos: Vector3, cost := 0.0) -> bool:
 			_cast_heal(pos)
 		_:
 			return false
+	_apply_karma(miracle, pos)
 	if village != null:
 		village.witness_miracle(miracle, pos)
 	return true
+
+
+func _apply_karma(miracle: String, pos: Vector3) -> void:
+	if not KARMA.has(miracle):
+		return
+	GameState.shift_alignment(KARMA[miracle]["player"])
+	var creature := get_tree().get_first_node_in_group("creature") as Creature
+	if creature != null and creature.global_position.distance_to(pos) < CREATURE_SIGHT_RANGE:
+		creature.witness(KARMA[miracle]["creature"])
 
 
 func _cast_food(pos: Vector3) -> void:
@@ -72,14 +95,12 @@ func _cast_rain(pos: Vector3) -> void:
 	cloud.add_child(drops)
 	add_child(cloud)
 
-	# Water everything in range.
 	for f in get_tree().get_nodes_in_group("farms"):
 		var farm := f as Farm
 		if farm.global_position.distance_to(pos) < 14.0:
 			farm.water(12.0)
 
-	var timer := get_tree().create_timer(12.0)
-	timer.timeout.connect(cloud.queue_free)
+	get_tree().create_timer(12.0).timeout.connect(cloud.queue_free)
 
 
 func _drop_mesh() -> SphereMesh:
@@ -90,6 +111,8 @@ func _drop_mesh() -> SphereMesh:
 	return m
 
 
+## Lightning is now lethal at the point of impact. An evil god's bread
+## and butter; a good god's gravest temptation.
 func _cast_lightning(pos: Vector3) -> void:
 	var bolt := Util.cylinder(0.3, 30.0, Color(1.0, 1.0, 0.9), pos + Vector3(0, 15, 0), true)
 	add_child(bolt)
@@ -105,6 +128,20 @@ func _cast_lightning(pos: Vector3) -> void:
 	get_tree().create_timer(0.25).timeout.connect(bolt.queue_free)
 	get_tree().create_timer(0.25).timeout.connect(flash.queue_free)
 	get_tree().create_timer(20.0).timeout.connect(scorch.queue_free)
+
+	for v in get_tree().get_nodes_in_group("villagers"):
+		var villager := v as Villager
+		var dist := villager.global_position.distance_to(pos)
+		if dist < LIGHTNING_KILL_RADIUS:
+			GameState.shift_alignment(-4.0)  # on top of the cast itself
+			villager.take_damage(999.0, true)
+		elif dist < LIGHTNING_BURN_RADIUS:
+			villager.take_damage(40.0, true)
+
+	for s in get_tree().get_nodes_in_group("animals"):
+		var sheep := s as Sheep
+		if sheep.global_position.distance_to(pos) < LIGHTNING_KILL_RADIUS:
+			sheep.die()  # drops cooked-ish meat where it stood
 
 
 func _cast_heal(pos: Vector3) -> void:
