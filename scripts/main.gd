@@ -1,40 +1,46 @@
 extends Node3D
-## Main orchestrator: builds the world, wires all systems together.
-## Everything is constructed procedurally from primitives — this is a
-## deliberately ugly proof of concept. Art comes later; systems come first.
-
-const WORLD_SIZE := 400.0
+## Main orchestrator: boots the endless world, runs the day/night cycle,
+## and wires all systems together. Terrain, villages, and wildlife are the
+## WorldGen's job now — this file owns the sky, the clock, and the player.
 
 var camera_rig: CameraRig
 var divine_hand: DivineHand
 var miracles: MiracleManager
-var village: Village
+var world_gen: WorldGen
+var village: Village          # the player's home village
 var creature: Creature
 var hud: HUD
+
+var _sun: DirectionalLight3D
+var _moon: DirectionalLight3D
+var _sky_material: ProceduralSkyMaterial
+var _environment: Environment
 
 
 func _ready() -> void:
 	_setup_input()
 	_build_environment()
-	_build_terrain()
-	_scatter_nature()
 
+	world_gen = WorldGen.new()
+	add_child(world_gen)
+
+	# The player's home village sits at the origin, in the flattened cradle.
 	village = Village.new()
-	village.position = Vector3.ZERO
+	village.is_player_home = true
+	village.village_name = "Elsmere"
+	village.position = Vector3(0, world_gen.height_at(0, 0), 0)
 	add_child(village)
+	world_gen.player_village = village
 
 	creature = Creature.new()
-	creature.position = Vector3(10, 0, 10)
+	creature.position = Vector3(10, world_gen.height_at(10, 10) + 0.5, 10)
 	add_child(creature)
-
-	_spawn_sheep_flock()
-	_start_fauna_breeding()
 
 	camera_rig = CameraRig.new()
 	add_child(camera_rig)
+	world_gen.focus_node = camera_rig
 
 	miracles = MiracleManager.new()
-	miracles.village = village
 	add_child(miracles)
 
 	divine_hand = DivineHand.new()
@@ -47,14 +53,46 @@ func _ready() -> void:
 	hud.divine_hand = divine_hand
 	add_child(hud)
 
-	GameState.announce("A new god stirs. The village of Elsmere awaits your influence.")
+	GameState.announce("A new god stirs over an endless world. Elsmere awaits your influence.")
 
 	if "--smoke-test" in OS.get_cmdline_user_args():
 		_run_smoke_test()
 
 
-## Input actions are registered in code so the whole project stays reviewable
-## as plain text (no opaque project.godot input blobs).
+func _process(_delta: float) -> void:
+	_update_daylight()
+
+
+## The day/night cycle: one full cycle per 16 villager years. The sun wheels
+## overhead, hands off to a pale moon, and house windows light up at dusk.
+func _update_daylight() -> void:
+	var df := GameState.day_fraction()
+	var elev := GameState.sun_elevation()   # -1 midnight .. +1 noon
+
+	_sun.rotation_degrees = Vector3(-(df * 360.0 - 90.0), 20.0, 0)
+	_sun.light_energy = maxf(elev, 0.0) * 1.2 + 0.02
+	_sun.light_color = Color(1.0, 0.75 + 0.25 * clampf(elev, 0, 1), 0.6 + 0.4 * clampf(elev, 0, 1))
+
+	_moon.rotation_degrees = Vector3(-(df * 360.0 + 90.0), -30.0, 0)
+	_moon.light_energy = maxf(-elev, 0.0) * 0.22
+
+	var day_top := Color(0.32, 0.52, 0.82)
+	var day_horizon := Color(0.7, 0.78, 0.85)
+	var night_top := Color(0.03, 0.04, 0.1)
+	var night_horizon := Color(0.08, 0.09, 0.16)
+	var dusk_horizon := Color(0.9, 0.5, 0.3)
+	var t := clampf((elev + 0.3) / 0.9, 0.0, 1.0)
+	_sky_material.sky_top_color = night_top.lerp(day_top, t)
+	var horizon := night_horizon.lerp(day_horizon, t)
+	# A band of fire at dawn and dusk.
+	var duskiness := clampf(1.0 - absf(elev) * 3.5, 0.0, 1.0)
+	horizon = horizon.lerp(dusk_horizon, duskiness * 0.7)
+	_sky_material.sky_horizon_color = horizon
+	_sky_material.ground_horizon_color = horizon
+	_environment.ambient_light_energy = lerpf(0.25, 1.0, t)
+	_environment.fog_light_color = horizon.darkened(0.2)
+
+
 func _setup_input() -> void:
 	var actions := {
 		"cam_forward": [KEY_W, KEY_UP],
@@ -80,120 +118,40 @@ func _setup_input() -> void:
 
 
 func _build_environment() -> void:
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-55, 35, 0)
-	sun.shadow_enabled = true
-	sun.light_energy = 1.2
-	add_child(sun)
+	_sun = DirectionalLight3D.new()
+	_sun.shadow_enabled = true
+	add_child(_sun)
 
-	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.35, 0.55, 0.85)
-	sky_mat.sky_horizon_color = Color(0.7, 0.78, 0.85)
+	_moon = DirectionalLight3D.new()
+	_moon.light_color = Color(0.7, 0.78, 1.0)
+	_moon.shadow_enabled = true
+	add_child(_moon)
+
+	_sky_material = ProceduralSkyMaterial.new()
 	var sky := Sky.new()
-	sky.sky_material = sky_mat
+	sky.sky_material = _sky_material
 
-	var env := Environment.new()
-	env.background_mode = Environment.BG_SKY
-	env.sky = sky
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_sky_contribution = 0.6
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	_environment = Environment.new()
+	_environment.background_mode = Environment.BG_SKY
+	_environment.sky = sky
+	_environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	_environment.ambient_light_sky_contribution = 0.7
+	_environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	# The polish pass: distance fog, soft bloom on emissives, contact shadows.
+	_environment.fog_enabled = true
+	_environment.fog_density = 0.004
+	_environment.fog_sky_affect = 0.2
+	_environment.glow_enabled = true
+	_environment.glow_intensity = 0.5
+	_environment.glow_bloom = 0.1
+	_environment.ssao_enabled = true
 
 	var world_env := WorldEnvironment.new()
-	world_env.environment = env
+	world_env.environment = _environment
 	add_child(world_env)
 
 
-func _build_terrain() -> void:
-	var ground := StaticBody3D.new()
-	ground.name = "Ground"
-	ground.collision_layer = 1
-	ground.collision_mask = 0
-	ground.add_to_group("ground")
-
-	var shape := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	box.size = Vector3(WORLD_SIZE, 1.0, WORLD_SIZE)
-	shape.shape = box
-	shape.position = Vector3(0, -0.5, 0)
-	ground.add_child(shape)
-
-	ground.add_child(Util.box(
-		Vector3(WORLD_SIZE, 1.0, WORLD_SIZE),
-		Color(0.36, 0.55, 0.3),
-		Vector3(0, -0.5, 0)))
-	add_child(ground)
-
-	# Random darker grass patches make camera movement readable on a flat plane.
-	for i in 40:
-		var patch := Util.cylinder(
-			randf_range(2.0, 7.0), 0.04,
-			Color(0.3, 0.48, 0.26),
-			Vector3(randf_range(-150, 150), 0.02, randf_range(-150, 150)))
-		add_child(patch)
-
-
-func _scatter_nature() -> void:
-	# Trees: ring around the village, none inside it.
-	for i in 30:
-		var angle := randf() * TAU
-		var dist := randf_range(25.0, 120.0)
-		var pos := Vector3(cos(angle) * dist, 0, sin(angle) * dist)
-		add_child(_make_tree(pos))
-
-	# Rocks: pickable rigid bodies, fun to throw.
-	for i in 10:
-		var angle := randf() * TAU
-		var dist := randf_range(15.0, 80.0)
-		var rock := RigidBody3D.new()
-		rock.collision_layer = 4
-		rock.collision_mask = 1 | 4
-		rock.mass = 5.0
-		rock.add_to_group("pickable")
-		rock.set_meta("hover_name", "Rock")
-		var r := randf_range(0.4, 0.8)
-		var col := CollisionShape3D.new()
-		var sphere_shape := SphereShape3D.new()
-		sphere_shape.radius = r
-		col.shape = sphere_shape
-		rock.add_child(col)
-		rock.add_child(Util.sphere(r, Color(0.5, 0.5, 0.52)))
-		rock.position = Vector3(cos(angle) * dist, r + 0.5, sin(angle) * dist)
-		add_child(rock)
-
-
-func _spawn_sheep_flock() -> void:
-	for i in 8:
-		var sheep := Sheep.new()
-		var angle := randf() * TAU
-		var dist := randf_range(18.0, 45.0)
-		sheep.position = Vector3(cos(angle) * dist, 0.5, sin(angle) * dist)
-		add_child(sheep)
-
-
-## Sheep multiply slowly, as sheep do — so a carnivore village can survive
-## if it doesn't eat faster than the flock breeds.
-func _start_fauna_breeding() -> void:
-	var timer := Timer.new()
-	timer.wait_time = 45.0
-	timer.autostart = true
-	timer.timeout.connect(_breed_sheep)
-	add_child(timer)
-
-
-func _breed_sheep() -> void:
-	var flock := get_tree().get_nodes_in_group("animals")
-	if flock.size() < 2 or flock.size() >= 14:
-		return
-	var parent := flock[randi() % flock.size()] as Sheep
-	if not is_instance_valid(parent):
-		return
-	var lamb := Sheep.new()
-	lamb.position = parent.global_position + Vector3(randf_range(-1, 1), 0.5, randf_range(-1, 1))
-	add_child(lamb)
-
-
-## Diet policy hotkeys (1-4) apply to the village.
+## Diet policy hotkeys (1-4) apply to the player's home village.
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("diet_vegan"):
 		village.set_diet(Village.Diet.VEGAN)
@@ -205,57 +163,51 @@ func _unhandled_input(event: InputEvent) -> void:
 		village.set_diet(Village.Diet.CANNIBAL)
 
 
-func _make_tree(pos: Vector3) -> Node3D:
-	var tree := Node3D.new()
-	tree.position = pos
-	var h := randf_range(2.5, 4.5)
-	tree.add_child(Util.cylinder(0.25, h, Color(0.42, 0.3, 0.18), Vector3(0, h * 0.5, 0)))
-	var leaves := Util.mesh_node(_cone_mesh(1.6, 2.8), Color(0.2, 0.45, 0.2), Vector3(0, h + 1.2, 0))
-	tree.add_child(leaves)
-	return tree
-
-
-func _cone_mesh(radius: float, height: float) -> CylinderMesh:
-	var m := CylinderMesh.new()
-	m.top_radius = 0.0
-	m.bottom_radius = radius
-	m.height = height
-	return m
-
-
-## Headless CI/validation mode: exercises every major system for a few
-## seconds, then exits. Run with:
+## Headless CI/validation: exercises every major system, then exits.
 ##   godot --headless --path . -- --smoke-test
 func _run_smoke_test() -> void:
 	print("SMOKE TEST: starting")
 	_smoke_test_gestures()
-	await get_tree().create_timer(1.0).timeout
+	await get_tree().create_timer(1.5).timeout
+	print("SMOKE TEST: chunks=%d biome(0,0)=%s height(0,0)=%.2f water(200,200)=%s" % [
+		world_gen.get_child_count(),
+		world_gen.biome_at(0, 0),
+		world_gen.height_at(0, 0),
+		world_gen.is_underwater(200, 200),
+	])
 	for miracle: String in ["food", "rain", "heal", "lightning"]:
 		GameState.add_prayer_power(50.0)
 		var ok := miracles.cast(miracle, Vector3(5, 0, 5))
 		print("SMOKE TEST: cast %s -> %s" % [miracle, ok])
-		await get_tree().create_timer(0.5).timeout
-	# Exercise diet policies and the karma systems.
+		await get_tree().create_timer(0.4).timeout
+
 	for diet: Village.Diet in [Village.Diet.VEGAN, Village.Diet.CARNIVORE,
 			Village.Diet.CANNIBAL, Village.Diet.OMNIVORE]:
 		village.set_diet(diet)
-	print("SMOKE TEST: alignment after casts/diets = %.1f (%s)"
-		% [GameState.alignment, GameState.alignment_word()])
+	print("SMOKE TEST: alignment=%.1f (%s)" % [GameState.alignment, GameState.alignment_word()])
 
-	# Kill one villager to exercise death -> corpse.
 	var victim := get_tree().get_first_node_in_group("villagers") as Villager
 	victim.take_damage(999.0, true)
 	await get_tree().create_timer(1.0).timeout
 	print("SMOKE TEST: corpses=%d after a divine execution" %
 		get_tree().get_nodes_in_group("corpses").size())
 
+	# Force a build cycle to exercise construction.
+	village.store.add_lumber(20)
+	village.store.add_stone(10)
+	var site := village.start_construction(world_gen)
+	print("SMOKE TEST: construction site=%s homeless=%d capacity=%d" % [
+		site != null, village.homeless_count(), village.housing_capacity()])
+
 	await get_tree().create_timer(2.0).timeout
-	print("SMOKE TEST: villagers=%d sheep=%d creature_state=%s creature_morality=%.1f belief=%.1f" % [
+	print("SMOKE TEST: villagers=%d animals=%d houses=%d villages=%d creature=%s day=%.2f night=%s" % [
 		get_tree().get_nodes_in_group("villagers").size(),
 		get_tree().get_nodes_in_group("animals").size(),
+		get_tree().get_nodes_in_group("houses").size(),
+		get_tree().get_nodes_in_group("village").size(),
 		creature.state_name(),
-		creature.morality,
-		village.belief,
+		GameState.day_fraction(),
+		GameState.is_night(),
 	])
 	print("SMOKE TEST OK")
 	get_tree().quit(0)

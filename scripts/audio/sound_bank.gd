@@ -1,0 +1,248 @@
+extends Node
+## Autoload `SoundBank`: every sound in the game is synthesized here at
+## startup — no audio assets needed. Sounds play positionally in 3D with
+## random pitch variation so a field of sheep never sounds like a loop.
+
+const SAMPLE_RATE := 22050
+
+var _bank := {}
+
+
+func _ready() -> void:
+	_bank["baa"] = _make_baa()
+	_bank["cluck"] = _make_cluck()
+	_bank["oink"] = _make_oink()
+	_bank["neigh"] = _make_neigh()
+	_bank["bark"] = _make_bark()
+	_bank["howl"] = _make_howl()
+	_bank["croak"] = _make_croak()
+	_bank["saw"] = _make_saw()
+	_bank["pick"] = _make_pick()
+	_bank["hammer"] = _make_hammer()
+	_bank["murmur"] = _make_murmur()
+	_bank["chatter"] = _make_chatter()
+
+
+## Plays a named sound at a world position, then cleans itself up.
+func play_at(sound: String, pos: Vector3, volume_db := 0.0, pitch_jitter := 0.12) -> void:
+	if not _bank.has(sound):
+		return
+	var scene := get_tree().current_scene
+	if scene == null:
+		return
+	var p := AudioStreamPlayer3D.new()
+	p.stream = _bank[sound]
+	p.volume_db = volume_db
+	p.pitch_scale = 1.0 + randf_range(-pitch_jitter, pitch_jitter)
+	p.max_distance = 70.0
+	p.unit_size = 8.0
+	scene.add_child(p)
+	p.global_position = pos
+	p.finished.connect(p.queue_free)
+	p.play()
+
+
+## Synthesis core ------------------------------------------------------------
+
+func _make_wav(samples: PackedFloat32Array) -> AudioStreamWAV:
+	var bytes := PackedByteArray()
+	bytes.resize(samples.size() * 2)
+	for i in samples.size():
+		bytes.encode_s16(i * 2, int(clampf(samples[i], -1.0, 1.0) * 32767.0))
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = SAMPLE_RATE
+	wav.stereo = false
+	wav.data = bytes
+	return wav
+
+
+func _env(t: float, duration: float, attack: float, release: float) -> float:
+	var a := clampf(t / maxf(attack, 0.001), 0.0, 1.0)
+	var r := clampf((duration - t) / maxf(release, 0.001), 0.0, 1.0)
+	return a * r
+
+
+## Sounds --------------------------------------------------------------------
+
+## A sheep bleat: a buzzy tone with tremolo — the "a-a-a-a" of a baa.
+func _make_baa() -> AudioStreamWAV:
+	var dur := 0.55
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var freq := 330.0 - t * 60.0 + sin(t * 9.0 * TAU) * 15.0
+		phase += freq / SAMPLE_RATE
+		var buzz := 2.0 * (phase - floorf(phase)) - 1.0  # sawtooth
+		var tremolo := 0.65 + 0.35 * sin(t * 24.0 * TAU)
+		samples[i] = buzz * tremolo * _env(t, dur, 0.06, 0.15) * 0.5
+	return _make_wav(samples)
+
+
+func _make_cluck() -> AudioStreamWAV:
+	var dur := 0.14
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var tone := sin(t * (900.0 - t * 2500.0) * TAU)
+		var noise := randf_range(-1, 1) * 0.4
+		samples[i] = (tone * 0.6 + noise) * _env(t, dur, 0.005, 0.1) * 0.5
+	return _make_wav(samples)
+
+
+func _make_oink() -> AudioStreamWAV:
+	var dur := 0.28
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var freq := 140.0 - t * 120.0
+		phase += freq / SAMPLE_RATE
+		var grunt := 2.0 * (phase - floorf(phase)) - 1.0
+		var snort := randf_range(-1, 1) * 0.35 * (1.0 - t / dur)
+		samples[i] = (grunt * 0.6 + snort) * _env(t, dur, 0.02, 0.1) * 0.55
+	return _make_wav(samples)
+
+
+func _make_neigh() -> AudioStreamWAV:
+	var dur := 0.85
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var freq := 950.0 - t * 550.0 + sin(t * 16.0 * TAU) * 60.0
+		phase += freq / SAMPLE_RATE
+		var tone := sin(phase * TAU) + 0.3 * sin(phase * 2.0 * TAU)
+		samples[i] = tone * _env(t, dur, 0.05, 0.35) * 0.4
+	return _make_wav(samples)
+
+
+func _make_bark() -> AudioStreamWAV:
+	var dur := 0.16
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var tone := sin(t * (420.0 - t * 900.0) * TAU)
+		var noise := randf_range(-1, 1) * 0.5
+		samples[i] = (tone * 0.5 + noise * 0.5) * _env(t, dur, 0.008, 0.08) * 0.65
+	return _make_wav(samples)
+
+
+func _make_howl() -> AudioStreamWAV:
+	var dur := 1.7
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var frac := t / dur
+		var freq := 380.0 + 240.0 * sin(frac * PI) - frac * 60.0
+		phase += freq / SAMPLE_RATE
+		var tone := sin(phase * TAU) + 0.25 * sin(phase * 2.0 * TAU)
+		samples[i] = tone * _env(t, dur, 0.35, 0.5) * 0.4
+	return _make_wav(samples)
+
+
+func _make_croak() -> AudioStreamWAV:
+	var dur := 0.3
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		phase += 95.0 / SAMPLE_RATE
+		var pulse := 1.0 if fmod(phase, 1.0) < 0.4 else -0.6
+		var ratchet := 0.6 + 0.4 * sin(t * 34.0 * TAU)
+		samples[i] = pulse * ratchet * _env(t, dur, 0.03, 0.1) * 0.4
+	return _make_wav(samples)
+
+
+## Two saw strokes through wood: shaped noise.
+func _make_saw() -> AudioStreamWAV:
+	var dur := 0.7
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var last := 0.0
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var stroke := absf(sin(t * 3.0 * TAU))  # two strokes
+		var noise := randf_range(-1, 1)
+		last = last * 0.7 + noise * 0.3  # crude low-pass for a woody rasp
+		samples[i] = last * stroke * _env(t, dur, 0.05, 0.1) * 0.5
+	return _make_wav(samples)
+
+
+## Pickaxe on stone: sharp ping with a click.
+func _make_pick() -> AudioStreamWAV:
+	var dur := 0.18
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var decay := exp(-t * 30.0)
+		var ping := sin(t * 1900.0 * TAU) * decay
+		var click := randf_range(-1, 1) * exp(-t * 90.0)
+		samples[i] = (ping * 0.6 + click * 0.5) * 0.6
+	return _make_wav(samples)
+
+
+func _make_hammer() -> AudioStreamWAV:
+	var dur := 0.15
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var thud := sin(t * 85.0 * TAU) * exp(-t * 25.0)
+		var knock := randf_range(-1, 1) * exp(-t * 70.0) * 0.5
+		samples[i] = (thud + knock) * 0.7
+	return _make_wav(samples)
+
+
+## Low worship murmur: slow syllable bumps of soft noise.
+func _make_murmur() -> AudioStreamWAV:
+	var dur := 1.1
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var last := 0.0
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var syllables := 0.5 + 0.5 * sin(t * 5.0 * TAU + sin(t * 2.3 * TAU))
+		last = last * 0.92 + randf_range(-1, 1) * 0.08  # heavy low-pass
+		samples[i] = last * syllables * _env(t, dur, 0.2, 0.3) * 1.4
+	return _make_wav(samples)
+
+
+## Field chatter: brighter, bubblier than murmur.
+func _make_chatter() -> AudioStreamWAV:
+	var dur := 0.9
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var last := 0.0
+	var pitch := 300.0
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		if i % 1800 == 0:
+			pitch = randf_range(220.0, 420.0)
+		var vowel := sin(t * pitch * TAU) * 0.4
+		last = last * 0.85 + randf_range(-1, 1) * 0.15
+		var syllables := 0.4 + 0.6 * absf(sin(t * 7.0 * TAU))
+		samples[i] = (vowel + last * 0.5) * syllables * _env(t, dur, 0.1, 0.25) * 0.45
+	return _make_wav(samples)

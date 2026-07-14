@@ -53,6 +53,23 @@ you're done. No system install required.
 | Vertical stroke | Lightning — terror converts too | 30 |
 | Horizontal stroke | Healing wave | 15 |
 
+## The world
+
+- **Endless, chunked terrain**: 48m chunks stream in around the camera.
+  Elevation from layered noise, lakes below the water table, and five
+  biomes — grassland, forest, savanna, rocky hills, wetland — each with
+  its own colors, trees, and wildlife. Everything is deterministic from
+  the world seed.
+- **Neutral villages** generate out in the world. They run the full
+  simulation (farming, building, families) but believe in nothing until
+  your miracles convert them (belief ≥ 40) — then their prayers feed you.
+- **Day/night cycle**: one full cycle per 16 villager years (~5⅓ real
+  minutes). Sun, moon, dawn/dusk skies. Villagers sleep at night; house
+  windows glow; wolves prowl — preferring villages gone wicked.
+- **Sound**: every sound is synthesized in code at startup (no assets) and
+  played positionally — bleating, clucking, sawing, quarry picks, hammers,
+  worship murmur, barks, howls, frog croaks.
+
 ## The core loop (what's simulated)
 
 - **Villagers live whole lives**: they age (1 game year = 20 real seconds),
@@ -60,9 +77,24 @@ you're done. No system install required.
   physical **corpse**. Adults courting at the totem conceive children;
   pregnancy lasts nine months (game time), then a child is born, plays
   instead of working, and grows up.
-- **Needs drive behavior**: hunger / energy / social choose between farming,
-  hunting, eating, sleeping, worship, play, and fleeing. Starvation is
-  lethal — and the god who allowed it is judged.
+- **Jobs are chosen, not assigned**: every adult scores what the village
+  lacks — food, lumber, stone, housing, repairs, livestock — and takes the
+  most urgent work: farming, hunting, felling timber, quarrying, building,
+  taming. Starvation is lethal — and the god who allowed it is judged.
+- **Houses are mortal too**: hut / house / longhouse (sleeps 2/4/6), each
+  with health and age. They decay past 30 years and collapse; builders
+  raise new ones (lumber + stone, placement checked for slope, water, and
+  clearance) and repair old ones. The homeless sleep rough by the totem,
+  recover poorly, and grow miserable. One diligent builder can house a
+  whole town — if the loggers and quarriers keep up.
+- **Livestock and taming, gated by virtue**: benevolent villagers tame
+  horses (ridden on long trips), oxen and llamas (hauling: +1 to every
+  harvest), and dogs (guarding, herding, and ambient joy). Wolves avoid
+  villages with dogs. Monstrous villages can't tame — they abandon
+  agriculture entirely, hunt, and butcher whatever is in the pen.
+- **Wild things**: deer, bears, wolves and tigers in the forests; lions,
+  giraffes and llamas on the savanna; frogs in the wetlands. Predators
+  hunt prey — and occasionally people.
 - **Diet is policy** (keys 1–4): Vegan (plants only), Omnivore, Carnivore
   (hunt the sheep), or **Cannibal** — corpses are butchered for the granary.
   Eating human flesh corrodes a villager's soul; the good refuse until
@@ -85,8 +117,9 @@ you're done. No system install required.
 
 ```
 scenes/main.tscn              Entry point (one node; world is built in code)
-scripts/main.gd               Orchestrator: terrain, environment, wiring
-scripts/game_state.gd         Autoload: prayer power + announcements
+scripts/main.gd               Orchestrator: sky, day/night clock, wiring
+scripts/game_state.gd         Autoload: prayer, alignment, game time
+scripts/audio/sound_bank.gd   Autoload: all sounds, synthesized in code
 scripts/util.gd               Primitive-shape building helpers
 scripts/player/
   camera_rig.gd               God-game camera (pan/rotate/zoom)
@@ -94,14 +127,20 @@ scripts/player/
   gesture_recognizer.gd       Mouse-trail → gesture classification
   gesture_trail.gd            Glowing trail drawn while gesturing
 scripts/world/
-  village.gd                  Belief, influence, diet policy, houses, births
+  world_gen.gd                Endless world: chunks, noise, biomes, villages
+  chunk.gd                    One 48m tile: mesh, collision, water, scatter
+  village.gd                  Belief/conversion, diet, housing, pen, jobs
+  house.gd                    Dwellings: sizes, health, age, collapse
+  wild_tree.gd                Harvestable trees (biome-styled)
+  rock_deposit.gd             Harvestable stone
   farm.gd                     Crop growth, tending, rain bonus, harvest
-  food_store.gd               Granary: separate plant/meat stocks
+  food_store.gd               Storehouse: plants, meat, lumber, stone
   food_item.gd                Physical food (plant, mutton, ...other)
-  sheep.gd                    Fauna: wandering, breeding, throwable meat
   corpse.gd                   The dead, as physical objects
+scripts/animals/animal.gd     EVERY beast, one data table: livestock, pets,
+                              predators, prey — taming, riding, guarding
 scripts/villager/villager.gd  Full villager lives: needs, age, pregnancy,
-                              morality, hunting, butchering (state machine)
+                              morality, demand-driven jobs (state machine)
 scripts/creature/creature.gd  Creature needs + INDEPENDENT morality/behavior
 scripts/miracles/
   miracle_manager.gd          Miracle catalog: costs, effects, gesture map
@@ -135,16 +174,19 @@ godot --headless --path . -- --smoke-test
 - ~~Villager lifecycle: age, death, children~~ ✔
 - ~~Diet policies incl. cannibalism~~ ✔
 - ~~Good/evil karma for player, creature, and villagers~~ ✔
+- ~~Endless chunked terrain, biomes, elevation, water~~ ✔
+- ~~Neutral villages + conversion~~ ✔
+- ~~Jobs: builder/lumberjack/quarrier; housing with decay; homelessness~~ ✔
+- ~~Day/night cycle (16 years per day)~~ ✔
+- ~~Livestock, taming, riding, guard dogs, predators~~ ✔
+- ~~Procedural sound~~ ✔
 - Creature learning (reward/punish via petting/slapping), direct control
-- Villager routines v2: jobs, festivals, music, dance, named relationships
-  (lovers, parents/children as tracked bonds)
-- Procedural endless terrain (chunked), multiple villages
+- Festivals, music, dance, named relationships (lovers, parents, friends)
 - **The opponent**: a rival god with its own villages, creature, and
-  temperament (village/creature/karma systems are already per-instance to
-  make this possible)
+  temperament (all systems are per-instance already to make this possible)
 - Miracle progression: unlocks, upgrades, mutually exclusive paths
 - Full controller support
-- Actual art, animation, and sound (someday)
+- Real art and animation (someday; the sound is already ours)
 
 ## Team workflow
 

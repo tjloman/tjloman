@@ -10,6 +10,10 @@ signal announcement(text: String)
 ## Lifespans of 60-85 years last ~20-28 minutes of play.
 const YEAR_SECONDS := 20.0
 
+## One full day/night cycle spans this many villager years (so a villager
+## lives through four or five great days — time is mythic here, not literal).
+const DAY_YEARS := 16.0
+
 const GOOD_COLOR := Color(1.0, 0.9, 0.65)
 const EVIL_COLOR := Color(0.75, 0.12, 0.1)
 
@@ -26,6 +30,20 @@ var alignment := 0.0
 
 func _process(delta: float) -> void:
 	game_years += delta / YEAR_SECONDS
+
+
+## 0.0 = midnight, 0.25 = dawn, 0.5 = noon, 0.75 = dusk. Play starts mid-morning.
+func day_fraction() -> float:
+	return fmod(0.35 + game_years / DAY_YEARS, 1.0)
+
+
+## -1 (deepest night) .. +1 (high noon).
+func sun_elevation() -> float:
+	return -cos(day_fraction() * TAU)
+
+
+func is_night() -> bool:
+	return sun_elevation() < -0.08
 
 
 func add_prayer_power(amount: float) -> void:

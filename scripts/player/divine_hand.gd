@@ -88,7 +88,7 @@ func _physics_process(delta: float) -> void:
 
 	match state:
 		HandState.DRAG_LAND:
-			var plane_point := _mouse_on_plane(mouse_pos)
+			var plane_point := _mouse_on_plane(mouse_pos, drag_anchor.y)
 			camera_rig.pan_world(drag_anchor - plane_point)
 		HandState.HOLDING:
 			if is_instance_valid(held_body):
@@ -136,14 +136,16 @@ func _describe(target: Node3D) -> String:
 	return target.name
 
 
-func _mouse_on_plane(mouse_pos: Vector2) -> Vector3:
+## Ray/plane intersection at a given height — used for land-dragging on
+## hills (the drag plane sits at the grab point's altitude).
+func _mouse_on_plane(mouse_pos: Vector2, plane_y := 0.0) -> Vector3:
 	var cam := camera_rig.camera
 	var from := cam.project_ray_origin(mouse_pos)
 	var dir := cam.project_ray_normal(mouse_pos)
 	var denom := dir.y
 	if absf(denom) < 0.0001:
 		return ground_point
-	var t := -from.y / denom
+	var t := (plane_y - from.y) / denom
 	if t < 0.0:
 		return ground_point
 	return from + dir * t

@@ -25,8 +25,6 @@ const LIGHTNING_KILL_RADIUS := 3.0
 const LIGHTNING_BURN_RADIUS := 8.0
 const CREATURE_SIGHT_RANGE := 45.0
 
-var village: Village
-
 
 func cast_gesture(gesture: String, pos: Vector3) -> bool:
 	if not MIRACLES.has(gesture):
@@ -51,8 +49,10 @@ func cast(miracle: String, pos: Vector3, cost := 0.0) -> bool:
 		_:
 			return false
 	_apply_karma(miracle, pos)
-	if village != null:
-		village.witness_miracle(miracle, pos)
+	# Every village close enough to see it reacts — this is how the
+	# unbelieving are converted.
+	for v in get_tree().get_nodes_in_group("village"):
+		(v as Village).witness_miracle(miracle, pos)
 	return true
 
 
@@ -138,10 +138,10 @@ func _cast_lightning(pos: Vector3) -> void:
 		elif dist < LIGHTNING_BURN_RADIUS:
 			villager.take_damage(40.0, true)
 
-	for s in get_tree().get_nodes_in_group("animals"):
-		var sheep := s as Sheep
-		if sheep.global_position.distance_to(pos) < LIGHTNING_KILL_RADIUS:
-			sheep.die()  # drops cooked-ish meat where it stood
+	for a in get_tree().get_nodes_in_group("animals"):
+		var animal := a as Animal
+		if animal.global_position.distance_to(pos) < LIGHTNING_KILL_RADIUS:
+			animal.die()  # drops cooked-ish meat where it stood
 
 
 func _cast_heal(pos: Vector3) -> void:

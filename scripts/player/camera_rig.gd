@@ -50,6 +50,19 @@ func _process(delta: float) -> void:
 
 	camera.position.z = lerpf(camera.position.z, zoom_distance, minf(delta * 8.0, 1.0))
 
+	_follow_terrain(delta)
+
+
+## The rig's pivot rides the landscape so hills don't swallow the camera.
+func _follow_terrain(delta: float) -> void:
+	var space := get_world_3d().direct_space_state
+	var from := global_position + Vector3(0, 120.0, 0)
+	var query := PhysicsRayQueryParameters3D.create(from, from + Vector3(0, -300.0, 0), 1)
+	var hit := space.intersect_ray(query)
+	if not hit.is_empty():
+		var target_y: float = maxf(hit.position.y, 0.0)
+		global_position.y = lerpf(global_position.y, target_y, minf(delta * 5.0, 1.0))
+
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:

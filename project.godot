@@ -14,6 +14,7 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 [autoload]
 
 GameState="*res://scripts/game_state.gd"
+SoundBank="*res://scripts/audio/sound_bank.gd"
 
 [display]
 

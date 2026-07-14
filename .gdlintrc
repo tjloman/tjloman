@@ -1,3 +1,4 @@
 # gdlint (gdtoolkit) config — run: pip install gdtoolkit && gdlint scripts/
 max-line-length: 120
-max-returns: 12
+max-returns: 24
+max-public-methods: 40

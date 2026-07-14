@@ -13,6 +13,7 @@ var _alignment_bar: ProgressBar
 var _alignment_fill: StyleBoxFlat
 var _alignment_label: Label
 var _census_label: Label
+var _resources_label: Label
 var _diet_label: Label
 var _hover_label: Label
 var _message_label: Label
@@ -59,6 +60,9 @@ func _build_bars() -> void:
 
 	_census_label = _make_label("")
 	vbox.add_child(_census_label)
+
+	_resources_label = _make_label("")
+	vbox.add_child(_resources_label)
 
 	_diet_label = _make_label("")
 	vbox.add_child(_diet_label)
@@ -145,12 +149,18 @@ Vertical stroke ............ Lightning — LETHAL up close (30)
 Horizontal stroke .......... Healing wave (15)
 
 THE WORLD
-Villagers age, marry in worship, bear children (9 months), and die.
-The dead leave corpses. What happens to corpses is... policy.
-Sheep are meat. Cannibal villages have other sources.
-Your alignment colors your hand and the influence ring.
-Your creature has its OWN morality — it learns from watching you.
-A monstrous creature will eat your villagers. A gentle one farms."""
+The world is endless: drag the land and keep going. Other villages are
+out there — they believe in nothing until your miracles convince them.
+Villagers age, bear children, and die. The dead leave corpses, and what
+happens to corpses is... policy. Villagers pick whatever job the village
+needs: farming, hunting, felling timber, quarrying stone, building.
+Houses have health and age; they crumble, and the homeless sleep rough.
+One day/night cycle passes every 16 villager years — nights are for
+sleeping, and for wolves, who prefer wicked villages.
+Benevolent souls tame horses (to ride), oxen and llamas (to haul), and
+dogs (to guard). Monstrous villages abandon the plough and pen what
+they catch. Your creature still has its OWN morality. Listen: the world
+bleats, saws, hammers, croaks, and howls back."""
 	help.add_theme_font_size_override("font_size", 15)
 	var margin := MarginContainer.new()
 	for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
@@ -165,13 +175,23 @@ func _process(delta: float) -> void:
 		_belief_bar.value = village.belief
 		var adults := 0
 		var children := 0
-		for v in get_tree().get_nodes_in_group("villagers"):
-			if (v as Villager).is_adult():
+		for v in village.my_villagers():
+			if v.is_adult():
 				adults += 1
 			else:
 				children += 1
-		_census_label.text = "Souls: %d adults, %d children — Year %d" \
-			% [adults, children, int(GameState.game_years)]
+		var converted := 0
+		var total := 0
+		for v in get_tree().get_nodes_in_group("village"):
+			total += 1
+			if (v as Village).converted:
+				converted += 1
+		_census_label.text = "%s: %d adults, %d children (%d homeless) — Year %d %s" % [
+			village.village_name, adults, children, village.homeless_count(),
+			int(GameState.game_years), "☾" if GameState.is_night() else "☀"]
+		_resources_label.text = "Food %d · Lumber %d · Stone %d — Believers: %d/%d villages" % [
+			village.store.total_food(), village.store.lumber, village.store.stone,
+			converted, total]
 		_diet_label.text = "Diet [1-4]: %s" % village.diet_name()
 	_hover_label.position = _hover_label.get_viewport().get_mouse_position() + Vector2(18, 18)
 
