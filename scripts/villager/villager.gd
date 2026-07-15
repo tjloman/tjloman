@@ -274,7 +274,9 @@ func _wait(delta: float) -> bool:
 	return _action_time <= 0.0
 
 
-func _process_go_target(target: Node3D, delta: float, next: State, work_time: float) -> void:
+# target is deliberately untyped: a typed Node3D parameter rejects freed
+# instances at the call site, before the validity guard below can run.
+func _process_go_target(target: Variant, delta: float, next: State, work_time: float) -> void:
 	if target == null or not is_instance_valid(target) or target.is_queued_for_deletion():
 		_decide()
 		return

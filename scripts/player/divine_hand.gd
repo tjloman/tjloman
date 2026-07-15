@@ -120,7 +120,8 @@ func _update_hover(mouse_pos: Vector2) -> void:
 		ground_point = hit.position
 		ground_point.y = maxf(ground_point.y, 0.0)
 		var collider: Object = hit.collider
-		if collider is Node3D and not (collider as Node3D).is_in_group("ground"):
+		if is_instance_valid(collider) and collider is Node3D \
+				and not (collider as Node3D).is_in_group("ground"):
 			hover_target = collider
 
 	hover_info_changed.emit(_describe(hover_target))
@@ -171,7 +172,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _on_grab() -> void:
 	if state != HandState.IDLE:
 		return
-	if hover_target != null and hover_target.is_in_group("pickable"):
+	if is_instance_valid(hover_target) and hover_target.is_in_group("pickable"):
 		held_body = hover_target
 		state = HandState.HOLDING
 		if held_body is RigidBody3D:
