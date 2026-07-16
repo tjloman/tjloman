@@ -21,6 +21,7 @@ func _ready() -> void:
 	_bank["hammer"] = _make_hammer()
 	_bank["murmur"] = _make_murmur()
 	_bank["chatter"] = _make_chatter()
+	_bank["boom"] = _make_boom()
 
 
 ## Plays a named sound at a world position, then cleans itself up.
@@ -226,6 +227,25 @@ func _make_murmur() -> AudioStreamWAV:
 		var syllables := 0.5 + 0.5 * sin(t * 5.0 * TAU + sin(t * 2.3 * TAU))
 		last = last * 0.92 + randf_range(-1, 1) * 0.08  # heavy low-pass
 		samples[i] = last * syllables * _env(t, dur, 0.2, 0.3) * 1.4
+	return _make_wav(samples)
+
+
+## Fireball detonation: a deep sub-bass sweep under a crackling noise burst.
+func _make_boom() -> AudioStreamWAV:
+	var dur := 1.1
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var phase := 0.0
+	var last := 0.0
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var freq := 110.0 * exp(-t * 3.0) + 28.0
+		phase += freq / SAMPLE_RATE
+		var thump := sin(phase * TAU) * exp(-t * 3.5)
+		last = last * 0.82 + randf_range(-1, 1) * 0.18  # rumbling low-passed noise
+		var crackle := last * exp(-t * 4.0)
+		samples[i] = clampf(thump * 0.9 + crackle * 0.7, -1.0, 1.0) * _env(t, dur, 0.004, 0.4)
 	return _make_wav(samples)
 
 

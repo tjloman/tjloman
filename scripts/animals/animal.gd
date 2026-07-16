@@ -10,6 +10,14 @@ enum State { IDLE, WANDER, FLEE, CHASE, HELD, FALLING }
 
 const GRAVITY := 20.0
 
+## What the butcher calls it. Anything not listed is just "<species> meat".
+const MEAT_NAMES := {
+	"sheep": "mutton", "pig": "pork", "chicken": "chicken", "deer": "venison",
+	"ox": "beef", "giraffe": "giraffe steak", "llama": "llama chop",
+	"bear": "bear flank", "wolf": "wolf flesh", "lion": "lion flesh",
+	"tiger": "tiger flesh",
+}
+
 ## body = torso box size; leg = leg height; meat = granary yield when
 ## butchered; tame = domesticable; ride/pack = tamed roles; predator hunts
 ## the listed prey species; attacks_villagers marks the truly dangerous.
@@ -267,7 +275,8 @@ func _move_toward(target: Vector3, speed: float, delta: float) -> bool:
 	velocity.z = dir.z * speed
 	velocity.y -= GRAVITY * delta
 	move_and_slide()
-	look_at(global_position + Vector3(dir.x, 0, dir.z), Vector3.UP)
+	# Heads are modeled at +Z; look_at aims -Z. Look away from travel to face it.
+	look_at(global_position - Vector3(dir.x, 0, dir.z), Vector3.UP)
 	return false
 
 
@@ -306,6 +315,7 @@ func die(drop_meat := true) -> void:
 		for i in meat:
 			var item := FoodItem.new()
 			item.food_type = FoodItem.FoodType.MEAT
+			item.meat_name = MEAT_NAMES.get(species, "%s meat" % species)
 			item.position = parent.to_local(global_position
 				+ Vector3(randf_range(-0.5, 0.5), 0.5, randf_range(-0.5, 0.5)))
 			parent.add_child(item)

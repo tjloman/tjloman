@@ -10,6 +10,7 @@ const MIRACLES := {
 	"zigzag": {"name": "rain", "cost": 25.0},
 	"vline": {"name": "lightning", "cost": 30.0},
 	"hline": {"name": "heal", "cost": 15.0},
+	"dline": {"name": "fireball", "cost": 25.0},
 }
 
 ## How each miracle moves the player's karma, and what the creature learns
@@ -19,11 +20,14 @@ const KARMA := {
 	"rain": {"player": 2.0, "creature": 1.5},
 	"heal": {"player": 3.0, "creature": 2.0},
 	"lightning": {"player": -4.0, "creature": -3.0},
+	"fireball": {"player": -2.5, "creature": -2.0},
 }
 
 const LIGHTNING_KILL_RADIUS := 3.0
 const LIGHTNING_BURN_RADIUS := 8.0
 const CREATURE_SIGHT_RANGE := 45.0
+
+var divine_hand: DivineHand = null  # wired by main; fireballs land in the grip
 
 
 func cast_gesture(gesture: String, pos: Vector3) -> bool:
@@ -46,13 +50,17 @@ func cast(miracle: String, pos: Vector3, cost := 0.0) -> bool:
 			_cast_lightning(pos)
 		"heal":
 			_cast_heal(pos)
+		"fireball":
+			_cast_fireball(pos)
 		_:
 			return false
 	_apply_karma(miracle, pos)
 	# Every village close enough to see it reacts — this is how the
-	# unbelieving are converted.
-	for v in get_tree().get_nodes_in_group("village"):
-		(v as Village).witness_miracle(miracle, pos)
+	# unbelieving are converted. A fireball converts where it EXPLODES,
+	# not where it is conjured, so it announces itself.
+	if miracle != "fireball":
+		for v in get_tree().get_nodes_in_group("village"):
+			(v as Village).witness_miracle(miracle, pos)
 	return true
 
 
@@ -63,6 +71,14 @@ func _apply_karma(miracle: String, pos: Vector3) -> void:
 	var creature := get_tree().get_first_node_in_group("creature") as Creature
 	if creature != null and creature.global_position.distance_to(pos) < CREATURE_SIGHT_RANGE:
 		creature.witness(KARMA[miracle]["creature"])
+
+
+## Conjures a fireball straight into the divine hand, ready to be hurled.
+func _cast_fireball(pos: Vector3) -> void:
+	var fireball := Fireball.new()
+	add_child(fireball)
+	if divine_hand == null or not divine_hand.force_hold(fireball):
+		fireball.global_position = pos + Vector3(0, 4.0, 0)
 
 
 func _cast_food(pos: Vector3) -> void:

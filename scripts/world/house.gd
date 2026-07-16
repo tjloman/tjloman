@@ -78,6 +78,15 @@ func repair(amount: float) -> void:
 	health = minf(health + amount, 100.0)
 
 
+## Sudden harm (fireballs, catastrophes) — collapses outright at zero.
+func damage(amount: float) -> void:
+	if under_construction:
+		return
+	health -= amount
+	if health <= 0.0:
+		_collapse()
+
+
 func needs_repair() -> bool:
 	return not under_construction and health < 55.0
 

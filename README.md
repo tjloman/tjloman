@@ -35,10 +35,10 @@ you're done. No system install required.
 |---|---|
 | Left mouse on land (drag) | Grab and drag the world (B&W style) |
 | Left mouse on things | Pick up food / rocks / villagers |
-| Release while moving mouse | Throw what you're holding |
+| Release while moving mouse | Throw — your hand's momentum carries; flick hard to hurl far |
 | **Hold right mouse + draw** | **Cast a miracle gesture** |
 | Mouse wheel | Zoom |
-| Middle mouse drag | Rotate / tilt camera |
+| Middle mouse drag | Rotate / tilt camera (tilts above the horizon for skyward throws) |
 | WASD / arrows | Pan camera |
 | Q / E | Rotate camera |
 | 1 / 2 / 3 / 4 | Village diet: Vegan / Omnivore / Carnivore / Cannibal |
@@ -52,6 +52,7 @@ you're done. No system install required.
 | Zigzag (W shape) | Rain — crops grow 4× | 25 |
 | Vertical stroke | Lightning — terror converts too | 30 |
 | Horizontal stroke | Healing wave | 15 |
+| Diagonal slash | **Fireball** — conjured into your hand; throw it. Explodes on impact, converts where it lands | 25 |
 
 ## The world
 
@@ -68,7 +69,9 @@ you're done. No system install required.
   windows glow; wolves prowl — preferring villages gone wicked.
 - **Sound**: every sound is synthesized in code at startup (no assets) and
   played positionally — bleating, clucking, sawing, quarry picks, hammers,
-  worship murmur, barks, howls, frog croaks.
+  worship murmur, barks, howls, frog croaks, and the boom of a fireball.
+- **Rendering**: the Mobile renderer + MSAA. Good and plain — meant to look
+  right on a phone, no advanced GPU required (yet).
 
 ## The core loop (what's simulated)
 
@@ -135,7 +138,7 @@ scripts/world/
   rock_deposit.gd             Harvestable stone
   farm.gd                     Crop growth, tending, rain bonus, harvest
   food_store.gd               Storehouse: plants, meat, lumber, stone
-  food_item.gd                Physical food (plant, mutton, ...other)
+  food_item.gd                Physical food: grain sheaves & species-named meat
   corpse.gd                   The dead, as physical objects
 scripts/animals/animal.gd     EVERY beast, one data table: livestock, pets,
                               predators, prey — taming, riding, guarding
@@ -144,6 +147,7 @@ scripts/villager/villager.gd  Full villager lives: needs, age, pregnancy,
 scripts/creature/creature.gd  Creature needs + INDEPENDENT morality/behavior
 scripts/miracles/
   miracle_manager.gd          Miracle catalog: costs, effects, gesture map
+  fireball.gd                 The throwable miracle: ballistic, explosive
 scripts/ui/hud.gd             Bars, legend, tooltips, help
 ```
 

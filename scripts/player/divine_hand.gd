@@ -11,6 +11,8 @@ enum HandState { IDLE, DRAG_LAND, HOLDING, GESTURING }
 const HOVER_HEIGHT := 1.4
 const RAY_LENGTH := 500.0
 const HIT_MASK := 1 | 2 | 4  # ground | units | props
+const THROW_BOOST := 1.6     # hand velocity -> projectile velocity
+const MAX_THROW_SPEED := 55.0
 
 var camera_rig: CameraRig
 var miracles: MiracleManager
@@ -115,7 +117,12 @@ func _update_hover(mouse_pos: Vector2) -> void:
 
 	hover_target = null
 	if hit.is_empty():
-		ground_point = _mouse_on_plane(mouse_pos)
+		if dir.y > -0.02:
+			# Aiming at open sky: the hand rises along the ray so throws
+			# can be wound up high and released in a real arc.
+			ground_point = from + dir * clampf(camera_rig.zoom_distance, 15.0, 45.0)
+		else:
+			ground_point = _mouse_on_plane(mouse_pos)
 	else:
 		ground_point = hit.position
 		ground_point.y = maxf(ground_point.y, 0.0)
@@ -180,8 +187,12 @@ func _on_grab() -> void:
 		elif held_body.has_method("pick_up"):
 			held_body.call("pick_up")
 	else:
+		# Grabbing open sky isn't grabbing land — don't start a drag there.
+		var mouse_pos := get_viewport().get_mouse_position()
+		if camera_rig.camera.project_ray_normal(mouse_pos).y > -0.02:
+			return
 		state = HandState.DRAG_LAND
-		drag_anchor = _mouse_on_plane(get_viewport().get_mouse_position())
+		drag_anchor = _mouse_on_plane(mouse_pos)
 
 
 func _on_release() -> void:
@@ -206,9 +217,23 @@ func _throw_velocity() -> Vector3:
 		return Vector3.ZERO
 	var oldest := _pos_history[0]
 	var newest := _pos_history[_pos_history.size() - 1]
-	# History spans ~6 physics frames.
-	var vel := (newest - oldest) / (6.0 / 60.0)
-	return vel.limit_length(30.0)
+	var span := (_pos_history.size() - 1) / 60.0
+	# The hand's own momentum, amplified: flick hard, throw far.
+	var vel := (newest - oldest) / span * THROW_BOOST
+	return vel.limit_length(MAX_THROW_SPEED)
+
+
+## Places a conjured object (e.g. a fireball) straight into the hand's grip.
+## Returns false if the hand is already full.
+func force_hold(body: PhysicsBody3D) -> bool:
+	if state == HandState.HOLDING and is_instance_valid(held_body):
+		return false
+	body.global_position = global_position + Vector3(0, -0.6, 0)
+	held_body = body
+	state = HandState.HOLDING
+	if body is RigidBody3D:
+		(body as RigidBody3D).freeze = true
+	return true
 
 
 func _finish_gesture() -> void:

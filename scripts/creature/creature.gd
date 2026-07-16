@@ -252,7 +252,8 @@ func _move_toward(target: Vector3, speed: float, delta: float) -> bool:
 	velocity.z = dir.z * speed
 	velocity.y -= GRAVITY * delta
 	move_and_slide()
-	look_at(global_position + Vector3(dir.x, 0, dir.z), Vector3.UP)
+	# Body faces +Z; look_at aims -Z. Look away from travel to face it.
+	look_at(global_position - Vector3(dir.x, 0, dir.z), Vector3.UP)
 	_walk_phase += delta * 9.0
 	return false
 

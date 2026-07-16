@@ -47,6 +47,7 @@ func _ready() -> void:
 	divine_hand.camera_rig = camera_rig
 	divine_hand.miracles = miracles
 	add_child(divine_hand)
+	miracles.divine_hand = divine_hand  # fireballs are conjured into the grip
 
 	hud = HUD.new()
 	hud.village = village
@@ -120,11 +121,15 @@ func _setup_input() -> void:
 func _build_environment() -> void:
 	_sun = DirectionalLight3D.new()
 	_sun.shadow_enabled = true
+	# Tighter shadow range = crisper shadows and cheaper on weak GPUs.
+	_sun.directional_shadow_max_distance = 140.0
+	_sun.light_specular = 0.25  # matte, plain — no plastic glints
 	add_child(_sun)
 
 	_moon = DirectionalLight3D.new()
 	_moon.light_color = Color(0.7, 0.78, 1.0)
-	_moon.shadow_enabled = true
+	_moon.shadow_enabled = false  # a second shadowed sun is a phone-killer
+	_moon.light_specular = 0.1
 	add_child(_moon)
 
 	_sky_material = ProceduralSkyMaterial.new()
@@ -137,14 +142,14 @@ func _build_environment() -> void:
 	_environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	_environment.ambient_light_sky_contribution = 0.7
 	_environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	# The polish pass: distance fog, soft bloom on emissives, contact shadows.
+	# Good and plain: distance fog and gentle bloom, nothing the mobile
+	# renderer can't do. (SSAO is Forward+-only — deliberately absent.)
 	_environment.fog_enabled = true
 	_environment.fog_density = 0.004
 	_environment.fog_sky_affect = 0.2
 	_environment.glow_enabled = true
 	_environment.glow_intensity = 0.5
 	_environment.glow_bloom = 0.1
-	_environment.ssao_enabled = true
 
 	var world_env := WorldEnvironment.new()
 	world_env.environment = _environment
@@ -175,7 +180,7 @@ func _run_smoke_test() -> void:
 		world_gen.height_at(0, 0),
 		world_gen.is_underwater(200, 200),
 	])
-	for miracle: String in ["food", "rain", "heal", "lightning"]:
+	for miracle: String in ["food", "rain", "heal", "lightning", "fireball"]:
 		GameState.add_prayer_power(50.0)
 		var ok := miracles.cast(miracle, Vector3(5, 0, 5))
 		print("SMOKE TEST: cast %s -> %s" % [miracle, ok])
@@ -224,7 +229,11 @@ func _smoke_test_gestures() -> void:
 		Vector2(100, 300), Vector2(150, 200), Vector2(200, 300),
 		Vector2(250, 200), Vector2(300, 300), Vector2(350, 200),
 	])
+	var dline := PackedVector2Array([
+		Vector2(100, 100), Vector2(180, 175), Vector2(260, 250), Vector2(340, 330),
+	])
 	print("SMOKE TEST: gesture circle -> ", GestureRecognizer.classify(circle))
 	print("SMOKE TEST: gesture vline  -> ", GestureRecognizer.classify(vline))
 	print("SMOKE TEST: gesture hline  -> ", GestureRecognizer.classify(hline))
 	print("SMOKE TEST: gesture zigzag -> ", GestureRecognizer.classify(zigzag))
+	print("SMOKE TEST: gesture dline  -> ", GestureRecognizer.classify(dline))

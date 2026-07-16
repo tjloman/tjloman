@@ -466,6 +466,14 @@ func witness_miracle(type: String, pos: Vector3) -> void:
 					v.witness_horror(3.0)
 				if dist < 14.0:
 					v.scare(pos)
+		"fireball":
+			change_belief(7.0)
+			GameState.announce("Fire from the sky over %s! They kneel in the ash." % village_name)
+			for v in my_villagers():
+				var dist := v.global_position.distance_to(pos)
+				if dist < 16.0:
+					v.witness_horror(2.5)
+					v.scare(pos)
 
 
 func hover_text() -> String:

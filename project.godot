@@ -9,7 +9,7 @@ config_version=5
 config/name="Hand of the Heavens (PoC)"
 config/description="A ground-up, Black & White-inspired god game prototype: divine hand, needs-driven villagers, a trainable creature, belief, and gesture-cast miracles."
 run/main_scene="res://scenes/main.tscn"
-config/features=PackedStringArray("4.7", "Forward Plus")
+config/features=PackedStringArray("4.7", "Mobile")
 
 [autoload]
 
@@ -23,4 +23,7 @@ window/size/viewport_height=900
 
 [rendering]
 
-renderer/rendering_method="forward_plus"
+; Mobile renderer: looks good on a phone, needs no advanced GPU. MSAA is
+; near-free on tiled mobile GPUs and smooths our primitive-shape world.
+renderer/rendering_method="mobile"
+anti_aliasing/quality/msaa_3d=2

@@ -13,6 +13,13 @@ func _init() -> void:
 	collision_layer = 4
 	collision_mask = 1 | 4
 	mass = 4.0
+	# The dead stay where they fall — no rolling downhill into the lake.
+	var phys := PhysicsMaterial.new()
+	phys.friction = 1.0
+	phys.bounce = 0.0
+	physics_material_override = phys
+	linear_damp = 0.8
+	angular_damp = 8.0
 
 
 func _ready() -> void:

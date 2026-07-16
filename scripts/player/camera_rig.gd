@@ -74,8 +74,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_rotating = event.pressed
 	elif event is InputEventMouseMotion and _rotating:
 		rotate_y(-event.relative.x * 0.005)
+		# Tilts above the horizon (up to +35) so you can face the sky and
+		# arc throws high overhead.
 		var new_pitch: float = clampf(
-			pitch_node.rotation_degrees.x - event.relative.y * 0.25, -80.0, -20.0)
+			pitch_node.rotation_degrees.x - event.relative.y * 0.25, -80.0, 35.0)
 		pitch_node.rotation_degrees.x = new_pitch
 
 

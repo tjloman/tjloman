@@ -7,6 +7,7 @@ class_name GestureRecognizer
 ##   "zigzag"    – several sharp direction reversals            -> Rain
 ##   "vline"     – tall, straight stroke                        -> Lightning
 ##   "hline"     – wide, straight stroke                        -> Heal
+##   "dline"     – straight diagonal slash                      -> Fireball
 ##   "none"      – unrecognized
 
 const MIN_PATH_LENGTH := 60.0  # pixels; anything shorter is a misclick
@@ -53,6 +54,9 @@ static func classify(points: PackedVector2Array) -> String:
 			return "vline"
 		if bbox.size.x > bbox.size.y * 2.0:
 			return "hline"
+		# Neither tall nor wide but clearly drawn: a diagonal slash.
+		if bbox.size.x > 40.0 and bbox.size.y > 40.0:
+			return "dline"
 
 	return "none"
 

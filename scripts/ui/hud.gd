@@ -88,7 +88,8 @@ func _make_bar(color: Color) -> ProgressBar:
 func _build_legend() -> void:
 	var legend := Label.new()
 	legend.text = "Hold RIGHT MOUSE and draw a gesture:   O  Food (20)" \
-		+ "      /\\/\\  Rain (25)      |  Lightning (30)      —  Heal (15)"
+		+ "      /\\/\\  Rain (25)      |  Lightning (30)      —  Heal (15)" \
+		+ "      \\  Fireball (25)"
 	legend.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	legend.position.y -= 34
 	legend.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -147,6 +148,12 @@ Circle ..................... Food falls from the sky (20)
 Zigzag ..................... Rain — crops grow 4x (25)
 Vertical stroke ............ Lightning — LETHAL up close (30)
 Horizontal stroke .......... Healing wave (15)
+Diagonal slash ............. FIREBALL — lands in your hand; throw it (25)
+
+THROWING
+Anything you hold carries your hand's momentum when released — flick
+hard to hurl far. Tilt the camera above the horizon (middle mouse) and
+aim at the sky to wind up high, arcing throws.
 
 THE WORLD
 The world is endless: drag the land and keep going. Other villages are

@@ -692,7 +692,9 @@ func _move_toward(target: Vector3, speed: float, delta: float) -> bool:
 	velocity.z = dir.z * speed
 	velocity.y -= GRAVITY * delta
 	move_and_slide()
-	look_at(global_position + Vector3(dir.x, 0, dir.z), Vector3.UP)
+	# Bodies are modeled facing +Z, and look_at aims -Z — so look away
+	# from the direction of travel to face it. (Yes, everyone used to moonwalk.)
+	look_at(global_position - Vector3(dir.x, 0, dir.z), Vector3.UP)
 	return false
 
 
