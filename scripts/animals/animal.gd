@@ -118,6 +118,13 @@ func _build_body(body: Vector3, leg_h: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# Far-off beasts stand still: the world shouldn't pay physics for what
+	# nobody can see. (Held/falling animals always simulate.)
+	if state != State.HELD and state != State.FALLING:
+		var cam := get_viewport().get_camera_3d()
+		if cam != null and cam.global_position.distance_to(global_position) > 90.0:
+			return
+
 	match state:
 		State.HELD:
 			velocity = Vector3.ZERO
@@ -291,7 +298,9 @@ func _ambient_sound(delta: float) -> void:
 	var sound: String = spec.get("sound", "")
 	if sound == "" or state == State.HELD:
 		return
-	if randf() < spec.get("sound_chance", 0.0) * delta * 10.0:
+	# sound_chance is per-second probability: a sheep baas every ~20s,
+	# not twice a second. (The old x10 here made the world a wall of noise.)
+	if randf() < spec.get("sound_chance", 0.0) * delta:
 		SoundBank.play_at(sound, global_position, -6.0)
 
 

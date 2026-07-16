@@ -4,8 +4,10 @@ extends Node
 ## random pitch variation so a field of sheep never sounds like a loop.
 
 const SAMPLE_RATE := 22050
+const MAX_CONCURRENT := 24
 
 var _bank := {}
+var _active := 0
 
 
 func _ready() -> void:
@@ -26,7 +28,7 @@ func _ready() -> void:
 
 ## Plays a named sound at a world position, then cleans itself up.
 func play_at(sound: String, pos: Vector3, volume_db := 0.0, pitch_jitter := 0.12) -> void:
-	if not _bank.has(sound):
+	if not _bank.has(sound) or _active >= MAX_CONCURRENT:
 		return
 	var scene := get_tree().current_scene
 	if scene == null:
@@ -35,11 +37,14 @@ func play_at(sound: String, pos: Vector3, volume_db := 0.0, pitch_jitter := 0.12
 	p.stream = _bank[sound]
 	p.volume_db = volume_db
 	p.pitch_scale = 1.0 + randf_range(-pitch_jitter, pitch_jitter)
-	p.max_distance = 70.0
+	p.max_distance = 50.0
 	p.unit_size = 8.0
 	scene.add_child(p)
 	p.global_position = pos
-	p.finished.connect(p.queue_free)
+	_active += 1
+	p.finished.connect(func() -> void:
+		_active -= 1
+		p.queue_free())
 	p.play()
 
 

@@ -117,9 +117,10 @@ func _update_hover(mouse_pos: Vector2) -> void:
 
 	hover_target = null
 	if hit.is_empty():
-		if dir.y > -0.02:
-			# Aiming at open sky: the hand rises along the ray so throws
-			# can be wound up high and released in a real arc.
+		if state == HandState.HOLDING and dir.y > -0.02:
+			# Winding up a throw at open sky: the hand rises along the ray
+			# so it can be released in a real arc. Empty-handed, the hand
+			# stays on the land instead of leaping into midair.
 			ground_point = from + dir * clampf(camera_rig.zoom_distance, 15.0, 45.0)
 		else:
 			ground_point = _mouse_on_plane(mouse_pos)

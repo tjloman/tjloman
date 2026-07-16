@@ -56,6 +56,8 @@ func _ready() -> void:
 	store = FoodStore.new()
 	store.position = Vector3(-3, 0, 5)
 	add_child(store)
+	if is_player_home:
+		store.plant_food += 8  # a founding surplus, so the game starts kind
 
 	_build_influence_ring()
 	_build_starting_houses()
@@ -271,7 +273,8 @@ func _assign_housing() -> void:
 func on_house_completed(house: House) -> void:
 	if construction_site == house:
 		construction_site = null
-	GameState.announce("A new %s stands in %s." % [house.size_name().to_lower(), village_name])
+	if is_player_home:
+		GameState.announce("A new %s stands in %s." % [house.size_name().to_lower(), village_name])
 	_assign_housing()
 
 

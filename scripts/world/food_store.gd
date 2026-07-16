@@ -4,7 +4,7 @@ extends Node3D
 ## Stock is visualized in piles — orange spheres (plants), red cubes (meat),
 ## brown planks (lumber), gray blocks (stone).
 
-var plant_food := 10
+var plant_food := 14
 var meat_food := 0
 var lumber := 6
 var stone := 3

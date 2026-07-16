@@ -105,7 +105,7 @@ func _scatter() -> void:
 		"forest":
 			_scatter_trees(rng, rng.randi_range(9, 15), "forest")
 			_scatter_deposits(rng, rng.randi_range(0, 1))
-			_scatter_animals(rng, {"deer": 0.9, "bear": 0.15, "wolf": 0.2, "tiger": 0.06})
+			_scatter_animals(rng, {"deer": 0.9, "bear": 0.12, "wolf": 0.12, "tiger": 0.04})
 		"grassland":
 			_scatter_trees(rng, rng.randi_range(2, 4), "grassland")
 			_scatter_flowers(rng, rng.randi_range(5, 10))

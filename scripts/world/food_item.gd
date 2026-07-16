@@ -7,7 +7,7 @@ extends RigidBody3D
 
 enum FoodType { PLANT, MEAT }
 
-const NUTRITION := 35.0
+const NUTRITION := 40.0
 
 var food_type := FoodType.PLANT
 var meat_name := "mutton"

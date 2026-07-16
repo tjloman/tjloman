@@ -5,12 +5,13 @@ extends Node3D
 
 const BASE_GROWTH_PER_SEC := 0.008
 const TEND_BONUS_PER_SEC := 0.03
+const MAX_TENDERS := 3      # extra hands beyond this add nothing
 const RAIN_MULTIPLIER := 4.0
-const HARVEST_YIELD := 5
+const HARVEST_YIELD := 7
 
 var growth := 0.4  # 0..1; harvestable at >= 0.8
 var _rain_time_left := 0.0
-var _being_tended := false
+var _tenders := 0
 var _crop_meshes: Array[MeshInstance3D] = []
 
 
@@ -32,10 +33,10 @@ func _process(delta: float) -> void:
 	if _rain_time_left > 0.0:
 		_rain_time_left -= delta
 		rate *= RAIN_MULTIPLIER
-	if _being_tended:
-		rate += TEND_BONUS_PER_SEC
+	# Many hands make crops grow: each tender adds their bonus, up to a cap.
+	rate += TEND_BONUS_PER_SEC * mini(_tenders, MAX_TENDERS)
 	growth = clampf(growth + rate * delta, 0.0, 1.0)
-	_being_tended = false  # workers re-assert this every frame they work
+	_tenders = 0  # workers re-assert this every frame they work
 
 	var height := 0.15 + growth * 1.1
 	for crop in _crop_meshes:
@@ -44,7 +45,7 @@ func _process(delta: float) -> void:
 
 
 func tend() -> void:
-	_being_tended = true
+	_tenders += 1
 
 
 func is_harvestable() -> bool:

@@ -110,7 +110,7 @@ func _physics_process(delta: float) -> void:
 		State.TENDING:
 			_action_time -= delta
 			_apply_gravity_only(delta)
-			var farm := get_tree().get_first_node_in_group("farms") as Farm
+			var farm := _nearest_farm()
 			if farm != null:
 				farm.tend()
 			if _action_time <= 0.0:
@@ -124,7 +124,9 @@ func _physics_process(delta: float) -> void:
 				_decide()
 
 	_animate_waddle(delta)
-	_label.text = _status_text()
+	var status := _status_text()
+	if _label.text != status:
+		_label.text = status
 
 
 func _decide() -> void:
@@ -145,16 +147,31 @@ func _decide() -> void:
 			return
 	# A kind creature helps with the crops when it has a full belly.
 	if morality > 30.0 and hunger < 40.0 and randf() < 0.4:
-		var farm := get_tree().get_first_node_in_group("farms") as Farm
+		var farm := _nearest_farm()
 		if farm != null:
 			state = State.GO_TEND
 			_target = farm.global_position
-			GameState.announce("Your creature lumbers over to help in the fields.")
 			return
 	state = State.WANDER
 	var angle := randf() * TAU
 	var dist := randf_range(4.0, 18.0)
 	_target = Vector3(cos(angle) * dist, 0, sin(angle) * dist)
+
+
+## The creature helps whichever farm is actually nearby — not the first
+## farm in the scene tree, which might belong to a village 300m away.
+func _nearest_farm() -> Farm:
+	var best: Farm = null
+	var best_dist := 60.0
+	for f in get_tree().get_nodes_in_group("farms"):
+		var farm := f as Farm
+		if not is_instance_valid(farm):
+			continue
+		var d := global_position.distance_to(farm.global_position)
+		if d < best_dist:
+			best_dist = d
+			best = farm
+	return best
 
 
 ## Anything edible: ground food always; corpses only for a corrupted soul.
@@ -235,10 +252,13 @@ func witness(weight: float) -> void:
 
 func _grow() -> void:
 	if growth_scale < MAX_SCALE:
+		var before := int(growth_scale / MAX_SCALE * 10.0)
 		growth_scale = minf(growth_scale * 1.03, MAX_SCALE)
 		scale = Vector3.ONE * growth_scale
-		GameState.announce("Your creature grows a little. It is now %.0f%% of its destined size." \
-			% (growth_scale / MAX_SCALE * 100.0))
+		# Announce only when crossing a 10% milestone, not on every meal.
+		if int(growth_scale / MAX_SCALE * 10.0) > before:
+			GameState.announce("Your creature grows. It is now %.0f%% of its destined size." \
+				% (growth_scale / MAX_SCALE * 100.0))
 
 
 func _move_toward(target: Vector3, speed: float, delta: float) -> bool:

@@ -106,7 +106,9 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_tick_lifecycle(delta)
 	_tick_needs(delta)
-	_label.text = _status_text()
+	var status := _status_text()
+	if _label.text != status:  # Label3D re-renders on every assignment
+		_label.text = status
 
 	match state:
 		State.HELD:
@@ -165,7 +167,8 @@ func _physics_process(delta: float) -> void:
 				if village.farm.is_harvestable():
 					var yield_bonus := 1 if village.has_pack_animal() else 0
 					village.store.add(FoodItem.FoodType.PLANT, village.farm.harvest() + yield_bonus)
-					GameState.announce("%s brought in the harvest." % villager_name)
+					if village.is_player_home:
+						GameState.announce("%s brought in the harvest." % villager_name)
 				_decide()
 		State.GO_HUNT:
 			_process_go_target(_target_animal, delta, State.HUNTING, 2.0)
@@ -186,8 +189,9 @@ func _physics_process(delta: float) -> void:
 					_target_corpse.queue_free()
 					village.store.add(FoodItem.FoodType.MEAT, 2)
 					morality = maxf(morality - 20.0, -100.0)
-					GameState.announce("%s butchered the remains of %s. The gods avert their eyes."
-						% [villager_name, corpse_name])
+					if village.is_player_home:
+						GameState.announce("%s butchered the remains of %s. The gods avert their eyes."
+							% [villager_name, corpse_name])
 				_target_corpse = null
 				_decide()
 		State.GO_CHOP:
@@ -247,8 +251,9 @@ func _physics_process(delta: float) -> void:
 			elif _action_time <= 0.0:
 				_target_animal.tame(village)
 				morality = minf(morality + 2.0, 100.0)
-				GameState.announce("%s gently tamed a %s. It follows them home."
-					% [villager_name, _target_animal.species])
+				if village.is_player_home:
+					GameState.announce("%s gently tamed a %s. It follows them home."
+						% [villager_name, _target_animal.species])
 				_target_animal = null
 				_decide()
 		State.GO_WORSHIP:
@@ -301,7 +306,8 @@ func _tick_lifecycle(delta: float) -> void:
 	age += years
 	if was_child and age >= ADULT_AGE:
 		_apply_life_stage()
-		GameState.announce("%s of %s has come of age." % [villager_name, village.village_name])
+		if village.is_player_home:
+			GameState.announce("%s of %s has come of age." % [villager_name, village.village_name])
 
 	if age > lifespan:
 		die(true)
@@ -313,7 +319,8 @@ func _tick_lifecycle(delta: float) -> void:
 			pregnant = false
 			pregnancy_progress = 0.0
 			village.spawn_child(global_position)
-			GameState.announce("%s has given birth! %s grows." % [villager_name, village.village_name])
+			if village.is_player_home:
+				GameState.announce("%s has given birth! %s grows." % [villager_name, village.village_name])
 
 
 func _apply_life_stage() -> void:
@@ -342,8 +349,8 @@ func _try_conceive(delta: float) -> void:
 		return
 	if village.population() >= MAX_POPULATION:
 		return
-	# ~50% chance over one 8-second worship session spent near a partner.
-	if randf() > 0.08 * delta:
+	# ~1 in 3 chance over one 8-second worship session spent near a partner.
+	if randf() > 0.05 * delta:
 		return
 	for other in village.my_villagers():
 		if other == self or other.is_female or not other.is_adult():
@@ -353,14 +360,16 @@ func _try_conceive(delta: float) -> void:
 		if global_position.distance_to(other.global_position) < 5.0:
 			pregnant = true
 			pregnancy_progress = 0.0
-			GameState.announce("%s and %s are expecting a child." % [villager_name, other.villager_name])
+			if village.is_player_home:
+				GameState.announce("%s and %s are expecting a child."
+					% [villager_name, other.villager_name])
 			return
 
 
 ## Needs ---------------------------------------------------------------------
 
 func _tick_needs(delta: float) -> void:
-	var hunger_rate := 0.7 * (1.4 if pregnant else 1.0)
+	var hunger_rate := 0.5 * (1.4 if pregnant else 1.0)
 	hunger = minf(hunger + hunger_rate * delta, 100.0)
 	if state != State.SLEEPING:
 		var working := state in [State.FARMING, State.HUNTING, State.CHOPPING,
@@ -372,8 +381,10 @@ func _tick_needs(delta: float) -> void:
 	if hunger >= 100.0:
 		health -= 2.0 * delta
 		if health <= 0.0:
-			GameState.shift_alignment(-3.0)
-			GameState.announce("%s starved to death. The heavens stayed silent." % villager_name)
+			# You are judged for your own flock, not for strangers far away.
+			if village.is_player_home:
+				GameState.shift_alignment(-3.0)
+				GameState.announce("%s starved to death. The heavens stayed silent." % villager_name)
 			die(false)
 
 
@@ -391,8 +402,8 @@ func _decide() -> void:
 		return
 	if hunger > 60.0 and _plan_eating():
 		return
-	# Night is for sleeping (unless you're a child with a full battery).
-	if GameState.is_night() and energy < 92.0:
+	# Night is for sleeping — though the well-rested potter about a while.
+	if GameState.is_night() and energy < 85.0:
 		_go_sleep()
 		return
 	if not is_adult():
@@ -427,15 +438,16 @@ func _pick_job() -> bool:
 	var store := village.store
 	var scores := {}
 
-	# Housing crisis?
+	# Housing crisis? (Scores sit below a hungry village's food worry so
+	# the WHOLE town doesn't drop its ploughs to hammer one hut.)
 	var homeless := village.homeless_count()
 	var damaged := _find_damaged_house()
 	if village.construction_site != null:
-		scores["build"] = 60.0
+		scores["build"] = 42.0
 	elif homeless > 0 and store.lumber >= 4 and store.stone >= 2:
-		scores["build"] = 45.0 + homeless * 8.0
+		scores["build"] = 38.0 + homeless * 6.0
 	elif damaged != null and store.lumber >= 1:
-		scores["build"] = 30.0
+		scores["build"] = 26.0
 
 	# Materials wanted? (for the next hut, plus a reserve)
 	var want_lumber: bool = store.lumber < 10 and (homeless > 0 or store.lumber < 5)
@@ -559,7 +571,9 @@ func _process_go_eat(delta: float) -> void:
 		if _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
 			if _target_food.is_human_meat:
 				morality = maxf(morality - 25.0, -100.0)
-				GameState.announce("%s has eaten human flesh. Something in them dims." % villager_name)
+				if village.is_player_home:
+					GameState.announce("%s has eaten human flesh. Something in them dims."
+						% villager_name)
 			_target_food.queue_free()
 			_target_food = null
 			_dismount()
@@ -723,10 +737,11 @@ func die(of_old_age: bool) -> void:
 	var parent := get_parent() as Node3D
 	corpse.position = parent.to_local(global_position + Vector3(0, 0.5, 0))
 	parent.add_child(corpse)
-	if of_old_age:
-		GameState.announce("%s died peacefully at %d, full of years." % [villager_name, int(age)])
-	else:
-		GameState.announce("%s has died at %d." % [villager_name, int(age)])
+	if village.is_player_home:
+		if of_old_age:
+			GameState.announce("%s died peacefully at %d, full of years." % [villager_name, int(age)])
+		else:
+			GameState.announce("%s has died at %d." % [villager_name, int(age)])
 	queue_free()
 
 
