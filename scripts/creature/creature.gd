@@ -219,10 +219,10 @@ func _devour_prey() -> void:
 		if village != null:
 			village.change_belief(4.0)  # terror is still proof of the divine
 			for v in get_tree().get_nodes_in_group("villagers"):
-				var witness := v as Villager
-				if witness.global_position.distance_to(global_position) < 15.0:
-					witness.scare(global_position)
-					witness.witness_horror(4.0)
+				var onlooker := v as Villager
+				if onlooker.global_position.distance_to(global_position) < 15.0:
+					onlooker.scare(global_position)
+					onlooker.witness_horror(4.0)
 	_target_prey = null
 	state = State.EATING
 	_action_time = 2.0

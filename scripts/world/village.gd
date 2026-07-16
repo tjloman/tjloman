@@ -80,13 +80,15 @@ func _build_pen() -> void:
 	pen.position = _pen_center
 	for i in 8:
 		var angle := TAU * i / 8.0
+		var next_angle := angle + TAU / 8.0
 		var post_pos := Vector3(cos(angle) * 4.0, 0.5, sin(angle) * 4.0)
+		var next_pos := Vector3(cos(next_angle) * 4.0, 0.5, sin(next_angle) * 4.0)
 		pen.add_child(Util.box(Vector3(0.15, 1.0, 0.15), Color(0.5, 0.38, 0.25), post_pos))
 		var rail := Util.box(Vector3(0.08, 0.08, 3.1), Color(0.55, 0.42, 0.28),
-			(post_pos + Vector3(cos(angle + TAU / 8.0) * 4.0, 0.5, sin(angle + TAU / 8.0) * 4.0)) / 2.0 \
-			+ Vector3(0, 0.25, 0))
-		rail.look_at_from_position(rail.position,
-			pen.to_local(pen.to_global(post_pos)), Vector3.UP)
+			(post_pos + next_pos) / 2.0 + Vector3(0, 0.25, 0))
+		# Aim the rail along the fence line with pure math — look_at needs
+		# the node in the tree, and the pen isn't added yet.
+		rail.basis = Basis.looking_at(next_pos - post_pos, Vector3.UP)
 		pen.add_child(rail)
 	add_child(pen)
 
@@ -118,7 +120,8 @@ func _build_starting_houses() -> void:
 		house.village = self
 		house.age = randf_range(5.0, 20.0)
 		house.position = Vector3(cos(angle) * 7.5, 0, sin(angle) * 7.5)
-		house.look_at_from_position(house.position, Vector3.ZERO, Vector3.UP)
+		# Face the totem — computed off-tree, so no look_at here.
+		house.basis = Basis.looking_at(-house.position, Vector3.UP)
 		add_child(house)
 		houses.append(house)
 
