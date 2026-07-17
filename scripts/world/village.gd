@@ -18,6 +18,11 @@ const MIN_INFLUENCE := 14.0
 const MAX_INFLUENCE := 65.0
 const MAX_TAMED := 8
 
+## Hand-placed founding homes, clear of the farm (E), store (NW), and pen (S).
+const STARTER_HOUSE_SPOTS: Array[Vector3] = [
+	Vector3(5, 0, 9), Vector3(-4.5, 0, 10), Vector3(10.5, 0, 5),
+]
+
 var village_name := "Elsmere"
 var is_player_home := true
 var converted := false
@@ -50,11 +55,12 @@ func _ready() -> void:
 	_build_pen()
 
 	farm = Farm.new()
-	farm.position = Vector3(9, 0, -4)
+	farm.position = _grounded(Vector3(10, 0, -4))
 	add_child(farm)
 
+	# The round market sits well clear of the house ring to the northwest.
 	store = FoodStore.new()
-	store.position = Vector3(-3, 0, 5)
+	store.position = _grounded(Vector3(-9, 0, 6))
 	add_child(store)
 	if is_player_home:
 		store.plant_food += 8  # a founding surplus, so the game starts kind
@@ -77,15 +83,29 @@ func _build_totem() -> void:
 	add_child(totem)
 
 
+## Converts a flat village-local offset into one whose height sits on the
+## actual terrain. Villages away from the flattened cradle stand on slopes;
+## without this, their buildings float in air or bury their foundations.
+func _grounded(local: Vector3) -> Vector3:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world == null:
+		return local
+	local.y = world.height_at(global_position.x + local.x, global_position.z + local.z) \
+		- global_position.y
+	return local
+
+
 func _build_pen() -> void:
 	var pen := Node3D.new()
-	pen.position = _pen_center
+	pen.position = _grounded(_pen_center)
 	for i in 8:
 		var angle := TAU * i / 8.0
 		var next_angle := angle + TAU / 8.0
 		var post_pos := Vector3(cos(angle) * 4.0, 0.5, sin(angle) * 4.0)
 		var next_pos := Vector3(cos(next_angle) * 4.0, 0.5, sin(next_angle) * 4.0)
-		pen.add_child(Util.box(Vector3(0.15, 1.0, 0.15), Color(0.5, 0.38, 0.25), post_pos))
+		# Posts run deep below grade so sloped ground never leaves them floating.
+		pen.add_child(Util.box(Vector3(0.15, 2.2, 0.15), Color(0.5, 0.38, 0.25),
+			post_pos - Vector3(0, 0.4, 0)))
 		var rail := Util.box(Vector3(0.08, 0.08, 3.1), Color(0.55, 0.42, 0.28),
 			(post_pos + next_pos) / 2.0 + Vector3(0, 0.25, 0))
 		# Aim the rail along the fence line with pure math — look_at needs
@@ -116,14 +136,14 @@ func _build_starting_houses() -> void:
 	var sizes: Array = [House.Size.HUT, House.Size.HUT, House.Size.HOUSE] \
 		if is_player_home else [House.Size.HUT, House.Size.HUT]
 	for i in sizes.size():
-		var angle := TAU * i / 6.0 + 0.4
 		var house := House.new()
 		house.size = sizes[i]
 		house.village = self
 		house.age = randf_range(5.0, 20.0)
-		house.position = Vector3(cos(angle) * 7.5, 0, sin(angle) * 7.5)
+		house.position = _grounded(STARTER_HOUSE_SPOTS[i])
 		# Face the totem — computed off-tree, so no look_at here.
-		house.basis = Basis.looking_at(-house.position, Vector3.UP)
+		house.basis = Basis.looking_at(
+			-Vector3(house.position.x, 0, house.position.z), Vector3.UP)
 		add_child(house)
 		houses.append(house)
 
@@ -300,10 +320,13 @@ func find_build_spot(world: WorldGen) -> Vector3:
 			if is_instance_valid(h) and h.global_position.distance_to(pos) < 4.5:
 				blocked = true
 				break
-		for structure: Node3D in [totem, farm, store]:
+		for structure: Node3D in [totem, farm]:
 			if structure.global_position.distance_to(pos) < 6.0:
 				blocked = true
 				break
+		# The round market is wide — houses keep extra distance from it.
+		if store.global_position.distance_to(pos) < 8.5:
+			blocked = true
 		if pen_position().distance_to(pos) < 6.0:
 			blocked = true
 		if not blocked:

@@ -18,6 +18,8 @@ var _crop_meshes: Array[MeshInstance3D] = []
 func _ready() -> void:
 	add_to_group("farms")
 	set_meta("hover_name", "Farm")
+	# Earthen bed sunk into the slope so the field never floats.
+	add_child(Util.box(Vector3(7.4, 1.2, 5.4), Color(0.4, 0.29, 0.19), Vector3(0, -0.5, 0)))
 	add_child(Util.box(Vector3(7, 0.15, 5), Color(0.45, 0.32, 0.2), Vector3(0, 0.07, 0)))
 	for x in 4:
 		for z in 3:

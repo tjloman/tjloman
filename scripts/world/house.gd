@@ -121,6 +121,10 @@ func _build_visuals() -> void:
 	var wall := Color(0.78, 0.68, 0.52)
 	var roof := Color(0.62, 0.28, 0.22)
 
+	# A stone foundation, sunk into the earth: on sloped ground it bridges
+	# the gap on the downhill side instead of leaving the house floating.
+	add_child(Util.box(Vector3(w + 0.5, 1.2, depth + 0.5), Color(0.52, 0.5, 0.47),
+		Vector3(0, -0.45, 0)))
 	add_child(Util.box(Vector3(w, 1.9, depth), wall, Vector3(0, 0.95, 0)))
 	add_child(Util.prism(Vector3(w + 0.5, 1.1, depth + 0.5), roof, Vector3(0, 2.45, 0)))
 	# Door.
@@ -139,6 +143,9 @@ func _build_visuals() -> void:
 
 func _build_scaffold_visuals() -> void:
 	var w: float = SPECS[size]["width"]
+	# The foundation is laid first — construction sites sit on it too.
+	add_child(Util.box(Vector3(w + 0.5, 1.2, w + 0.5), Color(0.52, 0.5, 0.47),
+		Vector3(0, -0.45, 0)))
 	# Corner posts and one beam: enough to read as "under construction".
 	for corner in [Vector3(w / 2, 0, w / 2), Vector3(-w / 2, 0, w / 2),
 			Vector3(w / 2, 0, -w / 2), Vector3(-w / 2, 0, -w / 2)]:
