@@ -7,6 +7,7 @@ config_version=5
 [application]
 
 config/name="Hand of the Heavens (PoC)"
+config/version="0.1.0-demo"
 config/description="A ground-up, Black & White-inspired god game prototype: divine hand, needs-driven villagers, a trainable creature, belief, and gesture-cast miracles."
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7", "Mobile")

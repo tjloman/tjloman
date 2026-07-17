@@ -177,6 +177,36 @@ scripts/ui/hud.gd             Bars, legend, tooltips, help
    features stay decoupled.
 4. **Everything tunable lives in `const`s at the top of its file.**
 
+## Packing a demo build
+
+Export presets for **Linux**, **Windows**, and **Web** are committed in
+`export_presets.cfg`, and everything lands in `builds/` (git-ignored).
+
+**One-time setup** (per machine): open the project in the editor, then
+*Editor → Manage Export Templates → Download and Install*. Templates must
+match the editor version exactly (4.7-stable).
+
+Then either export from the editor (*Project → Export… → Export Project*),
+or pack everything from the terminal:
+
+```sh
+./build.sh              # Linux + Windows + Web, zipped in builds/
+./build.sh Web          # just one platform
+GODOT=~/Apps/godot ./build.sh   # if godot isn't on your PATH
+```
+
+Notes:
+- Desktop builds are **single-file** (the game data is embedded in the
+  executable) — send the zip, they unzip and run. No installer.
+- The Web build is exported **without threads**, so it runs from any
+  static host — itch.io (upload `hand-of-heavens-demo-web.zip`, mark
+  "played in browser"), GitHub Pages, or locally with
+  `python -m http.server -d builds/web`. No special headers needed.
+- The whole game is generated from code — no assets — so a demo zip is
+  only as big as the engine runtime (~40 MB desktop, ~30 MB web).
+- Cross-exporting Windows builds from Linux works out of the box; icons
+  and code signing are left unset (fine for a demo).
+
 ## Headless smoke test
 
 CI-friendly check that the whole world boots, gestures classify, and all four
