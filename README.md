@@ -42,6 +42,8 @@ you're done. No system install required.
 | WASD / arrows | Pan camera |
 | Q / E | Rotate camera |
 | 1 / 2 / 3 / 4 | Village diet: Vegan / Omnivore / Carnivore / Cannibal |
+| P / L (hand near creature) | **Pet** (reward) / **scold** (discourage) its last deed |
+| C | Jump the camera to your creature |
 | F1 | Help panel |
 
 ### Miracle gestures (hold right mouse)
@@ -107,8 +109,17 @@ you're done. No system install required.
     what you let happen. Your hand and the influence ring shift from gold
     to blood-red.
   - **Creature morality**: independent. It drifts with what the creature
-    *witnesses* you do. A gentle creature tends the farm; a vicious one
-    eats corpses; a monstrous one hunts your own villagers when hungry.
+    *witnesses* you do — and with what you praise. A gentle creature tends
+    the farm; a vicious one eats corpses; a monstrous one hunts your own
+    villagers when hungry.
+- **The creature observes, learns, and feels.** It has mood, boredom, and
+  a bond with your hand. It *watches* villagers work and grows curious
+  about their jobs; its desires (tending, hauling food to the granary,
+  playing, guarding at night, mischief) are learned weights you shape by
+  petting (P) or scolding (L) its last deed — praise cruelty and you are
+  raising a monster. It plays with the sheep, dances for the children,
+  spooks villagers when bored and mean, and sulks when told off. Hover it
+  to read its heart; press C when you lose track of it.
   - **Villager morality**: shaped by diet, trauma witnessed, and worship.
     A virtuous flock prays with more conviction (more prayer power).
 - **Belief** rises when villagers witness miracles — kindness or terror both
@@ -144,7 +155,8 @@ scripts/animals/animal.gd     EVERY beast, one data table: livestock, pets,
                               predators, prey — taming, riding, guarding
 scripts/villager/villager.gd  Full villager lives: needs, age, pregnancy,
                               morality, demand-driven jobs (state machine)
-scripts/creature/creature.gd  Creature needs + INDEPENDENT morality/behavior
+scripts/creature/creature.gd  The creature: feelings (mood/bond/boredom),
+                              learned desires, pet/scold training, observation
 scripts/miracles/
   miracle_manager.gd          Miracle catalog: costs, effects, gesture map
   fireball.gd                 The throwable miracle: ballistic, explosive
@@ -184,7 +196,7 @@ godot --headless --path . -- --smoke-test
 - ~~Day/night cycle (16 years per day)~~ ✔
 - ~~Livestock, taming, riding, guard dogs, predators~~ ✔
 - ~~Procedural sound~~ ✔
-- Creature learning (reward/punish via petting/slapping), direct control
+- ~~Creature learning (reward/punish via petting/scolding)~~ ✔ — next: direct control, leashes
 - Festivals, music, dance, named relationships (lovers, parents, friends)
 - **The opponent**: a rival god with its own villages, creature, and
   temperament (all systems are per-instance already to make this possible)

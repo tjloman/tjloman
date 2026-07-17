@@ -107,6 +107,9 @@ func _setup_input() -> void:
 		"diet_omnivore": [KEY_2],
 		"diet_carnivore": [KEY_3],
 		"diet_cannibal": [KEY_4],
+		"pet_creature": [KEY_P],
+		"scold_creature": [KEY_L],
+		"find_creature": [KEY_C],
 	}
 	for action: String in actions:
 		if InputMap.has_action(action):
@@ -157,6 +160,7 @@ func _build_environment() -> void:
 
 
 ## Diet policy hotkeys (1-4) apply to the player's home village.
+## P/L pet or scold the creature (the hand must be near it); C finds it.
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("diet_vegan"):
 		village.set_diet(Village.Diet.VEGAN)
@@ -166,6 +170,29 @@ func _unhandled_input(event: InputEvent) -> void:
 		village.set_diet(Village.Diet.CARNIVORE)
 	elif event.is_action_pressed("diet_cannibal"):
 		village.set_diet(Village.Diet.CANNIBAL)
+	elif event.is_action_pressed("pet_creature"):
+		_touch_creature(true)
+	elif event.is_action_pressed("scold_creature"):
+		_touch_creature(false)
+	elif event.is_action_pressed("find_creature") and is_instance_valid(creature):
+		camera_rig.global_position.x = creature.global_position.x
+		camera_rig.global_position.z = creature.global_position.z
+
+
+## Training only counts when the hand is actually AT the creature — you
+## cannot pet from across the map.
+func _touch_creature(kindly: bool) -> void:
+	if not is_instance_valid(creature):
+		return
+	var near: bool = divine_hand.hover_target == creature \
+		or divine_hand.global_position.distance_to(creature.global_position) < 8.0
+	if not near:
+		GameState.announce("Your hand is too far away to reach your creature. (C finds it.)")
+		return
+	if kindly:
+		creature.praise()
+	else:
+		creature.scold()
 
 
 ## Headless CI/validation: exercises every major system, then exits.
@@ -203,6 +230,15 @@ func _run_smoke_test() -> void:
 	var site := village.start_construction(world_gen)
 	print("SMOKE TEST: construction site=%s homeless=%d capacity=%d" % [
 		site != null, village.homeless_count(), village.housing_capacity()])
+
+	# Exercise creature training: praise and scold must move bond/mood/desires.
+	creature._last_deed = "play"
+	var desire_before: float = creature.desires["play"]
+	creature.praise()
+	creature.scold()
+	print("SMOKE TEST: creature trained — bond=%.0f mood=%.0f (%s) play desire %.2f->%.2f, loves %s" % [
+		creature.bond, creature.mood, creature.mood_word(),
+		desire_before, creature.desires["play"], creature.favorite_deed()])
 
 	await get_tree().create_timer(2.0).timeout
 	print("SMOKE TEST: villagers=%d animals=%d houses=%d villages=%d creature=%s day=%.2f night=%s" % [

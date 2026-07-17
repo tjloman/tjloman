@@ -66,6 +66,8 @@ var state := State.IDLE
 var _target := Vector3.ZERO
 var _prey: Node3D = null
 var _action_time := 2.0
+var _state_time := 0.0
+var _prev_state := State.IDLE
 var _think_time := 0.0
 var _flee_from := Vector3.ZERO
 var _fall_speed := 0.0
@@ -124,6 +126,25 @@ func _physics_process(delta: float) -> void:
 		var cam := get_viewport().get_camera_3d()
 		if cam != null and cam.global_position.distance_to(global_position) > 90.0:
 			return
+
+	# Watchdogs: no chase or trek lasts forever, and nothing falls out of
+	# the world when its chunk streams away.
+	if state != _prev_state:
+		_prev_state = state
+		_state_time = 0.0
+	_state_time += delta
+	if _state_time > 25.0 and state in [State.WANDER, State.CHASE]:
+		_state_time = 0.0
+		_prey = null
+		state = State.IDLE
+		_action_time = 2.0
+	if global_position.y < -12.0:
+		var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+		if world != null:
+			global_position.y = world.height_at(global_position.x, global_position.z) + 0.5
+			velocity = Vector3.ZERO
+			if state == State.FALLING:
+				state = State.IDLE
 
 	match state:
 		State.HELD:

@@ -68,6 +68,8 @@ var _mount: Animal = null
 var _flee_from := Vector3.ZERO
 var _fall_speed := 0.0
 var _work_sound_time := 0.0
+var _state_time := 0.0
+var _prev_state := State.WANDER
 var _label: Label3D
 var _visuals: Node3D
 var _body_mesh: MeshInstance3D
@@ -106,6 +108,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_tick_lifecycle(delta)
 	_tick_needs(delta)
+	_tick_watchdogs(delta)
 	var status := _status_text()
 	if _label.text != status:  # Label3D re-renders on every assignment
 		_label.text = status
@@ -269,6 +272,27 @@ func _physics_process(delta: float) -> void:
 			morality = minf(morality + 0.05, 100.0)
 			_try_conceive(delta)
 			if _action_time <= 0.0:
+				_decide()
+
+
+## Never stuck, never lost: re-decide if any state drags on too long
+## (blocked paths, vanished targets), and snap back onto the terrain if
+## the ground was streamed out from underneath us while the camera roamed.
+func _tick_watchdogs(delta: float) -> void:
+	if state != _prev_state:
+		_prev_state = state
+		_state_time = 0.0
+	_state_time += delta
+	if _state_time > 40.0 and state not in [State.SLEEPING, State.HELD]:
+		_state_time = 0.0
+		_decide()
+	if global_position.y < -12.0:
+		var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+		if world != null:
+			global_position.y = world.height_at(global_position.x, global_position.z) + 1.0
+			velocity = Vector3.ZERO
+			if state == State.FALLING:
+				state = State.WANDER
 				_decide()
 
 

@@ -141,6 +141,8 @@ Middle mouse (drag) ........ rotate camera
 WASD / arrows .............. pan camera
 Q / E ...................... rotate camera
 1 / 2 / 3 / 4 .............. village diet: Vegan / Omnivore / Carnivore / Cannibal
+P / L (hand near creature) . PET (reward) / SCOLD (discourage) its last deed
+C .......................... jump the camera to your creature
 F1 ......................... toggle this help
 
 MIRACLES (drawn with right mouse held)
@@ -166,8 +168,15 @@ One day/night cycle passes every 16 villager years — nights are for
 sleeping, and for wolves, who prefer wicked villages.
 Benevolent souls tame horses (to ride), oxen and llamas (to haul), and
 dogs (to guard). Monstrous villages abandon the plough and pen what
-they catch. Your creature still has its OWN morality. Listen: the world
-bleats, saws, hammers, croaks, and howls back."""
+they catch. Listen: the world bleats, saws, hammers, croaks, and howls.
+
+YOUR CREATURE
+It watches, learns, and feels. It observes villagers working and grows
+curious about their jobs; it plays when bored, guards the village at
+night when good, sulks when scolded, and makes mischief when idle and
+mean. Pet (P) what you like, scold (L) what you don't — it learns what
+YOU reward, so praising cruelty raises a monster. Hover it to read its
+mood, bond, and what it currently loves doing. Press C if you lose it."""
 	help.add_theme_font_size_override("font_size", 15)
 	var margin := MarginContainer.new()
 	for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
