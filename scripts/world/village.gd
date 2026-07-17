@@ -55,12 +55,12 @@ func _ready() -> void:
 	_build_pen()
 
 	farm = Farm.new()
-	farm.position = _grounded(Vector3(10, 0, -4))
+	farm.position = _grounded(Vector3(10, 0, -4), 3.6)
 	add_child(farm)
 
 	# The round market sits well clear of the house ring to the northwest.
 	store = FoodStore.new()
-	store.position = _grounded(Vector3(-9, 0, 6))
+	store.position = _grounded(Vector3(-9, 0, 6), 3.5)
 	add_child(store)
 	if is_player_home:
 		store.plant_food += 8  # a founding surplus, so the game starts kind
@@ -83,21 +83,21 @@ func _build_totem() -> void:
 	add_child(totem)
 
 
-## Converts a flat village-local offset into one whose height sits on the
-## actual terrain. Villages away from the flattened cradle stand on slopes;
-## without this, their buildings float in air or bury their foundations.
-func _grounded(local: Vector3) -> Vector3:
+## Converts a flat village-local offset into one that settles on the HIGH
+## side of the terrain under the structure's footprint — nothing buried
+## uphill, foundations bridging downhill. `half` is the footprint half-width.
+func _grounded(local: Vector3, half := 2.5) -> Vector3:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	if world == null:
 		return local
-	local.y = world.height_at(global_position.x + local.x, global_position.z + local.z) \
-		- global_position.y
+	local.y = world.settle_height(
+		global_position.x + local.x, global_position.z + local.z, half) - global_position.y
 	return local
 
 
 func _build_pen() -> void:
 	var pen := Node3D.new()
-	pen.position = _grounded(_pen_center)
+	pen.position = _grounded(_pen_center, 4.0)
 	for i in 8:
 		var angle := TAU * i / 8.0
 		var next_angle := angle + TAU / 8.0
@@ -140,7 +140,7 @@ func _build_starting_houses() -> void:
 		house.size = sizes[i]
 		house.village = self
 		house.age = randf_range(5.0, 20.0)
-		house.position = _grounded(STARTER_HOUSE_SPOTS[i])
+		house.position = _grounded(STARTER_HOUSE_SPOTS[i], 2.0)
 		# Face the totem — computed off-tree, so no look_at here.
 		house.basis = Basis.looking_at(
 			-Vector3(house.position.x, 0, house.position.z), Vector3.UP)
@@ -151,7 +151,8 @@ func _build_starting_houses() -> void:
 func _spawn_villagers(count: int) -> void:
 	for i in count:
 		var v := _make_villager(randf_range(16.0, 45.0))
-		v.position = Vector3(randf_range(-5, 5), 1.0, randf_range(-5, 5))
+		var spot := _grounded(Vector3(randf_range(-5, 5), 0, randf_range(-5, 5)), 0.5)
+		v.position = spot + Vector3(0, 0.6, 0)
 		add_child(v)
 	_assign_housing()
 
@@ -290,6 +291,11 @@ func _assign_housing() -> void:
 		villagers[i].home = slots[i] if i < slots.size() else null
 
 
+## A villager set down here by the hand has joined us — welcome them home.
+func adopt(_newcomer: Villager) -> void:
+	_assign_housing()
+
+
 func on_house_completed(house: House) -> void:
 	if construction_site == house:
 		construction_site = null
@@ -314,7 +320,7 @@ func find_build_spot(world: WorldGen) -> Vector3:
 		if world != null:
 			if world.is_underwater(pos.x, pos.z) or world.slope_at(pos.x, pos.z) > 0.9:
 				continue
-			pos.y = world.height_at(pos.x, pos.z)
+			pos.y = world.settle_height(pos.x, pos.z, 2.2)
 		var blocked := false
 		for h in houses:
 			if is_instance_valid(h) and h.global_position.distance_to(pos) < 4.5:

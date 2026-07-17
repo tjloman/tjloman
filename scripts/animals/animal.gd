@@ -71,6 +71,7 @@ var _prev_state := State.IDLE
 var _think_time := 0.0
 var _flee_from := Vector3.ZERO
 var _fall_speed := 0.0
+var _gentle_drop := false
 var _satiated := 0.0
 var _rider: Node3D = null
 
@@ -155,6 +156,12 @@ func _physics_process(delta: float) -> void:
 			velocity.y -= GRAVITY * delta
 			move_and_slide()
 			if is_on_floor():
+				if _gentle_drop:
+					_gentle_drop = false
+					state = State.IDLE
+					_action_time = 2.0
+					velocity = Vector3.ZERO
+					return
 				if _fall_speed > 16.0:
 					take_damage((_fall_speed - 16.0) * 4.0)
 				if state == State.FALLING:
@@ -207,6 +214,14 @@ func _think() -> void:
 		queue_free()  # wolves of the raid melt away at dawn
 		return
 	_satiated = maxf(_satiated - 1.0, 0.0)
+
+	# Buried waist-deep in a hillside (bad spawn, collision hiccup)? Pop up.
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world != null:
+		var h := world.height_at(global_position.x, global_position.z)
+		if global_position.y < h - 1.0:
+			global_position.y = h + 0.4
+			velocity = Vector3.ZERO
 
 	if spec.get("predator", false) and _satiated <= 0.0 and state != State.CHASE:
 		_prey = _find_prey()
@@ -396,9 +411,10 @@ func pick_up() -> void:
 	velocity = Vector3.ZERO
 
 
-func drop(throw_velocity: Vector3) -> void:
+func drop(throw_velocity: Vector3, gentle := false) -> void:
 	state = State.FALLING
 	velocity = throw_velocity
+	_gentle_drop = gentle
 
 
 func hover_text() -> String:

@@ -202,13 +202,18 @@ func _on_release() -> void:
 			state = HandState.IDLE
 		HandState.HOLDING:
 			var throw_vel := _throw_velocity()
+			# A still hand PLACES; a moving hand THROWS. Placement is calm —
+			# no fear, no fall damage — and where you place someone matters.
+			var gentle := throw_vel.length() < 3.0
+			if gentle:
+				throw_vel = Vector3.ZERO
 			if is_instance_valid(held_body):
 				if held_body is RigidBody3D:
 					var rb := held_body as RigidBody3D
 					rb.freeze = false
 					rb.linear_velocity = throw_vel
 				elif held_body.has_method("drop"):
-					held_body.call("drop", throw_vel)
+					held_body.call("drop", throw_vel, gentle)
 			held_body = null
 			state = HandState.IDLE
 

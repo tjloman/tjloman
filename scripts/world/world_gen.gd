@@ -95,6 +95,17 @@ func is_underwater(x: float, z: float) -> bool:
 	return height_at(x, z) < WATER_LEVEL + 0.25
 
 
+## The HIGHEST ground under a footprint. Structures settle on the high
+## side so their sunken foundations bridge the downhill gap — never the
+## uphill wall buried in the slope.
+func settle_height(x: float, z: float, half := 2.5) -> float:
+	var best := height_at(x, z)
+	for corner in [Vector2(half, half), Vector2(-half, half),
+			Vector2(half, -half), Vector2(-half, -half)]:
+		best = maxf(best, height_at(x + corner.x, z + corner.y))
+	return best
+
+
 ## Approximate slope (rise over 2m) — used to veto building/village sites.
 func slope_at(x: float, z: float) -> float:
 	var h := height_at(x, z)

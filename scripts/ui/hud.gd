@@ -134,7 +134,14 @@ func _build_help_panel() -> void:
 
 Left mouse (on land) ....... grab & drag the world
 Left mouse (on things) ..... pick up food, rocks, sheep, villagers
+Release while STILL ........ place gently — no fear, no harm
 Release while moving ....... throw! (hard landings hurt — and stain your soul)
+
+PLACING VILLAGERS IS POLICY
+Set a villager down in a village of the faith and they will JOIN it —
+steal hands for your towns, or shuttle your faithful between them.
+Set one of YOUR believers down in a heathen village and they become a
+MISSIONARY, preaching at its totem until belief takes root.
 Right mouse (hold) ......... draw a miracle gesture
 Mouse wheel ................ zoom
 Middle mouse (drag) ........ rotate camera

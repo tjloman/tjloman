@@ -13,6 +13,7 @@ enum State {
 	GO_FARM, FARMING, GO_HUNT, HUNTING, GO_BUTCHER, BUTCHERING,
 	GO_CHOP, CHOPPING, GO_QUARRY, QUARRYING, GO_BUILD, BUILDING,
 	GO_TAME, TAMING, GO_WORSHIP, WORSHIPPING, PLAY,
+	GO_PREACH, PREACHING,
 	FLEE, HELD, FALLING,
 }
 
@@ -70,6 +71,9 @@ var _fall_speed := 0.0
 var _work_sound_time := 0.0
 var _state_time := 0.0
 var _prev_state := State.WANDER
+var _gentle_drop := false
+var _mission_village: Village = null
+var _ground_check_time := randf_range(1.0, 3.0)
 var _label: Label3D
 var _visuals: Node3D
 var _body_mesh: MeshInstance3D
@@ -259,6 +263,33 @@ func _physics_process(delta: float) -> void:
 						% [villager_name, _target_animal.species])
 				_target_animal = null
 				_decide()
+		State.GO_PREACH:
+			if _mission_village == null or not is_instance_valid(_mission_village):
+				_mission_village = null
+				_decide()
+			elif _move_toward(_mission_village.totem.global_position
+					+ Vector3(randf_range(-2, 2), 0, randf_range(-2, 2)),
+					WALK_SPEED * _speed_factor(), delta):
+				state = State.PREACHING
+				_action_time = 35.0
+		State.PREACHING:
+			_apply_gravity_only(delta)
+			_action_time -= delta
+			_work_noise("murmur", 3.0, delta)
+			if _mission_village == null or not is_instance_valid(_mission_village):
+				_mission_village = null
+				_decide()
+			elif _mission_village.converted:
+				GameState.announce("%s has brought %s into the light!"
+					% [villager_name, _mission_village.village_name])
+				morality = minf(morality + 5.0, 100.0)
+				_mission_village = null
+				_decide()
+			else:
+				_mission_village.change_belief(0.45 * delta)
+				if _action_time <= 0.0:
+					_mission_village = null
+					_decide()
 		State.GO_WORSHIP:
 			if _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
 				state = State.WORSHIPPING
@@ -294,6 +325,16 @@ func _tick_watchdogs(delta: float) -> void:
 			if state == State.FALLING:
 				state = State.WANDER
 				_decide()
+	# Waist-deep in a hillside (bad spawn, collision hiccup): pop back up.
+	_ground_check_time -= delta
+	if _ground_check_time <= 0.0:
+		_ground_check_time = 3.0
+		var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+		if world != null:
+			var h := world.height_at(global_position.x, global_position.z)
+			if global_position.y < h - 1.0:
+				global_position.y = h + 0.4
+				velocity = Vector3.ZERO
 
 
 ## Small helpers for the state machine.
@@ -400,6 +441,9 @@ func _tick_needs(delta: float) -> void:
 			State.QUARRYING, State.BUILDING]
 		energy = maxf(energy - (0.5 if working else 0.25) * delta, 0.0)
 	social = maxf(social - 0.3 * delta, 0.0)
+	# A fed body knits itself back together — small wounds heal.
+	if hunger < 70.0 and health < 100.0:
+		health = minf(health + 1.5 * delta, 100.0)
 	if hunger > 85.0:
 		happiness = maxf(happiness - 1.5 * delta, 0.0)
 	if hunger >= 100.0:
@@ -770,12 +814,64 @@ func die(of_old_age: bool) -> void:
 
 
 func _land() -> void:
+	if _gentle_drop:
+		_gentle_drop = false
+		velocity = Vector3.ZERO
+		_on_placed_gently()
+		return
 	if _fall_speed > 14.0:
-		take_damage((_fall_speed - 14.0) * 8.0, true)
+		take_damage((_fall_speed - 14.0) * 5.0, true)
 	if not is_instance_valid(self) or is_queued_for_deletion():
 		return
 	scare(global_position + Vector3(randf() - 0.5, 0, randf() - 0.5))
 	GameState.announce("%s survived a divine toss. Mostly." % villager_name)
+
+
+## Set down by a careful god. If this is another village's ground, that
+## was no accident: the faithful defect TO belief, and believers carry
+## the word INTO the heathen dark.
+func _on_placed_gently() -> void:
+	var host := _village_here()
+	if host == null or host == village:
+		_decide()
+		return
+	if host.converted:
+		_defect_to(host)
+	elif village.converted:
+		_mission_village = host
+		state = State.GO_PREACH
+		GameState.announce("%s carries the word of the heavens into %s."
+			% [villager_name, host.village_name])
+	else:
+		_decide()  # two heathen villages; they will simply walk home
+
+
+func _village_here() -> Village:
+	var best: Village = null
+	var best_dist := INF
+	for v in get_tree().get_nodes_in_group("village"):
+		var candidate := v as Village
+		if not is_instance_valid(candidate):
+			continue
+		var flat := candidate.global_position - global_position
+		flat.y = 0
+		var d := flat.length()
+		if d < maxf(candidate.influence_radius * 1.2, 18.0) and d < best_dist:
+			best_dist = d
+			best = candidate
+	return best
+
+
+func _defect_to(host: Village) -> void:
+	var old_name := village.village_name
+	_dismount()
+	home = null
+	village = host
+	host.adopt(self)
+	if host.is_player_home or host.converted:
+		GameState.announce("%s of %s now calls %s home."
+			% [villager_name, old_name, host.village_name])
+	_decide()
 
 
 func scare(from_pos: Vector3) -> void:
@@ -812,10 +908,14 @@ func pick_up() -> void:
 	velocity = Vector3.ZERO
 
 
-func drop(throw_velocity: Vector3) -> void:
+## A still hand sets a villager down gently (no fear, no harm — and where
+## you set them down MATTERS); a moving hand throws them, with all that
+## implies for their body and your soul.
+func drop(throw_velocity: Vector3, gentle := false) -> void:
 	state = State.FALLING
 	velocity = throw_velocity
-	if throw_velocity.length() > 10.0:
+	_gentle_drop = gentle
+	if not gentle and throw_velocity.length() > 10.0:
 		GameState.shift_alignment(-1.0)
 
 
@@ -826,9 +926,10 @@ func hover_text() -> String:
 	var extra := ", pregnant" if pregnant else ""
 	if home == null:
 		extra += ", HOMELESS"
-	return "%s of %s — %s %s, age %d%s — %s\n(hunger %d · energy %d · happy %d · %s)" % [
+	return "%s of %s — %s %s, age %d%s — %s\n(health %d · hunger %d · energy %d · happy %d · %s)" % [
 		villager_name, village.village_name, _morality_word(), stage, int(age), extra,
-		_status_word(), int(hunger), int(energy), int(happiness), "she" if is_female else "he"]
+		_status_word(), int(health), int(hunger), int(energy), int(happiness),
+		"she" if is_female else "he"]
 
 
 func _morality_word() -> String:
@@ -857,6 +958,7 @@ func _status_word() -> String:
 		State.GO_BUILD, State.BUILDING: return "building"
 		State.GO_TAME, State.TAMING: return "taming a beast"
 		State.GO_WORSHIP, State.WORSHIPPING: return "worshipping"
+		State.GO_PREACH, State.PREACHING: return "on a mission"
 		State.FLEE: return "fleeing in terror"
 		State.HELD: return "in the grip of a god"
 		State.FALLING: return "airborne"
@@ -875,6 +977,7 @@ func _status_text() -> String:
 		State.TAMING: return "shhh"
 		State.BUTCHERING: return "..."
 		State.WORSHIPPING: return "pray"
+		State.PREACHING: return "hear me!"
 		State.PLAY: return "wheee"
 		State.FLEE, State.FALLING: return "!!!"
 		State.HELD: return "?!"

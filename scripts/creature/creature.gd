@@ -193,11 +193,15 @@ func _tick_watchdogs(delta: float) -> void:
 	if _state_time > STUCK_SECONDS and state != State.SLEEPING:
 		_state_time = 0.0
 		_decide()
-	if global_position.y < -12.0:
+	# Fell out of the world (chunk streamed away) or buried in a hillside
+	# (bad spawn, collision hiccup)? Pop back to the surface.
+	if global_position.y < -12.0 or fmod(_state_time, 3.0) < delta:
 		var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 		if world != null:
-			global_position.y = world.height_at(global_position.x, global_position.z) + 1.0
-			velocity = Vector3.ZERO
+			var h := world.height_at(global_position.x, global_position.z)
+			if global_position.y < h - 1.2:
+				global_position.y = h + 0.5
+				velocity = Vector3.ZERO
 
 
 ## The slow gaze: passively learn from whatever is happening nearby.

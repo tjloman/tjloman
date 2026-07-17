@@ -35,6 +35,7 @@ you're done. No system install required.
 |---|---|
 | Left mouse on land (drag) | Grab and drag the world (B&W style) |
 | Left mouse on things | Pick up food / rocks / villagers |
+| Release with a **still** hand | **Place gently** — no fear, no harm. Placing a villager in another village makes them a **missionary** (yours → heathen town) or a **convert** (anyone → a faithful town) |
 | Release while moving mouse | Throw — your hand's momentum carries; flick hard to hurl far |
 | **Hold right mouse + draw** | **Cast a miracle gesture** |
 | Mouse wheel | Zoom |
