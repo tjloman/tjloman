@@ -91,11 +91,23 @@ func _update_daylight() -> void:
 	var night_horizon := Color(0.08, 0.09, 0.16)
 	var dusk_horizon := Color(0.9, 0.5, 0.3)
 	var t := clampf((elev + 0.3) / 0.9, 0.0, 1.0)
-	_sky_material.sky_top_color = night_top.lerp(day_top, t)
+	var top := night_top.lerp(day_top, t)
 	var horizon := night_horizon.lerp(day_horizon, t)
 	# A band of fire at dawn and dusk.
 	var duskiness := clampf(1.0 - absf(elev) * 3.5, 0.0, 1.0)
 	horizon = horizon.lerp(dusk_horizon, duskiness * 0.7)
+
+	# The heavens are the god's conscience: a saintly hand gilds the sky
+	# warm and golden; a monstrous one bruises it ash and blood.
+	var a := GameState.alignment / 100.0
+	if a > 0.0:
+		horizon = horizon.lerp(Color(1.0, 0.88, 0.55), a * 0.22)
+		top = top.lerp(Color(0.55, 0.62, 0.75), a * 0.12)
+	elif a < 0.0:
+		horizon = horizon.lerp(Color(0.5, 0.18, 0.13), -a * 0.35)
+		top = top.lerp(Color(0.22, 0.09, 0.1), -a * 0.28)
+
+	_sky_material.sky_top_color = top
 	_sky_material.sky_horizon_color = horizon
 	_sky_material.ground_horizon_color = horizon
 	_environment.ambient_light_energy = lerpf(0.25, 1.0, t)

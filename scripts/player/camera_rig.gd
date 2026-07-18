@@ -22,11 +22,14 @@ var follow_target: Node3D = null
 var _rotating := false
 var _touches := {}        # touch index -> screen position
 var _pinch_dist := 0.0
+var _world_cache: WorldGen = null
 
 
 func _ready() -> void:
 	pitch_node = Node3D.new()
-	pitch_node.rotation_degrees = Vector3(-50, 0, 0)
+	# A low, B&W-style default gaze: the horizon sits high and the sky
+	# fills a good share of the frame.
+	pitch_node.rotation_degrees = Vector3(-32, 0, 0)
 	add_child(pitch_node)
 
 	camera = Camera3D.new()
@@ -67,6 +70,7 @@ func _process(delta: float) -> void:
 	camera.position.z = lerpf(camera.position.z, zoom_distance, minf(delta * 8.0, 1.0))
 
 	_follow_terrain(delta)
+	_clamp_camera_above_ground()
 
 
 ## The rig's pivot rides the landscape so hills don't swallow the camera.
@@ -78,6 +82,21 @@ func _follow_terrain(delta: float) -> void:
 	if not hit.is_empty():
 		var target_y: float = maxf(hit.position.y, 0.0)
 		global_position.y = lerpf(global_position.y, target_y, minf(delta * 5.0, 1.0))
+
+
+## The land is solid, even to gods: the camera never dips beneath the
+## terrain (or the water table). Checked against the pure-noise height
+## field, so it holds even where no chunk is loaded.
+func _clamp_camera_above_ground() -> void:
+	if _world_cache == null or not is_instance_valid(_world_cache):
+		_world_cache = get_tree().get_first_node_in_group("world_gen") as WorldGen
+		if _world_cache == null:
+			return
+	var cam_pos := camera.global_position
+	var floor_y := maxf(
+		_world_cache.height_at(cam_pos.x, cam_pos.z), WorldGen.WATER_LEVEL) + 2.0
+	if cam_pos.y < floor_y:
+		camera.global_position.y = floor_y
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -104,7 +123,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			# Each finger's drag fires its own event, so use half strength.
 			rotate_y(-event.relative.x * 0.0025)
 			pitch_node.rotation_degrees.x = clampf(
-				pitch_node.rotation_degrees.x - event.relative.y * 0.12, -80.0, 35.0)
+				pitch_node.rotation_degrees.x - event.relative.y * 0.12, -75.0, 40.0)
 		return
 
 	if event is InputEventMouseButton:
@@ -116,10 +135,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_rotating = event.pressed
 	elif event is InputEventMouseMotion and _rotating:
 		rotate_y(-event.relative.x * 0.005)
-		# Tilts above the horizon (up to +35) so you can face the sky and
-		# arc throws high overhead.
+		# Tilts from near-top-down to well above the horizon (+40): face
+		# the sky to arc throws, or just to watch the weather of your soul.
 		var new_pitch: float = clampf(
-			pitch_node.rotation_degrees.x - event.relative.y * 0.25, -80.0, 35.0)
+			pitch_node.rotation_degrees.x - event.relative.y * 0.25, -75.0, 40.0)
 		pitch_node.rotation_degrees.x = new_pitch
 
 

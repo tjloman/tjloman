@@ -1,17 +1,14 @@
 class_name HUD
 extends CanvasLayer
-## The (mostly empty) godly dashboard. The world itself is the interface
-## now: belief is the COLOR of each village's ring, population its SIZE,
-## prayer power the GLOW of the totem orb, and details live on hover.
-## What remains here: the alignment bar, diet readout, gesture legend,
-## hover tooltip, announcements, F1 help.
+## The (mostly empty) godly dashboard. The world itself is the interface:
+## belief is the COLOR of each village's ring, population its SIZE, prayer
+## power the GLOW of the totem orb, ALIGNMENT is your own hand's color and
+## the cast of the sky, and details live on hover. What remains here: the
+## diet readout, gesture legend, hover tooltip, announcements, F1 help.
 
 var village: Village
 var divine_hand: DivineHand
 
-var _alignment_bar: ProgressBar
-var _alignment_fill: StyleBoxFlat
-var _alignment_label: Label
 var _diet_label: Label
 var _hover_label: Label
 var _message_label: Label
@@ -27,7 +24,6 @@ func _ready() -> void:
 	_build_message_label()
 	_build_help_panel()
 
-	GameState.alignment_changed.connect(_on_alignment_changed)
 	GameState.announcement.connect(_on_announcement)
 	if divine_hand != null:
 		divine_hand.hover_info_changed.connect(_on_hover_info)
@@ -39,14 +35,6 @@ func _build_bars() -> void:
 	vbox.custom_minimum_size = Vector2(280, 0)
 	add_child(vbox)
 
-	_alignment_label = _make_label("Alignment — Neutral")
-	vbox.add_child(_alignment_label)
-	_alignment_bar = _make_bar(Color(0.8, 0.8, 0.8))
-	_alignment_bar.max_value = 200.0  # alignment -100..100 mapped to 0..200
-	_alignment_bar.value = 100.0
-	_alignment_fill = _alignment_bar.get_theme_stylebox("fill") as StyleBoxFlat
-	vbox.add_child(_alignment_bar)
-
 	_diet_label = _make_label("")
 	vbox.add_child(_diet_label)
 
@@ -56,16 +44,6 @@ func _make_label(text: String) -> Label:
 	l.text = text
 	l.add_theme_font_size_override("font_size", 15)
 	return l
-
-
-func _make_bar(color: Color) -> ProgressBar:
-	var bar := ProgressBar.new()
-	bar.custom_minimum_size = Vector2(280, 18)
-	bar.show_percentage = false
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = color
-	bar.add_theme_stylebox_override("fill", fill)
-	return bar
 
 
 func _build_legend() -> void:
@@ -207,13 +185,6 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_help"):
 		_help_panel.visible = not _help_panel.visible
-
-
-func _on_alignment_changed(value: float) -> void:
-	_alignment_bar.value = value + 100.0
-	_alignment_label.text = "Alignment — %s" % GameState.alignment_word()
-	if _alignment_fill != null:
-		_alignment_fill.bg_color = GameState.alignment_color()
 
 
 func _on_announcement(text: String) -> void:

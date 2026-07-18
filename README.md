@@ -129,8 +129,10 @@ you're done. No system install required.
   starvation breaks them.
 - **Three karma systems, kept separate**:
   - **Player alignment** (−100…+100): moved by your miracles, throws, and
-    what you let happen. Your hand and the influence ring shift from gold
-    to blood-red.
+    what you let happen. There is no bar: **your hand is the gauge**,
+    shifting gold to blood-red — and **the sky itself is your
+    conscience**, gilding warm for the saintly, bruising ash-and-blood
+    for the monstrous. Converted village rings wear the same color.
   - **Creature morality**: independent. It drifts with what the creature
     *witnesses* you do — and with what you praise. A gentle creature tends
     the farm; a vicious one eats corpses; a monstrous one hunts your own
