@@ -207,6 +207,47 @@ Notes:
 - Cross-exporting Windows builds from Linux works out of the box; icons
   and code signing are left unset (fine for a demo).
 
+### Android (.apk)
+
+An **Android** preset is committed too (arm64, debug-signed — installable
+on any phone, not store-ready). One-time setup on your machine:
+
+1. **JDK 17** — e.g. `sudo apt install openjdk-17-jdk` (or your distro's
+   equivalent; on an immutable distro, a toolbox/distrobox works fine).
+2. **Android SDK** — easiest is [Android Studio](https://developer.android.com/studio)
+   (installs the SDK to `~/Android/Sdk`); or the standalone
+   `cmdline-tools` + `sdkmanager "platform-tools" "build-tools;34.0.0" "platforms;android-34"`,
+   then `sdkmanager --licenses` to accept licenses.
+3. **Debug keystore** — Android Studio creates `~/.android/debug.keystore`
+   on first launch. Without Android Studio, make one yourself:
+   ```sh
+   keytool -keyalg RSA -genkeypair -alias androiddebugkey \
+     -keypass android -keystore ~/.android/debug.keystore -storepass android \
+     -dname "CN=Android Debug,O=Android,C=US" -validity 9999
+   ```
+4. **Point Godot at all three** — *Editor → Editor Settings → Export →
+   Android*: set *Java SDK Path* (the JDK 17 folder), *Android SDK Path*
+   (e.g. `~/Android/Sdk`), and *Debug Keystore*
+   (`~/.android/debug.keystore`, user `androiddebugkey`, password `android`).
+5. Export templates installed (same dialog as the desktop platforms).
+
+Then:
+
+```sh
+./build.sh Android          # -> builds/hand-of-heavens-demo.apk
+adb install builds/hand-of-heavens-demo.apk   # or copy to the phone and tap it
+```
+
+(Installing by tapping the file requires allowing "install unknown apps"
+for your file manager — normal for any demo APK.)
+
+⚠️ **Touch controls are not designed yet.** Android taps emulate the left
+mouse button, so you can pan the land, pick things up, and place them —
+but miracles need the *right* mouse button and training needs P/L, so on
+a phone the demo is look-but-mostly-drag. A real touch scheme (gesture
+casting with one finger, radial menus) is on the roadmap; until then the
+APK is best for testing performance and feel-on-glass.
+
 ## Headless smoke test
 
 CI-friendly check that the whole world boots, gestures classify, and all four

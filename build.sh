@@ -22,17 +22,27 @@ build() {
 
 mkdir -p builds/web
 
+# Android is exported as a DEBUG build: it signs itself with the debug
+# keystore (no release keys needed) and installs on any phone with
+# "install unknown apps" allowed. Perfect for a demo, not for a store.
+build_android() {
+    echo "==> Exporting: Android (debug-signed) -> builds/hand-of-heavens-demo.apk"
+    "$GODOT" --headless --export-debug "Android" builds/hand-of-heavens-demo.apk
+}
+
 if [ -n "$1" ]; then
     case "$1" in
-        Linux*) build "Linux x86_64" builds/hand-of-heavens-demo.x86_64 ;;
-        Win*)   build "Windows Desktop" builds/hand-of-heavens-demo.exe ;;
-        Web)    build "Web" builds/web/index.html ;;
-        *) echo "Unknown preset: $1 (use Linux, Windows, or Web)"; exit 1 ;;
+        Linux*)   build "Linux x86_64" builds/hand-of-heavens-demo.x86_64 ;;
+        Win*)     build "Windows Desktop" builds/hand-of-heavens-demo.exe ;;
+        Web)      build "Web" builds/web/index.html ;;
+        Android)  build_android ;;
+        *) echo "Unknown preset: $1 (use Linux, Windows, Web, or Android)"; exit 1 ;;
     esac
 else
     build "Linux x86_64" builds/hand-of-heavens-demo.x86_64
     build "Windows Desktop" builds/hand-of-heavens-demo.exe
     build "Web" builds/web/index.html
+    # Android is opt-in (./build.sh Android) — it needs the SDK installed.
 fi
 
 # Zip what shipped, ready to upload/send.
