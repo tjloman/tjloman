@@ -13,7 +13,15 @@ const ROTATE_SPEED := 1.6
 var camera: Camera3D
 var pitch_node: Node3D
 var zoom_distance := 35.0
+var divine_hand: DivineHand = null   # wired by main; touch gestures preempt it
+
+## When set, the rig glides after this node (e.g. the creature) until the
+## player pans away manually.
+var follow_target: Node3D = null
+
 var _rotating := false
+var _touches := {}        # touch index -> screen position
+var _pinch_dist := 0.0
 
 
 func _ready() -> void:
@@ -30,10 +38,18 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if follow_target != null and is_instance_valid(follow_target):
+		var t := follow_target.global_position
+		global_position.x = lerpf(global_position.x, t.x, minf(delta * 4.0, 1.0))
+		global_position.z = lerpf(global_position.z, t.z, minf(delta * 4.0, 1.0))
+	elif follow_target != null:
+		follow_target = null
+
 	var input_dir := Vector2.ZERO
 	input_dir.y = Input.get_action_strength("cam_back") - Input.get_action_strength("cam_forward")
 	input_dir.x = Input.get_action_strength("cam_right") - Input.get_action_strength("cam_left")
 	if input_dir != Vector2.ZERO:
+		follow_target = null  # manual panning breaks the follow
 		# Pan speed scales with zoom so the world feels consistent at any height.
 		var speed := PAN_SPEED * (zoom_distance / 35.0)
 		var forward := -global_transform.basis.z
@@ -65,6 +81,32 @@ func _follow_terrain(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Multi-touch: two fingers own the camera — pinch zooms, dragging both
+	# orbits freely (yaw with horizontal motion, pitch with vertical).
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			_touches[event.index] = event.position
+			if _touches.size() == 2:
+				_pinch_dist = _touch_span()
+				if divine_hand != null:
+					divine_hand.cancel_touch_interaction()
+		else:
+			_touches.erase(event.index)
+			_pinch_dist = 0.0
+		return
+	if event is InputEventScreenDrag and _touches.has(event.index):
+		_touches[event.index] = event.position
+		if _touches.size() >= 2:
+			var span := _touch_span()
+			if _pinch_dist > 8.0:
+				zoom_distance = clampf(zoom_distance * (_pinch_dist / span), MIN_ZOOM, MAX_ZOOM)
+			_pinch_dist = span
+			# Each finger's drag fires its own event, so use half strength.
+			rotate_y(-event.relative.x * 0.0025)
+			pitch_node.rotation_degrees.x = clampf(
+				pitch_node.rotation_degrees.x - event.relative.y * 0.12, -80.0, 35.0)
+		return
+
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
 			zoom_distance = clampf(zoom_distance * 0.9, MIN_ZOOM, MAX_ZOOM)
@@ -83,5 +125,18 @@ func _unhandled_input(event: InputEvent) -> void:
 
 ## Pan by a world-space delta (used by DivineHand's grab-the-land drag).
 func pan_world(delta_vec: Vector3) -> void:
+	follow_target = null  # grabbing the land breaks the follow
 	delta_vec.y = 0
 	global_position += delta_vec
+
+
+func _touch_span() -> float:
+	var positions := _touches.values()
+	if positions.size() < 2:
+		return 0.0
+	return (positions[0] as Vector2).distance_to(positions[1] as Vector2)
+
+
+## True while two or more fingers are on the glass (the camera owns them).
+func is_multitouching() -> bool:
+	return _touches.size() >= 2

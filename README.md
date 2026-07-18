@@ -162,6 +162,8 @@ scripts/miracles/
   miracle_manager.gd          Miracle catalog: costs, effects, gesture map
   fireball.gd                 The throwable miracle: ballistic, explosive
 scripts/ui/hud.gd             Bars, legend, tooltips, help
+scripts/ui/touch_controls.gd  Touchscreen-only buttons: Cast/Move mode,
+                              follow-the-creature camera lock
 ```
 
 ### Architecture principles (read before adding systems)
@@ -250,12 +252,19 @@ adb install builds/hand-of-heavens-demo.apk   # or copy to the phone and tap it
 (Installing by tapping the file requires allowing "install unknown apps"
 for your file manager — normal for any demo APK.)
 
-⚠️ **Touch controls are not designed yet.** Android taps emulate the left
-mouse button, so you can pan the land, pick things up, and place them —
-but miracles need the *right* mouse button and training needs P/L, so on
-a phone the demo is look-but-mostly-drag. A real touch scheme (gesture
-casting with one finger, radial menus) is on the roadmap; until then the
-APK is best for testing performance and feel-on-glass.
+**Touch controls** (appear automatically on touchscreens):
+
+| Touch | Action |
+|---|---|
+| One finger | Everything the left mouse does — governed by the Mode button |
+| **Mode** button | Toggle **Move** (drag land / pick / place / throw) ↔ **Cast** (one-finger gesture drawing) |
+| **Creature** button | Camera locks to and follows your creature (pan to release) |
+| Pinch | Zoom |
+| Two-finger drag | Orbit the camera freely (yaw + tilt) |
+
+The UI scales to the device (900-line logical height, width expands to
+the phone's aspect). Not yet touchable: creature pet/scold and diet
+policy — they still need P/L and 1–4 on a keyboard.
 
 ## Headless smoke test
 

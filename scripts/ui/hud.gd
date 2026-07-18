@@ -152,6 +152,13 @@ P / L (hand near creature) . PET (reward) / SCOLD (discourage) its last deed
 C .......................... jump the camera to your creature
 F1 ......................... toggle this help
 
+ON TOUCHSCREENS
+One finger ................. everything the left mouse does (per the Mode button)
+Mode button ................ toggle: MOVE (drag/pick/place/throw) or CAST (draw gestures)
+Creature button ............ camera locks to and follows your creature
+Pinch ...................... zoom
+Two-finger drag ............ orbit the camera freely (yaw and tilt)
+
 MIRACLES (drawn with right mouse held)
 Circle ..................... Food falls from the sky (20)
 Zigzag ..................... Rain — crops grow 4x (25)

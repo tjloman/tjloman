@@ -21,6 +21,10 @@ var trail: GestureTrail
 var state := HandState.IDLE
 var held_body: PhysicsBody3D = null
 var hover_target: Node3D = null
+
+## Touch "cast mode": one-finger drags draw miracle gestures instead of
+## grabbing. Toggled by the on-screen button; irrelevant with a mouse.
+var cast_mode := false
 var drag_anchor := Vector3.ZERO
 var gesture_points := PackedVector2Array()
 var ground_point := Vector3.ZERO
@@ -161,10 +165,20 @@ func _mouse_on_plane(mouse_pos: Vector2, plane_y := 0.0) -> Vector3:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# While two fingers are down the camera owns the screen — ignore the
+	# emulated mouse events the first finger still produces.
+	if camera_rig != null and camera_rig.is_multitouching():
+		return
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
-				_on_grab()
+				if cast_mode and state == HandState.IDLE:
+					state = HandState.GESTURING
+					gesture_points = PackedVector2Array([event.position])
+				else:
+					_on_grab()
+			elif state == HandState.GESTURING and cast_mode:
+				_finish_gesture()
 			else:
 				_on_release()
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
@@ -227,6 +241,20 @@ func _throw_velocity() -> Vector3:
 	# The hand's own momentum, amplified: flick hard, throw far.
 	var vel := (newest - oldest) / span * THROW_BOOST
 	return vel.limit_length(MAX_THROW_SPEED)
+
+
+## A second finger landed: the camera takes over. Abort any in-progress
+## land-drag or gesture (a held object stays held — pinching while
+## carrying is fine).
+func cancel_touch_interaction() -> void:
+	match state:
+		HandState.DRAG_LAND:
+			state = HandState.IDLE
+		HandState.GESTURING:
+			trail.points = PackedVector2Array()
+			trail.queue_redraw()
+			gesture_points = PackedVector2Array()
+			state = HandState.IDLE
 
 
 ## Places a conjured object (e.g. a fireball) straight into the hand's grip.

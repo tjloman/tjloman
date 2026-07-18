@@ -23,6 +23,11 @@ window/size/viewport_width=1600
 window/size/viewport_height=900
 ; Phones/tablets play in landscape, either way up.
 window/handheld/orientation=4
+; Scale the UI with the screen: a 900-line logical height everywhere, the
+; width expanding to match the device's aspect (tall phones get more world,
+; never stretched or letterboxed UI).
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 
 [rendering]
 

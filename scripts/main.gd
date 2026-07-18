@@ -49,10 +49,18 @@ func _ready() -> void:
 	add_child(divine_hand)
 	miracles.divine_hand = divine_hand  # fireballs are conjured into the grip
 
+	camera_rig.divine_hand = divine_hand  # two-finger camera preempts the hand
+
 	hud = HUD.new()
 	hud.village = village
 	hud.divine_hand = divine_hand
 	add_child(hud)
+
+	var touch := TouchControls.new()
+	touch.divine_hand = divine_hand
+	touch.camera_rig = camera_rig
+	touch.creature = creature
+	add_child(touch)
 
 	GameState.announce("A new god stirs over an endless world. Elsmere awaits your influence.")
 
