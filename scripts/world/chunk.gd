@@ -183,16 +183,22 @@ func _scatter_deposits(rng: RandomNumberGenerator, count: int) -> void:
 		_place(RockDeposit.new(), spot, 0.2)
 
 
+## Small flowers that read as flowers: a ring of petals around a bright
+## center on a short stem (no more mysterious pushpins).
 func _scatter_flowers(rng: RandomNumberGenerator, count: int) -> void:
 	for i in count:
 		var spot := _random_spot(rng)
 		if not _spot_ok(spot):
 			continue
-		var color := Color.from_hsv(rng.randf(), 0.7, 0.95)
-		var flower := Util.sphere(0.12, color)
-		var stem := Util.cylinder(0.02, 0.3, Color(0.3, 0.5, 0.25), Vector3(0, -0.18, 0))
-		flower.add_child(stem)
-		_place(flower, spot, -0.35)
+		var petal_color := Color.from_hsv(rng.randf(), 0.65, 0.95)
+		var flower := Node3D.new()
+		flower.add_child(Util.cylinder(0.015, 0.25, Color(0.3, 0.5, 0.25), Vector3(0, 0.12, 0)))
+		flower.add_child(Util.sphere(0.045, Color(0.95, 0.85, 0.3), Vector3(0, 0.26, 0)))
+		for p in 5:
+			var a := TAU * p / 5.0
+			flower.add_child(Util.sphere(0.05, petal_color,
+				Vector3(cos(a) * 0.07, 0.26, sin(a) * 0.07)))
+		_place(flower, spot, 0.02)
 
 
 func _scatter_animals(rng: RandomNumberGenerator, table: Dictionary) -> void:

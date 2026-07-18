@@ -17,12 +17,17 @@ var rng_seed := 0
 var lumber := 1.0
 
 var _felled := false
+var _held := false
+var _flying := false
+var _fly_velocity := Vector3.ZERO
 var _shown_lumber := -1
+var _base_height := 3.5
 var _replant_time := REPLANT_PERIOD * randf_range(0.5, 1.5)
 
 
 func _ready() -> void:
 	add_to_group("trees")
+	add_to_group("pickable")  # any tree can be UPROOTED by the hand
 	collision_layer = 1
 	collision_mask = 0
 	set_meta("hover_name", "Tree")
@@ -44,6 +49,7 @@ func _ready() -> void:
 		"grassland":
 			leaf_color = Color(0.28, 0.52, 0.24)
 
+	_base_height = h
 	var col := CollisionShape3D.new()
 	var shape := CylinderShape3D.new()
 	shape.radius = 0.45
@@ -68,6 +74,11 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	if _felled:
+		return
+	if _held:
+		return
+	if _flying:
+		_fly(delta)
 		return
 	if lumber < MAX_LUMBER:
 		lumber = minf(lumber + GROWTH_PER_SEC * delta, MAX_LUMBER)
@@ -109,6 +120,76 @@ func _try_replant() -> void:
 	spot.y = world.height_at(spot.x, spot.z) - 0.1
 	sapling.position = parent.to_local(spot)
 	parent.add_child(sapling)
+
+
+## Uprooting: the divine hand (or a big enough creature) can pull any
+## tree out of the ground, roots and all. Set down gently it replants
+## where it lands; thrown hard it splinters; dropped onto a storehouse
+## it banks its full lumber.
+
+func current_height() -> float:
+	return _base_height * scale.y
+
+
+func pick_up() -> void:
+	_held = true
+	_flying = false
+	collision_layer = 0
+
+
+func drop(throw_velocity: Vector3, gentle := false) -> void:
+	_held = false
+	if gentle:
+		_land(0.0)
+	else:
+		_flying = true
+		_fly_velocity = throw_velocity
+
+
+func _fly(delta: float) -> void:
+	_fly_velocity.y -= 20.0 * delta
+	global_position += _fly_velocity * delta
+	rotation_degrees.x = wrapf(rotation_degrees.x + delta * 220.0, -180.0, 180.0)
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world == null:
+		return
+	var ground := world.height_at(global_position.x, global_position.z)
+	if global_position.y <= ground:
+		_flying = false
+		_land(_fly_velocity.length())
+
+
+## Touchdown. Storehouse first; then either a rough landing (splinters
+## into lumber, most of it lost — a wasteful god) or a fresh planting.
+func _land(impact_speed: float) -> void:
+	rotation = Vector3.ZERO
+	for s in get_tree().get_nodes_in_group("stores"):
+		var store := s as FoodStore
+		if is_instance_valid(store) \
+				and store.global_position.distance_to(global_position) < FoodStore.PLATFORM_RADIUS + 1.5:
+			store.add_lumber(maxi(int(lumber), 1))
+			queue_free()
+			return
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world != null:
+		if world.is_underwater(global_position.x, global_position.z):
+			queue_free()  # swallowed by the lake
+			return
+		global_position.y = world.height_at(global_position.x, global_position.z) - 0.1
+	if impact_speed > 14.0:
+		for i in mini(int(lumber / 4.0) + 1, 5):
+			var bundle := ResourceItem.new()
+			bundle.kind = "lumber"
+			get_parent().add_child(bundle)
+			bundle.global_position = global_position \
+				+ Vector3(randf_range(-1, 1), 1.0, randf_range(-1, 1))
+		queue_free()
+		return
+	collision_layer = 1  # replanted, roots take hold, growth resumes
+
+
+func is_held() -> bool:
+	return _held or _flying
 
 
 ## Called by a lumberjack when the chop completes. Timber!

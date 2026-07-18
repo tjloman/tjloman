@@ -164,7 +164,7 @@ func pick_farm(from: Vector3) -> Farm:
 ## Wants another field? One per ~7 mouths, capped so villages stay villages.
 func wants_new_farm() -> bool:
 	farms = farms.filter(func(f): return is_instance_valid(f))
-	return farms.size() < mini(1 + population() / 7, 4)
+	return farms.size() < mini(1 + int(population() / 7.0), 4)
 
 
 ## A farmer finished breaking new ground: register the field.

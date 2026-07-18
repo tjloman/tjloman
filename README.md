@@ -34,7 +34,9 @@ you're done. No system install required.
 | Input | Action |
 |---|---|
 | Left mouse on land (drag) | Grab and drag the world (B&W style) |
-| Left mouse on things | Pick up food / rocks / villagers |
+| Left mouse on things | Pick up food / villagers / animals — even **trees** (uproot any; gentle drop replants, hard throw splinters, dropped on a storehouse banks full lumber; your creature uproots trees smaller than itself) |
+| Gentle release **at your creature** | **Hand it the object** — innate; raises its attention and bond |
+| Throw **to your creature** | With attention and practice it **catches** — praise catches to train the skill |
 | Release with a **still** hand | **Place gently** — no fear, no harm. Placing a villager in another village makes them a **missionary** (yours → heathen town) or a **convert** (anyone → a faithful town) |
 | Release while moving mouse | Throw — your hand's momentum carries; flick hard to hurl far |
 | **Hold right mouse + draw** | **Cast a miracle gesture** |

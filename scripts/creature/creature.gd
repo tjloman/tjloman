@@ -47,8 +47,14 @@ var morality := 0.0
 ## These weights multiply into every decision it makes.
 var desires := {
 	"tend": 0.6, "gather": 0.6, "play": 0.9, "watch": 1.1,
-	"guard": 0.5, "mischief": 0.35, "fish": 0.7,
+	"guard": 0.5, "mischief": 0.35, "fish": 0.7, "catch": 0.3,
 }
+
+## ATTENTION: how closely it is watching your hand right now. Handing it
+## things raises it (innate); it decays with neglect. Catching a thrown
+## object requires attention — and catch skill grows when you praise it.
+var attention := 20.0
+var divine_hand: DivineHand = null  # wired by main
 
 var state := State.IDLE
 var _last_deed := ""  # the deed a pet or scolding will be credited to
@@ -64,6 +70,7 @@ var _play_toy: Animal = null
 var _carried: Node3D = null
 var _carry_intent := ""
 var _catch_target: Node3D = null
+var _catch_checked_id := 0  # one catch attempt per throw
 ## What it has learned it CANNOT eat, the hard way, one taste at a time.
 var _inedible := {}
 var _action_time := 2.0
@@ -197,6 +204,8 @@ func _physics_process(delta: float) -> void:
 		_observe_time = OBSERVE_PERIOD
 		_observe_world()
 
+	_try_catch_throw()
+
 	# Whatever the claws hold rides along, up at the shoulder.
 	if _carried != null:
 		if is_instance_valid(_carried):
@@ -225,6 +234,7 @@ func _tick_feelings(delta: float) -> void:
 	# Mood slowly settles toward contentment scaled by bond: a loved
 	# creature's resting state is happier.
 	mood = lerpf(mood, 45.0 + bond * 0.3, 0.03 * delta)
+	attention = maxf(attention - 0.6 * delta, 0.0)
 
 
 ## Never stuck, never lost: re-decide if a state drags on, and snap back
@@ -310,6 +320,10 @@ func _decide() -> void:
 			and _nearest_giftable() != null:
 		pool["gift"] = desires["gather"] * 0.8
 	pool["fish"] = desires["fish"] * 0.5  # fishing for the fun of it
+	# Logging: uproot a tree smaller than itself and haul it home whole.
+	if morality > 0.0 and _home_village() != null \
+			and _home_village().store.lumber < 8 and _nearest_uprootable_tree() != null:
+		pool["logging"] = desires["gather"] * 0.7
 	if morality < 10.0:
 		pool["mischief"] = desires["mischief"] * (1.0 - morality / 100.0) * (boredom / 60.0)
 	pool["wander"] = 0.7
@@ -340,6 +354,10 @@ func _decide() -> void:
 				state = State.GO_FISH
 			else:
 				_wander()
+		"logging":
+			_catch_target = _nearest_uprootable_tree()
+			_carry_intent = "deliver"
+			state = State.CATCH
 		"mischief":
 			# Half the time a lunge and a roar; half the time it MAKES OFF
 			# with someone, carries them a way, and sets them down shaking.
@@ -497,6 +515,64 @@ func _process_go_gather(delta: float) -> void:
 		_target_food = null
 
 
+## PLAYING CATCH: if the hand throws something and the creature is paying
+## attention, it may snatch the object out of the air — a skill that
+## grows each time you praise a catch.
+func _try_catch_throw() -> void:
+	if _carried != null or divine_hand == null \
+			or state in [State.SLEEPING, State.SULK]:
+		return
+	var thrown := divine_hand.last_thrown
+	if thrown == null or not is_instance_valid(thrown) or thrown.is_queued_for_deletion():
+		return
+	if thrown.get_instance_id() == _catch_checked_id:
+		return
+	if global_position.distance_to(thrown.global_position) > 2.2 + scale.x:
+		return
+	_catch_checked_id = thrown.get_instance_id()  # one attempt per throw
+	if attention < 35.0:
+		return  # not watching your hand; it sails past
+	var skill := clampf(desires["catch"] * 0.55, 0.12, 0.95)
+	if randf() > skill:
+		GameState.announce("Your creature lunged... and fumbled the catch. Practice.")
+		mood = maxf(mood - 2.0, 0.0)
+		return
+	_pick_up_thing(thrown, _intent_for(thrown))
+	_last_deed = "catch"
+	mood = minf(mood + 10.0, 100.0)
+	bond = minf(bond + 2.0, 100.0)
+	attention = minf(attention + 10.0, 100.0)
+	GameState.announce("Your creature CAUGHT it! It looks extremely pleased with itself.")
+
+
+## Handing the creature something is innate — it always accepts, and it
+## teaches it to watch your hand (attention up, bond up).
+func receive_gift(item: Node3D) -> void:
+	if _carried != null:
+		_release_carried(true)
+	attention = minf(attention + 15.0, 100.0)
+	bond = minf(bond + 2.0, 100.0)
+	mood = minf(mood + 6.0, 100.0)
+	_pick_up_thing(item, _intent_for(item))
+	_last_deed = "receive"
+
+
+## What would the creature DO with this thing?
+func _intent_for(item: Node3D) -> String:
+	if item is FoodItem:
+		return "eat" if hunger > 45.0 else "deliver"
+	if item is ResourceItem or item is WildTree:
+		return "deliver"
+	if item is Animal:
+		var animal := item as Animal
+		if hunger > 55.0 and animal.meat_yield() > 0 and not _inedible.has(animal.species):
+			return "eat"
+		if animal.is_tamable() and morality > 0.0:
+			return "gift"
+		return "release"
+	return "release"
+
+
 ## The chase: run the quarry down and take it in the claws.
 func _process_catch(delta: float) -> void:
 	if _catch_target == null or not is_instance_valid(_catch_target) \
@@ -548,6 +624,9 @@ func _process_carrying(delta: float) -> void:
 						store.add_lumber(1)
 					else:
 						store.add_stone(1)
+					_carried.queue_free()
+				elif _carried is WildTree:
+					store.add_lumber(maxi(int((_carried as WildTree).lumber), 1))
 					_carried.queue_free()
 				_carried = null
 				for v in get_tree().get_nodes_in_group("villagers"):
@@ -786,6 +865,7 @@ func _spook_prey() -> void:
 func praise() -> void:
 	bond = minf(bond + 4.0, 100.0)
 	mood = minf(mood + 12.0, 100.0)
+	attention = minf(attention + 8.0, 100.0)
 	var key := _deed_desire_key(_last_deed)
 	if key != "":
 		_bump_desire(key, 0.25)
@@ -815,10 +895,12 @@ func scold() -> void:
 
 func _deed_desire_key(deed: String) -> String:
 	match deed:
-		"tend", "gather", "play", "watch", "guard", "mischief", "fish":
+		"tend", "gather", "play", "watch", "guard", "mischief", "fish", "catch":
 			return deed
 		"gift":
 			return "gather"
+		"receive":
+			return "catch"  # praised for accepting = learns to watch the hand
 		"hunt":
 			return "mischief"
 	return ""
@@ -872,6 +954,24 @@ func _nearest_catchable() -> Animal:
 		if d < best_dist:
 			best_dist = d
 			best = animal
+	return best
+
+
+## A tree it can uproot: one that stands shorter than the creature itself.
+func _nearest_uprootable_tree() -> WildTree:
+	var my_height := 2.55 * scale.y
+	var best: WildTree = null
+	var best_dist := 30.0
+	for t in get_tree().get_nodes_in_group("trees"):
+		var tree := t as WildTree
+		if not is_instance_valid(tree) or tree.is_felled() or tree.is_held():
+			continue
+		if tree.current_height() >= my_height:
+			continue
+		var d := global_position.distance_to(tree.global_position)
+		if d < best_dist:
+			best_dist = d
+			best = tree
 	return best
 
 
@@ -1120,10 +1220,10 @@ func favorite_deed() -> String:
 
 
 func hover_text() -> String:
-	return ("Your creature — %s (%s, %s) · bond %d\n" +
+	return ("Your creature — %s (%s, %s) · bond %d · attention %d\n" +
 		"hunger %d · energy %d · size %.0f%% · loves to %s\n" +
-		"[P — pet   ·   L — scold   ·   C — find it]") % [
-		_status_word(), morality_word(), mood_word(), int(bond),
+		"[P — pet   ·   L — scold   ·   C — lock camera]") % [
+		_status_word(), morality_word(), mood_word(), int(bond), int(attention),
 		int(hunger), int(energy), growth * 100.0, favorite_deed()]
 
 

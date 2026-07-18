@@ -94,9 +94,12 @@ func _build_help_panel() -> void:
 	help.text = """DIVINE CONTROLS
 
 Left mouse (on land) ....... grab & drag the world
-Left mouse (on things) ..... pick up food, rocks, sheep, villagers
+Left mouse (on things) ..... pick up food, sheep, villagers — even TREES (uproot!)
 Release while STILL ........ place gently — no fear, no harm
+  ...a gentle tree replants where set down; on a storehouse it banks its lumber
+  ...a gentle release AT your creature HANDS it the object (it learns to watch you)
 Release while moving ....... throw! (hard landings hurt — and stain your soul)
+  ...throw TO your creature: if it's attentive (and practiced) it CATCHES
 
 PLACING VILLAGERS IS POLICY
 Set a villager down in a village of the faith and they will JOIN it —

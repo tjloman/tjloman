@@ -48,6 +48,7 @@ func _ready() -> void:
 	divine_hand.miracles = miracles
 	add_child(divine_hand)
 	miracles.divine_hand = divine_hand  # fireballs are conjured into the grip
+	creature.divine_hand = divine_hand  # it watches your hand — and catches
 
 	camera_rig.divine_hand = divine_hand  # two-finger camera preempts the hand
 

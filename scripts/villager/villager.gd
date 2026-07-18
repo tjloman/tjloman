@@ -267,7 +267,8 @@ func _physics_process(delta: float) -> void:
 			_action_time -= delta
 			_work_noise("saw", 0.9, delta)
 			if _action_time <= 0.0:
-				if is_instance_valid(_target_tree) and not _target_tree.is_felled():
+				if is_instance_valid(_target_tree) and not _target_tree.is_felled() \
+						and not _target_tree.is_held():
 					var lumber := _target_tree.fell() + (1 if village.has_pack_animal() else 0)
 					village.store.add_lumber(lumber)
 				_target_tree = null
@@ -874,7 +875,7 @@ func _nearest_in_group(group: String, max_dist: float) -> Node3D:
 		var node := n as Node3D
 		if not is_instance_valid(node) or node.is_queued_for_deletion():
 			continue
-		if node is WildTree and (node as WildTree).is_felled():
+		if node is WildTree and ((node as WildTree).is_felled() or (node as WildTree).is_held()):
 			continue
 		var d := global_position.distance_to(node.global_position)
 		if d < best_dist:

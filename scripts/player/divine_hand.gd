@@ -25,6 +25,10 @@ var hover_target: Node3D = null
 ## Touch "cast mode": one-finger drags draw miracle gestures instead of
 ## grabbing. Toggled by the on-screen button; irrelevant with a mouse.
 var cast_mode := false
+
+## The last thing this hand threw (not placed) — the creature watches
+## for it, and may catch it out of the air.
+var last_thrown: Node3D = null
 var drag_anchor := Vector3.ZERO
 var gesture_points := PackedVector2Array()
 var ground_point := Vector3.ZERO
@@ -229,12 +233,24 @@ func _on_release() -> void:
 			if gentle:
 				throw_vel = Vector3.ZERO
 			if is_instance_valid(held_body):
+				# A gentle release right AT the creature is a hand-off: it
+				# takes the object in its claws (and learns to watch you).
+				if gentle:
+					var c := get_tree().get_first_node_in_group("creature") as Creature
+					if c != null and held_body != c \
+							and c.global_position.distance_to(global_position) < 3.0 + c.scale.x:
+						c.receive_gift(held_body)
+						held_body = null
+						state = HandState.IDLE
+						return
 				if held_body is RigidBody3D:
 					var rb := held_body as RigidBody3D
 					rb.freeze = false
 					rb.linear_velocity = throw_vel
 				elif held_body.has_method("drop"):
 					held_body.call("drop", throw_vel, gentle)
+				if not gentle:
+					last_thrown = held_body
 			held_body = null
 			state = HandState.IDLE
 

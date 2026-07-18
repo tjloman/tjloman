@@ -1,5 +1,5 @@
 class_name House
-extends Node3D
+extends StaticBody3D
 ## A dwelling with a lifespan of its own: health and age meters, capacity by
 ## size, decay in old age, collapse into rubble, and construction/repair by
 ## builders. Windows glow warm at night — unless nobody lives there.
@@ -30,6 +30,18 @@ var _night_check := 0.0
 
 func _ready() -> void:
 	add_to_group("houses")
+	# A real body, so the hand's ray can hover it (census, health, age).
+	# Layer 4 = props: villagers walk through, the hand sees it.
+	collision_layer = 4
+	collision_mask = 0
+	var w: float = SPECS[size]["width"]
+	var depth := w * (1.6 if size == Size.LONGHOUSE else 1.0)
+	var col := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(w + 0.4, 3.0, depth + 0.4)
+	col.shape = shape
+	col.position = Vector3(0, 1.5, 0)
+	add_child(col)
 	if under_construction:
 		health = 100.0
 		_build_scaffold_visuals()
@@ -114,6 +126,8 @@ func _collapse() -> void:
 
 func _clear_visuals() -> void:
 	for child in get_children():
+		if child is CollisionShape3D:
+			continue  # the hover body persists across rebuilds
 		child.queue_free()
 
 
