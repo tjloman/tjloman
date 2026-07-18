@@ -70,10 +70,14 @@ func _process(delta: float) -> void:
 	if rot != 0.0:
 		_yaw_around_focus(-rot * ROTATE_SPEED * delta)
 
+	# The camera only ever sits back along its own +Z. Forcing x/y to zero
+	# each frame heals any drift (e.g. an old ground-clamp that nudged the
+	# global position) so zoom-to-hand and rotation stay true.
+	camera.position.x = 0.0
+	camera.position.y = 0.0
 	camera.position.z = lerpf(camera.position.z, zoom_distance, minf(delta * 8.0, 1.0))
 
-	_follow_terrain(delta)
-	_clamp_camera_above_ground()
+	_update_rig_height(delta)
 
 	# TRUE lock-on: while following, the target sits centered in frame —
 	# orbit and zoom move around it, the camera keeps looking AT it.
@@ -84,33 +88,29 @@ func _process(delta: float) -> void:
 			camera.look_at(aim, Vector3.UP)
 
 
-## The rig's pivot rides the landscape so hills don't swallow the camera.
-func _follow_terrain(delta: float) -> void:
-	var space := get_world_3d().direct_space_state
-	var from := global_position + Vector3(0, 120.0, 0)
-	var query := PhysicsRayQueryParameters3D.create(from, from + Vector3(0, -300.0, 0), 1)
-	var hit := space.intersect_ray(query)
-	if not hit.is_empty():
-		var target_y: float = maxf(hit.position.y, 0.0)
-		global_position.y = lerpf(global_position.y, target_y, minf(delta * 5.0, 1.0))
-
-
-## The land is solid, even to gods: the camera never dips beneath the
-## terrain (or the water table). Checked against the pure-noise height
-## field, so it holds even where no chunk is loaded.
-func _clamp_camera_above_ground() -> void:
+## Keeps the whole rig at the right height WITHOUT ever touching the
+## camera's local offset: the pivot rides the terrain during normal play,
+## and lifts just enough to keep the CAMERA above ground when you tilt up
+## (which would otherwise sink the camera below the pivot into the hill).
+## Everything acts on the rig's y, so there's nothing to fight or corrupt.
+func _update_rig_height(delta: float) -> void:
 	if _world_cache == null or not is_instance_valid(_world_cache):
 		_world_cache = get_tree().get_first_node_in_group("world_gen") as WorldGen
 		if _world_cache == null:
 			return
-	var cam_pos := camera.global_position
-	# The cushion shrinks as you zoom in, so a close camera can sit right
-	# down at ankle height and look up — without ever entering the ground.
+	var cam := camera.global_position
+	# Cushion shrinks as you zoom in, so a close camera sits at ankle
+	# height and looks up — without entering the ground.
 	var cushion := clampf(zoom_distance * 0.06, 0.3, 2.0)
 	var floor_y := maxf(
-		_world_cache.height_at(cam_pos.x, cam_pos.z), WorldGen.WATER_LEVEL) + cushion
-	if cam_pos.y < floor_y:
-		camera.global_position.y = floor_y
+		_world_cache.height_at(cam.x, cam.z), WorldGen.WATER_LEVEL) + cushion
+	if cam.y < floor_y:
+		global_position.y += (floor_y - cam.y) + 0.01   # lift so the camera clears
+	elif cam.y > floor_y + 0.5:
+		# Comfortably clear: ease the pivot down to ride the land under it.
+		var terrain := maxf(
+			_world_cache.height_at(global_position.x, global_position.z), 0.0)
+		global_position.y = lerpf(global_position.y, terrain, minf(delta * 5.0, 1.0))
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -161,9 +161,16 @@ func _unhandled_input(event: InputEvent) -> void:
 ## your cursor stays put instead of the whole world swinging away. Falls
 ## back to the rig origin if the hand isn't ready.
 func _focus_point() -> Vector3:
-	if divine_hand != null and is_instance_valid(divine_hand):
+	# Only anchor to the hand when the camera is tilted DOWN enough that its
+	# spot is a genuine point on the ground (not a stale sky projection),
+	# and only when that point is within reach — otherwise a garbage focus
+	# would fling the rig across the map. Fall back to zooming in place.
+	if divine_hand != null and is_instance_valid(divine_hand) \
+			and pitch_node.rotation_degrees.x < -8.0:
 		var p := divine_hand.ground_point
-		return Vector3(p.x, global_position.y, p.z)
+		var flat := Vector2(p.x - global_position.x, p.z - global_position.z)
+		if flat.length() < MAX_ZOOM:
+			return Vector3(p.x, global_position.y, p.z)
 	return global_position
 
 

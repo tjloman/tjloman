@@ -128,8 +128,14 @@ func _blast_visuals(pos: Vector3) -> void:
 	flash.omni_range = 22.0
 	flash.position = pos + Vector3(0, 2, 0)
 	scene.add_child(flash)
+	# The scorch is burned into the GROUND, wherever the blast happened
+	# above it — never left floating in mid-air.
+	var ground_y := pos.y
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world != null:
+		ground_y = maxf(world.height_at(pos.x, pos.z), WorldGen.WATER_LEVEL)
 	var scorch := Util.cylinder(BLAST_RADIUS * 0.55, 0.06, Color(0.12, 0.09, 0.07),
-		pos + Vector3(0, 0.04, 0))
+		Vector3(pos.x, ground_y + 0.05, pos.z))
 	scene.add_child(scorch)
 
 	var tween := scene.create_tween()
