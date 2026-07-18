@@ -361,7 +361,7 @@ func _strike_prey() -> void:
 func _find_water(world: WorldGen) -> Vector3:
 	if world == null:
 		return Vector3.INF
-	for dist in [12.0, 24.0, 40.0, 60.0]:
+	for dist: float in [12.0, 24.0, 40.0, 60.0]:
 		for i in 8:
 			var angle := TAU * i / 8.0 + randf() * 0.3
 			var probe := global_position + Vector3(cos(angle), 0, sin(angle)) * dist
