@@ -15,7 +15,7 @@ extends CharacterBody3D
 
 enum State {
 	IDLE, WANDER, SEEK_FOOD, EATING, SLEEPING, GO_TEND, TENDING,
-	STALK_PREY, WATCH, GO_GATHER, CARRYING, PLAY, GUARD, SULK,
+	STALK_PREY, WATCH, GO_GATHER, CARRYING, PLAY, GUARD, SULK, CATCH,
 }
 
 const WALK_SPEED := 3.5
@@ -55,7 +55,15 @@ var _target_food: Node3D = null      # FoodItem or Corpse
 var _target_prey: Node3D = null      # Villager or livestock Animal
 var _watch_subject: Villager = null
 var _play_toy: Animal = null
-var _carried_food_type := FoodItem.FoodType.PLANT
+
+## The claws: the creature can carry animals, food, and villagers.
+## _carry_intent says why: "deliver" (to the granary), "eat" (if it can),
+## "gift" (a tamable set down at the pen), "snatch" (villager mischief).
+var _carried: Node3D = null
+var _carry_intent := ""
+var _catch_target: Node3D = null
+## What it has learned it CANNOT eat, the hard way, one taste at a time.
+var _inedible := {}
 var _action_time := 2.0
 var _observe_time := 0.0
 var _state_time := 0.0
@@ -151,6 +159,8 @@ func _physics_process(delta: float) -> void:
 			_process_go_gather(delta)
 		State.CARRYING:
 			_process_carrying(delta)
+		State.CATCH:
+			_process_catch(delta)
 		State.PLAY:
 			_process_play(delta)
 		State.GUARD:
@@ -165,6 +175,14 @@ func _physics_process(delta: float) -> void:
 	if _observe_time <= 0.0:
 		_observe_time = OBSERVE_PERIOD
 		_observe_world()
+
+	# Whatever the claws hold rides along, up at the shoulder.
+	if _carried != null:
+		if is_instance_valid(_carried):
+			_carried.global_position = global_position + Vector3.UP * (1.5 * scale.y) \
+				+ global_transform.basis.z.normalized() * (0.9 * scale.x)
+		else:
+			_carried = null
 
 	_animate_waddle(delta)
 	var status := _status_text()
@@ -237,6 +255,9 @@ func _bump_desire(key: String, amount: float) -> void:
 ## Decision-making: needs first, then a weighted draw from its desires,
 ## colored by mood, boredom, bond, and morality.
 func _decide() -> void:
+	# A watchdog abort mid-carry sets the cargo down, never drops it forever.
+	if _carried != null:
+		_release_carried(true)
 	_last_deed = ""
 	if energy < 15.0:
 		state = State.SLEEPING
@@ -261,6 +282,10 @@ func _decide() -> void:
 	if _find_working_villager() != null:
 		pool["watch"] = desires["watch"] * (0.6 + boredom / 100.0)
 	pool["play"] = desires["play"] * (0.3 + mood / 150.0 + boredom / 100.0)
+	if morality > 20.0 and _home_village() != null \
+			and _home_village().tamed_count() < Village.MAX_TAMED \
+			and _nearest_giftable() != null:
+		pool["gift"] = desires["gather"] * 0.8
 	if morality < 10.0:
 		pool["mischief"] = desires["mischief"] * (1.0 - morality / 100.0) * (boredom / 60.0)
 	pool["wander"] = 0.7
@@ -280,12 +305,28 @@ func _decide() -> void:
 			state = State.PLAY
 			_action_time = randf_range(6.0, 10.0)
 			_play_toy = _find_toy()
+		"gift":
+			_catch_target = _nearest_giftable()
+			_carry_intent = "gift"
+			state = State.CATCH
 		"mischief":
-			_target_prey = _nearest_villager()
-			if _target_prey != null:
-				state = State.STALK_PREY
+			# Half the time a lunge and a roar; half the time it MAKES OFF
+			# with someone, carries them a way, and sets them down shaking.
+			if randf() < 0.5:
+				_target_prey = _nearest_villager()
+				if _target_prey != null:
+					state = State.STALK_PREY
+				else:
+					_wander()
 			else:
-				_wander()
+				_catch_target = _nearest_villager()
+				if _catch_target != null:
+					_carry_intent = "snatch"
+					state = State.CATCH
+					var angle := randf() * TAU
+					_target = global_position + Vector3(cos(angle), 0, sin(angle)) * 12.0
+				else:
+					_wander()
 		_:
 			_wander()
 
@@ -330,6 +371,14 @@ func _plan_food() -> bool:
 	if _target_food != null:
 		state = State.SEEK_FOOD
 		return true
+	# Nothing lying around? Catch dinner. (Skipping whatever it has
+	# learned, one bad taste at a time, that it cannot eat.)
+	var quarry := _nearest_catchable()
+	if quarry != null:
+		_catch_target = quarry
+		_carry_intent = "eat"
+		state = State.CATCH
+		return true
 	return false
 
 
@@ -338,7 +387,7 @@ func _finish_deed(deed: String, mood_gain: float) -> void:
 	_last_deed = deed
 	mood = minf(mood + mood_gain, 100.0)
 	boredom = maxf(boredom - 25.0, 0.0)
-	if deed in ["tend", "gather", "guard"]:
+	if deed in ["tend", "gather", "guard", "gift"]:
 		morality = clampf(morality + 1.0, -100.0, 100.0)
 	_decide()
 
@@ -401,23 +450,132 @@ func _process_go_gather(delta: float) -> void:
 		_target_food = null
 		_decide()
 	elif _move_toward(_target_food.global_position, WALK_SPEED * 0.9, delta):
-		_carried_food_type = (_target_food as FoodItem).food_type
-		_target_food.queue_free()
+		_pick_up_thing(_target_food, "deliver")
 		_target_food = null
-		state = State.CARRYING
+
+
+## The chase: run the quarry down and take it in the claws.
+func _process_catch(delta: float) -> void:
+	if _catch_target == null or not is_instance_valid(_catch_target) \
+			or _catch_target.is_queued_for_deletion():
+		_catch_target = null
+		_decide()
+		return
+	var reach := 2.0 + scale.x * 0.6
+	if global_position.distance_to(_catch_target.global_position) < reach:
+		_pick_up_thing(_catch_target, _carry_intent)
+		_catch_target = null
+	else:
+		_move_toward(_catch_target.global_position, _run_speed(), delta)
+
+
+## A bigger creature is a faster creature — full-grown, it runs down wolves.
+func _run_speed() -> float:
+	return WALK_SPEED * (1.1 + growth * 0.9)
+
+
+func _pick_up_thing(node: Node3D, intent: String) -> void:
+	_carried = node
+	_carry_intent = intent
+	if node is RigidBody3D:
+		(node as RigidBody3D).freeze = true
+	elif node.has_method("pick_up"):
+		node.call("pick_up")
+	state = State.CARRYING
+	_action_time = 1.8 if intent == "eat" else 5.0
 
 
 func _process_carrying(delta: float) -> void:
-	var store := _nearest_store()
-	if store == null:
+	if _carried == null or not is_instance_valid(_carried):
+		_carried = null
 		_decide()
 		return
-	if _move_toward(store.global_position, WALK_SPEED * 0.9, delta):
-		store.add(_carried_food_type, 1)
-		for v in get_tree().get_nodes_in_group("villagers"):
-			if v.global_position.distance_to(global_position) < 8.0:
-				v.cheer(2.0)
-		_finish_deed("gather", 6.0)
+	match _carry_intent:
+		"deliver":
+			var store := _nearest_store()
+			if store == null:
+				_release_carried(true)
+				_decide()
+			elif _move_toward(store.global_position, WALK_SPEED * 0.9, delta):
+				if _carried is FoodItem:
+					store.add((_carried as FoodItem).food_type, 1)
+					_carried.queue_free()
+				_carried = null
+				for v in get_tree().get_nodes_in_group("villagers"):
+					if v.global_position.distance_to(global_position) < 8.0:
+						v.cheer(2.0)
+				_finish_deed("gather", 6.0)
+		"eat":
+			_apply_gravity_only(delta)
+			_action_time -= delta
+			if _action_time <= 0.0:
+				_eat_carried()
+		"gift":
+			var village := _home_village()
+			if village == null:
+				_release_carried(true)
+				_decide()
+			elif _move_toward(village.pen_position(), WALK_SPEED * 0.9, delta):
+				GameState.announce("Your creature sets a %s down by the pen. A gift."
+					% (_carried as Animal).species)
+				_release_carried(true)  # gentle landing in a kind pen tames it
+				_finish_deed("gift", 8.0)
+		"snatch":
+			_action_time -= delta
+			_move_toward(_target, _run_speed() * 0.8, delta)
+			if _action_time <= 0.0:
+				if _carried is Villager:
+					(_carried as Villager).witness_horror(2.0)
+				morality = clampf(morality - 1.0, -100.0, 100.0)
+				mood = minf(mood + 6.0, 100.0)
+				_release_carried(false)
+				_last_deed = "mischief"
+				_decide()
+		_:
+			_release_carried(true)
+			_decide()
+
+
+## The moment of truth: some things are food, some things are lessons.
+func _eat_carried() -> void:
+	var animal := _carried as Animal
+	if animal == null:
+		_release_carried(true)
+		_decide()
+		return
+	if animal.meat_yield() <= 0:
+		_inedible[animal.species] = true
+		GameState.announce("Your creature tastes a %s, gags, and sets it down. Lesson learned."
+			% animal.species)
+		mood = maxf(mood - 4.0, 0.0)
+		_release_carried(true)
+		_decide()
+		return
+	if animal.tamed_by != null:
+		morality = clampf(morality - 3.0, -100.0, 100.0)
+		GameState.announce("Your creature has eaten a penned %s. The herders grieve." % animal.species)
+	elif animal.spec.get("predator", false):
+		morality = clampf(morality + 1.0, -100.0, 100.0)  # culling wolves is a service
+	else:
+		morality = clampf(morality - 0.5, -100.0, 100.0)
+	hunger = maxf(hunger - (30.0 + animal.meat_yield() * 10.0), 0.0)
+	_last_deed = "hunt"
+	animal.die(false)
+	_carried = null
+	state = State.EATING
+	_action_time = 2.0
+
+
+func _release_carried(gentle: bool) -> void:
+	if _carried != null and is_instance_valid(_carried):
+		if _carried is RigidBody3D:
+			(_carried as RigidBody3D).freeze = false
+			(_carried as RigidBody3D).linear_velocity = Vector3.ZERO
+		elif _carried.has_method("drop"):
+			var toss := Vector3.ZERO if gentle \
+				else Vector3(randf_range(-2, 2), 2.0, randf_range(-2, 2))
+			_carried.call("drop", toss, gentle)
+	_carried = null
 
 
 func _process_play(delta: float) -> void:
@@ -571,6 +729,8 @@ func _deed_desire_key(deed: String) -> String:
 	match deed:
 		"tend", "gather", "play", "watch", "guard", "mischief":
 			return deed
+		"gift":
+			return "gather"
 		"hunt":
 			return "mischief"
 	return ""
@@ -597,6 +757,51 @@ func _nearest_store() -> FoodStore:
 
 func _nearest_villager() -> Villager:
 	return _nearest_in_group("villagers", 50.0) as Villager
+
+
+func _home_village() -> Village:
+	for v in get_tree().get_nodes_in_group("village"):
+		if is_instance_valid(v) and (v as Village).is_player_home:
+			return v as Village
+	return null
+
+
+## Something it might eat: any animal it hasn't learned is inedible.
+## A good creature leaves the villages' livestock alone; a fallen one
+## does not distinguish.
+func _nearest_catchable() -> Animal:
+	var best: Animal = null
+	var best_dist := 35.0
+	for a in get_tree().get_nodes_in_group("animals"):
+		var animal := a as Animal
+		if not is_instance_valid(animal) or animal.is_queued_for_deletion():
+			continue
+		if animal.state == Animal.State.HELD or _inedible.has(animal.species):
+			continue
+		if animal.tamed_by != null and morality > -10.0:
+			continue
+		var d := global_position.distance_to(animal.global_position)
+		if d < best_dist:
+			best_dist = d
+			best = animal
+	return best
+
+
+## A wild, tamable beast worth carrying home to the pen as a gift.
+func _nearest_giftable() -> Animal:
+	var best: Animal = null
+	var best_dist := 30.0
+	for a in get_tree().get_nodes_in_group("animals"):
+		var animal := a as Animal
+		if not is_instance_valid(animal) or not animal.is_tamable():
+			continue
+		if animal.state == Animal.State.HELD:
+			continue
+		var d := global_position.distance_to(animal.global_position)
+		if d < best_dist:
+			best_dist = d
+			best = animal
+	return best
 
 
 func _nearest_in_group(group: String, radius: float) -> Node3D:
@@ -822,7 +1027,15 @@ func _status_word() -> String:
 		State.GO_TEND, State.TENDING: return "helping on the farm"
 		State.SLEEPING: return "sleeping"
 		State.WATCH: return "watching the villagers, learning"
-		State.GO_GATHER, State.CARRYING: return "carrying food to the granary"
+		State.GO_GATHER: return "fetching food for the granary"
+		State.CARRYING:
+			match _carry_intent:
+				"deliver": return "carrying food to the granary"
+				"eat": return "about to eat what it caught"
+				"gift": return "bringing a gift to the pen"
+				"snatch": return "making off with someone"
+			return "carrying something"
+		State.CATCH: return "chasing something down"
 		State.PLAY: return "playing"
 		State.GUARD: return "standing guard"
 		State.SULK: return "sulking"
@@ -837,7 +1050,9 @@ func _status_text() -> String:
 		State.STALK_PREY: return "..."
 		State.TENDING: return "help!"
 		State.WATCH: return "hmm..."
-		State.GO_GATHER, State.CARRYING: return "for you!"
+		State.CATCH: return "!!"
+		State.GO_GATHER: return "for you!"
+		State.CARRYING: return "nom?" if _carry_intent == "eat" else "for you!"
 		State.PLAY: return "wheee!"
 		State.GUARD: return "grrr"
 		State.SULK: return ":("

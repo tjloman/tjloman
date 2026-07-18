@@ -180,6 +180,7 @@ func _physics_process(delta: float) -> void:
 					state = State.IDLE
 					_action_time = 2.0
 					velocity = Vector3.ZERO
+					_maybe_pen_tame()
 					return
 				if _fall_speed > 16.0:
 					take_damage((_fall_speed - 16.0) * 4.0)
@@ -502,6 +503,24 @@ func scare(from_pos: Vector3) -> void:
 	_action_time = 3.0
 	if spec.get("skittish", false):
 		_action_time = 5.0
+
+
+## Set down gently inside a kind village's pen? That IS a taming: the
+## herders take in what the god delivers.
+func _maybe_pen_tame() -> void:
+	if not is_tamable():
+		return
+	for v in get_tree().get_nodes_in_group("village"):
+		var village := v as Village
+		if not is_instance_valid(village):
+			continue
+		if village.pen_position().distance_to(global_position) < 9.0 \
+				and village.average_morality() > 20.0:
+			tame(village)
+			if village.is_player_home:
+				GameState.announce("The %s settles into %s's pen, delivered by the hand."
+					% [species, village.village_name])
+			return
 
 
 func tame(by: Village) -> void:

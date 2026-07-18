@@ -161,7 +161,12 @@ func _physics_process(delta: float) -> void:
 			if home == null:
 				happiness = maxf(happiness - 0.5 * delta, 0.0)
 			energy = minf(energy + rate * delta, 100.0)
-			if energy >= 100.0 or (energy > 60.0 and not GameState.is_night()):
+			# Nobody starves to death IN BED: a growling stomach wakes you,
+			# and _decide puts eating before everything else.
+			if hunger > 80.0:
+				_body_mesh.rotation_degrees.x = 0
+				_decide()
+			elif energy >= 100.0 or (energy > 60.0 and not GameState.is_night()):
 				_body_mesh.rotation_degrees.x = 0
 				_decide()
 		State.GO_FARM:
@@ -381,11 +386,14 @@ func _wait(delta: float) -> bool:
 
 # target is deliberately untyped: a typed Node3D parameter rejects freed
 # instances at the call site, before the validity guard below can run.
+# Work range is generous: rock deposits and animals have fat colliders
+# that physically stop a villager ~1.5m out — "arrived" must reach past
+# them or the villager shoves at the rock forever and quarries nothing.
 func _process_go_target(target: Variant, delta: float, next: State, work_time: float) -> void:
 	if target == null or not is_instance_valid(target) or target.is_queued_for_deletion():
 		_decide()
 		return
-	if _move_toward(target.global_position, WALK_SPEED * _speed_factor(), delta):
+	if _move_toward(target.global_position, WALK_SPEED * _speed_factor(), delta, 2.4):
 		_dismount()
 		state = next
 		_action_time = work_time
@@ -470,6 +478,8 @@ func _try_conceive(delta: float) -> void:
 
 func _tick_needs(delta: float) -> void:
 	var hunger_rate := 0.5 * (1.4 if pregnant else 1.0)
+	if state == State.SLEEPING:
+		hunger_rate *= 0.4  # a sleeping body burns slow
 	hunger = minf(hunger + hunger_rate * delta, 100.0)
 	if state != State.SLEEPING:
 		var working := state in [State.FARMING, State.HUNTING, State.CHOPPING,
@@ -580,10 +590,11 @@ func _pick_job() -> bool:
 		if _nearest_huntable() != null:
 			scores["hunt"] = (35.0 if abandoned else 25.0) + food_worry
 
-	# Taming: a privilege of the good, pointless for the fallen.
+	# Taming: a privilege of the good, pointless for the fallen. An empty
+	# pen makes it urgent — a dog and a mount change everything.
 	if morality >= TAME_MORALITY and not abandoned and village.tamed_count() < Village.MAX_TAMED:
 		if _nearest_tamable() != null:
-			scores["tame"] = 22.0
+			scores["tame"] = 24.0 + (12.0 if village.tamed_count() == 0 else 0.0)
 
 	if scores.is_empty():
 		return false
@@ -853,10 +864,10 @@ func _dismount() -> void:
 
 ## Movement ------------------------------------------------------------------
 
-func _move_toward(target: Vector3, speed: float, delta: float) -> bool:
+func _move_toward(target: Vector3, speed: float, delta: float, arrive := ARRIVE_DIST) -> bool:
 	var to_target := target - global_position
 	to_target.y = 0
-	if to_target.length() < ARRIVE_DIST:
+	if to_target.length() < arrive:
 		_apply_gravity_only(delta)
 		return true
 	var dir := to_target.normalized()
