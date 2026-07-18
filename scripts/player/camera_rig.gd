@@ -5,7 +5,7 @@ extends Node3D
 ##
 ## Structure:  self (yaw) -> Pitch (x tilt) -> Camera3D (pulled back on z)
 
-const MIN_ZOOM := 8.0
+const MIN_ZOOM := 1.2   # close enough to stand at a villager's feet
 const MAX_ZOOM := 90.0
 const PAN_SPEED := 22.0
 const ROTATE_SPEED := 1.6
@@ -47,6 +47,9 @@ func _process(delta: float) -> void:
 		global_position.z = lerpf(global_position.z, t.z, minf(delta * 4.0, 1.0))
 	elif follow_target != null:
 		follow_target = null
+	else:
+		# Ease the lock-on aim back to the rig's natural framing.
+		camera.rotation = camera.rotation.lerp(Vector3.ZERO, minf(delta * 6.0, 1.0))
 
 	var input_dir := Vector2.ZERO
 	input_dir.y = Input.get_action_strength("cam_back") - Input.get_action_strength("cam_forward")
@@ -72,6 +75,14 @@ func _process(delta: float) -> void:
 	_follow_terrain(delta)
 	_clamp_camera_above_ground()
 
+	# TRUE lock-on: while following, the target sits centered in frame —
+	# orbit and zoom move around it, the camera keeps looking AT it.
+	if follow_target != null and is_instance_valid(follow_target):
+		var aim: Vector3 = follow_target.global_position \
+			+ Vector3.UP * 1.2 * follow_target.scale.y
+		if camera.global_position.distance_to(aim) > 0.6:
+			camera.look_at(aim, Vector3.UP)
+
 
 ## The rig's pivot rides the landscape so hills don't swallow the camera.
 func _follow_terrain(delta: float) -> void:
@@ -93,8 +104,11 @@ func _clamp_camera_above_ground() -> void:
 		if _world_cache == null:
 			return
 	var cam_pos := camera.global_position
+	# The cushion shrinks as you zoom in, so a close camera can sit right
+	# down at ankle height and look up — without ever entering the ground.
+	var cushion := clampf(zoom_distance * 0.06, 0.3, 2.0)
 	var floor_y := maxf(
-		_world_cache.height_at(cam_pos.x, cam_pos.z), WorldGen.WATER_LEVEL) + 2.0
+		_world_cache.height_at(cam_pos.x, cam_pos.z), WorldGen.WATER_LEVEL) + cushion
 	if cam_pos.y < floor_y:
 		camera.global_position.y = floor_y
 

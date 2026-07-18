@@ -44,7 +44,7 @@ you're done. No system install required.
 | Q / E | Rotate camera |
 | 1 / 2 / 3 / 4 | Village diet: Vegan / Omnivore / Carnivore / Cannibal |
 | P / L (hand near creature) | **Pet** (reward) / **scold** (discourage) its last deed |
-| C | Jump the camera to your creature |
+| C | **Lock** the camera onto your creature — centered, orbitable; C again (or pan) releases |
 | F1 | Help panel |
 
 ### Miracle gestures (hold right mouse)
@@ -80,8 +80,9 @@ you're done. No system install required.
   **population as size** and **belief as color** (gray → gold; converted
   rings wear your alignment color); the totem orb **glows with prayer
   power**. Hover a house for the census, a farm for harvest progress, the
-  storehouse for stocks. **Grab the storehouse** to withdraw goods as
-  physical items; drop food/lumber/stone onto any storehouse to bank it.
+  storehouse for stocks. **Grab a quarter of the storehouse** to withdraw
+  that resource as a physical item; drop food/lumber/stone onto any
+  storehouse to bank it.
 - **A living ecology**: wild animals have hunger and thirst — they trek
   to water to drink, browse forage bushes, graze, breed when fed and
   watered, and die of old age way out in the woods. Forage bushes with

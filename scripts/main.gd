@@ -195,8 +195,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("scold_creature"):
 		_touch_creature(false)
 	elif event.is_action_pressed("find_creature") and is_instance_valid(creature):
-		camera_rig.global_position.x = creature.global_position.x
-		camera_rig.global_position.z = creature.global_position.z
+		# C toggles a LOCK-ON: the camera glides to the creature, keeps it
+		# centered, and orbits around it until you pan away (or press C again).
+		if camera_rig.follow_target == creature:
+			camera_rig.follow_target = null
+		else:
+			camera_rig.follow_target = creature
+			camera_rig.zoom_distance = clampf(camera_rig.zoom_distance, 6.0, 16.0)
 
 
 ## Training only counts when the hand is actually AT the creature — you

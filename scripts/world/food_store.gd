@@ -110,32 +110,44 @@ func _process(delta: float) -> void:
 			rb.queue_free()
 
 
-## The hand grabs the platform: the most plentiful stock pops out as a
-## physical item, ready to be carried anywhere — another storehouse, a
-## hungry mouth, or the bottom of a lake. Null if the store is bare.
-func withdraw() -> RigidBody3D:
+## Grab a QUARTER of the platform and that resource pops out: grain
+## (+X+Z), meat (-X+Z), lumber (-X-Z), stone (+X-Z) — you choose what to
+## take by where you grab. Null (with a word) if that pile is bare.
+func withdraw_at(world_point: Vector3) -> RigidBody3D:
+	var local := to_local(world_point)
 	var item: RigidBody3D = null
-	var top := maxi(maxi(plant_food, meat_food), maxi(lumber, stone))
-	if top <= 0:
-		return null
-	if plant_food == top:
-		plant_food -= 1
-		item = FoodItem.new()
-	elif meat_food == top:
-		meat_food -= 1
-		var f := FoodItem.new()
-		f.food_type = FoodItem.FoodType.MEAT
-		item = f
-	elif lumber == top:
-		lumber -= 1
-		var r := ResourceItem.new()
-		r.kind = "lumber"
-		item = r
+	if local.x >= 0.0 and local.z >= 0.0:
+		if plant_food > 0:
+			plant_food -= 1
+			item = FoodItem.new()
+		else:
+			GameState.announce("The grain quarter is empty.")
+	elif local.x < 0.0 and local.z >= 0.0:
+		if meat_food > 0:
+			meat_food -= 1
+			var f := FoodItem.new()
+			f.food_type = FoodItem.FoodType.MEAT
+			item = f
+		else:
+			GameState.announce("The meat quarter is empty.")
+	elif local.x < 0.0 and local.z < 0.0:
+		if lumber > 0:
+			lumber -= 1
+			var r := ResourceItem.new()
+			r.kind = "lumber"
+			item = r
+		else:
+			GameState.announce("The lumber quarter is empty.")
 	else:
-		stone -= 1
-		var r := ResourceItem.new()
-		r.kind = "stone"
-		item = r
+		if stone > 0:
+			stone -= 1
+			var r := ResourceItem.new()
+			r.kind = "stone"
+			item = r
+		else:
+			GameState.announce("The stone quarter is empty.")
+	if item == null:
+		return null
 	_refresh_stack()
 	item.set_meta("no_deposit_until", Time.get_ticks_msec() + 2500)
 	get_parent().add_child(item)
@@ -224,5 +236,6 @@ func _show(m: MeshInstance3D) -> void:
 
 
 func hover_text() -> String:
-	return "Storehouse — %d plants · %d meat · %d lumber · %d stone" \
+	return ("Storehouse — %d plants · %d meat · %d lumber · %d stone\n" +
+		"(grab a quarter to take from that pile)") \
 		% [plant_food, meat_food, lumber, stone]

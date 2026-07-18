@@ -110,7 +110,7 @@ WASD / arrows .............. pan camera
 Q / E ...................... rotate camera
 1 / 2 / 3 / 4 .............. village diet: Vegan / Omnivore / Carnivore / Cannibal
 P / L (hand near creature) . PET (reward) / SCOLD (discourage) its last deed
-C .......................... jump the camera to your creature
+C .......................... LOCK the camera onto your creature (again to release)
 F1 ......................... toggle this help
 
 ON TOUCHSCREENS
@@ -137,7 +137,7 @@ Each village's ring: SIZE is its population, COLOR its belief — gray
 heathens brighten toward gold; converted rings wear your alignment.
 The totem orb glows with prayer power. Hover houses for the census,
 farms for harvest progress, the storehouse for exact stocks.
-GRAB the storehouse platform to withdraw goods as physical items;
+GRAB a QUARTER of the storehouse platform to withdraw THAT resource;
 drop food, lumber, or stone onto any storehouse to store it there.
 
 THE WORLD
