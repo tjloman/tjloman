@@ -16,6 +16,7 @@ extends CharacterBody3D
 enum State {
 	IDLE, WANDER, SEEK_FOOD, EATING, SLEEPING, GO_TEND, TENDING,
 	STALK_PREY, WATCH, GO_GATHER, CARRYING, PLAY, GUARD, SULK, CATCH,
+	GO_FISH, FISHING, GO_STORE,
 }
 
 const WALK_SPEED := 3.5
@@ -31,6 +32,7 @@ const OBSERVE_PERIOD := 2.5
 var hunger := 40.0
 var energy := 90.0
 var growth := 0.01            # 0..1 of its destined size; every game starts small
+var walks_on_water := false   # granted by a future miracle buff
 
 ## Feelings. Mood is the weather of its heart; bond is trust in your hand;
 ## boredom is the itch that play and curiosity scratch.
@@ -45,7 +47,7 @@ var morality := 0.0
 ## These weights multiply into every decision it makes.
 var desires := {
 	"tend": 0.6, "gather": 0.6, "play": 0.9, "watch": 1.1,
-	"guard": 0.5, "mischief": 0.35,
+	"guard": 0.5, "mischief": 0.35, "fish": 0.7,
 }
 
 var state := State.IDLE
@@ -161,6 +163,25 @@ func _physics_process(delta: float) -> void:
 			_process_carrying(delta)
 		State.CATCH:
 			_process_catch(delta)
+		State.GO_FISH:
+			if _target == Vector3.ZERO:
+				_decide()
+			elif _move_toward(_target, WALK_SPEED * 0.8, delta):
+				state = State.FISHING
+				_action_time = 5.0
+		State.FISHING:
+			_apply_gravity_only(delta)
+			_action_time -= delta
+			_body.rotation_degrees.x = sin(Time.get_ticks_msec() / 300.0) * 10.0
+			if _action_time <= 0.0:
+				_body.rotation_degrees.x = 0
+				_land_a_fish()
+		State.GO_STORE:
+			var store := _nearest_store()
+			if store == null:
+				_decide()
+			elif _move_toward(store.global_position, WALK_SPEED, delta):
+				_eat_from_store(store)
 		State.PLAY:
 			_process_play(delta)
 		State.GUARD:
@@ -238,6 +259,8 @@ func _observe_world() -> void:
 		match villager.state:
 			Villager.State.FARMING:
 				_bump_desire("tend", 0.01)
+			Villager.State.FISHING:
+				_bump_desire("fish", 0.012)
 			Villager.State.BUILDING, Villager.State.CHOPPING, Villager.State.QUARRYING:
 				_bump_desire("gather", 0.008)
 	if GameState.is_night():
@@ -277,7 +300,7 @@ func _decide() -> void:
 	var pool := {}
 	if morality > 10.0 and _nearest_farm() != null:
 		pool["tend"] = desires["tend"] * (1.0 + morality / 100.0)
-	if _nearest_ground_food(35.0) != null:
+	if _nearest_carriable(35.0) != null:
 		pool["gather"] = desires["gather"] * (1.0 + maxf(morality, 0.0) / 100.0)
 	if _find_working_villager() != null:
 		pool["watch"] = desires["watch"] * (0.6 + boredom / 100.0)
@@ -286,6 +309,7 @@ func _decide() -> void:
 			and _home_village().tamed_count() < Village.MAX_TAMED \
 			and _nearest_giftable() != null:
 		pool["gift"] = desires["gather"] * 0.8
+	pool["fish"] = desires["fish"] * 0.5  # fishing for the fun of it
 	if morality < 10.0:
 		pool["mischief"] = desires["mischief"] * (1.0 - morality / 100.0) * (boredom / 60.0)
 	pool["wander"] = 0.7
@@ -295,7 +319,7 @@ func _decide() -> void:
 			state = State.GO_TEND
 			_target = _nearest_farm().global_position
 		"gather":
-			_target_food = _nearest_ground_food(35.0)
+			_target_food = _nearest_carriable(35.0)
 			state = State.GO_GATHER
 		"watch":
 			_watch_subject = _find_working_villager()
@@ -309,6 +333,13 @@ func _decide() -> void:
 			_catch_target = _nearest_giftable()
 			_carry_intent = "gift"
 			state = State.CATCH
+		"fish":
+			var shore := _find_shore()
+			if shore != Vector3.INF:
+				_target = shore
+				state = State.GO_FISH
+			else:
+				_wander()
 		"mischief":
 			# Half the time a lunge and a roar; half the time it MAKES OFF
 			# with someone, carries them a way, and sets them down shaking.
@@ -379,6 +410,17 @@ func _plan_food() -> bool:
 		_carry_intent = "eat"
 		state = State.CATCH
 		return true
+	# Or fish for it — the gentle hunter's option.
+	var shore := _find_shore()
+	if shore != Vector3.INF:
+		_target = shore
+		state = State.GO_FISH
+		return true
+	# Last resort: raid the granary. The villagers notice.
+	var store := _nearest_store()
+	if store != null and store.total_food() > 0:
+		state = State.GO_STORE
+		return true
 	return false
 
 
@@ -387,7 +429,7 @@ func _finish_deed(deed: String, mood_gain: float) -> void:
 	_last_deed = deed
 	mood = minf(mood + mood_gain, 100.0)
 	boredom = maxf(boredom - 25.0, 0.0)
-	if deed in ["tend", "gather", "guard", "gift"]:
+	if deed in ["tend", "gather", "guard", "gift", "fish"]:
 		morality = clampf(morality + 1.0, -100.0, 100.0)
 	_decide()
 
@@ -446,7 +488,8 @@ func _learn_from(watched_state: Villager.State) -> void:
 
 func _process_go_gather(delta: float) -> void:
 	if _target_food == null or not is_instance_valid(_target_food) \
-			or _target_food.is_queued_for_deletion() or not _target_food is FoodItem:
+			or _target_food.is_queued_for_deletion() \
+			or not (_target_food is FoodItem or _target_food is ResourceItem):
 		_target_food = null
 		_decide()
 	elif _move_toward(_target_food.global_position, WALK_SPEED * 0.9, delta):
@@ -500,6 +543,12 @@ func _process_carrying(delta: float) -> void:
 				if _carried is FoodItem:
 					store.add((_carried as FoodItem).food_type, 1)
 					_carried.queue_free()
+				elif _carried is ResourceItem:
+					if (_carried as ResourceItem).kind == "lumber":
+						store.add_lumber(1)
+					else:
+						store.add_stone(1)
+					_carried.queue_free()
 				_carried = null
 				for v in get_tree().get_nodes_in_group("villagers"):
 					if v.global_position.distance_to(global_position) < 8.0:
@@ -534,6 +583,45 @@ func _process_carrying(delta: float) -> void:
 		_:
 			_release_carried(true)
 			_decide()
+
+
+## The line comes up: a real fish, held in the claws. Eat it, or carry
+## it home for the granary if the belly can wait.
+func _land_a_fish() -> void:
+	var fish := FoodItem.new()
+	fish.food_type = FoodItem.FoodType.MEAT
+	fish.meat_name = "fish"
+	get_parent().add_child(fish)
+	fish.global_position = global_position + Vector3(0, 1.0, 0)
+	_last_deed = "fish"
+	_pick_up_thing(fish, "eat" if hunger > 45.0 else "deliver")
+
+
+func _eat_from_store(store: FoodStore) -> void:
+	var got := store.take(FoodItem.FoodType.PLANT, 1)
+	if got == 0:
+		got = store.take(FoodItem.FoodType.MEAT, 1)
+	if got > 0:
+		hunger = maxf(hunger - FoodItem.NUTRITION, 0.0)
+		morality = clampf(morality - 0.5, -100.0, 100.0)  # that was somebody's dinner
+		state = State.EATING
+		_action_time = 1.5
+	else:
+		_decide()
+
+
+## A dry spot at the water's edge, or INF if no shore is near.
+func _find_shore() -> Vector3:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world == null:
+		return Vector3.INF
+	for dist: float in [12.0, 25.0, 40.0]:
+		for i in 8:
+			var angle := TAU * i / 8.0 + randf() * 0.3
+			var probe := global_position + Vector3(cos(angle), 0, sin(angle)) * dist
+			if world.is_underwater(probe.x, probe.z):
+				return global_position + (probe - global_position) * 0.85
+	return Vector3.INF
 
 
 ## The moment of truth: some things are food, some things are lessons.
@@ -727,7 +815,7 @@ func scold() -> void:
 
 func _deed_desire_key(deed: String) -> String:
 	match deed:
-		"tend", "gather", "play", "watch", "guard", "mischief":
+		"tend", "gather", "play", "watch", "guard", "mischief", "fish":
 			return deed
 		"gift":
 			return "gather"
@@ -835,6 +923,22 @@ func _nearest_food() -> Node3D:
 	return best
 
 
+## Anything worth hauling to the storehouse: stray food or building
+## materials lying about the land.
+func _nearest_carriable(radius: float) -> Node3D:
+	var best: Node3D = _nearest_ground_food(radius)
+	var best_dist := radius if best == null else global_position.distance_to(best.global_position)
+	for r in get_tree().get_nodes_in_group("resource_items"):
+		var item := r as ResourceItem
+		if not is_instance_valid(item) or item.is_queued_for_deletion() or item.freeze:
+			continue
+		var d := global_position.distance_to(item.global_position)
+		if d < best_dist:
+			best_dist = d
+			best = item
+	return best
+
+
 func _nearest_ground_food(radius: float) -> FoodItem:
 	var best: FoodItem = null
 	var best_dist := radius
@@ -937,6 +1041,12 @@ func _move_toward(target: Vector3, speed: float, delta: float) -> bool:
 		_apply_gravity_only(delta)
 		return true
 	var dir := to_target.normalized()
+	# The creature WADES: water is passable but slow — half speed with
+	# its legs in the lake. (A future miracle will let it walk ON water.)
+	if not walks_on_water:
+		var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+		if world != null and world.is_underwater(global_position.x, global_position.z):
+			speed *= 0.5
 	velocity.x = dir.x * speed
 	velocity.z = dir.z * speed
 	velocity.y -= GRAVITY * delta
@@ -1036,6 +1146,8 @@ func _status_word() -> String:
 				"snatch": return "making off with someone"
 			return "carrying something"
 		State.CATCH: return "chasing something down"
+		State.GO_FISH, State.FISHING: return "fishing"
+		State.GO_STORE: return "raiding the granary"
 		State.PLAY: return "playing"
 		State.GUARD: return "standing guard"
 		State.SULK: return "sulking"
@@ -1051,6 +1163,7 @@ func _status_text() -> String:
 		State.TENDING: return "help!"
 		State.WATCH: return "hmm..."
 		State.CATCH: return "!!"
+		State.FISHING: return "..."
 		State.GO_GATHER: return "for you!"
 		State.CARRYING: return "nom?" if _carry_intent == "eat" else "for you!"
 		State.PLAY: return "wheee!"

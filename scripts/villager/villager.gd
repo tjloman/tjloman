@@ -14,6 +14,7 @@ enum State {
 	GO_CHOP, CHOPPING, GO_QUARRY, QUARRYING, GO_BUILD, BUILDING,
 	GO_TAME, TAMING, GO_WORSHIP, WORSHIPPING, PLAY,
 	GO_PREACH, PREACHING, GO_FEED, GO_BUILD_FARM, BUILDING_FARM,
+	GO_FISH, FISHING,
 	FLEE, HELD, FALLING,
 }
 
@@ -77,6 +78,8 @@ var _target_bush: ForageBush = null
 var _target_farm: Farm = null
 var _carrying_feed := false
 var _farm_spot := Vector3.INF
+var _fish_spot := Vector3.INF
+var _world_cache: WorldGen = null
 var _label: Label3D
 var _visuals: Node3D
 var _body_mesh: MeshInstance3D
@@ -203,6 +206,22 @@ func _physics_process(delta: float) -> void:
 			elif _move_toward(village.pen_position(), WALK_SPEED * _speed_factor(), delta):
 				village.feed_penned()
 				_carrying_feed = false
+				_decide()
+		State.GO_FISH:
+			if _fish_spot == Vector3.INF:
+				_decide()
+			elif _move_toward(_fish_spot, WALK_SPEED * _speed_factor(), delta, 1.6):
+				_dismount()
+				state = State.FISHING
+				_action_time = 9.0
+		State.FISHING:
+			_apply_gravity_only(delta)
+			_action_time -= delta
+			if _action_time <= 0.0:
+				village.store.add(FoodItem.FoodType.MEAT, 1)
+				if village.is_player_home and randf() < 0.3:
+					GameState.announce("%s pulled a fish from the shallows." % villager_name)
+				_fish_spot = Vector3.INF
 				_decide()
 		State.GO_BUILD_FARM:
 			if _move_toward(_farm_spot, WALK_SPEED * _speed_factor(), delta):
@@ -589,6 +608,9 @@ func _pick_job() -> bool:
 			scores["butcher_pen"] = 40.0 + food_worry
 		if _nearest_huntable() != null:
 			scores["hunt"] = (35.0 if abandoned else 25.0) + food_worry
+		# The shore feeds anyone patient enough to stand on it.
+		if _find_shore() != Vector3.INF:
+			scores["fish"] = 23.0 + food_worry * 0.6
 
 	# Taming: a privilege of the good, pointless for the fallen. An empty
 	# pen makes it urgent — a dog and a mount change everything.
@@ -659,6 +681,9 @@ func _start_job(job: String) -> void:
 			_target_animal = _nearest_huntable()
 			state = State.GO_HUNT
 			_maybe_mount()
+		"fish":
+			_fish_spot = _find_shore()
+			state = State.GO_FISH
 		"butcher":
 			_target_corpse = _nearest_corpse()
 			state = State.GO_BUTCHER
@@ -766,6 +791,22 @@ func _nearest_edible_ground_food() -> FoodItem:
 	return best
 
 
+## A dry spot right at the water's edge, or INF if no shore is in reach.
+func _find_shore() -> Vector3:
+	var world := _world()
+	if world == null:
+		return Vector3.INF
+	for dist: float in [10.0, 20.0, 35.0, 50.0]:
+		for i in 8:
+			var angle := TAU * i / 8.0 + randf() * 0.3
+			var probe := global_position + Vector3(cos(angle), 0, sin(angle)) * dist
+			if world.is_underwater(probe.x, probe.z):
+				var shore := global_position + (probe - global_position) * 0.85
+				shore.y = world.height_at(shore.x, shore.z)
+				return shore
+	return Vector3.INF
+
+
 func _nearest_forage_bush() -> ForageBush:
 	var best: ForageBush = null
 	var best_dist := INF
@@ -871,6 +912,14 @@ func _move_toward(target: Vector3, speed: float, delta: float, arrive := ARRIVE_
 		_apply_gravity_only(delta)
 		return true
 	var dir := to_target.normalized()
+	# Villagers cannot swim: refuse to step into open water. (The stuck
+	# watchdog re-decides anyone left pacing the shore.)
+	var world := _world()
+	if world != null:
+		var ahead := global_position + dir * 1.2
+		if world.is_underwater(ahead.x, ahead.z):
+			_apply_gravity_only(delta)
+			return false
 	velocity.x = dir.x * speed
 	velocity.z = dir.z * speed
 	velocity.y -= GRAVITY * delta
@@ -886,6 +935,12 @@ func _apply_gravity_only(delta: float) -> void:
 	velocity.z = 0
 	velocity.y -= GRAVITY * delta
 	move_and_slide()
+
+
+func _world() -> WorldGen:
+	if _world_cache == null or not is_instance_valid(_world_cache):
+		_world_cache = get_tree().get_first_node_in_group("world_gen") as WorldGen
+	return _world_cache
 
 
 ## Harm, fear, death ---------------------------------------------------------
@@ -1062,6 +1117,7 @@ func _status_word() -> String:
 		State.GO_PREACH, State.PREACHING: return "on a mission"
 		State.GO_FEED: return "feeding the animals"
 		State.GO_BUILD_FARM, State.BUILDING_FARM: return "breaking new ground"
+		State.GO_FISH, State.FISHING: return "fishing"
 		State.FLEE: return "fleeing in terror"
 		State.HELD: return "in the grip of a god"
 		State.FALLING: return "airborne"
@@ -1081,6 +1137,7 @@ func _status_text() -> String:
 		State.BUTCHERING: return "..."
 		State.WORSHIPPING: return "pray"
 		State.PREACHING: return "hear me!"
+		State.FISHING: return "fish?"
 		State.PLAY: return "wheee"
 		State.FLEE, State.FALLING: return "!!!"
 		State.HELD: return "?!"

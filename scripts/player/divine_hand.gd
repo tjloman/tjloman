@@ -194,6 +194,13 @@ func _unhandled_input(event: InputEvent) -> void:
 func _on_grab() -> void:
 	if state != HandState.IDLE:
 		return
+	# Grabbing the storehouse platform withdraws its most plentiful stock
+	# as a physical item, straight into the grip.
+	if hover_target is FoodStore:
+		var item := (hover_target as FoodStore).withdraw()
+		if item != null:
+			force_hold(item)
+		return
 	if is_instance_valid(hover_target) and hover_target.is_in_group("pickable"):
 		held_body = hover_target
 		state = HandState.HOLDING

@@ -192,7 +192,9 @@ func _build_influence_ring() -> void:
 	_influence_ring.mesh = torus
 	_influence_ring.material_override = _ring_material
 	_influence_ring.position = Vector3(0, 0.3, 0)
-	_influence_ring.visible = converted
+	# The ring IS the readout now: its SIZE is the population, its COLOR
+	# is belief — every village wears its state on the ground around it.
+	_influence_ring.visible = true
 	add_child(_influence_ring)
 
 
@@ -251,6 +253,7 @@ func _process(delta: float) -> void:
 	if _housing_timer <= 0.0:
 		_housing_timer = 4.0
 		_assign_housing()
+		_update_influence()  # ring size tracks population; orb tracks prayer
 
 	_breed_timer -= delta
 	if _breed_timer <= 0.0:
@@ -303,18 +306,33 @@ func _convert() -> void:
 	GameState.shift_alignment(1.0)
 
 
+## The world is the interface: ring size = population, ring color =
+## belief (gray heathens brighten to gold; converted rings wear the
+## god's alignment color), totem orb glow = prayer power.
 func _update_influence() -> void:
-	influence_radius = lerpf(MIN_INFLUENCE, MAX_INFLUENCE, belief / 100.0)
+	influence_radius = clampf(10.0 + population() * 1.8, MIN_INFLUENCE, MAX_INFLUENCE)
 	if _influence_ring != null:
 		_influence_ring.scale = Vector3(influence_radius, 1.0, influence_radius)
+	if _ring_material != null:
+		var c: Color
+		if converted:
+			c = GameState.alignment_color().lerp(Color.WHITE, 0.1)
+		else:
+			c = Color(0.45, 0.45, 0.45).lerp(Color(1.0, 0.9, 0.55), belief / CONVERT_BELIEF)
+		_ring_material.albedo_color = Color(c.r, c.g, c.b, 0.55)
+		_ring_material.emission = c
+		_ring_material.emission_energy_multiplier = 0.4 + (belief / 100.0) * 1.6
+	if _totem_orb != null and converted:
+		var orb := _totem_orb.material_override as StandardMaterial3D
+		if orb != null and orb.emission_enabled:
+			orb.emission_energy_multiplier = 0.4 + 3.2 \
+				* (GameState.prayer_power / maxf(GameState.max_prayer_power, 1.0))
 	if is_player_home:
 		GameState.set_max_prayer_power(100.0 + belief * 2.0)
 
 
 func _on_alignment_changed(_value: float) -> void:
-	var c := GameState.alignment_color()
-	_ring_material.albedo_color = Color(c.r, c.g, c.b, 0.6)
-	_ring_material.emission = c
+	_update_influence()
 
 
 func is_inside_influence(point: Vector3) -> bool:
@@ -390,6 +408,15 @@ func find_build_spot(world: WorldGen) -> Vector3:
 		var pos := global_position + Vector3(cos(angle) * dist, 0, sin(angle) * dist)
 		if world != null:
 			if world.is_underwater(pos.x, pos.z) or world.slope_at(pos.x, pos.z) > 0.9:
+				continue
+			# No corner of the footprint may dip into the lake either.
+			var wet := false
+			for corner in [Vector2(2.2, 2.2), Vector2(-2.2, 2.2),
+					Vector2(2.2, -2.2), Vector2(-2.2, -2.2)]:
+				if world.is_underwater(pos.x + corner.x, pos.z + corner.y):
+					wet = true
+					break
+			if wet:
 				continue
 			pos.y = world.settle_height(pos.x, pos.z, 2.2)
 		var blocked := false

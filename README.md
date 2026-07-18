@@ -71,6 +71,17 @@ you're done. No system install required.
   skies. Villagers sleep at night; house windows glow; wolves prowl —
   preferring villages gone wicked. A villager's whole life spans about
   **40 days** — time enough to grow up, raise a family, and grow old.
+- **Water is real**: villagers and animals cannot cross it (frogs
+  excepted); nothing builds beneath it. The **shoreline feeds**: villagers
+  and the creature go **fishing** — fish counts as meat, with its own
+  silvery model. The creature **wades** at half speed (a future miracle
+  will let it walk on water).
+- **The world is the interface**: each village's ring shows its
+  **population as size** and **belief as color** (gray → gold; converted
+  rings wear your alignment color); the totem orb **glows with prayer
+  power**. Hover a house for the census, a farm for harvest progress, the
+  storehouse for stocks. **Grab the storehouse** to withdraw goods as
+  physical items; drop food/lumber/stone onto any storehouse to bank it.
 - **A living ecology**: wild animals have hunger and thirst — they trek
   to water to drink, browse forage bushes, graze, breed when fed and
   watered, and die of old age way out in the woods. Forage bushes with

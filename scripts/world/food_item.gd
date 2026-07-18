@@ -40,6 +40,8 @@ func _ready() -> void:
 
 	if food_type == FoodType.PLANT:
 		_build_sheaf()
+	elif meat_name == "fish":
+		_build_fish()
 	else:
 		_build_meat()
 
@@ -68,6 +70,19 @@ func _build_meat() -> void:
 	add_child(bone)
 	for side in [-1.0, 1.0]:
 		add_child(Util.sphere(0.06, Color(0.93, 0.9, 0.82), Vector3(0.05 * side, 0.0, 0.44)))
+
+
+## A fish, fresh from the shallows: silver body, forked tail, staring eye.
+func _build_fish() -> void:
+	var silver := Color(0.62, 0.7, 0.78)
+	var body := Util.sphere(0.24, silver)
+	body.scale = Vector3(0.55, 0.8, 1.6)
+	add_child(body)
+	var tail := Util.prism(Vector3(0.05, 0.28, 0.22), silver.darkened(0.15), Vector3(0, 0, -0.42))
+	tail.rotation_degrees.z = 90
+	add_child(tail)
+	add_child(Util.sphere(0.035, Color.BLACK, Vector3(0.07, 0.05, 0.3)))
+	add_child(Util.sphere(0.035, Color.BLACK, Vector3(-0.07, 0.05, 0.3)))
 
 
 func hover_text() -> String:

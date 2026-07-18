@@ -161,7 +161,10 @@ func size_name() -> String:
 
 
 func hover_text() -> String:
+	var census := ""
+	if village != null and is_instance_valid(village):
+		census = "\n%s — population %d" % [village.village_name, village.population()]
 	if under_construction:
-		return "%s under construction — %d%%" % [size_name(), int(progress)]
-	return "%s — health %d%%, age %d years, sleeps %d" % [
-		size_name(), int(health), int(age), capacity()]
+		return "%s under construction — %d%%%s" % [size_name(), int(progress), census]
+	return "%s — health %d%%, age %d years, sleeps %d%s" % [
+		size_name(), int(health), int(age), capacity(), census]

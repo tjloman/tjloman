@@ -1,19 +1,17 @@
 class_name HUD
 extends CanvasLayer
-## The godly dashboard: belief, prayer power, and alignment bars; population
-## census; diet policy readout; gesture legend; hover tooltip; announcements;
-## F1 help.
+## The (mostly empty) godly dashboard. The world itself is the interface
+## now: belief is the COLOR of each village's ring, population its SIZE,
+## prayer power the GLOW of the totem orb, and details live on hover.
+## What remains here: the alignment bar, diet readout, gesture legend,
+## hover tooltip, announcements, F1 help.
 
 var village: Village
 var divine_hand: DivineHand
 
-var _belief_bar: ProgressBar
-var _prayer_bar: ProgressBar
 var _alignment_bar: ProgressBar
 var _alignment_fill: StyleBoxFlat
 var _alignment_label: Label
-var _census_label: Label
-var _resources_label: Label
 var _diet_label: Label
 var _hover_label: Label
 var _message_label: Label
@@ -29,7 +27,6 @@ func _ready() -> void:
 	_build_message_label()
 	_build_help_panel()
 
-	GameState.prayer_power_changed.connect(_on_prayer_changed)
 	GameState.alignment_changed.connect(_on_alignment_changed)
 	GameState.announcement.connect(_on_announcement)
 	if divine_hand != null:
@@ -42,14 +39,6 @@ func _build_bars() -> void:
 	vbox.custom_minimum_size = Vector2(280, 0)
 	add_child(vbox)
 
-	vbox.add_child(_make_label("Belief"))
-	_belief_bar = _make_bar(Color(1.0, 0.85, 0.3))
-	vbox.add_child(_belief_bar)
-
-	vbox.add_child(_make_label("Prayer Power"))
-	_prayer_bar = _make_bar(Color(0.5, 0.7, 1.0))
-	vbox.add_child(_prayer_bar)
-
 	_alignment_label = _make_label("Alignment — Neutral")
 	vbox.add_child(_alignment_label)
 	_alignment_bar = _make_bar(Color(0.8, 0.8, 0.8))
@@ -57,12 +46,6 @@ func _build_bars() -> void:
 	_alignment_bar.value = 100.0
 	_alignment_fill = _alignment_bar.get_theme_stylebox("fill") as StyleBoxFlat
 	vbox.add_child(_alignment_bar)
-
-	_census_label = _make_label("")
-	vbox.add_child(_census_label)
-
-	_resources_label = _make_label("")
-	vbox.add_child(_resources_label)
 
 	_diet_label = _make_label("")
 	vbox.add_child(_diet_label)
@@ -171,9 +154,19 @@ Anything you hold carries your hand's momentum when released — flick
 hard to hurl far. Tilt the camera above the horizon (middle mouse) and
 aim at the sky to wind up high, arcing throws.
 
+READING THE WORLD (there are almost no bars)
+Each village's ring: SIZE is its population, COLOR its belief — gray
+heathens brighten toward gold; converted rings wear your alignment.
+The totem orb glows with prayer power. Hover houses for the census,
+farms for harvest progress, the storehouse for exact stocks.
+GRAB the storehouse platform to withdraw goods as physical items;
+drop food, lumber, or stone onto any storehouse to store it there.
+
 THE WORLD
 The world is endless: drag the land and keep going. Other villages are
 out there — they believe in nothing until your miracles convince them.
+Water is a wall to villagers and beasts — but the shore feeds them:
+they fish. Your creature wades at half speed, and fishes too.
 Villagers age, bear children, and die. The dead leave corpses, and what
 happens to corpses is... policy. Villagers pick whatever job the village
 needs: farming, hunting, felling timber, quarrying stone, building.
@@ -202,26 +195,6 @@ mood, bond, and what it currently loves doing. Press C if you lose it."""
 
 func _process(delta: float) -> void:
 	if village != null:
-		_belief_bar.value = village.belief
-		var adults := 0
-		var children := 0
-		for v in village.my_villagers():
-			if v.is_adult():
-				adults += 1
-			else:
-				children += 1
-		var converted := 0
-		var total := 0
-		for v in get_tree().get_nodes_in_group("village"):
-			total += 1
-			if (v as Village).converted:
-				converted += 1
-		_census_label.text = "%s: %d adults, %d children (%d homeless) — Year %d %s" % [
-			village.village_name, adults, children, village.homeless_count(),
-			int(GameState.game_years), "☾" if GameState.is_night() else "☀"]
-		_resources_label.text = "Food %d · Lumber %d · Stone %d — Believers: %d/%d villages" % [
-			village.store.total_food(), village.store.lumber, village.store.stone,
-			converted, total]
 		_diet_label.text = "Diet [1-4]: %s" % village.diet_name()
 	_hover_label.position = _hover_label.get_viewport().get_mouse_position() + Vector2(18, 18)
 
@@ -234,11 +207,6 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_help"):
 		_help_panel.visible = not _help_panel.visible
-
-
-func _on_prayer_changed(value: float, max_value: float) -> void:
-	_prayer_bar.max_value = max_value
-	_prayer_bar.value = value
 
 
 func _on_alignment_changed(value: float) -> void:

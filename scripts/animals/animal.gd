@@ -442,6 +442,15 @@ func _move_toward(target: Vector3, speed: float, delta: float) -> bool:
 		_apply_gravity_only(delta)
 		return true
 	var dir := to_target.normalized()
+	# Beasts don't swim: stop at the water's edge (frogs excepted — they
+	# belong to both worlds).
+	if not spec.get("hops", false):
+		var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+		if world != null:
+			var ahead := global_position + dir * 1.2
+			if world.is_underwater(ahead.x, ahead.z):
+				_apply_gravity_only(delta)
+				return false
 	velocity.x = dir.x * speed
 	velocity.z = dir.z * speed
 	velocity.y -= GRAVITY * delta
