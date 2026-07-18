@@ -214,6 +214,15 @@ on any phone, not store-ready). One-time setup on your machine:
 
 1. **JDK 17** — e.g. `sudo apt install openjdk-17-jdk` (or your distro's
    equivalent; on an immutable distro, a toolbox/distrobox works fine).
+   Find the path Godot wants with
+   `java -XshowSettings:properties -version 2>&1 | grep java.home`.
+   ⚠️ **Distrobox users**: a JDK installed in the box lives at
+   `/usr/lib/jvm/...` *inside the container* — Godot can only use it if
+   Godot also runs inside that box. If you run Godot on the host, use a
+   tarball JDK in your home directory instead (both sides see `$HOME`):
+   extract [Temurin 17](https://adoptium.net/temurin/releases/?version=17)
+   to `~/Apps/jdk-17` and point Godot there. (`~/Android/Sdk` is in
+   `$HOME` already, so the Android SDK has no such problem.)
 2. **Android SDK** — easiest is [Android Studio](https://developer.android.com/studio)
    (installs the SDK to `~/Android/Sdk`); or the standalone
    `cmdline-tools` + `sdkmanager "platform-tools" "build-tools;34.0.0" "platforms;android-34"`,
