@@ -6,13 +6,19 @@ signal prayer_power_changed(value: float, max_value: float)
 signal alignment_changed(value: float)
 signal announcement(text: String)
 
-## One in-game year passes every this many real seconds.
-## Lifespans of 60-85 years last ~20-28 minutes of play.
-const YEAR_SECONDS := 20.0
+## One full day/night cycle, in real seconds. (The pace of the sun is the
+## heartbeat of the game — tuned once, everything else derives from it.)
+const DAY_SECONDS := 320.0
 
-## One full day/night cycle spans this many villager years (so a villager
-## lives through four or five great days — time is mythic here, not literal).
-const DAY_YEARS := 16.0
+## A villager's whole life (60-85 "years") spans about this many day/night
+## cycles — time enough to grow up, raise a family, and grow old.
+const LIFE_DAYS := 40.0
+
+## Derived: one in-game year of aging, in real seconds (~72.5y average life).
+const YEAR_SECONDS := LIFE_DAYS * DAY_SECONDS / 72.5
+
+## Derived: how many aging-years pass per day/night cycle.
+const DAY_YEARS := DAY_SECONDS / YEAR_SECONDS
 
 const GOOD_COLOR := Color(1.0, 0.9, 0.65)
 const EVIL_COLOR := Color(0.75, 0.12, 0.1)

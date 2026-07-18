@@ -13,7 +13,7 @@ enum State {
 	GO_FARM, FARMING, GO_HUNT, HUNTING, GO_BUTCHER, BUTCHERING,
 	GO_CHOP, CHOPPING, GO_QUARRY, QUARRYING, GO_BUILD, BUILDING,
 	GO_TAME, TAMING, GO_WORSHIP, WORSHIPPING, PLAY,
-	GO_PREACH, PREACHING,
+	GO_PREACH, PREACHING, GO_FEED, GO_BUILD_FARM, BUILDING_FARM,
 	FLEE, HELD, FALLING,
 }
 
@@ -31,7 +31,6 @@ const ARRIVE_DIST := 0.9
 const ADULT_AGE := 16.0
 const ELDER_AGE := 60.0
 const PREGNANCY_YEARS := 0.75  # nine months
-const MAX_POPULATION := 24
 const STARVING_HUNGER := 90.0
 const TAME_MORALITY := 40.0    # benevolent and saintly souls only
 
@@ -74,6 +73,10 @@ var _prev_state := State.WANDER
 var _gentle_drop := false
 var _mission_village: Village = null
 var _ground_check_time := randf_range(1.0, 3.0)
+var _target_bush: ForageBush = null
+var _target_farm: Farm = null
+var _carrying_feed := false
+var _farm_spot := Vector3.INF
 var _label: Label3D
 var _visuals: Node3D
 var _body_mesh: MeshInstance3D
@@ -162,20 +165,52 @@ func _physics_process(delta: float) -> void:
 				_body_mesh.rotation_degrees.x = 0
 				_decide()
 		State.GO_FARM:
-			if _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
+			if _target_farm == null or not is_instance_valid(_target_farm):
+				_target_farm = null
+				_decide()
+			elif _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
 				state = State.FARMING
 				_action_time = 3.0
 		State.FARMING:
 			_apply_gravity_only(delta)
 			_action_time -= delta
-			village.farm.tend()
+			if _target_farm == null or not is_instance_valid(_target_farm):
+				_target_farm = null
+				_decide()
+				return
+			_target_farm.tend()
 			_work_noise("chatter", 6.0, delta)
 			if _action_time <= 0.0:
-				if village.farm.is_harvestable():
+				if _target_farm.is_harvestable():
 					var yield_bonus := 1 if village.has_pack_animal() else 0
-					village.store.add(FoodItem.FoodType.PLANT, village.farm.harvest() + yield_bonus)
+					village.store.add(FoodItem.FoodType.PLANT, _target_farm.harvest() + yield_bonus)
 					if village.is_player_home:
 						GameState.announce("%s brought in the harvest." % villager_name)
+				_target_farm = null
+				_decide()
+		State.GO_FEED:
+			if not _carrying_feed:
+				if _move_toward(village.store.global_position, WALK_SPEED * _speed_factor(), delta):
+					if village.store.take(FoodItem.FoodType.PLANT, 1) > 0:
+						_carrying_feed = true
+					else:
+						_decide()
+			elif _move_toward(village.pen_position(), WALK_SPEED * _speed_factor(), delta):
+				village.feed_penned()
+				_carrying_feed = false
+				_decide()
+		State.GO_BUILD_FARM:
+			if _move_toward(_farm_spot, WALK_SPEED * _speed_factor(), delta):
+				_dismount()
+				state = State.BUILDING_FARM
+				_action_time = 10.0
+		State.BUILDING_FARM:
+			_apply_gravity_only(delta)
+			_action_time -= delta
+			_work_noise("hammer", 0.8, delta)
+			if _action_time <= 0.0:
+				village.spawn_farm_at(_farm_spot)
+				_farm_spot = Vector3.INF
 				_decide()
 		State.GO_HUNT:
 			_process_go_target(_target_animal, delta, State.HUNTING, 2.0)
@@ -412,8 +447,8 @@ func _try_conceive(delta: float) -> void:
 		return
 	if happiness < 50.0 or village.store.total_food() < 4:
 		return
-	if village.population() >= MAX_POPULATION:
-		return
+	if village.at_capacity():
+		return  # shelter bounds the flock — build houses to grow
 	# ~1 in 3 chance over one 8-second worship session spent near a partner.
 	if randf() > 0.05 * delta:
 		return
@@ -531,6 +566,11 @@ func _pick_job() -> bool:
 	var food_worry := maxf(20.0 - store.total_food(), 0.0) * 3.0
 	if not abandoned:
 		scores["farm"] = 20.0 + food_worry
+		# Hungry and short of fields? Break new ground.
+		if food_worry > 20.0 and village.wants_new_farm() and store.lumber >= 4:
+			scores["build_farm"] = 30.0 + food_worry * 0.5
+	if village.penned_hungry() and store.plant_food > 2:
+		scores["feed"] = 26.0
 	if village.diet == Village.Diet.CANNIBAL and store.meat_food < 4 \
 			and _will_eat_human_flesh() and _nearest_corpse() != null:
 		scores["butcher"] = 50.0 + food_worry
@@ -584,8 +624,26 @@ func _start_job(job: String) -> void:
 			state = State.GO_QUARRY
 			_maybe_mount()
 		"farm":
+			_target_farm = village.pick_farm(global_position)
+			if _target_farm == null:
+				state = State.WANDER
+				_action_time = 2.0
+				return
 			state = State.GO_FARM
-			_target = village.farm.global_position + Vector3(randf_range(-2, 2), 0, randf_range(-2, 2))
+			_target = _target_farm.global_position + Vector3(randf_range(-2, 2), 0, randf_range(-2, 2))
+		"feed":
+			_carrying_feed = false
+			state = State.GO_FEED
+		"build_farm":
+			var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+			_farm_spot = village.find_build_spot(world)
+			if _farm_spot == Vector3.INF or not village.store.try_spend_materials(4, 0):
+				_farm_spot = Vector3.INF
+				state = State.WANDER
+				_action_time = 2.0
+				return
+			state = State.GO_BUILD_FARM
+			_maybe_mount()
 		"hunt":
 			_target_animal = _nearest_huntable()
 			state = State.GO_HUNT
@@ -616,6 +674,7 @@ func _will_eat_human_flesh() -> bool:
 ## Eating --------------------------------------------------------------------
 
 func _plan_eating() -> bool:
+	_target_bush = null
 	_target_food = _nearest_edible_ground_food()
 	if _target_food != null:
 		state = State.GO_EAT
@@ -626,10 +685,27 @@ func _plan_eating() -> bool:
 			state = State.GO_EAT
 			_target = village.store.global_position
 			return true
+	# The granary is bare: go foraging in the wild like anyone's ancestors.
+	_target_bush = _nearest_forage_bush()
+	if _target_bush != null:
+		state = State.GO_EAT
+		return true
 	return false
 
 
 func _process_go_eat(delta: float) -> void:
+	if _target_bush != null:
+		if not is_instance_valid(_target_bush) or not _target_bush.has_berries():
+			_target_bush = null
+			_decide()
+			return
+		if _move_toward(_target_bush.global_position, WALK_SPEED * _speed_factor(), delta):
+			if _target_bush.take_berry():
+				_dismount()
+				state = State.EATING
+				_action_time = 2.0
+			_target_bush = null
+		return
 	if _target_food != null:
 		if not is_instance_valid(_target_food) or _target_food.is_queued_for_deletion():
 			_target_food = null
@@ -676,6 +752,20 @@ func _nearest_edible_ground_food() -> FoodItem:
 		if d < best_dist and d < village.influence_radius * 1.5:
 			best_dist = d
 			best = food
+	return best
+
+
+func _nearest_forage_bush() -> ForageBush:
+	var best: ForageBush = null
+	var best_dist := INF
+	for b in get_tree().get_nodes_in_group("forage"):
+		var bush := b as ForageBush
+		if not is_instance_valid(bush) or not bush.has_berries():
+			continue
+		var d := global_position.distance_to(bush.global_position)
+		if d < best_dist and d < village.influence_radius * 2.0:
+			best_dist = d
+			best = bush
 	return best
 
 
@@ -959,6 +1049,8 @@ func _status_word() -> String:
 		State.GO_TAME, State.TAMING: return "taming a beast"
 		State.GO_WORSHIP, State.WORSHIPPING: return "worshipping"
 		State.GO_PREACH, State.PREACHING: return "on a mission"
+		State.GO_FEED: return "feeding the animals"
+		State.GO_BUILD_FARM, State.BUILDING_FARM: return "breaking new ground"
 		State.FLEE: return "fleeing in terror"
 		State.HELD: return "in the grip of a god"
 		State.FALLING: return "airborne"

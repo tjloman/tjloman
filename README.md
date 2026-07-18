@@ -67,9 +67,17 @@ you're done. No system install required.
 - **Neutral villages** generate out in the world. They run the full
   simulation (farming, building, families) but believe in nothing until
   your miracles convert them (belief ≥ 40) — then their prayers feed you.
-- **Day/night cycle**: one full cycle per 16 villager years (~5⅓ real
-  minutes). Sun, moon, dawn/dusk skies. Villagers sleep at night; house
-  windows glow; wolves prowl — preferring villages gone wicked.
+- **Day/night cycle**: ~5⅓ real minutes per day. Sun, moon, dawn/dusk
+  skies. Villagers sleep at night; house windows glow; wolves prowl —
+  preferring villages gone wicked. A villager's whole life spans about
+  **40 days** — time enough to grow up, raise a family, and grow old.
+- **A living ecology**: wild animals have hunger and thirst — they trek
+  to water to drink, browse forage bushes, graze, breed when fed and
+  watered, and die of old age way out in the woods. Forage bushes with
+  regrowing berries dot every biome (villagers forage them too when the
+  granary runs dry). Trees grow from 1-lumber saplings to 30-lumber
+  giants — the model scales with maturity — and mature trees replant
+  themselves. Rock deposits hold 300 stone and visibly wear down.
 - **Sound**: every sound is synthesized in code at startup (no assets) and
   played positionally — bleating, clucking, sawing, quarry picks, hammers,
   worship murmur, barks, howls, frog croaks, and the boom of a fireball.
@@ -78,21 +86,24 @@ you're done. No system install required.
 
 ## The core loop (what's simulated)
 
-- **Villagers live whole lives**: they age (1 game year = 20 real seconds),
-  come of age at 16, slow down as elders, and die at 60–85 — leaving a
+- **Villagers live whole lives**: they age, come of age at 16, slow down
+  as elders, and die at 60–85 (about 40 day/night cycles) — leaving a
   physical **corpse**. Adults courting at the totem conceive children;
   pregnancy lasts nine months (game time), then a child is born, plays
-  instead of working, and grows up.
+  instead of working, and grows up. Births are bounded by shelter —
+  build houses to grow the flock.
 - **Jobs are chosen, not assigned**: every adult scores what the village
   lacks — food, lumber, stone, housing, repairs, livestock — and takes the
   most urgent work: farming, hunting, felling timber, quarrying, building,
   taming. Starvation is lethal — and the god who allowed it is judged.
 - **Houses are mortal too**: hut / house / longhouse (sleeps 2/4/6), each
-  with health and age. They decay past 30 years and collapse; builders
-  raise new ones (lumber + stone, placement checked for slope, water, and
-  clearance) and repair old ones. The homeless sleep rough by the totem,
-  recover poorly, and grow miserable. One diligent builder can house a
-  whole town — if the loggers and quarriers keep up.
+  with health and age. A **lived-in house is a kept house** — only empty
+  ones decay with age and collapse. Builders raise new ones (lumber +
+  stone, placement checked for slope, water, and clearance) and repair
+  old ones. The homeless sleep rough by the totem, recover poorly, and
+  grow miserable. Villagers also **break new fields** when the village
+  goes hungry, and **feed the penned livestock** from the granary; the
+  pen has a **well** so tamed animals can drink.
 - **Livestock and taming, gated by virtue**: benevolent villagers tame
   horses (ridden on long trips), oxen and llamas (hauling: +1 to every
   harvest), and dogs (guarding, herding, and ambient joy). Wolves avoid

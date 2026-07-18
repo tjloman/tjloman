@@ -20,13 +20,17 @@ enum State {
 
 const WALK_SPEED := 3.5
 const GRAVITY := 20.0
-const MAX_SCALE := 1.6
+## The growth arc: at 1% grown the creature stands about twice a villager's
+## height; at 100% it towers over the tallest trees.
+const MIN_SCALE := 1.1
+const MAX_SCALE := 4.2
+const GROWTH_PER_MEAL := 0.015
 const STUCK_SECONDS := 30.0   # no state may hold the creature hostage
 const OBSERVE_PERIOD := 2.5
 
 var hunger := 40.0
 var energy := 90.0
-var growth_scale := 1.0
+var growth := 0.01            # 0..1 of its destined size; every game starts small
 
 ## Feelings. Mood is the weather of its heart; bond is trust in your hand;
 ## boredom is the itch that play and curiosity scratch.
@@ -93,6 +97,7 @@ func _ready() -> void:
 	_label = Util.status_label()
 	_label.position = Vector3(0, 3.0, 0)
 	add_child(_label)
+	scale = Vector3.ONE * lerpf(MIN_SCALE, MAX_SCALE, growth)
 
 
 func _physics_process(delta: float) -> void:
@@ -710,14 +715,14 @@ func _find_toy() -> Animal:
 ## Body ----------------------------------------------------------------------
 
 func _grow() -> void:
-	if growth_scale < MAX_SCALE:
-		var before := int(growth_scale / MAX_SCALE * 10.0)
-		growth_scale = minf(growth_scale * 1.03, MAX_SCALE)
-		scale = Vector3.ONE * growth_scale
+	if growth < 1.0:
+		var before := int(growth * 10.0)
+		growth = minf(growth + GROWTH_PER_MEAL, 1.0)
+		scale = Vector3.ONE * lerpf(MIN_SCALE, MAX_SCALE, growth)
 		# Announce only when crossing a 10% milestone, not on every meal.
-		if int(growth_scale / MAX_SCALE * 10.0) > before:
+		if int(growth * 10.0) > before:
 			GameState.announce("Your creature grows. It is now %.0f%% of its destined size." \
-				% (growth_scale / MAX_SCALE * 100.0))
+				% (growth * 100.0))
 
 
 func _move_toward(target: Vector3, speed: float, delta: float) -> bool:
@@ -804,7 +809,7 @@ func hover_text() -> String:
 		"hunger %d · energy %d · size %.0f%% · loves to %s\n" +
 		"[P — pet   ·   L — scold   ·   C — find it]") % [
 		_status_word(), morality_word(), mood_word(), int(bond),
-		int(hunger), int(energy), growth_scale / MAX_SCALE * 100.0, favorite_deed()]
+		int(hunger), int(energy), growth * 100.0, favorite_deed()]
 
 
 func _status_word() -> String:

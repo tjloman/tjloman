@@ -1,12 +1,13 @@
 class_name RockDeposit
 extends StaticBody3D
-## A cluster of boulders that quarriers pick apart for stone. Shrinks with
-## every harvest, and is gone after three.
+## A cluster of boulders that quarriers pick apart for stone — a deep vein:
+## up to 300 stone before it's spent. The boulders visibly shrink as the
+## deposit is worked down.
 
 const STONE_PER_HARVEST := 3
-const MAX_HARVESTS := 3
+const TOTAL_STONE := 300
 
-var harvests_left := MAX_HARVESTS
+var stone_left := TOTAL_STONE
 var _boulders: Array[MeshInstance3D] = []
 
 
@@ -31,21 +32,30 @@ func _ready() -> void:
 		_boulders.append(b)
 
 
-## One quarrying pass: yields stone, shrinks the pile, frees when exhausted.
+## One quarrying pass: yields stone, wears the pile down, frees when spent.
 func quarry() -> int:
-	if harvests_left <= 0:
+	if stone_left <= 0:
 		return 0
-	harvests_left -= 1
-	if _boulders.size() > 0:
-		_boulders.pop_back().queue_free()
-	if harvests_left <= 0:
+	var taken := mini(STONE_PER_HARVEST, stone_left)
+	stone_left -= taken
+	var fraction := float(stone_left) / TOTAL_STONE
+	for i in _boulders.size():
+		var b := _boulders[i]
+		if not is_instance_valid(b):
+			continue
+		# Boulders shed one by one as the vein empties; survivors shrink.
+		if fraction < float(i) / _boulders.size():
+			b.visible = false
+		else:
+			b.scale = Vector3.ONE * lerpf(0.45, 1.0, fraction)
+	if stone_left <= 0:
 		queue_free()
-	return STONE_PER_HARVEST
+	return taken
 
 
 func is_exhausted() -> bool:
-	return harvests_left <= 0
+	return stone_left <= 0
 
 
 func hover_text() -> String:
-	return "Rock deposit — %d harvests left" % harvests_left
+	return "Rock deposit — %d stone remaining" % stone_left

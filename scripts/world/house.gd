@@ -19,6 +19,7 @@ const DECAY_START_AGE := 30.0   # years before a house starts crumbling
 var size := Size.HUT
 var health := 100.0
 var age := 0.0                  # years
+var occupied := false           # kept current by Village._assign_housing
 var under_construction := false
 var progress := 0.0             # 0..100 while under construction
 var village: Village
@@ -45,8 +46,9 @@ func _process(delta: float) -> void:
 		return
 	var years := delta / GameState.YEAR_SECONDS
 	age += years
-	if age > DECAY_START_AGE:
-		# Crumble faster the older it gets: ~1%/yr at 30, ~5%/yr at 55.
+	# A lived-in house is a kept house: hearth smoke, patched thatch,
+	# swept steps. Only EMPTY houses crumble with age.
+	if age > DECAY_START_AGE and not occupied:
 		health -= (1.0 + (age - DECAY_START_AGE) * 0.16) * years
 		if health <= 0.0:
 			_collapse()

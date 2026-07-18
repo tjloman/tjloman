@@ -105,22 +105,27 @@ func _scatter() -> void:
 		"forest":
 			_scatter_trees(rng, rng.randi_range(9, 15), "forest")
 			_scatter_deposits(rng, rng.randi_range(0, 1))
+			_scatter_bushes(rng, rng.randi_range(2, 4))
 			_scatter_animals(rng, {"deer": 0.9, "bear": 0.12, "wolf": 0.12, "tiger": 0.04})
 		"grassland":
 			_scatter_trees(rng, rng.randi_range(2, 4), "grassland")
 			_scatter_flowers(rng, rng.randi_range(5, 10))
 			_scatter_deposits(rng, rng.randi_range(0, 1))
+			_scatter_bushes(rng, rng.randi_range(3, 5))
 			_scatter_animals(rng, {"sheep": 0.8, "horse": 0.25, "chicken": 0.3,
 				"pig": 0.2, "dog": 0.1})
 		"savanna":
 			_scatter_trees(rng, rng.randi_range(2, 4), "savanna")
+			_scatter_bushes(rng, rng.randi_range(1, 3))
 			_scatter_animals(rng, {"giraffe": 0.3, "lion": 0.15, "llama": 0.3, "ox": 0.25})
 		"rocky_hills":
 			_scatter_trees(rng, rng.randi_range(0, 1), "forest")
 			_scatter_deposits(rng, rng.randi_range(2, 4))
+			_scatter_bushes(rng, rng.randi_range(0, 2))
 			_scatter_animals(rng, {"llama": 0.15})
 		"wetland":
 			_scatter_trees(rng, rng.randi_range(1, 3), "wetland")
+			_scatter_bushes(rng, rng.randi_range(2, 4))
 			_scatter_animals(rng, {"frog": 1.4, "pig": 0.25})
 
 
@@ -155,7 +160,19 @@ func _scatter_trees(rng: RandomNumberGenerator, count: int, style: String) -> vo
 		var tree := WildTree.new()
 		tree.style = style
 		tree.rng_seed = rng.randi()
+		# A natural mixed-age stand: some saplings, some giants.
+		tree.lumber = rng.randf_range(4.0, WildTree.MAX_LUMBER)
 		_place(tree, spot, 0.1)
+
+
+func _scatter_bushes(rng: RandomNumberGenerator, count: int) -> void:
+	for i in count:
+		var spot := _random_spot(rng)
+		if not _spot_ok(spot):
+			continue
+		var bush := ForageBush.new()
+		bush.berries = rng.randi_range(1, ForageBush.MAX_BERRIES)
+		_place(bush, spot, 0.1)
 
 
 func _scatter_deposits(rng: RandomNumberGenerator, count: int) -> void:

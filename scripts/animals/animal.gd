@@ -6,7 +6,7 @@ extends CharacterBody3D
 ##
 ## Add a species by adding a SPECIES row. That's the whole job.
 
-enum State { IDLE, WANDER, FLEE, CHASE, HELD, FALLING }
+enum State { IDLE, WANDER, FLEE, CHASE, HELD, FALLING, GO_DRINK, DRINKING, GO_FORAGE, GRAZE }
 
 const GRAVITY := 20.0
 
@@ -62,9 +62,18 @@ var health := 30.0
 var tamed_by: Village = null
 var night_spawned := false     # wolves of the wolf-raid despawn at dawn
 
+## An animal's real needs: it must drink and eat, and it grows old.
+## Wild herds breed when fed and watered — and die, way out in the woods.
+var hunger := randf_range(0.0, 40.0)
+var thirst := randf_range(0.0, 40.0)
+var age_seconds := 0.0
+var lifespan_seconds := randf_range(12.0, 28.0) * GameState.DAY_SECONDS
+
 var state := State.IDLE
 var _target := Vector3.ZERO
 var _prey: Node3D = null
+var _water_target := Vector3.INF
+var _bush: ForageBush = null
 var _action_time := 2.0
 var _state_time := 0.0
 var _prev_state := State.IDLE
@@ -72,7 +81,6 @@ var _think_time := 0.0
 var _flee_from := Vector3.ZERO
 var _fall_speed := 0.0
 var _gentle_drop := false
-var _satiated := 0.0
 var _rider: Node3D = null
 
 
@@ -121,6 +129,16 @@ func _build_body(body: Vector3, leg_h: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# Life goes on even beyond the camera: aging, appetite, and quiet
+	# deaths of old age happen way out in the woods.
+	if state != State.HELD:
+		age_seconds += delta
+		hunger = minf(hunger + 0.35 * delta, 100.0)
+		thirst = minf(thirst + 0.3 * delta, 100.0)
+		if age_seconds > lifespan_seconds:
+			die(false)  # returns to the earth, no butcher involved
+			return
+
 	# Far-off beasts stand still: the world shouldn't pay physics for what
 	# nobody can see. (Held/falling animals always simulate.)
 	if state != State.HELD and state != State.FALLING:
@@ -134,9 +152,10 @@ func _physics_process(delta: float) -> void:
 		_prev_state = state
 		_state_time = 0.0
 	_state_time += delta
-	if _state_time > 25.0 and state in [State.WANDER, State.CHASE]:
+	if _state_time > 25.0 and state in [State.WANDER, State.CHASE, State.GO_DRINK, State.GO_FORAGE]:
 		_state_time = 0.0
 		_prey = null
+		_water_target = Vector3.INF
 		state = State.IDLE
 		_action_time = 2.0
 	if global_position.y < -12.0:
@@ -190,6 +209,37 @@ func _physics_process(delta: float) -> void:
 				state = State.IDLE
 			elif _move_toward(_prey.global_position, spec["speed"] * 1.3, delta):
 				_strike_prey()
+		State.GO_DRINK:
+			if _water_target == Vector3.INF:
+				state = State.IDLE
+			elif _move_toward(_water_target, spec["speed"] * 0.8, delta):
+				state = State.DRINKING
+				_action_time = 3.0
+		State.DRINKING:
+			_apply_gravity_only(delta)
+			_action_time -= delta
+			if _action_time <= 0.0:
+				thirst = 0.0
+				_water_target = Vector3.INF
+				state = State.IDLE
+				_action_time = 2.0
+		State.GO_FORAGE:
+			if _bush == null or not is_instance_valid(_bush) or not _bush.has_berries():
+				_bush = null
+				state = State.IDLE
+			elif _move_toward(_bush.global_position, spec["speed"] * 0.8, delta):
+				if _bush.take_berry():
+					hunger = maxf(hunger - 55.0, 0.0)
+				_bush = null
+				state = State.GRAZE
+				_action_time = 2.0
+		State.GRAZE:
+			_apply_gravity_only(delta)
+			_action_time -= delta
+			if _action_time <= 0.0:
+				hunger = maxf(hunger - 30.0, 0.0)  # grass is always there
+				state = State.IDLE
+				_action_time = randf_range(2.0, 5.0)
 
 	_think_time -= delta
 	if _think_time <= 0.0:
@@ -206,14 +256,15 @@ func _physics_process(delta: float) -> void:
 	_ambient_sound(delta)
 
 
-## Slow thinking: predator targeting, guard-dog work, night despawn.
+## Slow thinking: needs first (drink, eat), then predator targeting,
+## guard-dog work, breeding, night despawn.
 func _think() -> void:
-	if state in [State.HELD, State.FALLING, State.FLEE]:
+	if state in [State.HELD, State.FALLING, State.FLEE,
+			State.DRINKING, State.GO_DRINK, State.GO_FORAGE, State.GRAZE]:
 		return
 	if night_spawned and not GameState.is_night():
 		queue_free()  # wolves of the raid melt away at dawn
 		return
-	_satiated = maxf(_satiated - 1.0, 0.0)
 
 	# Buried waist-deep in a hillside (bad spawn, collision hiccup)? Pop up.
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
@@ -223,11 +274,35 @@ func _think() -> void:
 			global_position.y = h + 0.4
 			velocity = Vector3.ZERO
 
-	if spec.get("predator", false) and _satiated <= 0.0 and state != State.CHASE:
+	# Thirst: tamed animals drink at the village well, wild ones seek water.
+	if thirst > 65.0 and state != State.CHASE:
+		if tamed_by != null:
+			_water_target = tamed_by.well_position()
+			state = State.GO_DRINK
+			return
+		_water_target = _find_water(world)
+		if _water_target != Vector3.INF:
+			state = State.GO_DRINK
+			return
+
+	# Hunger: predators hunt (below); herbivores browse bushes or graze.
+	# Tamed animals graze lightly and wait to be fed at the pen.
+	if hunger > 65.0 and not spec.get("predator", false):
+		_bush = _find_forage_bush()
+		if _bush != null and tamed_by == null:
+			state = State.GO_FORAGE
+			return
+		state = State.GRAZE
+		_action_time = 3.0
+		return
+
+	if spec.get("predator", false) and hunger > 55.0 and state != State.CHASE:
 		_prey = _find_prey()
 		if _prey != null:
 			state = State.CHASE
 			return
+
+	_maybe_breed()
 
 	if spec.get("guard", false) and tamed_by != null:
 		var wolf := _find_nearby("animals", 16.0, func(n): return n is Animal \
@@ -271,15 +346,67 @@ func _strike_prey() -> void:
 	if _prey is Animal:
 		(_prey as Animal).take_damage(25.0)
 		if not is_instance_valid(_prey) or _prey.is_queued_for_deletion():
-			_satiated = 25.0
+			hunger = maxf(hunger - 70.0, 0.0)
 			_prey = null
 			state = State.IDLE
 	elif _prey.has_method("take_damage"):
 		_prey.call("take_damage", 20.0, false)
 		_prey.call("scare", global_position)
-		_satiated = 15.0
+		hunger = maxf(hunger - 45.0, 0.0)
 		_prey = null
 		state = State.IDLE
+
+
+## Probes rings of points for open water; returns the near shore, or INF.
+func _find_water(world: WorldGen) -> Vector3:
+	if world == null:
+		return Vector3.INF
+	for dist in [12.0, 24.0, 40.0, 60.0]:
+		for i in 8:
+			var angle := TAU * i / 8.0 + randf() * 0.3
+			var probe := global_position + Vector3(cos(angle), 0, sin(angle)) * dist
+			if world.is_underwater(probe.x, probe.z):
+				# Stop at the water's edge, not in the drink.
+				return global_position + (probe - global_position) * 0.85
+	return Vector3.INF
+
+
+func _find_forage_bush() -> ForageBush:
+	var best: ForageBush = null
+	var best_dist := 35.0
+	for b in get_tree().get_nodes_in_group("forage"):
+		var bush := b as ForageBush
+		if not is_instance_valid(bush) or not bush.has_berries():
+			continue
+		var d := global_position.distance_to(bush.global_position)
+		if d < best_dist:
+			best_dist = d
+			best = bush
+	return best
+
+
+## Wild herds grow: a fed, watered adult near its own kind may calve —
+## unless the ground is already crowded with them.
+func _maybe_breed() -> void:
+	if tamed_by != null or night_spawned or spec.get("predator", false):
+		return
+	if hunger > 40.0 or thirst > 50.0 or age_seconds < lifespan_seconds * 0.2:
+		return
+	if randf() > 0.012:  # per think-tick (~1s): a calf every few minutes of comfort
+		return
+	var kin := 0
+	for a in get_tree().get_nodes_in_group("animals"):
+		var other := a as Animal
+		if other != self and is_instance_valid(other) and other.species == species \
+				and other.global_position.distance_to(global_position) < 30.0:
+			kin += 1
+	if kin < 1 or kin >= 4:
+		return  # needs a mate nearby; stops when the meadow is full
+	var calf := Animal.create(species)
+	var parent := get_parent() as Node3D
+	calf.position = parent.to_local(global_position
+		+ Vector3(randf_range(-2, 2), 0.3, randf_range(-2, 2)))
+	parent.add_child(calf)
 
 
 func _find_nearby(group: String, radius: float, filter: Callable) -> Node3D:
@@ -423,4 +550,5 @@ func hover_text() -> String:
 		flavor = "of %s" % tamed_by.village_name
 	elif spec.get("predator", false):
 		flavor = "predator"
-	return "%s (%s)" % [species.capitalize(), flavor]
+	return "%s (%s) — hunger %d · thirst %d" % [
+		species.capitalize(), flavor, int(hunger), int(thirst)]

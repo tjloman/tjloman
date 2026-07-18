@@ -31,7 +31,8 @@ var influence_radius := MIN_INFLUENCE
 var diet := Diet.OMNIVORE
 
 var totem: Node3D
-var farm: Farm
+var farm: Farm                 # the founding field (always farms[0])
+var farms: Array[Farm] = []
 var store: FoodStore
 var houses: Array[House] = []
 var construction_site: House = null
@@ -57,6 +58,7 @@ func _ready() -> void:
 	farm = Farm.new()
 	farm.position = _grounded(Vector3(10, 0, -4), 3.6)
 	add_child(farm)
+	farms.append(farm)
 
 	# The round market sits well clear of the house ring to the northwest.
 	store = FoodStore.new()
@@ -112,11 +114,73 @@ func _build_pen() -> void:
 		# the node in the tree, and the pen isn't added yet.
 		rail.basis = Basis.looking_at(next_pos - post_pos, Vector3.UP)
 		pen.add_child(rail)
+	# The well at the pen's heart: a stone ring of water for the animals.
+	pen.add_child(Util.cylinder(0.85, 0.6, Color(0.55, 0.53, 0.5), Vector3(0, 0.3, 0)))
+	pen.add_child(Util.cylinder(0.68, 0.1, Color(0.25, 0.45, 0.65), Vector3(0, 0.62, 0)))
+	for side in [-1.0, 1.0]:
+		pen.add_child(Util.box(Vector3(0.1, 1.5, 0.1), Color(0.5, 0.38, 0.25),
+			Vector3(0.75 * side, 0.9, 0)))
+	pen.add_child(Util.prism(Vector3(2.0, 0.5, 1.0), Color(0.6, 0.45, 0.3), Vector3(0, 1.8, 0)))
 	add_child(pen)
 
 
 func pen_position() -> Vector3:
 	return global_position + _pen_center
+
+
+## The well stands at the pen's center; tamed animals drink here.
+func well_position() -> Vector3:
+	return pen_position()
+
+
+## True if any penned animal is going hungry (a villager should feed them).
+func penned_hungry() -> bool:
+	for a in tamed_animals:
+		if is_instance_valid(a) and a.hunger > 60.0:
+			return true
+	return false
+
+
+## A villager arrived with feed from the store: every animal at the pen eats.
+func feed_penned() -> void:
+	for a in tamed_animals:
+		if is_instance_valid(a) and a.global_position.distance_to(pen_position()) < 14.0:
+			a.hunger = maxf(a.hunger - 60.0, 0.0)
+
+
+## The nearest of this village's fields (villagers work whichever is closest).
+func pick_farm(from: Vector3) -> Farm:
+	farms = farms.filter(func(f): return is_instance_valid(f))
+	var best: Farm = null
+	var best_dist := INF
+	for f in farms:
+		var d := from.distance_to(f.global_position)
+		if d < best_dist:
+			best_dist = d
+			best = f
+	return best
+
+
+## Wants another field? One per ~7 mouths, capped so villages stay villages.
+func wants_new_farm() -> bool:
+	farms = farms.filter(func(f): return is_instance_valid(f))
+	return farms.size() < mini(1 + population() / 7, 4)
+
+
+## A farmer finished breaking new ground: register the field.
+func spawn_farm_at(world_spot: Vector3) -> void:
+	var new_farm := Farm.new()
+	new_farm.position = to_local(world_spot)
+	add_child(new_farm)
+	farms.append(new_farm)
+	if is_player_home:
+		GameState.announce("A new field has been broken in %s." % village_name)
+
+
+## Births are bounded by shelter: a village can outgrow its housing a
+## little, but not without limit — build homes to grow the flock.
+func at_capacity() -> bool:
+	return population() >= housing_capacity() + 8
 
 
 func _build_influence_ring() -> void:
@@ -280,6 +344,8 @@ func homeless_count() -> int:
 
 
 ## Greedy re-assignment: fill houses in order; the leftover sleep rough.
+## Also marks which houses are lived in — occupancy is what keeps a
+## house standing against the years.
 func _assign_housing() -> void:
 	houses = houses.filter(func(h): return is_instance_valid(h))
 	var villagers := my_villagers()
@@ -287,8 +353,13 @@ func _assign_housing() -> void:
 	for h in houses:
 		for i in h.capacity():
 			slots.append(h)
+	var lived_in := {}
 	for i in villagers.size():
 		villagers[i].home = slots[i] if i < slots.size() else null
+		if villagers[i].home != null:
+			lived_in[villagers[i].home] = true
+	for h in houses:
+		h.occupied = lived_in.has(h)
 
 
 ## A villager set down here by the hand has joined us — welcome them home.
@@ -326,8 +397,10 @@ func find_build_spot(world: WorldGen) -> Vector3:
 			if is_instance_valid(h) and h.global_position.distance_to(pos) < 4.5:
 				blocked = true
 				break
-		for structure: Node3D in [totem, farm]:
-			if structure.global_position.distance_to(pos) < 6.0:
+		if totem.global_position.distance_to(pos) < 6.0:
+			blocked = true
+		for f in farms:
+			if is_instance_valid(f) and f.global_position.distance_to(pos) < 7.0:
 				blocked = true
 				break
 		# The round market is wide — houses keep extra distance from it.
