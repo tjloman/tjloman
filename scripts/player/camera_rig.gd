@@ -6,7 +6,7 @@ extends Node3D
 ## Structure:  self (yaw) -> Pitch (x tilt) -> Camera3D (pulled back on z)
 
 const MIN_ZOOM := 1.2   # close enough to stand at a villager's feet
-const MAX_ZOOM := 90.0
+const MAX_ZOOM := 70.0
 const PAN_SPEED := 22.0
 const ROTATE_SPEED := 1.6
 
@@ -68,7 +68,7 @@ func _process(delta: float) -> void:
 
 	var rot := Input.get_action_strength("cam_rotate_right") - Input.get_action_strength("cam_rotate_left")
 	if rot != 0.0:
-		rotate_y(-rot * ROTATE_SPEED * delta)
+		_yaw_around_focus(-rot * ROTATE_SPEED * delta)
 
 	camera.position.z = lerpf(camera.position.z, zoom_distance, minf(delta * 8.0, 1.0))
 
@@ -132,28 +132,65 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _touches.size() >= 2:
 			var span := _touch_span()
 			if _pinch_dist > 8.0:
-				zoom_distance = clampf(zoom_distance * (_pinch_dist / span), MIN_ZOOM, MAX_ZOOM)
+				_zoom_toward(_pinch_dist / span)
 			_pinch_dist = span
 			# Each finger's drag fires its own event, so use half strength.
-			rotate_y(-event.relative.x * 0.0025)
+			_yaw_around_focus(-event.relative.x * 0.0025)
 			pitch_node.rotation_degrees.x = clampf(
 				pitch_node.rotation_degrees.x - event.relative.y * 0.12, -75.0, 40.0)
 		return
 
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
-			zoom_distance = clampf(zoom_distance * 0.9, MIN_ZOOM, MAX_ZOOM)
+			_zoom_toward(0.9)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
-			zoom_distance = clampf(zoom_distance * 1.1, MIN_ZOOM, MAX_ZOOM)
+			_zoom_toward(1.1)
 		elif event.button_index == MOUSE_BUTTON_MIDDLE:
 			_rotating = event.pressed
 	elif event is InputEventMouseMotion and _rotating:
-		rotate_y(-event.relative.x * 0.005)
+		_yaw_around_focus(-event.relative.x * 0.005)
 		# Tilts from near-top-down to well above the horizon (+40): face
 		# the sky to arc throws, or just to watch the weather of your soul.
 		var new_pitch: float = clampf(
 			pitch_node.rotation_degrees.x - event.relative.y * 0.25, -75.0, 40.0)
 		pitch_node.rotation_degrees.x = new_pitch
+
+
+## The point everything pivots around: the hand's spot on the ground.
+## Zooming dollies toward it, yaw orbits around it — so the thing under
+## your cursor stays put instead of the whole world swinging away. Falls
+## back to the rig origin if the hand isn't ready.
+func _focus_point() -> Vector3:
+	if divine_hand != null and is_instance_valid(divine_hand):
+		var p := divine_hand.ground_point
+		return Vector3(p.x, global_position.y, p.z)
+	return global_position
+
+
+## Zoom by a factor, keeping the focus point fixed in frame: the rig
+## origin slides toward (zoom in) or away from (zoom out) the hand by the
+## same ratio as the zoom distance — standard dolly-to-cursor.
+func _zoom_toward(factor: float) -> void:
+	var new_zoom := clampf(zoom_distance * factor, MIN_ZOOM, MAX_ZOOM)
+	var ratio := new_zoom / zoom_distance
+	zoom_distance = new_zoom
+	if follow_target == null and not is_equal_approx(ratio, 1.0):
+		var focus := _focus_point()
+		var offset := (global_position - focus) * ratio
+		global_position = Vector3(focus.x + offset.x, global_position.y, focus.z + offset.z)
+
+
+## Yaw the rig, orbiting around the hand's ground point rather than
+## spinning in place, so the framing pivots on what you're looking at.
+func _yaw_around_focus(angle: float) -> void:
+	if follow_target != null:
+		rotate_y(angle)  # lock-on already orbits its target
+		return
+	var focus := _focus_point()
+	var offset := global_position - focus
+	offset = offset.rotated(Vector3.UP, angle)
+	rotate_y(angle)
+	global_position = Vector3(focus.x + offset.x, global_position.y, focus.z + offset.z)
 
 
 ## Pan by a world-space delta (used by DivineHand's grab-the-land drag).
