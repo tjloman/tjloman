@@ -1227,6 +1227,16 @@ func hover_text() -> String:
 		int(hunger), int(energy), growth * 100.0, favorite_deed()]
 
 
+## What to call the thing it's hauling — honest about lumber and stone,
+## not "food" for everything.
+func _carriable_word(item: Node3D) -> String:
+	if item is ResourceItem:
+		return (item as ResourceItem).kind
+	if item is WildTree:
+		return "timber"
+	return "food"
+
+
 func _status_word() -> String:
 	match state:
 		State.IDLE: return "pondering"
@@ -1237,10 +1247,10 @@ func _status_word() -> String:
 		State.GO_TEND, State.TENDING: return "helping on the farm"
 		State.SLEEPING: return "sleeping"
 		State.WATCH: return "watching the villagers, learning"
-		State.GO_GATHER: return "fetching food for the granary"
+		State.GO_GATHER: return "fetching %s for the store" % _carriable_word(_target_food)
 		State.CARRYING:
 			match _carry_intent:
-				"deliver": return "carrying food to the granary"
+				"deliver": return "carrying %s to the store" % _carriable_word(_carried)
 				"eat": return "about to eat what it caught"
 				"gift": return "bringing a gift to the pen"
 				"snatch": return "making off with someone"

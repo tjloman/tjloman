@@ -95,6 +95,17 @@ func is_underwater(x: float, z: float) -> bool:
 	return height_at(x, z) < WATER_LEVEL + 0.25
 
 
+## True only if the WHOLE footprint (a grid, not just corners) is dry —
+## so a building's foundation never straddles an inlet or floats over
+## water between two dry corners.
+func footprint_dry(x: float, z: float, half := 2.5) -> bool:
+	for dz in [-half, -half * 0.5, 0.0, half * 0.5, half]:
+		for dx in [-half, -half * 0.5, 0.0, half * 0.5, half]:
+			if is_underwater(x + dx, z + dz):
+				return false
+	return true
+
+
 ## The HIGHEST ground under a footprint. Structures settle on the high
 ## side so their sunken foundations bridge the downhill gap — never the
 ## uphill wall buried in the slope.

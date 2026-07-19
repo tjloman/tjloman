@@ -1,13 +1,18 @@
 class_name Farm
 extends Node3D
-## A field that grows food over time. Villagers tend it (speeds growth) and
-## harvest it into the village store. Rain miracles multiply growth rate.
+## A field of crops that grows food over time. The soil is a DECAL projected
+## straight down onto the terrain, so the field follows the contours of the
+## land instead of floating on a platform; the crops are planted at the real
+## ground height beneath each row. Villagers tend it (faster growth), rain
+## multiplies it, harvest banks it in the store.
 
 const BASE_GROWTH_PER_SEC := 0.008
 const TEND_BONUS_PER_SEC := 0.03
 const MAX_TENDERS := 3      # extra hands beyond this add nothing
 const RAIN_MULTIPLIER := 4.0
 const HARVEST_YIELD := 7
+const HALF_X := 3.5
+const HALF_Z := 2.5
 
 var growth := 0.4  # 0..1; harvestable at >= 0.8
 var _rain_time_left := 0.0
@@ -18,18 +23,42 @@ var _crop_meshes: Array[MeshInstance3D] = []
 func _ready() -> void:
 	add_to_group("farms")
 	set_meta("hover_name", "Farm")
-	# A deep earthen bed sunk into the slope so the field neither floats
-	# nor lets a hill poke up through it (grounded to the high corner, the
-	# bed bridges the downhill drop and buries the uphill rise).
-	add_child(Util.box(Vector3(7.4, 3.0, 5.4), Color(0.4, 0.29, 0.19), Vector3(0, -1.4, 0)))
-	add_child(Util.box(Vector3(7, 0.15, 5), Color(0.45, 0.32, 0.2), Vector3(0, 0.07, 0)))
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+
+	# The soil, painted onto the land: a decal projects down onto whatever
+	# terrain lies beneath, hugging every rise and dip.
+	var decal := Decal.new()
+	decal.texture_albedo = _soil_texture()
+	decal.size = Vector3(HALF_X * 2.0 + 0.6, 8.0, HALF_Z * 2.0 + 0.6)
+	decal.position = Vector3(0, 0, 0)
+	add_child(decal)
+
+	# Crops planted in rows, each at the true ground height under its spot.
+	# base_y = the ground the crop grows out of; it scales up from there.
 	for x in 4:
 		for z in 3:
-			var crop := Util.box(
-				Vector3(0.4, 1.0, 0.4), Color(0.35, 0.7, 0.25),
-				Vector3(-2.4 + x * 1.6, 0.15, -1.5 + z * 1.5))
+			var lx := -2.4 + x * 1.6
+			var lz := -1.5 + z * 1.5
+			var ground_y := -0.05
+			if world != null:
+				ground_y = world.height_at(global_position.x + lx, global_position.z + lz) \
+					- global_position.y - 0.05
+			var crop := Util.box(Vector3(0.4, 1.0, 0.4), Color(0.35, 0.7, 0.25),
+				Vector3(lx, ground_y, lz))
+			crop.set_meta("base_y", ground_y)
 			add_child(crop)
 			_crop_meshes.append(crop)
+
+
+## A simple tilled-soil texture: brown with darker furrow stripes.
+func _soil_texture() -> ImageTexture:
+	var img := Image.create(48, 48, false, Image.FORMAT_RGB8)
+	for y in 48:
+		for x in 48:
+			var furrow := 0.0 if (x / 4) % 2 == 0 else 0.08
+			var n := (sin(x * 1.7) * cos(y * 2.1)) * 0.03
+			img.set_pixel(x, y, Color(0.36 - furrow + n, 0.26 - furrow + n, 0.16 + n))
+	return ImageTexture.create_from_image(img)
 
 
 func _process(delta: float) -> void:
@@ -42,10 +71,12 @@ func _process(delta: float) -> void:
 	growth = clampf(growth + rate * delta, 0.0, 1.0)
 	_tenders = 0  # workers re-assert this every frame they work
 
+	# Crops rise straight out of the soil: bottom pinned to the ground it
+	# was planted on, growing taller with maturity.
 	var height := 0.15 + growth * 1.1
 	for crop in _crop_meshes:
-		crop.scale.y = height
-		crop.position.y = height * 0.5
+		crop.scale.y = height              # box mesh is 1m tall, so scale == metres
+		crop.position.y = crop.get_meta("base_y") + height * 0.5
 
 
 func tend() -> void:

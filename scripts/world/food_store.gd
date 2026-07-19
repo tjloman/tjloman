@@ -102,12 +102,22 @@ func _process(delta: float) -> void:
 		if rb is FoodItem:
 			add((rb as FoodItem).food_type, 1)
 			rb.queue_free()
+			_thank_the_giver()
 		elif rb is ResourceItem:
 			if (rb as ResourceItem).kind == "lumber":
 				add_lumber(1)
 			else:
 				add_stone(1)
 			rb.queue_free()
+			_thank_the_giver()
+
+
+## A gift to the storehouse gladdens whoever's nearby — the villagers
+## appreciate provision, whether it fell from the sky or the creature's claws.
+func _thank_the_giver() -> void:
+	for v in get_tree().get_nodes_in_group("villagers"):
+		if v.global_position.distance_to(global_position) < 12.0:
+			v.cheer(1.5)
 
 
 ## Grab a QUARTER of the platform and that resource pops out: grain

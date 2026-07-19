@@ -6,8 +6,12 @@ extends StaticBody3D
 ## nearby, so a forest logged with restraint is a forest forever.
 ## Lumberjacks fell them for their CURRENT lumber; felled trees are gone.
 
-const MAX_LUMBER := 30.0
-const GROWTH_PER_SEC := 0.018   # sapling to giant across ~5 day cycles
+const MAX_LUMBER := 10.0
+## Growth SLOWS as the tree matures: each unit of lumber takes longer than
+## the last, so mature timber is genuinely worth more than a thicket of
+## saplings. lumber advances by GROWTH_BASE / (1 + lumber * GROWTH_TAPER).
+const GROWTH_BASE := 0.06
+const GROWTH_TAPER := 0.7
 const SAPLING_SCALE := 0.22
 const REPLANT_PERIOD := 50.0
 const REPLANT_CROWDING := 4     # no seeding when this many trees stand close
@@ -81,7 +85,8 @@ func _process(delta: float) -> void:
 		_fly(delta)
 		return
 	if lumber < MAX_LUMBER:
-		lumber = minf(lumber + GROWTH_PER_SEC * delta, MAX_LUMBER)
+		var step := GROWTH_BASE / (1.0 + lumber * GROWTH_TAPER)
+		lumber = minf(lumber + step * delta, MAX_LUMBER)
 		if int(lumber) != _shown_lumber:
 			_apply_growth_scale()
 	else:

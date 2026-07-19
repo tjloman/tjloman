@@ -6,14 +6,17 @@ extends StaticBody3D
 
 enum Size { HUT, HOUSE, LONGHOUSE }
 
-## capacity / lumber cost / stone cost / footprint by size
+## capacity / lumber cost / stone cost / footprint / build effort by size.
+## Bigger dwellings cost more AND take longer: `effort` is total
+## builder-seconds of work to raise it (a hut is a weekend, a longhouse a
+## season).
 const SPECS := {
-	Size.HUT: {"capacity": 2, "lumber": 4, "stone": 2, "width": 2.0},
-	Size.HOUSE: {"capacity": 4, "lumber": 8, "stone": 4, "width": 2.8},
-	Size.LONGHOUSE: {"capacity": 6, "lumber": 14, "stone": 8, "width": 3.6},
+	Size.HUT: {"capacity": 2, "lumber": 5, "stone": 3, "width": 2.0, "effort": 45.0},
+	Size.HOUSE: {"capacity": 4, "lumber": 12, "stone": 7, "width": 2.8, "effort": 95.0},
+	Size.LONGHOUSE: {"capacity": 6, "lumber": 22, "stone": 14, "width": 3.6, "effort": 180.0},
 }
 
-const BUILD_RATE := 14.0        # construction progress per builder-second
+const BUILD_RATE := 6.0         # construction progress per builder-second
 const DECAY_START_AGE := 30.0   # years before a house starts crumbling
 
 var size := Size.HUT
@@ -74,10 +77,12 @@ func _process(delta: float) -> void:
 
 
 ## Builders call this each working tick.
+## Progress is measured against this dwelling's total effort, so a
+## longhouse takes four times a hut's labour to top out at 100%.
 func advance_construction(amount: float) -> void:
 	if not under_construction:
 		return
-	progress += amount
+	progress += amount * (100.0 / SPECS[size]["effort"])
 	if progress >= 100.0:
 		under_construction = false
 		age = 0.0

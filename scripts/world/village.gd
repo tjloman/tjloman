@@ -92,8 +92,25 @@ func _grounded(local: Vector3, half := 2.5) -> Vector3:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	if world == null:
 		return local
+	# Keep foundations out of the water: if the requested footprint is wet,
+	# spiral outward for the nearest dry spot before settling the height.
+	if not world.footprint_dry(global_position.x + local.x, global_position.z + local.z, half):
+		local = _nearest_dry_local(world, local, half)
 	local.y = world.settle_height(
 		global_position.x + local.x, global_position.z + local.z, half) - global_position.y
+	return local
+
+
+## Spirals out from a wet offset to the nearest dry footprint (keeping the
+## structure near where it was meant to go). Falls back to the original.
+func _nearest_dry_local(world: WorldGen, local: Vector3, half: float) -> Vector3:
+	for ring in range(1, 7):
+		var r := ring * 2.0
+		for i in 8:
+			var a := TAU * i / 8.0
+			var cand := local + Vector3(cos(a) * r, 0, sin(a) * r)
+			if world.footprint_dry(global_position.x + cand.x, global_position.z + cand.z, half):
+				return cand
 	return local
 
 
@@ -407,16 +424,10 @@ func find_build_spot(world: WorldGen) -> Vector3:
 		var dist := randf_range(6.5, maxf(influence_radius * 0.8, 12.0))
 		var pos := global_position + Vector3(cos(angle) * dist, 0, sin(angle) * dist)
 		if world != null:
-			if world.is_underwater(pos.x, pos.z) or world.slope_at(pos.x, pos.z) > 0.9:
+			if world.slope_at(pos.x, pos.z) > 0.9:
 				continue
-			# No corner of the footprint may dip into the lake either.
-			var wet := false
-			for corner in [Vector2(2.2, 2.2), Vector2(-2.2, 2.2),
-					Vector2(2.2, -2.2), Vector2(-2.2, -2.2)]:
-				if world.is_underwater(pos.x + corner.x, pos.z + corner.y):
-					wet = true
-					break
-			if wet:
+			# The WHOLE footprint must be dry — no floating over an inlet.
+			if not world.footprint_dry(pos.x, pos.z, 2.2):
 				continue
 			pos.y = world.settle_height(pos.x, pos.z, 2.2)
 		var blocked := false
