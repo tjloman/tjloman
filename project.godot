@@ -17,6 +17,7 @@ config/features=PackedStringArray("4.7", "Mobile")
 GameState="*res://scripts/game_state.gd"
 SoundBank="*res://scripts/audio/sound_bank.gd"
 NavField="*res://scripts/nav_field.gd"
+Quality="*res://scripts/quality.gd"
 
 [display]
 

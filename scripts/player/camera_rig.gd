@@ -34,9 +34,9 @@ func _ready() -> void:
 
 	camera = Camera3D.new()
 	camera.position = Vector3(0, 0, zoom_distance)
-	# Draw distance matched to the loaded area — no point rendering toward
-	# a horizon of unloaded void, and less overdraw is kinder to the phone.
-	camera.far = 260.0
+	# Draw distance scales with the graphics tier (and the loaded area) —
+	# no point rendering toward a horizon of unloaded void.
+	camera.far = Quality.camera_far()
 	pitch_node.add_child(camera)
 
 	position = Vector3(0, 0, 8)

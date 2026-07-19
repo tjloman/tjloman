@@ -16,15 +16,17 @@ extends Node3D
 
 const CHUNK_SIZE := 48.0
 const CHUNK_CELLS := 12          # 12x12 quads, 13x13 height samples
-## Kept deliberately modest so a phone doesn't drown in nodes/memory the
-## instant the world boots — the old 7x7 burst of terrain+collision+trees
-## backgrounded the app on mobile. Distance fog hides the shorter horizon.
-const LOAD_RADIUS := 2           # chunks kept live around the focus (5x5)
-const UNLOAD_RADIUS := 3
 const WATER_LEVEL := 0.0
 const CHUNKS_PER_FRAME := 1      # one chunk a frame: gentle, no startup stall
 const VILLAGE_CELL_CHANCE := 0.05
 const VILLAGE_MIN_CELL_DIST := 3  # chunks from origin before rivals appear
+
+## How much world stays live around the focus. Set from the graphics tier
+## at boot: a budget phone keeps a tight 5x5 so it doesn't drown in
+## nodes/memory the instant the world loads (distance fog hides the short
+## horizon); a capable device streams a wider 7x7. Rebuilds on world reload.
+var load_radius := 2
+var unload_radius := 3
 
 var world_seed := 20260714
 
@@ -42,6 +44,8 @@ var _wolf_raid_cooldown := 0.0
 
 func _ready() -> void:
 	add_to_group("world_gen")
+	load_radius = Quality.load_radius()
+	unload_radius = Quality.unload_radius()
 	_height_noise.seed = world_seed
 	_height_noise.fractal_octaves = 4
 	_height_noise.frequency = 0.007
@@ -158,8 +162,8 @@ func _stream_chunks() -> void:
 	var center := Vector2i(floori(focus.x / CHUNK_SIZE), floori(focus.z / CHUNK_SIZE))
 
 	var made := 0
-	for dz in range(-LOAD_RADIUS, LOAD_RADIUS + 1):
-		for dx in range(-LOAD_RADIUS, LOAD_RADIUS + 1):
+	for dz in range(-load_radius, load_radius + 1):
+		for dx in range(-load_radius, load_radius + 1):
 			var cell := center + Vector2i(dx, dz)
 			if _chunks.has(cell):
 				continue
@@ -170,7 +174,7 @@ func _stream_chunks() -> void:
 
 	for cell: Vector2i in _chunks.keys():
 		var away := (cell - center).abs()
-		if maxi(away.x, away.y) > UNLOAD_RADIUS:
+		if maxi(away.x, away.y) > unload_radius:
 			_chunks[cell].queue_free()
 			_chunks.erase(cell)
 

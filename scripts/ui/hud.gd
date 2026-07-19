@@ -115,6 +115,7 @@ Q / E ...................... rotate camera
 P / L (hand near creature) . PET (reward) / SCOLD (discourage) its last deed
 C .......................... LOCK the camera onto your creature (again to release)
 F1 ......................... toggle this help
+F2 ......................... cycle graphics quality: Low / Medium / High
 
 ON TOUCHSCREENS
 One finger ................. everything the left mouse does (per the Mode button)

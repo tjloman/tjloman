@@ -86,16 +86,17 @@ func _build_water() -> void:
 	var water := MeshInstance3D.new()
 	water.mesh = plane
 	var mat := StandardMaterial3D.new()
-	# On phones, opaque matte water — transparent + reflective planes are
-	# heavy overdraw on tiled mobile GPUs. Desktop gets the pretty version.
-	if OS.has_feature("mobile"):
-		mat.albedo_color = Color(0.22, 0.44, 0.62)
-		mat.roughness = 0.6
-	else:
+	# Transparent + reflective water is heavy overdraw on tiled mobile GPUs,
+	# so only the Medium/High tiers get the pretty version; Low tiers (budget
+	# phones) get opaque matte water that reads fine and actually runs.
+	if Quality.water_alpha():
 		mat.albedo_color = Color(0.2, 0.42, 0.65, 0.75)
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		mat.roughness = 0.1
 		mat.metallic = 0.3
+	else:
+		mat.albedo_color = Color(0.22, 0.44, 0.62)
+		mat.roughness = 0.6
 	water.material_override = mat
 	water.position = Vector3(WorldGen.CHUNK_SIZE / 2.0, WorldGen.WATER_LEVEL, WorldGen.CHUNK_SIZE / 2.0)
 	add_child(water)

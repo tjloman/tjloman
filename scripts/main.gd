@@ -63,10 +63,26 @@ func _ready() -> void:
 	touch.creature = creature
 	add_child(touch)
 
+	# F2 (or the settings cycle) re-tunes what can change live; the world's
+	# stream radius and water rebuild on the next reload.
+	Quality.quality_changed.connect(_on_quality_changed)
+
 	GameState.announce("A new god stirs over an endless world. Elsmere awaits your influence.")
 
 	if "--smoke-test" in OS.get_cmdline_user_args():
 		_run_smoke_test()
+
+
+## Re-apply the tier knobs that are cheap to flip mid-game (lights, glow,
+## fog, draw distance). Radius/water are baked into live chunks, so those
+## wait for a reload — the cycle() announcement says as much.
+func _on_quality_changed() -> void:
+	_sun.shadow_enabled = Quality.shadows()
+	_sun.directional_shadow_max_distance = Quality.shadow_distance()
+	_environment.glow_enabled = Quality.glow()
+	_environment.fog_density = Quality.fog_density()
+	if is_instance_valid(camera_rig) and camera_rig.camera != null:
+		camera_rig.camera.far = Quality.camera_far()
 
 
 func _process(_delta: float) -> void:
@@ -124,6 +140,7 @@ func _setup_input() -> void:
 		"cam_rotate_left": [KEY_Q],
 		"cam_rotate_right": [KEY_E],
 		"toggle_help": [KEY_F1],
+		"cycle_quality": [KEY_F2],
 		"diet_vegan": [KEY_1],
 		"diet_omnivore": [KEY_2],
 		"diet_carnivore": [KEY_3],
@@ -143,15 +160,12 @@ func _setup_input() -> void:
 
 
 func _build_environment() -> void:
-	# On phones (Adreno-class GPUs) real-time shadows and full-screen glow
-	# are the features that hang or OOM the mobile driver — and they're
-	# pure polish. Strip them there; desktop keeps the pretty pass.
-	var mobile := OS.has_feature("mobile")
-
+	# The graphics tier (auto-detected per GPU, overridable) decides which
+	# of the pretty-but-heavy features are on — a flagship gets them all, a
+	# budget Adreno gets a plain-but-stable look.
 	_sun = DirectionalLight3D.new()
-	_sun.shadow_enabled = not mobile
-	# Tighter shadow range = crisper shadows and cheaper on weak GPUs.
-	_sun.directional_shadow_max_distance = 70.0
+	_sun.shadow_enabled = Quality.shadows()
+	_sun.directional_shadow_max_distance = Quality.shadow_distance()
 	_sun.light_specular = 0.25  # matte, plain — no plastic glints
 	add_child(_sun)
 
@@ -171,11 +185,11 @@ func _build_environment() -> void:
 	_environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	_environment.ambient_light_sky_contribution = 0.7
 	_environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	# Distance fog is cheap and stays on everywhere; glow is desktop-only.
+	# Distance fog is cheap and stays on everywhere; glow scales with tier.
 	_environment.fog_enabled = true
-	_environment.fog_density = 0.008   # hides the nearer horizon of a lean world
+	_environment.fog_density = Quality.fog_density()
 	_environment.fog_sky_affect = 0.2
-	_environment.glow_enabled = not mobile
+	_environment.glow_enabled = Quality.glow()
 	_environment.glow_intensity = 0.5
 	_environment.glow_bloom = 0.1
 
@@ -187,7 +201,9 @@ func _build_environment() -> void:
 ## Diet policy hotkeys (1-4) apply to the player's home village.
 ## P/L pet or scold the creature (the hand must be near it); C finds it.
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("diet_vegan"):
+	if event.is_action_pressed("cycle_quality"):
+		Quality.cycle()
+	elif event.is_action_pressed("diet_vegan"):
 		village.set_diet(Village.Diet.VEGAN)
 	elif event.is_action_pressed("diet_omnivore"):
 		village.set_diet(Village.Diet.OMNIVORE)
