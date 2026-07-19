@@ -245,10 +245,10 @@ func _run_smoke_test() -> void:
 			entry[0], entry[1], opened, conjured])
 		await get_tree().create_timer(0.2).timeout
 	# Directly resolve one of each new miracle to exercise every effect.
-	for name: String in ["food", "rain", "heal", "lightning", "forest_seed",
+	for miracle: String in ["food", "rain", "heal", "lightning", "forest_seed",
 			"forage_thicket", "lightning_storm", "tornado", "bird_flock"]:
-		miracles.resolve(name, Vector3(6, 0, 6))
-		print("SMOKE TEST: resolve %s" % name)
+		miracles.resolve(miracle, Vector3(6, 0, 6))
+		print("SMOKE TEST: resolve %s" % miracle)
 		await get_tree().create_timer(0.3).timeout
 
 	for diet: Village.Diet in [Village.Diet.VEGAN, Village.Diet.CARNIVORE,

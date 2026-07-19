@@ -133,17 +133,17 @@ func conjure(miracle: String) -> bool:
 ## apply karma, and let the villages witness it.
 func resolve(miracle: String, pos: Vector3) -> void:
 	pos.y = 0
-	var scale := power()
+	var potency := power()
 	match miracle:
 		"food": _cast_food(pos)
-		"rain": _cast_rain(pos, scale)
+		"rain": _cast_rain(pos, potency)
 		"lightning": _cast_lightning(pos)
-		"heal": _cast_heal(pos, scale)
-		"forest_seed": _cast_forest_seed(pos, scale)
-		"forage_thicket": _cast_forage_thicket(pos, scale)
-		"lightning_storm": _cast_lightning_storm(pos, scale)
-		"tornado": _cast_tornado(pos, scale)
-		"bird_flock": _cast_bird_flock(pos, scale)
+		"heal": _cast_heal(pos, potency)
+		"forest_seed": _cast_forest_seed(pos, potency)
+		"forage_thicket": _cast_forage_thicket(pos, potency)
+		"lightning_storm": _cast_lightning_storm(pos, potency)
+		"tornado": _cast_tornado(pos, potency)
+		"bird_flock": _cast_bird_flock(pos, potency)
 		_: return
 	_apply_karma(miracle, pos)
 	for v in get_tree().get_nodes_in_group("village"):
@@ -166,8 +166,8 @@ func _cast_food(pos: Vector3) -> void:
 		add_child(food)
 
 
-func _cast_rain(pos: Vector3, scale := 1.0) -> void:
-	var reach := 14.0 * scale
+func _cast_rain(pos: Vector3, potency := 1.0) -> void:
+	var reach := 14.0 * potency
 	var cloud := Node3D.new()
 	cloud.position = pos + Vector3(0, 12, 0)
 
@@ -193,7 +193,7 @@ func _cast_rain(pos: Vector3, scale := 1.0) -> void:
 	for f in get_tree().get_nodes_in_group("farms"):
 		var farm := f as Farm
 		if farm.global_position.distance_to(pos) < reach:
-			farm.water(12.0 * scale)
+			farm.water(12.0 * potency)
 
 	# Rain is the counter to fire: it douses every blaze it falls on.
 	for t in get_tree().get_nodes_in_group("trees"):
@@ -258,8 +258,8 @@ func ignite_trees_near(pos: Vector3, radius: float) -> void:
 			tree.ignite()
 
 
-func _cast_heal(pos: Vector3, scale := 1.0) -> void:
-	var reach := 8.0 * scale
+func _cast_heal(pos: Vector3, potency := 1.0) -> void:
+	var reach := 8.0 * potency
 	var torus := TorusMesh.new()
 	torus.inner_radius = 0.9
 	torus.outer_radius = 1.0
@@ -283,7 +283,7 @@ func _cast_heal(pos: Vector3, scale := 1.0) -> void:
 ## Nature -------------------------------------------------------------------
 
 ## Plants a stand of thirteen saplings that shoot up to ~4 lumber quickly.
-func _cast_forest_seed(pos: Vector3, scale := 1.0) -> void:
+func _cast_forest_seed(pos: Vector3, potency := 1.0) -> void:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	var biome := "grassland"
 	if world != null:
@@ -291,7 +291,7 @@ func _cast_forest_seed(pos: Vector3, scale := 1.0) -> void:
 	var planted := 0
 	for i in 13:
 		var a := TAU * i / 13.0 + randf() * 0.4
-		var r := randf_range(1.5, 5.0 * scale)
+		var r := randf_range(1.5, 5.0 * potency)
 		var spot := pos + Vector3(cos(a) * r, 0, sin(a) * r)
 		if world != null and world.is_underwater(spot.x, spot.z):
 			continue
@@ -309,12 +309,12 @@ func _cast_forest_seed(pos: Vector3, scale := 1.0) -> void:
 
 
 ## Scatters a thicket of berry bushes — wild forage for beast and villager.
-func _cast_forage_thicket(pos: Vector3, scale := 1.0) -> void:
+func _cast_forage_thicket(pos: Vector3, potency := 1.0) -> void:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-	var n := int(6 * scale)
+	var n := int(6 * potency)
 	for i in n:
 		var a := TAU * i / maxf(n, 1) + randf() * 0.5
-		var r := randf_range(1.0, 4.0 * scale)
+		var r := randf_range(1.0, 4.0 * potency)
 		var spot := pos + Vector3(cos(a) * r, 0, sin(a) * r)
 		if world != null and world.is_underwater(spot.x, spot.z):
 			continue
@@ -330,9 +330,9 @@ func _cast_forage_thicket(pos: Vector3, scale := 1.0) -> void:
 
 ## A rolling storm: several bolts strike across a wide area over a few
 ## seconds, each lethal at its point of impact. Widens with your reach.
-func _cast_lightning_storm(pos: Vector3, scale := 1.0) -> void:
-	var reach := 10.0 * scale
-	var strikes := int(4 + scale * 3)
+func _cast_lightning_storm(pos: Vector3, potency := 1.0) -> void:
+	var reach := 10.0 * potency
+	var strikes := int(4 + potency * 3)
 	for i in strikes:
 		var delay := i * 0.35
 		var a := randf() * TAU
@@ -345,7 +345,7 @@ func _cast_lightning_storm(pos: Vector3, scale := 1.0) -> void:
 
 ## A tornado: a spinning funnel that wanders, flinging loose things and
 ## terrifying (and battering) whoever it passes.
-func _cast_tornado(pos: Vector3, scale := 1.0) -> void:
+func _cast_tornado(pos: Vector3, potency := 1.0) -> void:
 	var funnel := Node3D.new()
 	funnel.position = pos
 	add_child(funnel)
@@ -354,9 +354,9 @@ func _cast_tornado(pos: Vector3, scale := 1.0) -> void:
 		var ring := Util.cylinder(0.4 + t * 2.6, 1.4, Color(0.55, 0.55, 0.6, 0.6),
 			Vector3(0, 0.7 + i * 1.4, 0))
 		funnel.add_child(ring)
-	var life := 8.0 + scale * 2.0
+	var life := 8.0 + potency * 2.0
 	var drift := Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)).normalized()
-	_run_tornado(funnel, drift, life, 5.0 * scale)
+	_run_tornado(funnel, drift, life, 5.0 * potency)
 
 
 func _run_tornado(funnel: Node3D, drift: Vector3, life: float, radius: float) -> void:
@@ -385,7 +385,7 @@ func _run_tornado(funnel: Node3D, drift: Vector3, life: float, radius: float) ->
 
 ## A V of birds sweeps overhead — doves if you are good, ravens if neutral,
 ## screeching bats if you are wicked. An omen the villages read plainly.
-func _cast_bird_flock(pos: Vector3, scale := 1.0) -> void:
+func _cast_bird_flock(pos: Vector3, potency := 1.0) -> void:
 	var flock := Node3D.new()
 	var body_color := Color(0.95, 0.95, 0.95)
 	var sound := "coo"
@@ -395,9 +395,9 @@ func _cast_bird_flock(pos: Vector3, scale := 1.0) -> void:
 	elif GameState.alignment < 30.0:
 		body_color = Color(0.12, 0.12, 0.14)
 		sound = "caw"
-	var count := int(7 + scale * 4)
+	var count := int(7 + potency * 4)
 	for i in count:
-		var row := (i + 1) / 2
+		var row := int((i + 1) / 2.0)
 		var side := 1 if i % 2 == 0 else -1
 		var bird := Util.box(Vector3(0.5, 0.12, 0.2), body_color,
 			Vector3(side * row * 0.7, 0, -row * 0.7))
