@@ -29,12 +29,18 @@ var cast_mode := false
 ## The last thing this hand threw (not placed) — the creature watches
 ## for it, and may catch it out of the air.
 var last_thrown: Node3D = null
+
 var drag_anchor := Vector3.ZERO
 var gesture_points := PackedVector2Array()
 var ground_point := Vector3.ZERO
 
 # Recent hand positions, for computing throw velocity on release.
 var _pos_history: Array[Vector3] = []
+
+## Two-step casting: the menu opened by the first gesture, and how long it
+## stays open awaiting the selector gesture.
+var _armed_menu := ""
+var _menu_timer := 0.0
 
 var _hand_material: StandardMaterial3D
 var _glow: OmniLight3D
@@ -86,6 +92,13 @@ func _on_alignment_changed(_value: float) -> void:
 func _physics_process(delta: float) -> void:
 	var mouse_pos := get_viewport().get_mouse_position()
 	_update_hover(mouse_pos)
+
+	# An armed miracle menu forgotten too long simply closes.
+	if _armed_menu != "":
+		_menu_timer -= delta
+		if _menu_timer <= 0.0:
+			_armed_menu = ""
+			GameState.announce("The miracle fades, uncast.")
 
 	# The hand rests on whatever the mouse is over; fall back to the y=0 plane.
 	var target := ground_point + Vector3(0, HOVER_HEIGHT, 0)
@@ -299,5 +312,17 @@ func _finish_gesture() -> void:
 	trail.queue_redraw()
 	gesture_points = PackedVector2Array()
 	state = HandState.IDLE
-	if gesture != "none" and miracles != null:
-		miracles.cast_gesture(gesture, ground_point)
+	if gesture == "none" or miracles == null:
+		return
+	# Two-step casting. First a MENU opener, then a SELECTOR within it.
+	if _armed_menu == "":
+		if miracles.is_menu_opener(gesture):
+			_armed_menu = gesture
+			_menu_timer = 5.0
+			GameState.announce(miracles.menu_label(gesture) + "   (draw to choose)")
+		else:
+			GameState.announce("Draw a spiral, reverse-spiral, or wave to open a miracle.")
+	else:
+		miracles.select(_armed_menu, gesture)
+		_armed_menu = ""
+		_menu_timer = 0.0

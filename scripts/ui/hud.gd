@@ -48,9 +48,9 @@ func _make_label(text: String) -> Label:
 
 func _build_legend() -> void:
 	var legend := Label.new()
-	legend.text = "Hold RIGHT MOUSE and draw a gesture:   O  Food (20)" \
-		+ "      /\\/\\  Rain (25)      |  Lightning (30)      —  Heal (15)" \
-		+ "      \\  Fireball (25)"
+	legend.text = "RIGHT MOUSE, two gestures:  (1) open a menu — @ spiral NATURE" \
+		+ "  · reverse-spiral WRATH · /\\/ wave SKY   (2) draw a selector to conjure" \
+		+ " — then THROW the miracle where you want it.  (F1 for the full list)"
 	legend.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	legend.position.y -= 34
 	legend.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -123,12 +123,19 @@ Creature button ............ camera locks to and follows your creature
 Pinch ...................... zoom
 Two-finger drag ............ orbit the camera freely (yaw and tilt)
 
-MIRACLES (drawn with right mouse held)
-Circle ..................... Food falls from the sky (20)
-Zigzag ..................... Rain — crops grow 4x (25)
-Vertical stroke ............ Lightning — LETHAL up close (30)
-Horizontal stroke .......... Healing wave (15)
-Diagonal slash ............. FIREBALL — lands in your hand; throw it (25)
+MIRACLES — two gestures, held right mouse
+Step 1: draw a MENU opener.   Step 2: draw a SELECTOR in that menu.
+The miracle drops into your hand as an orb — THROW it where you want.
+
+  SPIRAL — Nature:   O Food (20) · | Forest seed, 13 trees (45)
+                     — Forage thicket (30) · \\ Bloom/Rain (25)
+  REVERSE-SPIRAL — Wrath:  | Lightning (30) · O Lightning STORM (90)
+                     \\ Fireball (25) · — Tornado (110)
+  WAVE — Sky:  — Heal (15) · O Bird flock, an omen (40) · | Rain (25)
+
+The grandest miracles (storm, tornado) need a wide reservoir of prayer —
+convert more villages to hold and wield them, and your reach (belief +
+villages) widens their fury.
 
 THROWING
 Anything you hold carries your hand's momentum when released — flick

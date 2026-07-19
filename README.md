@@ -49,15 +49,23 @@ you're done. No system install required.
 | C | **Lock** the camera onto your creature — centered, orbitable; C again (or pan) releases |
 | F1 | Help panel |
 
-### Miracle gestures (hold right mouse)
+### Miracles — two gestures, then throw (hold right mouse)
 
-| Gesture | Miracle | Prayer cost |
+Casting is two steps. First draw a **menu opener**; then draw a **selector**
+inside it. The miracle is conjured as a glowing **orb into your hand** —
+**throw or place it**, and it unleashes wherever it lands. (Selectors are
+namespaced per menu, so the same simple shape means different things in
+different menus.)
+
+| Menu (opener) | Selector → Miracle | Cost |
 |---|---|---|
-| Circle | Food falls from the sky | 20 |
-| Zigzag (W shape) | Rain — crops grow 4× | 25 |
-| Vertical stroke | Lightning — terror converts too | 30 |
-| Horizontal stroke | Healing wave | 15 |
-| Diagonal slash | **Fireball** — conjured into your hand; throw it. Explodes on impact, converts where it lands | 25 |
+| **Spiral** — Nature | Circle → Food · Vertical → Forest seed (13 trees) · Horizontal → Forage thicket · Diagonal → Rain | 20 / 45 / 30 / 25 |
+| **Reverse-spiral** — Wrath | Vertical → Lightning · Circle → Lightning **storm** · Diagonal → Fireball · Horizontal → **Tornado** | 30 / 90 / 25 / 110 |
+| **Wave** — Sky | Horizontal → Heal · Circle → **Bird flock** (doves/ravens/bats by alignment) · Vertical → Rain | 15 / 40 / 25 |
+
+The mightiest miracles need a **wide reservoir of prayer** — each converted
+village raises your cap (+120) and widens the fury of storms and flocks.
+Everything you conjure is a throwable you place where you choose.
 
 ## The world
 
@@ -187,8 +195,9 @@ scripts/villager/villager.gd  Full villager lives: needs, age, pregnancy,
 scripts/creature/creature.gd  The creature: feelings (mood/bond/boredom),
                               learned desires, pet/scold training, observation
 scripts/miracles/
-  miracle_manager.gd          Miracle catalog: costs, effects, gesture map
-  fireball.gd                 The throwable miracle: ballistic, explosive
+  miracle_manager.gd          Two-step menus, catalog, effects, power scaling
+  miracle_orb.gd              Generic conjured-and-thrown miracle carrier
+  fireball.gd                 The throwable fire miracle: ballistic, explosive
 scripts/ui/hud.gd             Bars, legend, tooltips, help
 scripts/ui/touch_controls.gd  Touchscreen-only buttons: Cast/Move mode,
                               follow-the-creature camera lock

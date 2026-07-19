@@ -233,11 +233,23 @@ func _run_smoke_test() -> void:
 		world_gen.height_at(0, 0),
 		world_gen.is_underwater(200, 200),
 	])
-	for miracle: String in ["food", "rain", "heal", "lightning", "fireball"]:
-		GameState.add_prayer_power(50.0)
-		var ok := miracles.cast(miracle, Vector3(5, 0, 5))
-		print("SMOKE TEST: cast %s -> %s" % [miracle, ok])
-		await get_tree().create_timer(0.4).timeout
+	# Two-step casting: open each menu, conjure a selection, and resolve it.
+	GameState.set_max_prayer_power(400.0)
+	for entry: Array in [["spiral", "circle"], ["rev_spiral", "vline"],
+			["wave", "hline"], ["rev_spiral", "circle"], ["spiral", "vline"],
+			["wave", "circle"], ["rev_spiral", "hline"]]:
+		GameState.add_prayer_power(200.0)
+		var opened := miracles.is_menu_opener(entry[0])
+		var conjured := miracles.select(entry[0], entry[1])
+		print("SMOKE TEST: menu %s + %s -> opener=%s conjured=%s" % [
+			entry[0], entry[1], opened, conjured])
+		await get_tree().create_timer(0.2).timeout
+	# Directly resolve one of each new miracle to exercise every effect.
+	for name: String in ["food", "rain", "heal", "lightning", "forest_seed",
+			"forage_thicket", "lightning_storm", "tornado", "bird_flock"]:
+		miracles.resolve(name, Vector3(6, 0, 6))
+		print("SMOKE TEST: resolve %s" % name)
+		await get_tree().create_timer(0.3).timeout
 
 	for diet: Village.Diet in [Village.Diet.VEGAN, Village.Diet.CARNIVORE,
 			Village.Diet.CANNIBAL, Village.Diet.OMNIVORE]:
@@ -294,8 +306,15 @@ func _smoke_test_gestures() -> void:
 	var dline := PackedVector2Array([
 		Vector2(100, 100), Vector2(180, 175), Vector2(260, 250), Vector2(340, 330),
 	])
+	# A spiral: two-and-a-bit widening loops (should read as "spiral").
+	var spiral := PackedVector2Array()
+	for i in 40:
+		var a := TAU * i / 16.0
+		var rad := 20.0 + i * 3.0
+		spiral.append(Vector2(400 + cos(a) * rad, 300 + sin(a) * rad))
 	print("SMOKE TEST: gesture circle -> ", GestureRecognizer.classify(circle))
 	print("SMOKE TEST: gesture vline  -> ", GestureRecognizer.classify(vline))
 	print("SMOKE TEST: gesture hline  -> ", GestureRecognizer.classify(hline))
-	print("SMOKE TEST: gesture zigzag -> ", GestureRecognizer.classify(zigzag))
+	print("SMOKE TEST: gesture wave   -> ", GestureRecognizer.classify(zigzag))
 	print("SMOKE TEST: gesture dline  -> ", GestureRecognizer.classify(dline))
+	print("SMOKE TEST: gesture spiral -> ", GestureRecognizer.classify(spiral))

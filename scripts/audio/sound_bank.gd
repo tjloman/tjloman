@@ -24,6 +24,9 @@ func _ready() -> void:
 	_bank["murmur"] = _make_murmur()
 	_bank["chatter"] = _make_chatter()
 	_bank["boom"] = _make_boom()
+	_bank["coo"] = _make_coo()
+	_bank["caw"] = _make_caw()
+	_bank["screech"] = _make_screech()
 
 
 ## Plays a named sound at a world position, then cleans itself up.
@@ -232,6 +235,52 @@ func _make_murmur() -> AudioStreamWAV:
 		var syllables := 0.5 + 0.5 * sin(t * 5.0 * TAU + sin(t * 2.3 * TAU))
 		last = last * 0.92 + randf_range(-1, 1) * 0.08  # heavy low-pass
 		samples[i] = last * syllables * _env(t, dur, 0.2, 0.3) * 1.4
+	return _make_wav(samples)
+
+
+## A dove's coo: two soft, breathy descending tones.
+func _make_coo() -> AudioStreamWAV:
+	var dur := 0.5
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var freq := 520.0 - t * 90.0 + (40.0 if t > 0.25 else 0.0)
+		var tone := sin(t * freq * TAU) * 0.6 + sin(t * freq * 2.0 * TAU) * 0.1
+		samples[i] = tone * _env(t, dur, 0.05, 0.2) * 0.4
+	return _make_wav(samples)
+
+
+## A raven's caw: a harsh, buzzy squawk.
+func _make_caw() -> AudioStreamWAV:
+	var dur := 0.32
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var freq := 380.0 - t * 120.0
+		phase += freq / SAMPLE_RATE
+		var buzz := 2.0 * (phase - floorf(phase)) - 1.0
+		var noise := randf_range(-1, 1) * 0.3
+		samples[i] = (buzz * 0.6 + noise) * _env(t, dur, 0.02, 0.12) * 0.5
+	return _make_wav(samples)
+
+
+## A bat's screech: a thin, high, downward shriek.
+func _make_screech() -> AudioStreamWAV:
+	var dur := 0.28
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var freq := 2600.0 - t * 1400.0
+		var tone := sin(t * freq * TAU)
+		var noise := randf_range(-1, 1) * 0.2
+		samples[i] = (tone * 0.7 + noise) * _env(t, dur, 0.01, 0.1) * 0.4
 	return _make_wav(samples)
 
 

@@ -1,14 +1,22 @@
 class_name GestureRecognizer
 ## Classifies a raw mouse trail (screen-space points) into a miracle gesture.
 ##
-## Deliberately simple heuristics for the PoC — the seam to replace later with
-## a proper $1/$Q recognizer when we have dozens of miracles:
-##   "circle"    – closed loop, high total turning angle        -> Food
-##   "zigzag"    – several sharp direction reversals            -> Rain
-##   "vline"     – tall, straight stroke                        -> Lightning
-##   "hline"     – wide, straight stroke                        -> Heal
-##   "dline"     – straight diagonal slash                      -> Fireball
-##   "none"      – unrecognized
+## Deliberately simple heuristics — enough shapes to drive the two-step
+## casting system (a MENU-OPENING gesture, then a SELECTOR gesture):
+##   MENU OPENERS
+##     "spiral"     – 1.5+ clockwise loops, open (not closed)
+##     "rev_spiral" – 1.5+ counter-clockwise loops
+##     "wave"       – several reversals (a W / sine scribble)
+##   SELECTORS (meaning depends on the open menu)
+##     "circle"     – one closed loop
+##     "vline"      – tall straight stroke
+##     "hline"      – wide straight stroke
+##     "dline"      – diagonal slash
+##   "none"         – unrecognized
+##
+## Because selectors are namespaced inside a menu, the same simple shape can
+## mean different miracles in different menus — which sidesteps the recognizer
+## confusing them.
 
 const MIN_PATH_LENGTH := 60.0  # pixels; anything shorter is a misclick
 
@@ -40,13 +48,18 @@ static func classify(points: PackedVector2Array) -> String:
 	var closed := resampled[0].distance_to(resampled[resampled.size() - 1]) < path_len * 0.25
 	var aspect := bbox.size.x / maxf(bbox.size.y, 1.0)
 
-	# Circle: loops around at least ~270 degrees and roughly closes.
+	# Spiral: 1.3+ full turns of winding. Sign tells clockwise from counter
+	# (screen y is down, so positive accumulated angle winds one way).
+	if absf(total_turn) > 8.0:
+		return "spiral" if total_turn > 0.0 else "rev_spiral"
+
+	# Circle: roughly one loop that closes.
 	if absf(total_turn) > 4.5 and closed and aspect > 0.35 and aspect < 2.8:
 		return "circle"
 
-	# Zigzag: multiple hard reversals (a W / lightning-bolt scribble).
+	# Wave: multiple hard reversals (a W / sine scribble).
 	if reversals >= 2:
-		return "zigzag"
+		return "wave"
 
 	# Straight-ish strokes: little accumulated turning.
 	if absf(total_turn) < 2.0:

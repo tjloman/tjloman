@@ -674,6 +674,21 @@ func witness_miracle(type: String, pos: Vector3) -> void:
 				if dist < 16.0:
 					v.witness_horror(2.5)
 					v.scare(pos)
+		"forest_seed", "forage_thicket":
+			change_belief(5.0)
+			GameState.announce("Green life bursts forth near %s. A generous god!" % village_name)
+		"bird_flock":
+			change_belief(4.0)
+			GameState.announce("An omen of birds passes over %s." % village_name)
+		"lightning_storm", "tornado":
+			change_belief(10.0)
+			GameState.announce("%s trembles beneath a wrath from the heavens." % village_name)
+			for v in my_villagers():
+				if v.global_position.distance_to(pos) < 20.0:
+					v.witness_horror(4.0)
+					v.scare(pos)
+		_:
+			change_belief(3.0)
 
 
 func hover_text() -> String:

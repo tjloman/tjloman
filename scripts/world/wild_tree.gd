@@ -86,6 +86,12 @@ func _process(delta: float) -> void:
 		return
 	if lumber < MAX_LUMBER:
 		var step := GROWTH_BASE / (1.0 + lumber * GROWTH_TAPER)
+		# A miracle-sown sapling races to its quickened size, then slows.
+		if has_meta("quicken_to"):
+			if lumber < float(get_meta("quicken_to")):
+				step = 2.5
+			else:
+				remove_meta("quicken_to")
 		lumber = minf(lumber + step * delta, MAX_LUMBER)
 		if int(lumber) != _shown_lumber:
 			_apply_growth_scale()
