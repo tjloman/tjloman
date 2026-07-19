@@ -207,6 +207,10 @@ func _build_influence_ring() -> void:
 	var torus := TorusMesh.new()
 	torus.inner_radius = 0.97
 	torus.outer_radius = 1.0
+	# A thin flat ring — its tube needs almost no detail, and the default
+	# 64x32 was pointless geometry on a ring seen edge-on.
+	torus.rings = 48
+	torus.ring_segments = 6
 	_ring_material = Util.mat(Color(1.0, 0.95, 0.7, 0.6), true)
 	_influence_ring = MeshInstance3D.new()
 	_influence_ring.mesh = torus

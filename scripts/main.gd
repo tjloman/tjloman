@@ -77,6 +77,7 @@ func _ready() -> void:
 ## fog, draw distance). Radius/water are baked into live chunks, so those
 ## wait for a reload — the cycle() announcement says as much.
 func _on_quality_changed() -> void:
+	get_viewport().msaa_3d = Quality.msaa_3d()
 	_sun.shadow_enabled = Quality.shadows()
 	_sun.directional_shadow_max_distance = Quality.shadow_distance()
 	_environment.glow_enabled = Quality.glow()
@@ -163,6 +164,8 @@ func _build_environment() -> void:
 	# The graphics tier (auto-detected per GPU, overridable) decides which
 	# of the pretty-but-heavy features are on — a flagship gets them all, a
 	# budget Adreno gets a plain-but-stable look.
+	get_viewport().msaa_3d = Quality.msaa_3d()
+
 	_sun = DirectionalLight3D.new()
 	_sun.shadow_enabled = Quality.shadows()
 	_sun.directional_shadow_max_distance = Quality.shadow_distance()

@@ -26,7 +26,7 @@ func _ready() -> void:
 
 	for i in 3:
 		var r := randf_range(0.5, 0.9)
-		var b := Util.sphere(r, Color(0.52, 0.51, 0.53),
+		var b := Util.lite_sphere(r, Color(0.52, 0.51, 0.53),
 			Vector3(randf_range(-0.7, 0.7), r * 0.6, randf_range(-0.7, 0.7)))
 		add_child(b)
 		_boulders.append(b)

@@ -170,6 +170,7 @@ func _scatter_trees(rng: RandomNumberGenerator, count: int, style: String) -> vo
 		# A natural mixed-age stand: some saplings, some giants.
 		tree.lumber = rng.randf_range(4.0, WildTree.MAX_LUMBER)
 		_place(tree, spot, 0.1)
+		Util.apply_lod(tree, Quality.clutter_distance())
 
 
 func _scatter_bushes(rng: RandomNumberGenerator, count: int) -> void:
@@ -180,6 +181,7 @@ func _scatter_bushes(rng: RandomNumberGenerator, count: int) -> void:
 		var bush := ForageBush.new()
 		bush.berries = rng.randi_range(1, ForageBush.MAX_BERRIES)
 		_place(bush, spot, 0.1)
+		Util.apply_lod(bush, Quality.clutter_distance())
 
 
 func _scatter_deposits(rng: RandomNumberGenerator, count: int) -> void:
@@ -187,25 +189,41 @@ func _scatter_deposits(rng: RandomNumberGenerator, count: int) -> void:
 		var spot := _random_spot(rng)
 		if not _spot_ok(spot):
 			continue
-		_place(RockDeposit.new(), spot, 0.2)
+		var rock := RockDeposit.new()
+		_place(rock, spot, 0.2)
+		Util.apply_lod(rock, Quality.clutter_distance())
 
 
-## Small flowers that read as flowers: a ring of petals around a bright
-## center on a short stem (no more mysterious pushpins).
+## Flowers are pure decoration and never move — so the whole chunk's worth
+## collapses into ONE MultiMesh (one draw call, one mesh, one material): a
+## billboard bloom per instance, tinted by per-instance colour. The old
+## version was 7 high-poly nodes EACH; a meadow of them was a big slice of
+## the resource burst that backgrounded budget phones as chunks streamed in.
 func _scatter_flowers(rng: RandomNumberGenerator, count: int) -> void:
+	var xforms: Array[Transform3D] = []
+	var colors: Array[Color] = []
 	for i in count:
 		var spot := _random_spot(rng)
 		if not _spot_ok(spot):
 			continue
-		var petal_color := Color.from_hsv(rng.randf(), 0.65, 0.95)
-		var flower := Node3D.new()
-		flower.add_child(Util.cylinder(0.015, 0.25, Color(0.3, 0.5, 0.25), Vector3(0, 0.12, 0)))
-		flower.add_child(Util.sphere(0.045, Color(0.95, 0.85, 0.3), Vector3(0, 0.26, 0)))
-		for p in 5:
-			var a := TAU * p / 5.0
-			flower.add_child(Util.sphere(0.05, petal_color,
-				Vector3(cos(a) * 0.07, 0.26, sin(a) * 0.07)))
-		_place(flower, spot, 0.02)
+		spot.y = world.height_at(position.x + spot.x, position.z + spot.z) + 0.02
+		xforms.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU), spot))
+		colors.append(Color.from_hsv(rng.randf(), 0.6, 0.95))
+	if xforms.is_empty():
+		return
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = Util.blossom_mesh()
+	mm.instance_count = xforms.size()
+	for i in xforms.size():
+		mm.set_instance_transform(i, xforms[i])
+		mm.set_instance_color(i, colors[i])
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	mmi.material_override = Util.blossom_material()
+	Util.apply_lod(mmi, Quality.clutter_distance())
+	add_child(mmi)
 
 
 func _scatter_animals(rng: RandomNumberGenerator, table: Dictionary) -> void:

@@ -85,6 +85,13 @@ func water_alpha() -> bool:
 	return tier >= Tier.MEDIUM
 
 
+## MSAA multiplies the per-pixel cost of the opaque pass. Budget GPUs that
+## already flirt with a frame timeout get none; capable devices get a cheap
+## 2x to smooth our hard primitive edges.
+func msaa_3d() -> Viewport.MSAA:
+	return Viewport.MSAA_2X if tier >= Tier.MEDIUM else Viewport.MSAA_DISABLED
+
+
 func load_radius() -> int:
 	return [2, 3, 3][tier]
 
@@ -95,6 +102,14 @@ func unload_radius() -> int:
 
 func camera_far() -> float:
 	return [220.0, 300.0, 380.0][tier]
+
+
+## How far out the scattered wilderness clutter (trees, bushes, rocks,
+## flowers) keeps drawing. Budget devices cull it tight — under the fog
+## line — so the far ring of the world is terrain and silhouette only;
+## capable devices render clutter most of the way to the horizon.
+func clutter_distance() -> float:
+	return [70.0, 120.0, 180.0][tier]
 
 
 func fog_density() -> float:
