@@ -16,7 +16,7 @@ extends CharacterBody3D
 enum State {
 	IDLE, WANDER, SEEK_FOOD, EATING, SLEEPING, GO_TEND, TENDING,
 	STALK_PREY, WATCH, GO_GATHER, CARRYING, PLAY, GUARD, SULK, CATCH,
-	GO_FISH, FISHING, GO_STORE,
+	GO_FISH, FISHING, GO_STORE, KICK_HOUSE,
 }
 
 const WALK_SPEED := 3.5
@@ -47,7 +47,7 @@ var morality := 0.0
 ## These weights multiply into every decision it makes.
 var desires := {
 	"tend": 0.6, "gather": 0.6, "play": 0.9, "watch": 1.1,
-	"guard": 0.5, "mischief": 0.35, "fish": 0.7, "catch": 0.3,
+	"guard": 0.5, "mischief": 0.35, "fish": 0.7, "catch": 0.3, "rampage": 0.4,
 }
 
 ## ATTENTION: how closely it is watching your hand right now. Handing it
@@ -198,6 +198,8 @@ func _physics_process(delta: float) -> void:
 			_apply_gravity_only(delta)
 			if _action_time <= 0.0:
 				_decide()
+		State.KICK_HOUSE:
+			_process_kick_house(delta)
 
 	_observe_time -= delta
 	if _observe_time <= 0.0:
@@ -234,7 +236,14 @@ func _tick_feelings(delta: float) -> void:
 	# Mood slowly settles toward contentment scaled by bond: a loved
 	# creature's resting state is happier.
 	mood = lerpf(mood, 45.0 + bond * 0.3, 0.03 * delta)
+	# Attention fades with neglect — but a hand hovering close-by is
+	# magnetic: the creature watches it, and stays ready to learn or catch.
 	attention = maxf(attention - 0.6 * delta, 0.0)
+	if divine_hand != null and is_instance_valid(divine_hand):
+		var reach := 5.0 + scale.x * 2.0
+		if divine_hand.global_position.distance_to(global_position) < reach:
+			attention = minf(attention + 12.0 * delta, 100.0)
+			bond = minf(bond + 0.3 * delta, 100.0)
 
 
 ## Never stuck, never lost: re-decide if a state drags on, and snap back
@@ -258,21 +267,33 @@ func _tick_watchdogs(delta: float) -> void:
 				velocity = Vector3.ZERO
 
 
-## The slow gaze: passively learn from whatever is happening nearby.
+## The slow gaze: passively learn from whatever the villagers are doing
+## nearby — and simply watching them work holds its attention.
 func _observe_world() -> void:
+	var watched_work := false
 	for v in get_tree().get_nodes_in_group("villagers"):
 		var villager := v as Villager
 		if not is_instance_valid(villager):
 			continue
-		if villager.global_position.distance_to(global_position) > 14.0:
+		if villager.global_position.distance_to(global_position) > 16.0:
 			continue
 		match villager.state:
 			Villager.State.FARMING:
-				_bump_desire("tend", 0.01)
+				_bump_desire("tend", 0.02)
+				watched_work = true
 			Villager.State.FISHING:
-				_bump_desire("fish", 0.012)
+				_bump_desire("fish", 0.02)
+				watched_work = true
 			Villager.State.BUILDING, Villager.State.CHOPPING, Villager.State.QUARRYING:
-				_bump_desire("gather", 0.008)
+				_bump_desire("gather", 0.015)
+				watched_work = true
+			Villager.State.GO_FEED, Villager.State.TAMING:
+				_bump_desire("gather", 0.01)
+				watched_work = true
+	if watched_work:
+		# Curiosity about the villagers' work keeps it engaged and alert.
+		attention = minf(attention + 5.0, 100.0)
+		boredom = maxf(boredom - 4.0, 0.0)
 	if GameState.is_night():
 		for a in get_tree().get_nodes_in_group("animals"):
 			var animal := a as Animal
@@ -326,6 +347,10 @@ func _decide() -> void:
 		pool["logging"] = desires["gather"] * 0.7
 	if morality < 10.0:
 		pool["mischief"] = desires["mischief"] * (1.0 - morality / 100.0) * (boredom / 60.0)
+	# A monstrous heart doesn't just tease — it RAMPAGES: stomping houses,
+	# hurling livestock and villagers for the sheer joy of ruin.
+	if morality < -30.0 and (_nearest_house() != null or _nearest_hurlable() != null):
+		pool["rampage"] = desires["rampage"] * (-morality / 40.0) * (0.5 + boredom / 100.0)
 	pool["wander"] = 0.7
 
 	match _weighted_pick(pool):
@@ -358,6 +383,19 @@ func _decide() -> void:
 			_catch_target = _nearest_uprootable_tree()
 			_carry_intent = "deliver"
 			state = State.CATCH
+		"rampage":
+			# Kick a house, or seize a beast/villager and hurl it.
+			var house := _nearest_house()
+			if house != null and (randf() < 0.5 or _nearest_hurlable() == null):
+				_catch_target = house
+				state = State.KICK_HOUSE
+			else:
+				_catch_target = _nearest_hurlable()
+				if _catch_target != null:
+					_carry_intent = "hurl"
+					state = State.CATCH
+				else:
+					_wander()
 		"mischief":
 			# Half the time a lunge and a roar; half the time it MAKES OFF
 			# with someone, carries them a way, and sets them down shaking.
@@ -601,7 +639,7 @@ func _pick_up_thing(node: Node3D, intent: String) -> void:
 	elif node.has_method("pick_up"):
 		node.call("pick_up")
 	state = State.CARRYING
-	_action_time = 1.8 if intent == "eat" else 5.0
+	_action_time = 1.4 if intent in ["eat", "hurl"] else 5.0
 
 
 func _process_carrying(delta: float) -> void:
@@ -658,6 +696,17 @@ func _process_carrying(delta: float) -> void:
 				mood = minf(mood + 6.0, 100.0)
 				_release_carried(false)
 				_last_deed = "mischief"
+				_decide()
+		"hurl":
+			# A brief wind-up, then FLING it far and hard. Cruel joy.
+			_action_time -= delta
+			_apply_gravity_only(delta)
+			if _action_time <= 0.0:
+				_hurl_carried()
+				_last_deed = "rampage"
+				morality = clampf(morality - 2.0, -100.0, 100.0)
+				mood = minf(mood + 8.0, 100.0)
+				boredom = maxf(boredom - 25.0, 0.0)
 				_decide()
 		_:
 			_release_carried(true)
@@ -743,6 +792,69 @@ func _release_carried(gentle: bool) -> void:
 				else Vector3(randf_range(-2, 2), 2.0, randf_range(-2, 2))
 			_carried.call("drop", toss, gentle)
 	_carried = null
+
+
+## Fling the held thing away hard, in a random direction. Scares and
+## bruises whatever it was.
+func _hurl_carried() -> void:
+	if _carried == null or not is_instance_valid(_carried):
+		_carried = null
+		return
+	var dir := Vector3(randf_range(-1, 1), 0.6, randf_range(-1, 1)).normalized()
+	var v := dir * randf_range(14.0, 22.0)
+	if _carried.has_method("take_damage"):
+		_carried.call("take_damage", 25.0)  # one arg: works for animal and villager
+	if _carried is RigidBody3D:
+		(_carried as RigidBody3D).freeze = false
+		(_carried as RigidBody3D).linear_velocity = v
+	elif is_instance_valid(_carried) and _carried.has_method("drop"):
+		_carried.call("drop", v, false)
+	_carried = null
+
+
+## Stomp the house: heavy damage, a boom, terror for anyone watching.
+func _process_kick_house(delta: float) -> void:
+	if _catch_target == null or not is_instance_valid(_catch_target):
+		_catch_target = null
+		_decide()
+		return
+	if _move_toward(_catch_target.global_position, _run_speed(), delta):
+		var house := _catch_target as House
+		if house != null:
+			house.damage(60.0)
+			SoundBank.play_at("boom", global_position, -2.0)
+		morality = clampf(morality - 2.5, -100.0, 100.0)
+		mood = minf(mood + 8.0, 100.0)
+		boredom = maxf(boredom - 25.0, 0.0)
+		for v in get_tree().get_nodes_in_group("villagers"):
+			if v.global_position.distance_to(global_position) < 12.0:
+				v.scare(global_position)
+				v.witness_horror(3.0)
+		_last_deed = "rampage"
+		_catch_target = null
+		_decide()
+
+
+func _nearest_house() -> Node3D:
+	return _nearest_in_group("houses", 40.0)
+
+
+## A beast or villager the monster can seize and throw.
+func _nearest_hurlable() -> Node3D:
+	var best: Node3D = null
+	var best_dist := 30.0
+	for group in ["animals", "villagers"]:
+		for n in get_tree().get_nodes_in_group(group):
+			var node := n as Node3D
+			if not is_instance_valid(node) or node.is_queued_for_deletion():
+				continue
+			if node is Animal and (node as Animal).state == Animal.State.HELD:
+				continue
+			var d := global_position.distance_to(node.global_position)
+			if d < best_dist:
+				best_dist = d
+				best = node
+	return best
 
 
 func _process_play(delta: float) -> void:
@@ -895,7 +1007,7 @@ func scold() -> void:
 
 func _deed_desire_key(deed: String) -> String:
 	match deed:
-		"tend", "gather", "play", "watch", "guard", "mischief", "fish", "catch":
+		"tend", "gather", "play", "watch", "guard", "mischief", "fish", "catch", "rampage":
 			return deed
 		"gift":
 			return "gather"
@@ -1254,10 +1366,12 @@ func _status_word() -> String:
 				"eat": return "about to eat what it caught"
 				"gift": return "bringing a gift to the pen"
 				"snatch": return "making off with someone"
+				"hurl": return "winding up to throw something"
 			return "carrying something"
 		State.CATCH: return "chasing something down"
 		State.GO_FISH, State.FISHING: return "fishing"
 		State.GO_STORE: return "raiding the granary"
+		State.KICK_HOUSE: return "rampaging"
 		State.PLAY: return "playing"
 		State.GUARD: return "standing guard"
 		State.SULK: return "sulking"
@@ -1279,4 +1393,5 @@ func _status_text() -> String:
 		State.PLAY: return "wheee!"
 		State.GUARD: return "grrr"
 		State.SULK: return ":("
+		State.KICK_HOUSE: return "RAAWR"
 	return ""
