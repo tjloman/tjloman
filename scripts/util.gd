@@ -94,7 +94,7 @@ static func prism(size: Vector3, color: Color, pos := Vector3.ZERO) -> MeshInsta
 
 ## A material shared by every part of this exact colour. Do NOT recolour it.
 static func shared_mat(color: Color, emission := false) -> StandardMaterial3D:
-	var key := "%v|%s" % [color, emission]
+	var key := "%s|%s" % [color, emission]
 	var m: StandardMaterial3D = _mat_pool.get(key)
 	if m == null:
 		m = mat(color, emission)
@@ -113,7 +113,7 @@ static func _pooled_sphere_mesh(radius: float, segs: int) -> SphereMesh:
 		m.radius = r
 		m.height = r * 2.0
 		m.radial_segments = segs
-		m.rings = maxi(segs / 2, 3)
+		m.rings = maxi(int(segs / 2.0), 3)
 		_mesh_pool[key] = m
 	return m
 
