@@ -396,17 +396,40 @@ func _cast_bird_flock(pos: Vector3, potency := 1.0) -> void:
 	elif GameState.alignment < 30.0:
 		body_color = Color(0.12, 0.12, 0.14)
 		sound = "caw"
+	# A true wedge: one leader at the apex (front), the rest trailing BACK in
+	# two even arms to either side. Built in local space with -Z as "forward";
+	# the whole flock is then turned to face its line of flight, so the V
+	# always points the way the birds are going (not skewed into a "<").
 	var count := int(7 + potency * 4)
-	for i in count:
-		var row := int((i + 1) / 2.0)
-		var side := 1 if i % 2 == 0 else -1
-		var bird := Util.box(Vector3(0.5, 0.12, 0.2), body_color,
-			Vector3(side * row * 0.7, 0, -row * 0.7))
-		bird.rotation_degrees.z = side * 25.0
-		flock.add_child(bird)
-	flock.position = pos + Vector3(-30, 14, -30)
+	_add_bird(flock, Vector3.ZERO, body_color, 0.0)          # the leader
+	var placed := 1
+	var k := 1
+	while placed < count:
+		_add_bird(flock, Vector3(-k * 0.7, 0, k * 0.7), body_color, -18.0)
+		placed += 1
+		if placed < count:
+			_add_bird(flock, Vector3(k * 0.7, 0, k * 0.7), body_color, 18.0)
+			placed += 1
+		k += 1
+
+	var start := pos + Vector3(-34, 15, -20)
+	var finish := pos + Vector3(34, 17, 20)
+	var forward := finish - start
+	forward.y = 0.0
+	forward = forward.normalized()
+	# Basis.looking_at (not look_at) so this is safe before the node is in
+	# the tree — a -Z-forward orientation aligned to the flight path.
+	flock.transform.basis = Basis.looking_at(forward, Vector3.UP)
+	flock.position = start
 	add_child(flock)
 	SoundBank.play_at(sound, pos + Vector3(0, 10, 0), 2.0)
 	var tween := create_tween()
-	tween.tween_property(flock, "position", pos + Vector3(30, 16, 30), 6.0)
+	tween.tween_property(flock, "position", finish, 6.0)
 	tween.tween_callback(flock.queue_free)
+
+
+## One bird in a flock: a wide, thin body (wings) with a slight bank.
+func _add_bird(flock: Node3D, local_pos: Vector3, body_color: Color, bank: float) -> void:
+	var bird := Util.box(Vector3(0.5, 0.12, 0.2), body_color, local_pos)
+	bird.rotation_degrees.z = bank
+	flock.add_child(bird)

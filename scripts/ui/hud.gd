@@ -232,10 +232,14 @@ The grandest miracles (storm, tornado) need a wide reservoir of prayer —
 convert more villages to hold and wield them, and your reach (belief +
 villages) widens their fury.
 
-THROWING
+THROWING & AFTERTOUCH
 Anything you hold carries your hand's momentum when released — flick
 hard to hurl far. Tilt the camera above the horizon (middle mouse) and
 aim at the sky to wind up high, arcing throws.
+It's how you move in the LAST INSTANT that shapes the shot: pull back
+as you let go to loft it into a high, slow arc; jerk to one side to
+bend the throw that way, the projectile spinning as it curves. Every
+throw — fireball, beast, tree, or villager — is a skill you sharpen.
 
 READING THE WORLD (there are almost no bars)
 Each village's ring: SIZE is its population, COLOR its belief — gray

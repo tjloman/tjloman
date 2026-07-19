@@ -20,6 +20,19 @@ const MAX_THROW_SPEED := 55.0
 const THROW_MIN_STROKE := 60.0      # pixels of continuous drag
 const THROW_ACTIVE_WINDOW := 0.13   # seconds; must still be moving at release
 
+## AFTERTOUCH (a Black & White throwback). The way the hand's motion CHANGES
+## in the last instant of a throw — not just its speed — shapes the shot:
+##   pull back  -> the throw lofts into a high, slow, floaty arc
+##   jerk aside -> the projectile curves that way and spins as it flies
+## It reads from the final flick (works on touch, where the finger is gone
+## after release) and applies as launch loft plus a brief in-flight steer.
+const AFTERTOUCH_SECONDS := 0.45    # how long the curve keeps bending the shot
+const LOFT_GAIN := 0.85             # pull-back -> upward launch velocity
+const SLOW_ON_LOFT := 0.05          # pull-back also slows the forward throw
+const PUSH_GAIN := 0.5              # a forward shove at the end adds zip
+const CURVE_GAIN := 3.2             # sideways jerk -> in-flight lateral accel
+const SPIN_GAIN := 1.6              # sideways jerk -> projectile spin (rad/s)
+
 var camera_rig: CameraRig
 var miracles: MiracleManager
 var trail: GestureTrail
@@ -48,6 +61,12 @@ var _pos_history: Array[Vector3] = []
 # last stroke's momentum). Used only to decide throw-vs-place.
 var _stroke_pts: Array[Vector2] = []
 var _stroke_times: Array[float] = []
+
+# Aftertouch: the projectile the hand is still steering, the world-space
+# lateral acceleration it's applying, and how long that lasts.
+var _steer_body: Node3D = null
+var _steer_accel := Vector3.ZERO
+var _steer_time := 0.0
 
 ## Two-step casting: the menu opened by the first gesture, and how long it
 ## stays open awaiting the selector gesture.
@@ -118,8 +137,17 @@ func _physics_process(delta: float) -> void:
 	global_position = global_position.lerp(target, minf(delta * 14.0, 1.0))
 
 	_pos_history.append(global_position)
-	if _pos_history.size() > 6:
+	if _pos_history.size() > 10:
 		_pos_history.pop_front()
+
+	# Aftertouch: keep bending a freshly thrown projectile for a short window.
+	if _steer_time > 0.0:
+		if is_instance_valid(_steer_body):
+			_steer_time -= delta
+			_apply_in_flight(_steer_body, _steer_accel * delta)
+		else:
+			_steer_time = 0.0
+			_steer_body = null
 
 	match state:
 		HandState.DRAG_LAND:
@@ -263,7 +291,6 @@ func _on_release() -> void:
 			# between pokes) is what decides — placement is calm, no fear, no
 			# fall damage, and where you place someone matters.
 			var gentle := not _stroke_is_throw()
-			var throw_vel := Vector3.ZERO if gentle else _throw_velocity()
 			if is_instance_valid(held_body):
 				# A gentle release right AT the creature is a hand-off: it
 				# takes the object in its claws (and learns to watch you).
@@ -275,13 +302,13 @@ func _on_release() -> void:
 						held_body = null
 						state = HandState.IDLE
 						return
-				if held_body is RigidBody3D:
-					var rb := held_body as RigidBody3D
-					rb.freeze = false
-					rb.linear_velocity = throw_vel
-				elif held_body.has_method("drop"):
-					held_body.call("drop", throw_vel, gentle)
-				if not gentle:
+					_release_body(held_body, Vector3.ZERO, true)
+				else:
+					# Aftertouch shapes the shot from the final flick: a lofted
+					# and/or curving launch, plus a lingering in-flight steer.
+					var shot := _compute_throw()
+					_release_body(held_body, shot["vel"], false)
+					_begin_aftertouch(held_body, shot["curve"], shot["spin"])
 					last_thrown = held_body
 			held_body = null
 			state = HandState.IDLE
@@ -316,6 +343,93 @@ func _throw_velocity() -> Vector3:
 	# The hand's own momentum, amplified: flick hard, throw far.
 	var vel := (newest - oldest) / span * THROW_BOOST
 	return vel.limit_length(MAX_THROW_SPEED)
+
+
+## How the hand's motion CHANGED across the flick: late velocity minus early
+## velocity. Pulling back gives a vector opposing the throw; jerking aside
+## gives a sideways one. Zero for a smooth, even fling.
+func _flick_whip() -> Vector3:
+	var n := _pos_history.size()
+	if n < 4:
+		return Vector3.ZERO
+	var half := int(n / 2.0)
+	var dt := 1.0 / 60.0
+	var v_early := (_pos_history[half] - _pos_history[0]) / maxf(half * dt, dt)
+	var v_late := (_pos_history[n - 1] - _pos_history[half]) / maxf((n - 1 - half) * dt, dt)
+	return v_late - v_early
+
+
+## Turns the base throw plus the flick's "whip" into a shaped shot:
+## { vel: launch velocity, curve: in-flight lateral accel, spin: rad/s }.
+func _compute_throw() -> Dictionary:
+	var base := _throw_velocity()
+	var flat := Vector3(base.x, 0.0, base.z)
+	if flat.length() < 0.01:
+		return {"vel": base, "curve": Vector3.ZERO, "spin": 0.0}
+	var fwd := flat.normalized()
+	var right := Vector3.UP.cross(fwd).normalized()
+	var whip := _flick_whip()
+
+	var vel := base
+	# Pull back at the end -> loft: rises higher, drifts forward slower.
+	var pull := clampf(-whip.dot(fwd), 0.0, 20.0)
+	vel.y += pull * LOFT_GAIN
+	var slow := clampf(pull * SLOW_ON_LOFT, 0.0, 0.6)
+	vel.x *= 1.0 - slow
+	vel.z *= 1.0 - slow
+	# A forward shove at the very end adds a little extra zip.
+	vel += fwd * clampf(whip.dot(fwd), 0.0, 20.0) * PUSH_GAIN
+	vel = vel.limit_length(MAX_THROW_SPEED * 1.3)
+
+	# Sideways jerk -> a curving arc (lateral accel held through flight) and
+	# a matching spin on the projectile (both clamped so a wild flick stays
+	# playable, not launched into orbit).
+	var side := clampf(whip.dot(right), -16.0, 16.0)
+	var spin := clampf(side * SPIN_GAIN, -10.0, 10.0)
+	return {"vel": vel, "curve": right * side * CURVE_GAIN, "spin": spin}
+
+
+## Hand off a released body to physics — a thrown velocity for RigidBodies,
+## or the object's own drop() for the custom flyers (trees, folk, beasts).
+func _release_body(body: Node3D, vel: Vector3, gentle: bool) -> void:
+	if body is RigidBody3D:
+		var rb := body as RigidBody3D
+		rb.freeze = false
+		rb.linear_velocity = vel
+	elif body.has_method("drop"):
+		body.call("drop", vel, gentle)
+
+
+## Arm the aftertouch: remember the projectile, set its spin now, and store
+## the lateral acceleration the hand will feed it over the next fraction of
+## a second (the curving arc).
+func _begin_aftertouch(body: Node3D, curve: Vector3, spin: float) -> void:
+	_apply_spin(body, spin)
+	if curve.length() < 0.01:
+		_steer_body = null
+		_steer_time = 0.0
+		return
+	_steer_body = body
+	_steer_accel = curve
+	_steer_time = AFTERTOUCH_SECONDS
+
+
+func _apply_spin(body: Node3D, spin: float) -> void:
+	if absf(spin) < 0.05:
+		return
+	if body is RigidBody3D:
+		(body as RigidBody3D).angular_velocity = Vector3(0.0, spin, 0.0)
+	elif body.has_method("set_flight_spin"):
+		body.call("set_flight_spin", spin)
+
+
+func _apply_in_flight(body: Node3D, dv: Vector3) -> void:
+	if body is RigidBody3D:
+		var rb := body as RigidBody3D
+		if not rb.freeze:
+			rb.linear_velocity += dv
+	elif body.has_method("in_flight_push"):
+		body.call("in_flight_push", dv)
 
 
 ## A second finger landed: the camera takes over. Abort any in-progress

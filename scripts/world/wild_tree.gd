@@ -39,6 +39,7 @@ var _replant_time := REPLANT_PERIOD * randf_range(0.5, 1.5)
 var _burn_time := 0.0
 var _fire_tick := 0.0
 var _fire_visual: Node3D = null
+var _spin_yaw := 0.0   # aftertouch yaw spin while airborne (rad/s)
 var _grow_accum := randf() * 0.4   # de-sync the growth tick across trees
 
 
@@ -186,13 +187,28 @@ func _fly(delta: float) -> void:
 	_fly_velocity.y -= 20.0 * delta
 	global_position += _fly_velocity * delta
 	rotation_degrees.x = wrapf(rotation_degrees.x + delta * 220.0, -180.0, 180.0)
+	if _spin_yaw != 0.0:
+		rotation_degrees.y = wrapf(
+			rotation_degrees.y + rad_to_deg(_spin_yaw) * delta, -180.0, 180.0)
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	if world == null:
 		return
 	var ground := world.height_at(global_position.x, global_position.z)
 	if global_position.y <= ground:
 		_flying = false
+		_spin_yaw = 0.0
 		_land(_fly_velocity.length())
+
+
+## Aftertouch hooks: nudge a thrown tree's flight (the curving arc) and set
+## its spin. Ignored unless it's actually airborne.
+func in_flight_push(dv: Vector3) -> void:
+	if _flying:
+		_fly_velocity += dv
+
+
+func set_flight_spin(rate: float) -> void:
+	_spin_yaw = rate
 
 
 ## Touchdown. Storehouse first; then either a rough landing (splinters

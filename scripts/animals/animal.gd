@@ -81,6 +81,7 @@ var _think_time := 0.0
 var _flee_from := Vector3.ZERO
 var _fall_speed := 0.0
 var _gentle_drop := false
+var _tumble := 0.0   # aftertouch spin while thrown (rad/s)
 var _rider: Node3D = null
 
 
@@ -179,7 +180,11 @@ func _physics_process(delta: float) -> void:
 			_fall_speed = velocity.length()
 			velocity.y -= GRAVITY * delta
 			move_and_slide()
+			if _tumble != 0.0:
+				rotation.y = wrapf(rotation.y + _tumble * delta, -PI, PI)  # aftertouch spin
 			if is_on_floor():
+				_tumble = 0.0
+				rotation = Vector3.ZERO
 				if _gentle_drop:
 					_gentle_drop = false
 					state = State.IDLE
@@ -577,6 +582,16 @@ func drop(throw_velocity: Vector3, gentle := false) -> void:
 	state = State.FALLING
 	velocity = throw_velocity
 	_gentle_drop = gentle
+
+
+## Aftertouch hooks: bend a thrown beast's arc, and set its tumble.
+func in_flight_push(dv: Vector3) -> void:
+	if state == State.FALLING:
+		velocity += dv
+
+
+func set_flight_spin(rate: float) -> void:
+	_tumble = rate
 
 
 func hover_text() -> String:
