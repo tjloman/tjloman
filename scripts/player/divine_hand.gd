@@ -20,18 +20,21 @@ const MAX_THROW_SPEED := 55.0
 const THROW_MIN_STROKE := 60.0      # pixels of continuous drag
 const THROW_ACTIVE_WINDOW := 0.13   # seconds; must still be moving at release
 
-## AFTERTOUCH (a Black & White throwback). The way the hand's motion CHANGES
-## in the last instant of a throw — not just its speed — shapes the shot:
-##   pull back  -> the throw lofts into a high, slow, floaty arc
-##   jerk aside -> the projectile curves that way and spins as it flies
-## It reads from the final flick (works on touch, where the finger is gone
-## after release) and applies as launch loft plus a brief in-flight steer.
+## AFTERTOUCH (a Black & White throwback). The POWER and DIRECTION of a throw
+## come from the whole sweep of the motion (the momentum); the final flick
+## only SHAPES it — never overrides it, contributing about half the character
+## of the arc:
+##   pull back  -> raises the launch ANGLE (brief flick ~40 deg, long ~80 deg)
+##   jerk aside -> curves the flight that way, spinning the projectile
+## It reads from the final flick vs. the sweep, so it works on touch (where
+## the finger is gone the instant you release).
 const AFTERTOUCH_SECONDS := 0.45    # how long the curve keeps bending the shot
-const LOFT_GAIN := 0.85             # pull-back -> upward launch velocity
-const SLOW_ON_LOFT := 0.05          # pull-back also slows the forward throw
-const PUSH_GAIN := 0.5              # a forward shove at the end adds zip
-const CURVE_GAIN := 3.2             # sideways jerk -> in-flight lateral accel
-const SPIN_GAIN := 1.6              # sideways jerk -> projectile spin (rad/s)
+const FLICK_SAMPLES := 3            # trailing hand samples that count as "the flick"
+const MAX_LOFT_DEG := 82.0          # steepest arc a hard pull-back can add
+const LOFT_PER_PULL := 0.16         # radians of loft per m/s of BACKWARD flick
+const CURVE_GAIN := 3.2             # sideways flick -> in-flight lateral accel
+const SPIN_GAIN := 1.4              # flick deviation -> projectile spin (rad/s)
+const MAX_SPIN := 11.0              # cap so a wild flick doesn't blur into a top
 
 var camera_rig: CameraRig
 var miracles: MiracleManager
@@ -308,7 +311,7 @@ func _on_release() -> void:
 					# and/or curving launch, plus a lingering in-flight steer.
 					var shot := _compute_throw()
 					_release_body(held_body, shot["vel"], false)
-					_begin_aftertouch(held_body, shot["curve"], shot["spin"])
+					_begin_aftertouch(held_body, shot["curve"], shot["angular"])
 					last_thrown = held_body
 			held_body = null
 			state = HandState.IDLE
@@ -334,59 +337,64 @@ func _stroke_is_throw() -> bool:
 	return now - _stroke_times[_stroke_times.size() - 1] <= THROW_ACTIVE_WINDOW
 
 
-func _throw_velocity() -> Vector3:
-	if _pos_history.size() < 2:
+## The MOMENTUM of the throw: the hand's velocity over the broad sweep,
+## EXCLUDING the trailing flick, boosted and capped. This sets the throw's
+## power and heading — the flick never gets to override it.
+func _sweep_velocity() -> Vector3:
+	var n := _pos_history.size()
+	if n < 2:
 		return Vector3.ZERO
-	var oldest := _pos_history[0]
-	var newest := _pos_history[_pos_history.size() - 1]
-	var span := (_pos_history.size() - 1) / 60.0
-	# The hand's own momentum, amplified: flick hard, throw far.
-	var vel := (newest - oldest) / span * THROW_BOOST
+	var last := maxi(n - 1 - FLICK_SAMPLES, 1)   # end of the sweep, before the flick
+	var span := last / 60.0
+	var vel := (_pos_history[last] - _pos_history[0]) / span * THROW_BOOST
 	return vel.limit_length(MAX_THROW_SPEED)
 
 
-## How the hand's motion CHANGED across the flick: late velocity minus early
-## velocity. Pulling back gives a vector opposing the throw; jerking aside
-## gives a sideways one. Zero for a smooth, even fling.
-func _flick_whip() -> Vector3:
+## The velocity of the trailing FLICK itself (the last few frames). Its
+## backward component lofts the throw, its sideways component curves it, and
+## its whole deviation from the launch line spins it. A follow-through (flick
+## still moving forward) shapes nothing — only a deliberate yank does.
+func _flick_velocity() -> Vector3:
 	var n := _pos_history.size()
-	if n < 4:
+	if n < FLICK_SAMPLES + 2:
 		return Vector3.ZERO
-	var half := int(n / 2.0)
-	var dt := 1.0 / 60.0
-	var v_early := (_pos_history[half] - _pos_history[0]) / maxf(half * dt, dt)
-	var v_late := (_pos_history[n - 1] - _pos_history[half]) / maxf((n - 1 - half) * dt, dt)
-	return v_late - v_early
+	var last := n - 1 - FLICK_SAMPLES
+	return (_pos_history[n - 1] - _pos_history[last]) / (FLICK_SAMPLES / 60.0)
 
 
-## Turns the base throw plus the flick's "whip" into a shaped shot:
-## { vel: launch velocity, curve: in-flight lateral accel, spin: rad/s }.
+## Turns momentum + flick into a shaped shot:
+## { vel: launch velocity, curve: in-flight lateral accel, angular: rad/s vec }.
+## Momentum owns power and azimuth; the flick only lofts the ANGLE and curves.
 func _compute_throw() -> Dictionary:
-	var base := _throw_velocity()
-	var flat := Vector3(base.x, 0.0, base.z)
-	if flat.length() < 0.01:
-		return {"vel": base, "curve": Vector3.ZERO, "spin": 0.0}
+	var momentum := _sweep_velocity()
+	var speed := momentum.length()
+	var flat := Vector3(momentum.x, 0.0, momentum.z)
+	if speed < 0.5 or flat.length() < 0.4:
+		return {"vel": momentum, "curve": Vector3.ZERO, "angular": Vector3.ZERO}
 	var fwd := flat.normalized()
 	var right := Vector3.UP.cross(fwd).normalized()
-	var whip := _flick_whip()
+	var flick := _flick_velocity()
 
-	var vel := base
-	# Pull back at the end -> loft: rises higher, drifts forward slower.
-	var pull := clampf(-whip.dot(fwd), 0.0, 20.0)
-	vel.y += pull * LOFT_GAIN
-	var slow := clampf(pull * SLOW_ON_LOFT, 0.0, 0.6)
-	vel.x *= 1.0 - slow
-	vel.z *= 1.0 - slow
-	# A forward shove at the very end adds a little extra zip.
-	vel += fwd * clampf(whip.dot(fwd), 0.0, 20.0) * PUSH_GAIN
-	vel = vel.limit_length(MAX_THROW_SPEED * 1.3)
+	# LOFT: only the flick's BACKWARD (and upward) motion raises the launch
+	# angle — a follow-through stays flat. Added to the momentum's own
+	# elevation and clamped, so a brief yank gives ~30-45 deg and only a long,
+	# hard one nears vertical. Power and heading stay the momentum's.
+	var pull := maxf(-flick.dot(fwd), 0.0) + maxf(flick.y, 0.0) * 0.5
+	var loft := minf(pull * LOFT_PER_PULL, deg_to_rad(MAX_LOFT_DEG))
+	var base_elev := asin(clampf(momentum.y / speed, -1.0, 1.0))
+	var elev := clampf(base_elev + loft, -0.25, deg_to_rad(87.0))
+	var vel := (fwd * cos(elev) + Vector3.UP * sin(elev)) * speed
 
-	# Sideways jerk -> a curving arc (lateral accel held through flight) and
-	# a matching spin on the projectile (both clamped so a wild flick stays
-	# playable, not launched into orbit).
-	var side := clampf(whip.dot(right), -16.0, 16.0)
-	var spin := clampf(side * SPIN_GAIN, -10.0, 10.0)
-	return {"vel": vel, "curve": right * side * CURVE_GAIN, "spin": spin}
+	# CURVE: a sideways flick bends the flight (a lingering lateral accel).
+	var curve := right * flick.dot(right) * CURVE_GAIN
+
+	# SPIN on a real 3D axis: perpendicular to the launch and the flick.
+	# Sideways flick -> yaw; pull-back -> topspin; anything between -> tilted.
+	var angular := Vector3.ZERO
+	var axis := vel.normalized().cross(flick)
+	if axis.length() > 0.05:
+		angular = axis.normalized() * clampf(axis.length() * SPIN_GAIN, 0.0, MAX_SPIN)
+	return {"vel": vel, "curve": curve, "angular": angular}
 
 
 ## Hand off a released body to physics — a thrown velocity for RigidBodies,
@@ -403,8 +411,8 @@ func _release_body(body: Node3D, vel: Vector3, gentle: bool) -> void:
 ## Arm the aftertouch: remember the projectile, set its spin now, and store
 ## the lateral acceleration the hand will feed it over the next fraction of
 ## a second (the curving arc).
-func _begin_aftertouch(body: Node3D, curve: Vector3, spin: float) -> void:
-	_apply_spin(body, spin)
+func _begin_aftertouch(body: Node3D, curve: Vector3, angular: Vector3) -> void:
+	_apply_spin(body, angular)
 	if curve.length() < 0.01:
 		_steer_body = null
 		_steer_time = 0.0
@@ -414,13 +422,15 @@ func _begin_aftertouch(body: Node3D, curve: Vector3, spin: float) -> void:
 	_steer_time = AFTERTOUCH_SECONDS
 
 
-func _apply_spin(body: Node3D, spin: float) -> void:
-	if absf(spin) < 0.05:
+## Set the projectile spinning about a real 3D axis. RigidBodies take it as
+## angular velocity; the custom flyers tumble around that world axis.
+func _apply_spin(body: Node3D, angular: Vector3) -> void:
+	if angular.length() < 0.05:
 		return
 	if body is RigidBody3D:
-		(body as RigidBody3D).angular_velocity = Vector3(0.0, spin, 0.0)
+		(body as RigidBody3D).angular_velocity = angular
 	elif body.has_method("set_flight_spin"):
-		body.call("set_flight_spin", spin)
+		body.call("set_flight_spin", angular)
 
 
 func _apply_in_flight(body: Node3D, dv: Vector3) -> void:

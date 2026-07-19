@@ -71,7 +71,7 @@ var _build_site: House = null
 var _mount: Animal = null
 var _flee_from := Vector3.ZERO
 var _fall_speed := 0.0
-var _tumble := 0.0   # aftertouch spin while thrown (rad/s)
+var _spin_ang := Vector3.ZERO   # aftertouch spin axis*rate while thrown (rad/s)
 var _work_sound_time := 0.0
 var _state_time := 0.0
 var _prev_state := State.WANDER
@@ -144,8 +144,8 @@ func _physics_process(delta: float) -> void:
 			_fall_speed = velocity.length()
 			velocity.y -= GRAVITY * delta
 			move_and_slide()
-			if _tumble != 0.0:
-				_visuals.rotate_y(_tumble * delta)  # aftertouch spin
+			if _spin_ang.length() > 0.001:  # aftertouch tumble about a 3D axis
+				_visuals.global_rotate(_spin_ang.normalized(), _spin_ang.length() * delta)
 			if is_on_floor():
 				_land()
 			return
@@ -1123,18 +1123,18 @@ func die(of_old_age: bool) -> void:
 	queue_free()
 
 
-## Aftertouch hooks: bend a thrown villager's arc, and set their tumble.
+## Aftertouch hooks: bend a thrown villager's arc, and set their tumble axis.
 func in_flight_push(dv: Vector3) -> void:
 	if state == State.FALLING:
 		velocity += dv
 
 
-func set_flight_spin(rate: float) -> void:
-	_tumble = rate
+func set_flight_spin(angular: Vector3) -> void:
+	_spin_ang = angular
 
 
 func _land() -> void:
-	_tumble = 0.0
+	_spin_ang = Vector3.ZERO
 	_visuals.rotation = Vector3.ZERO
 	if _gentle_drop:
 		_gentle_drop = false
