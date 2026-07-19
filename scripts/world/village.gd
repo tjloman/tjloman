@@ -17,6 +17,7 @@ const WORSHIP_BELIEF_PER_SEC := 0.05
 const MIN_INFLUENCE := 14.0
 const MAX_INFLUENCE := 65.0
 const MAX_TAMED := 8
+const PRAYER_PER_VILLAGE := 120.0   # each convert widens your prayer reservoir
 
 ## Hand-placed founding homes, clear of the farm (E), store (NW), and pen (S).
 const STARTER_HOUSE_SPOTS: Array[Vector3] = [
@@ -345,7 +346,13 @@ func _update_influence() -> void:
 			orb.emission_energy_multiplier = 0.4 + 3.2 \
 				* (GameState.prayer_power / maxf(GameState.max_prayer_power, 1.0))
 	if is_player_home:
-		GameState.set_max_prayer_power(100.0 + belief * 2.0)
+		# Every converted village widens the reservoir of prayer you can
+		# hold — the gate behind the mightiest, most constant miracles.
+		var believers := 0
+		for v in get_tree().get_nodes_in_group("village"):
+			if (v as Village).converted:
+				believers += 1
+		GameState.set_max_prayer_power(100.0 + belief * 2.0 + believers * PRAYER_PER_VILLAGE)
 
 
 func _on_alignment_changed(_value: float) -> void:
