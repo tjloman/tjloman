@@ -143,10 +143,15 @@ func _setup_input() -> void:
 
 
 func _build_environment() -> void:
+	# On phones (Adreno-class GPUs) real-time shadows and full-screen glow
+	# are the features that hang or OOM the mobile driver — and they're
+	# pure polish. Strip them there; desktop keeps the pretty pass.
+	var mobile := OS.has_feature("mobile")
+
 	_sun = DirectionalLight3D.new()
-	_sun.shadow_enabled = true
+	_sun.shadow_enabled = not mobile
 	# Tighter shadow range = crisper shadows and cheaper on weak GPUs.
-	_sun.directional_shadow_max_distance = 70.0   # tight = cheaper on mobile
+	_sun.directional_shadow_max_distance = 70.0
 	_sun.light_specular = 0.25  # matte, plain — no plastic glints
 	add_child(_sun)
 
@@ -166,12 +171,11 @@ func _build_environment() -> void:
 	_environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	_environment.ambient_light_sky_contribution = 0.7
 	_environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	# Good and plain: distance fog and gentle bloom, nothing the mobile
-	# renderer can't do. (SSAO is Forward+-only — deliberately absent.)
+	# Distance fog is cheap and stays on everywhere; glow is desktop-only.
 	_environment.fog_enabled = true
 	_environment.fog_density = 0.008   # hides the nearer horizon of a lean world
 	_environment.fog_sky_affect = 0.2
-	_environment.glow_enabled = true
+	_environment.glow_enabled = not mobile
 	_environment.glow_intensity = 0.5
 	_environment.glow_bloom = 0.1
 
