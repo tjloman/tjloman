@@ -1054,6 +1054,8 @@ func _move_toward(target: Vector3, speed: float, delta: float, arrive := ARRIVE_
 		_apply_gravity_only(delta)
 		return true
 	var dir := to_target.normalized()
+	# Steer around trees and rocks (but not the one we're walking to).
+	dir = NavField.steer(global_position, dir, 0.4, target)
 	# Villagers cannot swim: refuse to step into open water. (The stuck
 	# watchdog re-decides anyone left pacing the shore.)
 	var world := _world()

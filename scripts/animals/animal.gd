@@ -442,6 +442,8 @@ func _move_toward(target: Vector3, speed: float, delta: float) -> bool:
 		_apply_gravity_only(delta)
 		return true
 	var dir := to_target.normalized()
+	# Steer around trees and rocks on the way (but not the target).
+	dir = NavField.steer(global_position, dir, 0.4, target)
 	# Beasts don't swim: stop at the water's edge (frogs excepted — they
 	# belong to both worlds).
 	if not spec.get("hops", false):

@@ -1253,6 +1253,9 @@ func _move_toward(target: Vector3, speed: float, delta: float) -> bool:
 		_apply_gravity_only(delta)
 		return true
 	var dir := to_target.normalized()
+	# Steer around trees and rocks (not the one it's heading for). A modest
+	# radius so a giant creature glides past groves without over-swerving.
+	dir = NavField.steer(global_position, dir, 0.6, target)
 	# The creature WADES: water is passable but slow — half speed with
 	# its legs in the lake. (A future miracle will let it walk ON water.)
 	if not walks_on_water:

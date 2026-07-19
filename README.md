@@ -178,6 +178,7 @@ scripts/main.gd               Orchestrator: sky, day/night clock, wiring
 scripts/game_state.gd         Autoload: prayer, alignment, game time
 scripts/audio/sound_bank.gd   Autoload: all sounds, synthesized in code
 scripts/util.gd               Primitive-shape building helpers
+scripts/nav_field.gd          Autoload: periodic obstacle field for steering
 scripts/player/
   camera_rig.gd               God-game camera (pan/rotate/zoom)
   divine_hand.gd              THE hand: hover, grab, throw, drag, gestures
