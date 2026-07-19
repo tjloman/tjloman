@@ -108,6 +108,12 @@ func _explode() -> void:
 		if house.global_position.distance_to(pos) < BLAST_RADIUS:
 			house.damage(50.0)
 
+	# Fire catches on the trees it touches — and spreads from there.
+	for t in get_tree().get_nodes_in_group("trees"):
+		var tree := t as WildTree
+		if is_instance_valid(tree) and tree.global_position.distance_to(pos) < BLAST_RADIUS:
+			tree.ignite()
+
 	# The blast is the sermon: terror converts where the fireball LANDS.
 	for v in get_tree().get_nodes_in_group("village"):
 		(v as Village).witness_miracle("fireball", pos)

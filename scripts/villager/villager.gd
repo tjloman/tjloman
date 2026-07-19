@@ -977,7 +977,8 @@ func _nearest_in_group(group: String, max_dist: float) -> Node3D:
 		var node := n as Node3D
 		if not is_instance_valid(node) or node.is_queued_for_deletion():
 			continue
-		if node is WildTree and ((node as WildTree).is_felled() or (node as WildTree).is_held()):
+		if node is WildTree and ((node as WildTree).is_felled() \
+				or (node as WildTree).is_held() or (node as WildTree).burning):
 			continue
 		var d := global_position.distance_to(node.global_position)
 		if d < best_dist:

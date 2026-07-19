@@ -195,6 +195,13 @@ func _cast_rain(pos: Vector3, scale := 1.0) -> void:
 		if farm.global_position.distance_to(pos) < reach:
 			farm.water(12.0 * scale)
 
+	# Rain is the counter to fire: it douses every blaze it falls on.
+	for t in get_tree().get_nodes_in_group("trees"):
+		var tree := t as WildTree
+		if is_instance_valid(tree) and tree.burning \
+				and tree.global_position.distance_to(pos) < reach:
+			tree.extinguish()
+
 	get_tree().create_timer(12.0).timeout.connect(cloud.queue_free)
 
 
@@ -237,6 +244,18 @@ func _cast_lightning(pos: Vector3) -> void:
 		var animal := a as Animal
 		if animal.global_position.distance_to(pos) < LIGHTNING_KILL_RADIUS:
 			animal.die()  # drops cooked-ish meat where it stood
+
+	# A bolt sets the nearest trees alight — the seed of a spreading fire.
+	ignite_trees_near(pos, 5.0)
+
+
+## Sets trees within `radius` of a point ablaze. The fire spreads and
+## self-limits from there (see WildTree). Shared by lightning and fireballs.
+func ignite_trees_near(pos: Vector3, radius: float) -> void:
+	for t in get_tree().get_nodes_in_group("trees"):
+		var tree := t as WildTree
+		if is_instance_valid(tree) and tree.global_position.distance_to(pos) < radius:
+			tree.ignite()
 
 
 func _cast_heal(pos: Vector3, scale := 1.0) -> void:

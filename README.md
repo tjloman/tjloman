@@ -81,6 +81,13 @@ Everything you conjure is a throwable you place where you choose.
   skies. Villagers sleep at night; house windows glow; wolves prowl —
   preferring villages gone wicked. A villager's whole life spans about
   **40 days** — time enough to grow up, raise a family, and grow old.
+- **Fire spreads** — and is contained by default. Lightning (and its
+  storm) and fireballs set trees ablaze; a blaze leaps only to close
+  neighbours and burns out in seconds, so it runs through a dense stand
+  and gutters out at gaps and water — a **tool for clearing forest that
+  would otherwise creep across the map**. Rain douses it; a thrown
+  burning tree is a firebrand. Fire scares off villagers and beasts but
+  spares buildings.
 - **Water is real**: villagers and animals cannot cross it (frogs
   excepted); nothing builds beneath it. The **shoreline feeds**: villagers
   and the creature go **fishing** — fish counts as meat, with its own

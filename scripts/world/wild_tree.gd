@@ -16,9 +16,18 @@ const SAPLING_SCALE := 0.22
 const REPLANT_PERIOD := 50.0
 const REPLANT_CROWDING := 4     # no seeding when this many trees stand close
 
+## FIRE — contained by default. A burning tree lasts a few seconds, spreads
+## only to close neighbours, and can't leap a gap or reach water — so a
+## blaze clears a stand of forest but burns out on its own. Rain douses it.
+const BURN_SECONDS := 9.0
+const SPREAD_RADIUS := 6.0
+const SPREAD_CHANCE := 0.35      # per spread-tick, per near neighbour
+const HARM_RADIUS := 3.5
+
 var style := "forest"
 var rng_seed := 0
 var lumber := 1.0
+var burning := false
 
 var _felled := false
 var _held := false
@@ -27,6 +36,9 @@ var _fly_velocity := Vector3.ZERO
 var _shown_lumber := -1
 var _base_height := 3.5
 var _replant_time := REPLANT_PERIOD * randf_range(0.5, 1.5)
+var _burn_time := 0.0
+var _fire_tick := 0.0
+var _fire_visual: Node3D = null
 
 
 func _ready() -> void:
@@ -79,10 +91,15 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _felled:
 		return
+	# Held or in flight takes precedence — a thrown, blazing tree is a
+	# firebrand that ignites wherever it lands. Fire pauses while airborne.
 	if _held:
 		return
 	if _flying:
 		_fly(delta)
+		return
+	if burning:
+		_burn(delta)
 		return
 	if lumber < MAX_LUMBER:
 		var step := GROWTH_BASE / (1.0 + lumber * GROWTH_TAPER)
@@ -203,6 +220,104 @@ func is_held() -> bool:
 	return _held or _flying
 
 
+## Fire ------------------------------------------------------------------------
+
+## Set the tree alight. A tree in water, felled, or already ablaze won't
+## take. Fire is a tool: it clears forest that would otherwise creep.
+func ignite() -> void:
+	if burning or _felled or _held or _flying:
+		return
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world != null and world.is_underwater(global_position.x, global_position.z):
+		return  # wet wood won't catch
+	burning = true
+	_burn_time = BURN_SECONDS * randf_range(0.8, 1.2)
+	_build_fire_visual()
+
+
+func extinguish() -> void:
+	if not burning:
+		return
+	burning = false
+	_burn_time = 0.0
+	if _fire_visual != null and is_instance_valid(_fire_visual):
+		_fire_visual.queue_free()
+	_fire_visual = null
+
+
+func _build_fire_visual() -> void:
+	_fire_visual = Node3D.new()
+	var top := current_height()
+	for i in 4:
+		var cone := CylinderMesh.new()
+		cone.top_radius = 0.0
+		cone.bottom_radius = 0.6
+		cone.height = 1.6
+		var flame := Util.mesh_node(cone,
+			Color(1.0, randf_range(0.4, 0.7), 0.12), Vector3(0, 0, 0), true)
+		flame.position = Vector3(randf_range(-0.4, 0.4), top * 0.5 + i * 0.4, randf_range(-0.4, 0.4))
+		_fire_visual.add_child(flame)
+	var light := OmniLight3D.new()
+	light.light_color = Color(1.0, 0.5, 0.15)
+	light.light_energy = 3.0
+	light.omni_range = SPREAD_RADIUS + 2.0
+	light.position = Vector3(0, top * 0.6, 0)
+	_fire_visual.add_child(light)
+	add_child(_fire_visual)
+
+
+func _burn(delta: float) -> void:
+	_burn_time -= delta
+	# Flicker the flames.
+	if _fire_visual != null and is_instance_valid(_fire_visual):
+		_fire_visual.scale.y = 1.0 + sin(Time.get_ticks_msec() / 60.0) * 0.15
+
+	_fire_tick -= delta
+	if _fire_tick <= 0.0:
+		_fire_tick = 0.6
+		_harm_nearby()
+		_spread()
+		if randf() < 0.4:
+			SoundBank.play_at("boom", global_position, -14.0, 0.4)  # a soft crackle
+
+	if _burn_time <= 0.0:
+		# Consumed to ash — no lumber, and a gap the fire can't cross.
+		queue_free()
+
+
+## Fire scares and lightly burns whatever stands too close (it should flee),
+## but leaves buildings alone — this stays a forest-clearing tool.
+func _harm_nearby() -> void:
+	for grp in ["villagers", "animals", "creature"]:
+		for n in get_tree().get_nodes_in_group(grp):
+			var node := n as Node3D
+			if not is_instance_valid(node):
+				continue
+			if node.global_position.distance_to(global_position) < HARM_RADIUS:
+				if node.has_method("scare"):
+					node.call("scare", global_position)
+				if node.has_method("take_damage"):
+					node.call("take_damage", 4.0)
+
+
+## Spread only to close neighbours, by chance — so a blaze runs through a
+## dense stand but gutters out where the trees thin.
+func _spread() -> void:
+	for t in get_tree().get_nodes_in_group("trees"):
+		var tree := t as WildTree
+		if tree == self or not is_instance_valid(tree) or tree.burning:
+			continue
+		if tree.global_position.distance_to(global_position) < SPREAD_RADIUS:
+			if randf() < SPREAD_CHANCE:
+				tree.ignite()
+	for b in get_tree().get_nodes_in_group("forage"):
+		var bush := b as Node3D
+		if is_instance_valid(bush) \
+				and bush.global_position.distance_to(global_position) < SPREAD_RADIUS * 0.7:
+			if randf() < SPREAD_CHANCE * 0.5:
+				bush.queue_free()  # kindling gone
+
+
 ## Called by a lumberjack when the chop completes. Timber!
 func fell() -> int:
 	if _felled:
@@ -222,6 +337,8 @@ func is_felled() -> bool:
 
 
 func hover_text() -> String:
+	if burning:
+		return "Tree — ABLAZE"
 	if lumber >= MAX_LUMBER:
 		return "Tree — %d lumber, fully grown" % int(lumber)
 	return "Tree — %d lumber and growing" % int(lumber)

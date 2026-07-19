@@ -1076,7 +1076,7 @@ func _nearest_uprootable_tree() -> WildTree:
 	var best_dist := 30.0
 	for t in get_tree().get_nodes_in_group("trees"):
 		var tree := t as WildTree
-		if not is_instance_valid(tree) or tree.is_felled() or tree.is_held():
+		if not is_instance_valid(tree) or tree.is_felled() or tree.is_held() or tree.burning:
 			continue
 		if tree.current_height() >= my_height:
 			continue
