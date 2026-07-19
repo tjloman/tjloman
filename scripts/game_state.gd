@@ -5,6 +5,10 @@ extends Node
 signal prayer_power_changed(value: float, max_value: float)
 signal alignment_changed(value: float)
 signal announcement(text: String)
+## Casting guidance (which menu is open, what to draw, "held — throw it").
+## Kept OUT of the announcement stream so the busy world can't overwrite the
+## step you're mid-way through — the HUD gives it its own quiet corner.
+signal cast_hint(text: String)
 
 ## One full day/night cycle, in real seconds. (The pace of the sun is the
 ## heartbeat of the game — tuned once, everything else derives from it.)
@@ -95,3 +99,7 @@ func alignment_word() -> String:
 
 func announce(text: String) -> void:
 	announcement.emit(text)
+
+
+func hint(text: String) -> void:
+	cast_hint.emit(text)

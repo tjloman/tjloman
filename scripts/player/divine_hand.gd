@@ -13,6 +13,12 @@ const RAY_LENGTH := 500.0
 const HIT_MASK := 1 | 2 | 4  # ground | units | props
 const THROW_BOOST := 1.6     # hand velocity -> projectile velocity
 const MAX_THROW_SPEED := 55.0
+## A release only THROWS if the pointer was dragged this far in one unbroken
+## stroke AND was still moving at the moment of release. This is what tells a
+## genuine throwing flick apart from tapping/poking around the screen (each
+## poke resets the stroke), which used to fling things by accident on touch.
+const THROW_MIN_STROKE := 60.0      # pixels of continuous drag
+const THROW_ACTIVE_WINDOW := 0.13   # seconds; must still be moving at release
 
 var camera_rig: CameraRig
 var miracles: MiracleManager
@@ -36,6 +42,12 @@ var ground_point := Vector3.ZERO
 
 # Recent hand positions, for computing throw velocity on release.
 var _pos_history: Array[Vector3] = []
+
+# The current unbroken pointer stroke while HOLDING: screen positions and the
+# time each was seen. Reset on every press (so a fresh poke can't inherit the
+# last stroke's momentum). Used only to decide throw-vs-place.
+var _stroke_pts: Array[Vector2] = []
+var _stroke_times: Array[float] = []
 
 ## Two-step casting: the menu opened by the first gesture, and how long it
 ## stays open awaiting the selector gesture.
@@ -98,7 +110,7 @@ func _physics_process(delta: float) -> void:
 		_menu_timer -= delta
 		if _menu_timer <= 0.0:
 			_armed_menu = ""
-			GameState.announce("The miracle fades, uncast.")
+			GameState.hint("The miracle faded, uncast.")
 
 	# The hand rests on whatever the mouse is over; fall back to the y=0 plane.
 	var target := ground_point + Vector3(0, HOVER_HEIGHT, 0)
@@ -189,6 +201,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
+				# Every fresh press begins a new stroke: a poke can never
+				# inherit the momentum of the drag before it.
+				_reset_stroke(event.position)
 				if cast_mode and state == HandState.IDLE:
 					state = HandState.GESTURING
 					gesture_points = PackedVector2Array([event.position])
@@ -204,8 +219,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				gesture_points = PackedVector2Array([event.position])
 			elif not event.pressed and state == HandState.GESTURING:
 				_finish_gesture()
-	elif event is InputEventMouseMotion and state == HandState.GESTURING:
-		gesture_points.append(event.position)
+	elif event is InputEventMouseMotion:
+		if state == HandState.GESTURING:
+			gesture_points.append(event.position)
+		elif state == HandState.HOLDING:
+			_stroke_pts.append(event.position)
+			_stroke_times.append(Time.get_ticks_msec() / 1000.0)
 
 
 func _on_grab() -> void:
@@ -239,12 +258,12 @@ func _on_release() -> void:
 		HandState.DRAG_LAND:
 			state = HandState.IDLE
 		HandState.HOLDING:
-			var throw_vel := _throw_velocity()
-			# A still hand PLACES; a moving hand THROWS. Placement is calm —
-			# no fear, no fall damage — and where you place someone matters.
-			var gentle := throw_vel.length() < 3.0
-			if gentle:
-				throw_vel = Vector3.ZERO
+			# A deliberate drag-flick THROWS; a tap or a settled hand PLACES.
+			# The stroke gate (screen-space, immune to the hand teleporting
+			# between pokes) is what decides — placement is calm, no fear, no
+			# fall damage, and where you place someone matters.
+			var gentle := not _stroke_is_throw()
+			var throw_vel := Vector3.ZERO if gentle else _throw_velocity()
 			if is_instance_valid(held_body):
 				# A gentle release right AT the creature is a hand-off: it
 				# takes the object in its claws (and learns to watch you).
@@ -266,6 +285,26 @@ func _on_release() -> void:
 					last_thrown = held_body
 			held_body = null
 			state = HandState.IDLE
+
+
+func _reset_stroke(pos: Vector2) -> void:
+	_stroke_pts = [pos]
+	_stroke_times = [Time.get_ticks_msec() / 1000.0]
+
+
+## True only for a genuine throwing flick: the pointer travelled a real
+## continuous distance this stroke AND was still moving at release. A tap,
+## a poke, or a drag that came to rest before letting go all read as PLACE.
+func _stroke_is_throw() -> bool:
+	if _stroke_pts.size() < 2:
+		return false
+	var dist := 0.0
+	for i in range(1, _stroke_pts.size()):
+		dist += _stroke_pts[i].distance_to(_stroke_pts[i - 1])
+	if dist < THROW_MIN_STROKE:
+		return false
+	var now := Time.get_ticks_msec() / 1000.0
+	return now - _stroke_times[_stroke_times.size() - 1] <= THROW_ACTIVE_WINDOW
 
 
 func _throw_velocity() -> Vector3:
@@ -319,9 +358,9 @@ func _finish_gesture() -> void:
 		if miracles.is_menu_opener(gesture):
 			_armed_menu = gesture
 			_menu_timer = 5.0
-			GameState.announce(miracles.menu_label(gesture) + "   (draw to choose)")
+			GameState.hint(miracles.menu_label(gesture) + "   (draw a selector to choose)")
 		else:
-			GameState.announce("Draw a spiral, reverse-spiral, or wave to open a miracle.")
+			GameState.hint("Draw a spiral, reverse-spiral, or wave to open a miracle menu.")
 	else:
 		miracles.select(_armed_menu, gesture)
 		_armed_menu = ""

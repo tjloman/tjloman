@@ -1240,10 +1240,10 @@ func _grow() -> void:
 		var before := int(growth * 10.0)
 		growth = minf(growth + GROWTH_PER_MEAL, 1.0)
 		scale = Vector3.ONE * lerpf(MIN_SCALE, MAX_SCALE, growth)
-		# Announce only when crossing a 10% milestone, not on every meal.
+		# A quiet word when it visibly grows (each 10% of its arc) — no
+		# numbers on screen; you watch it get bigger.
 		if int(growth * 10.0) > before:
-			GameState.announce("Your creature grows. It is now %.0f%% of its destined size." \
-				% (growth * 100.0))
+			GameState.announce("Your creature grows a little larger.")
 
 
 func _move_toward(target: Vector3, speed: float, delta: float) -> bool:
@@ -1300,6 +1300,12 @@ func state_name() -> String:
 	return State.keys()[state]
 
 
+## A plain-language phrase for what it is doing right now (for the HUD's
+## creature dashboard). Public wrapper over the internal status word.
+func activity_word() -> String:
+	return _status_word()
+
+
 func morality_word() -> String:
 	if morality > 60.0:
 		return "angelic"
@@ -1336,10 +1342,10 @@ func favorite_deed() -> String:
 
 func hover_text() -> String:
 	return ("Your creature — %s (%s, %s) · bond %d · attention %d\n" +
-		"hunger %d · energy %d · size %.0f%% · loves to %s\n" +
+		"hunger %d · energy %d · loves to %s\n" +
 		"[P — pet   ·   L — scold   ·   C — lock camera]") % [
 		_status_word(), morality_word(), mood_word(), int(bond), int(attention),
-		int(hunger), int(energy), growth * 100.0, favorite_deed()]
+		int(hunger), int(energy), favorite_deed()]
 
 
 ## What to call the thing it's hauling — honest about lumber and stone,

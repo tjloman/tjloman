@@ -8,23 +8,32 @@ extends CanvasLayer
 
 var village: Village
 var divine_hand: DivineHand
+var creature: Creature
+var camera_rig: CameraRig
 
 var _diet_label: Label
 var _hover_label: Label
 var _message_label: Label
 var _message_timer := 0.0
 var _help_panel: PanelContainer
+var _cast_label: Label
+var _creature_panel: PanelContainer
+var _creature_label: Label
+var _praise_scold: HBoxContainer
 
 
 func _ready() -> void:
 	layer = 5
 	_build_bars()
-	_build_legend()
+	_build_miracle_panel()
+	_build_creature_panel()
+	_build_praise_scold()
 	_build_hover_label()
 	_build_message_label()
 	_build_help_panel()
 
 	GameState.announcement.connect(_on_announcement)
+	GameState.cast_hint.connect(_on_cast_hint)
 	if divine_hand != null:
 		divine_hand.hover_info_changed.connect(_on_hover_info)
 
@@ -46,23 +55,104 @@ func _make_label(text: String) -> Label:
 	return l
 
 
-func _build_legend() -> void:
-	var legend := Label.new()
-	legend.text = "RIGHT MOUSE, two gestures:  (1) open a menu — @ spiral NATURE" \
-		+ "  · reverse-spiral WRATH · /\\/ wave SKY   (2) draw a selector to conjure" \
-		+ " — then THROW the miracle where you want it.  (F1 for the full list)"
-	legend.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	legend.position.y -= 34
-	legend.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	legend.add_theme_font_size_override("font_size", 15)
-	legend.add_theme_color_override("font_color", Color(1, 1, 0.85, 0.9))
-	add_child(legend)
+## A dim panel that owns the top of the screen: a standing reference to the
+## two-step miracle gestures, plus a live cast line that persists through the
+## noise of the world (world announcements go elsewhere and can't erase it).
+func _build_miracle_panel() -> void:
+	var panel := PanelContainer.new()
+	panel.set_anchors_and_offsets_preset(
+		Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, 8)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_theme_stylebox_override("panel", _dim_panel_style())
 
-	var hint := Label.new()
-	hint.text = "F1 — controls"
-	hint.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	hint.position += Vector2(-120, 16)
-	add_child(hint)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 2)
+	panel.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "MIRACLES  —  draw a MENU, then a SELECTOR  (right mouse, or CAST mode on touch)"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 14)
+	title.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0, 0.9))
+	vbox.add_child(title)
+
+	var ref := Label.new()
+	ref.text = ("spiral ▸ NATURE:  O Food · | Forest · — Thicket · \\ Rain\n"
+		+ "rev-spiral ▸ WRATH:  | Lightning · O Storm · \\ Fireball · — Tornado\n"
+		+ "wave ▸ SKY:  — Heal · O Birds · | Rain          (F1 — full controls)")
+	ref.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ref.add_theme_font_size_override("font_size", 13)
+	ref.add_theme_color_override("font_color", Color(1, 1, 0.85, 0.85))
+	vbox.add_child(ref)
+
+	_cast_label = Label.new()
+	_cast_label.text = "Draw a spiral, reverse-spiral, or wave to begin a miracle."
+	_cast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_cast_label.add_theme_font_size_override("font_size", 16)
+	_cast_label.add_theme_color_override("font_color", Color(1, 0.92, 0.5))
+	vbox.add_child(_cast_label)
+
+	add_child(panel)
+
+
+## Creature dashboard — hidden until you LOCK onto the creature (C, or the
+## Creature button). While locked it reads out what he is doing and feeling,
+## so on a phone you never have to hunt for a hover tooltip.
+func _build_creature_panel() -> void:
+	_creature_panel = PanelContainer.new()
+	_creature_panel.position = Vector2(16, 92)
+	_creature_panel.add_theme_stylebox_override("panel", _dim_panel_style())
+	_creature_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_creature_panel.visible = false
+
+	_creature_label = Label.new()
+	_creature_label.add_theme_font_size_override("font_size", 16)
+	_creature_label.add_theme_color_override("font_color", Color.WHITE)
+	_creature_panel.add_child(_creature_label)
+	add_child(_creature_panel)
+
+
+## Praise / Scold — big touch buttons, top-right, only while locked on. They
+## reinforce (or discourage) the creature's LAST deed, same as P / L.
+func _build_praise_scold() -> void:
+	_praise_scold = HBoxContainer.new()
+	_praise_scold.set_anchors_and_offsets_preset(
+		Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 16)
+	_praise_scold.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_praise_scold.add_theme_constant_override("separation", 12)
+	_praise_scold.visible = false
+
+	var praise := _big_button("Praise", Color(0.3, 0.6, 0.35))
+	praise.pressed.connect(_on_praise)
+	_praise_scold.add_child(praise)
+
+	var scold := _big_button("Scold", Color(0.62, 0.3, 0.3))
+	scold.pressed.connect(_on_scold)
+	_praise_scold.add_child(scold)
+	add_child(_praise_scold)
+
+
+func _big_button(text: String, tint: Color) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.custom_minimum_size = Vector2(150, 64)
+	b.add_theme_font_size_override("font_size", 24)
+	b.focus_mode = Control.FOCUS_NONE
+	var style := StyleBoxFlat.new()
+	style.bg_color = tint
+	style.set_corner_radius_all(8)
+	style.set_content_margin_all(8)
+	b.add_theme_stylebox_override("normal", style)
+	return b
+
+
+func _dim_panel_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0, 0, 0, 0.42)
+	style.set_corner_radius_all(8)
+	style.set_content_margin_all(10)
+	return style
 
 
 func _build_hover_label() -> void:
@@ -95,10 +185,11 @@ func _build_help_panel() -> void:
 
 Left mouse (on land) ....... grab & drag the world
 Left mouse (on things) ..... pick up food, sheep, villagers — even TREES (uproot!)
-Release while STILL ........ place gently — no fear, no harm
+Tap / short move, release .. place gently — no fear, no harm
   ...a gentle tree replants where set down; on a storehouse it banks its lumber
   ...a gentle release AT your creature HANDS it the object (it learns to watch you)
-Release while moving ....... throw! (hard landings hurt — and stain your soul)
+Drag and FLICK, release .... throw! (hard landings hurt — and stain your soul)
+  ...only a real drag-flick throws; taps and pokes always place, never fling
   ...throw TO your creature: if it's attentive (and practiced) it CATCHES
 
 PLACING VILLAGERS IS POLICY
@@ -120,7 +211,10 @@ F2 ......................... cycle graphics quality: Low / Medium / High
 ON TOUCHSCREENS
 One finger ................. everything the left mouse does (per the Mode button)
 Mode button ................ toggle: MOVE (drag/pick/place/throw) or CAST (draw gestures)
-Creature button ............ camera locks to and follows your creature
+Creature button ............ lock the camera onto your creature — and open its
+                             dashboard (what it's doing & feeling) plus PRAISE /
+                             SCOLD buttons, top-right
+To throw on glass .......... drag and flick in one stroke; a tap just places
 Pinch ...................... zoom
 Two-finger drag ............ orbit the camera freely (yaw and tilt)
 
@@ -187,10 +281,48 @@ func _process(delta: float) -> void:
 		_diet_label.text = "Diet [1-4]: %s" % village.diet_name()
 	_hover_label.position = _hover_label.get_viewport().get_mouse_position() + Vector2(18, 18)
 
+	_update_creature_panel()
+
 	if _message_timer > 0.0:
 		_message_timer -= delta
 		if _message_timer <= 0.0:
 			_message_label.text = ""
+
+
+## Shown only while the camera is LOCKED onto the creature. Its stats live
+## here in plain words instead of a hover tooltip — the whole reason the
+## lock-on exists on a phone.
+func _update_creature_panel() -> void:
+	var locked := camera_rig != null and is_instance_valid(creature) \
+		and camera_rig.follow_target == creature
+	_creature_panel.visible = locked
+	_praise_scold.visible = locked
+	if not locked:
+		return
+	_creature_label.text = ("YOUR CREATURE\n"
+		+ "Doing:    %s\n"
+		+ "Nature:   %s\n"
+		+ "Mood:     %s\n"
+		+ "Bond:     %d / 100\n"
+		+ "Hunger:   %d / 100\n"
+		+ "Energy:   %d / 100") % [
+			creature.activity_word(), creature.morality_word(), creature.mood_word(),
+			int(creature.bond), int(creature.hunger), int(creature.energy)]
+
+
+func _on_praise() -> void:
+	if is_instance_valid(creature):
+		creature.praise()
+
+
+func _on_scold() -> void:
+	if is_instance_valid(creature):
+		creature.scold()
+
+
+func _on_cast_hint(text: String) -> void:
+	if _cast_label != null:
+		_cast_label.text = text
 
 
 func _unhandled_input(event: InputEvent) -> void:

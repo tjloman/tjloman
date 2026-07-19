@@ -55,6 +55,8 @@ func _ready() -> void:
 	hud = HUD.new()
 	hud.village = village
 	hud.divine_hand = divine_hand
+	hud.creature = creature
+	hud.camera_rig = camera_rig
 	add_child(hud)
 
 	var touch := TouchControls.new()

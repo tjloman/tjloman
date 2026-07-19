@@ -97,7 +97,7 @@ func select(opener: String, selector: String) -> bool:
 	var menu: Dictionary = MENUS.get(opener, {})
 	var selectors: Dictionary = menu.get("selectors", {})
 	if not selectors.has(selector):
-		GameState.announce("That gesture means nothing in this menu.")
+		GameState.hint("That gesture means nothing in this menu.")
 		return false
 	return conjure(selectors[selector])
 
@@ -109,10 +109,10 @@ func conjure(miracle: String) -> bool:
 		return false
 	var cost: float = MIRACLES[miracle]["cost"]
 	if cost > GameState.max_prayer_power:
-		GameState.announce("This miracle needs more devoted villages before you can hold it.")
+		GameState.hint("%s needs more devoted villages before you can hold it." % miracle.capitalize())
 		return false
 	if not GameState.try_spend(cost):
-		GameState.announce("Not enough prayer power. Your followers must worship more.")
+		GameState.hint("Not enough prayer power — your followers must worship more.")
 		return false
 	var body: RigidBody3D
 	if miracle == "fireball":
@@ -126,6 +126,7 @@ func conjure(miracle: String) -> bool:
 	add_child(body)
 	if divine_hand == null or not divine_hand.force_hold(body):
 		body.global_position = global_position + Vector3(0, 4.0, 0)
+	GameState.hint("%s conjured — now THROW it where you want it." % miracle.capitalize())
 	return true
 
 
