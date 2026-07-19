@@ -337,9 +337,16 @@ func _smoke_test_gestures() -> void:
 		var a := TAU * i / 16.0
 		var rad := 20.0 + i * 3.0
 		spiral.append(Vector2(400 + cos(a) * rad, 300 + sin(a) * rad))
+	# A SMOOTH S / sine — no sharp corners at all (the case the old detector
+	# missed). Should now read as "wave" via curvature inflections.
+	var smooth_s := PackedVector2Array()
+	for i in 30:
+		var t := i / 29.0
+		smooth_s.append(Vector2(120 + t * 300.0, 300 + sin(t * TAU) * 90.0))
 	print("SMOKE TEST: gesture circle -> ", GestureRecognizer.classify(circle))
 	print("SMOKE TEST: gesture vline  -> ", GestureRecognizer.classify(vline))
 	print("SMOKE TEST: gesture hline  -> ", GestureRecognizer.classify(hline))
 	print("SMOKE TEST: gesture wave   -> ", GestureRecognizer.classify(zigzag))
+	print("SMOKE TEST: gesture wave/S -> ", GestureRecognizer.classify(smooth_s))
 	print("SMOKE TEST: gesture dline  -> ", GestureRecognizer.classify(dline))
 	print("SMOKE TEST: gesture spiral -> ", GestureRecognizer.classify(spiral))

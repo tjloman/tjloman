@@ -360,7 +360,7 @@ func _finish_gesture() -> void:
 			_menu_timer = 5.0
 			GameState.hint(miracles.menu_label(gesture) + "   (draw a selector to choose)")
 		else:
-			GameState.hint("Draw a spiral, reverse-spiral, or wave to open a miracle menu.")
+			GameState.hint("Draw a spiral, reverse-spiral, or wave/S to open a miracle menu.")
 	else:
 		miracles.select(_armed_menu, gesture)
 		_armed_menu = ""

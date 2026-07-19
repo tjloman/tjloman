@@ -80,14 +80,14 @@ func _build_miracle_panel() -> void:
 	var ref := Label.new()
 	ref.text = ("spiral ▸ NATURE:  O Food · | Forest · — Thicket · \\ Rain\n"
 		+ "rev-spiral ▸ WRATH:  | Lightning · O Storm · \\ Fireball · — Tornado\n"
-		+ "wave ▸ SKY:  — Heal · O Birds · | Rain          (F1 — full controls)")
+		+ "wave / S ▸ SKY:  — Heal · O Birds · | Rain      (F1 — full controls)")
 	ref.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ref.add_theme_font_size_override("font_size", 13)
 	ref.add_theme_color_override("font_color", Color(1, 1, 0.85, 0.85))
 	vbox.add_child(ref)
 
 	_cast_label = Label.new()
-	_cast_label.text = "Draw a spiral, reverse-spiral, or wave to begin a miracle."
+	_cast_label.text = "Draw a spiral, reverse-spiral, or wave/S to begin a miracle."
 	_cast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_cast_label.add_theme_font_size_override("font_size", 16)
 	_cast_label.add_theme_color_override("font_color", Color(1, 0.92, 0.5))
@@ -226,7 +226,7 @@ The miracle drops into your hand as an orb — THROW it where you want.
                      — Forage thicket (30) · \\ Bloom/Rain (25)
   REVERSE-SPIRAL — Wrath:  | Lightning (30) · O Lightning STORM (90)
                      \\ Fireball (25) · — Tornado (110)
-  WAVE — Sky:  — Heal (15) · O Bird flock, an omen (40) · | Rain (25)
+  WAVE or S — Sky:  — Heal (15) · O Bird flock, an omen (40) · | Rain (25)
 
 The grandest miracles (storm, tornado) need a wide reservoir of prayer —
 convert more villages to hold and wield them, and your reach (belief +
