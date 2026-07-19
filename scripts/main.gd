@@ -146,7 +146,7 @@ func _build_environment() -> void:
 	_sun = DirectionalLight3D.new()
 	_sun.shadow_enabled = true
 	# Tighter shadow range = crisper shadows and cheaper on weak GPUs.
-	_sun.directional_shadow_max_distance = 140.0
+	_sun.directional_shadow_max_distance = 70.0   # tight = cheaper on mobile
 	_sun.light_specular = 0.25  # matte, plain — no plastic glints
 	add_child(_sun)
 
@@ -169,7 +169,7 @@ func _build_environment() -> void:
 	# Good and plain: distance fog and gentle bloom, nothing the mobile
 	# renderer can't do. (SSAO is Forward+-only — deliberately absent.)
 	_environment.fog_enabled = true
-	_environment.fog_density = 0.004
+	_environment.fog_density = 0.008   # hides the nearer horizon of a lean world
 	_environment.fog_sky_affect = 0.2
 	_environment.glow_enabled = true
 	_environment.glow_intensity = 0.5

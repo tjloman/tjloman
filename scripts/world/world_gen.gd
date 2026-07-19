@@ -15,11 +15,14 @@ extends Node3D
 ## as yours but believe in nothing — until your miracles convince them.
 
 const CHUNK_SIZE := 48.0
-const CHUNK_CELLS := 16          # 16x16 quads, 17x17 height samples
-const LOAD_RADIUS := 3           # chunks kept live around the focus
-const UNLOAD_RADIUS := 5
+const CHUNK_CELLS := 12          # 12x12 quads, 13x13 height samples
+## Kept deliberately modest so a phone doesn't drown in nodes/memory the
+## instant the world boots — the old 7x7 burst of terrain+collision+trees
+## backgrounded the app on mobile. Distance fog hides the shorter horizon.
+const LOAD_RADIUS := 2           # chunks kept live around the focus (5x5)
+const UNLOAD_RADIUS := 3
 const WATER_LEVEL := 0.0
-const CHUNKS_PER_FRAME := 2
+const CHUNKS_PER_FRAME := 1      # one chunk a frame: gentle, no startup stall
 const VILLAGE_CELL_CHANCE := 0.05
 const VILLAGE_MIN_CELL_DIST := 3  # chunks from origin before rivals appear
 

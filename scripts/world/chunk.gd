@@ -103,15 +103,15 @@ func _scatter() -> void:
 		position.x + WorldGen.CHUNK_SIZE * 0.5, position.z + WorldGen.CHUNK_SIZE * 0.5)
 	match biome:
 		"forest":
-			_scatter_trees(rng, rng.randi_range(9, 15), "forest")
+			_scatter_trees(rng, rng.randi_range(5, 8), "forest")
 			_scatter_deposits(rng, rng.randi_range(0, 1))
-			_scatter_bushes(rng, rng.randi_range(2, 4))
+			_scatter_bushes(rng, rng.randi_range(1, 3))
 			_scatter_animals(rng, {"deer": 0.9, "bear": 0.12, "wolf": 0.12, "tiger": 0.04})
 		"grassland":
-			_scatter_trees(rng, rng.randi_range(2, 4), "grassland")
-			_scatter_flowers(rng, rng.randi_range(5, 10))
+			_scatter_trees(rng, rng.randi_range(1, 3), "grassland")
+			_scatter_flowers(rng, rng.randi_range(3, 6))
 			_scatter_deposits(rng, rng.randi_range(0, 1))
-			_scatter_bushes(rng, rng.randi_range(3, 5))
+			_scatter_bushes(rng, rng.randi_range(2, 3))
 			_scatter_animals(rng, {"sheep": 0.8, "horse": 0.25, "chicken": 0.3,
 				"pig": 0.2, "dog": 0.1})
 		"savanna":

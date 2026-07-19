@@ -39,6 +39,7 @@ var _replant_time := REPLANT_PERIOD * randf_range(0.5, 1.5)
 var _burn_time := 0.0
 var _fire_tick := 0.0
 var _fire_visual: Node3D = null
+var _grow_accum := randf() * 0.4   # de-sync the growth tick across trees
 
 
 func _ready() -> void:
@@ -101,6 +102,14 @@ func _process(delta: float) -> void:
 	if burning:
 		_burn(delta)
 		return
+	# Trees grow slowly; there's no need to touch every one every frame.
+	# Batch growth/replant into a ~0.4s tick — with hundreds of trees this
+	# is most of the steady-state cost saved on a phone.
+	_grow_accum += delta
+	if _grow_accum < 0.4:
+		return
+	var d := _grow_accum
+	_grow_accum = 0.0
 	if lumber < MAX_LUMBER:
 		var step := GROWTH_BASE / (1.0 + lumber * GROWTH_TAPER)
 		# A miracle-sown sapling races to its quickened size, then slows.
@@ -109,11 +118,11 @@ func _process(delta: float) -> void:
 				step = 2.5
 			else:
 				remove_meta("quicken_to")
-		lumber = minf(lumber + step * delta, MAX_LUMBER)
+		lumber = minf(lumber + step * d, MAX_LUMBER)
 		if int(lumber) != _shown_lumber:
 			_apply_growth_scale()
 	else:
-		_replant_time -= delta
+		_replant_time -= d
 		if _replant_time <= 0.0:
 			_replant_time = REPLANT_PERIOD * randf_range(0.8, 1.6)
 			_try_replant()
