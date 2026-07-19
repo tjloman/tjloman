@@ -112,6 +112,14 @@ func clutter_distance() -> float:
 	return [70.0, 120.0, 180.0][tier]
 
 
+## How far out villagers, animals, and the creature keep drawing. Generous
+## (they are what you watch), but past it a distant crowd is a speck in the
+## fog not worth the draw calls — and a big village stops rendering dozens of
+## bodies at once on a budget device.
+func actor_distance() -> float:
+	return [95.0, 150.0, 220.0][tier]
+
+
 func fog_density() -> float:
 	# A leaner world (LOW) needs thicker fog to hide the near horizon.
 	return [0.008, 0.006, 0.004][tier]

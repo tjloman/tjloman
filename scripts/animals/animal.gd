@@ -110,22 +110,27 @@ func _ready() -> void:
 
 
 func _build_body(body: Vector3, leg_h: float) -> void:
+	# Pooled parts: every beast of a species draws from the same handful of
+	# meshes and shared materials (all its colours are fixed per species), so
+	# a herd batches instead of minting a unique mesh+material per limb.
 	var color: Color = spec["color"]
-	add_child(Util.box(body, color, Vector3(0, leg_h + body.y * 0.5, 0)))
+	add_child(Util.lite_box(body, color, Vector3(0, leg_h + body.y * 0.5, 0)))
 	# Legs.
 	if leg_h > 0.1:
 		for corner in [Vector3(1, 0, 1), Vector3(-1, 0, 1), Vector3(1, 0, -1), Vector3(-1, 0, -1)]:
 			var offset := Vector3(corner.x * body.x * 0.35, leg_h * 0.5, corner.z * body.z * 0.35)
-			add_child(Util.box(Vector3(0.12, leg_h, 0.12), color.darkened(0.25), offset))
+			add_child(Util.lite_box(Vector3(0.12, leg_h, 0.12), color.darkened(0.25), offset))
 	# Head (on a neck, for the tall ones).
 	var neck_h: float = spec.get("neck", 0.0)
 	var head_y := leg_h + body.y + neck_h
 	if neck_h > 0.0:
-		add_child(Util.box(Vector3(0.25, neck_h, 0.25), color,
+		add_child(Util.lite_box(Vector3(0.25, neck_h, 0.25), color,
 			Vector3(0, leg_h + body.y + neck_h * 0.5 - 0.1, body.z * 0.35)))
 	var head_r: float = clampf(body.y * 0.4, 0.08, 0.35)
-	add_child(Util.sphere(head_r, color.darkened(0.15),
+	add_child(Util.lite_sphere(head_r, color.darkened(0.15),
 		Vector3(0, head_y, body.z * 0.5 + head_r * 0.5)))
+	# Distant beasts stop drawing (they already freeze physics far off).
+	Util.apply_lod(self, Quality.actor_distance())
 
 
 func _physics_process(delta: float) -> void:

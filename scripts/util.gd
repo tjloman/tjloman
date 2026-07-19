@@ -134,10 +134,57 @@ static func _pooled_cylinder_mesh(
 	return m
 
 
+static func _pooled_box_mesh(size: Vector3) -> BoxMesh:
+	var key := "box|%.2f|%.2f|%.2f" % [
+		snappedf(size.x, 0.02), snappedf(size.y, 0.02), snappedf(size.z, 0.02)]
+	var m: BoxMesh = _mesh_pool.get(key)
+	if m == null:
+		m = BoxMesh.new()
+		m.size = Vector3(
+			snappedf(size.x, 0.02), snappedf(size.y, 0.02), snappedf(size.z, 0.02))
+		_mesh_pool[key] = m
+	return m
+
+
+## Box sharing mesh+material with every twin — no tessellation to lower, but
+## same-species animals and same-shirt villagers then collapse to a handful of
+## meshes/materials the renderer can batch, instead of one unique pair each.
+static func lite_box(size: Vector3, color: Color, pos := Vector3.ZERO) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = _pooled_box_mesh(size)
+	mi.material_override = shared_mat(color)
+	mi.position = pos
+	return mi
+
+
 ## Low-poly sphere sharing mesh+material with every twin. For static clutter.
 static func lite_sphere(radius: float, color: Color, pos := Vector3.ZERO, segs := 8) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = _pooled_sphere_mesh(radius, segs)
+	mi.material_override = shared_mat(color)
+	mi.position = pos
+	return mi
+
+
+static func _pooled_capsule_mesh(radius: float, height: float, segs: int) -> CapsuleMesh:
+	var key := "cap|%.2f|%.2f|%d" % [snappedf(radius, 0.02), snappedf(height, 0.05), segs]
+	var m: CapsuleMesh = _mesh_pool.get(key)
+	if m == null:
+		m = CapsuleMesh.new()
+		m.radius = snappedf(radius, 0.02)
+		m.height = snappedf(height, 0.05)
+		m.radial_segments = segs
+		m.rings = maxi(int(segs / 4.0), 2)
+		_mesh_pool[key] = m
+	return m
+
+
+## Low-poly capsule sharing mesh+material — villager torsos of the same
+## (quantised) shirt colour then share one mesh and one material.
+static func lite_capsule(
+		radius: float, height: float, color: Color, pos := Vector3.ZERO, segs := 12) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = _pooled_capsule_mesh(radius, height, segs)
 	mi.material_override = shared_mat(color)
 	mi.position = pos
 	return mi
@@ -212,6 +259,9 @@ static func apply_lod(root: Node, end_dist: float) -> void:
 
 
 ## Simple billboard status label used above villagers/creature heads.
+## Each is a transparent, camera-facing text quad — cheap alone, but a crowd
+## of them is real overdraw on a tiled mobile GPU. So it only renders up
+## close (past ~34m it stops drawing); far-off crowds cost nothing for text.
 static func status_label(text := "", pixel_size := 0.01) -> Label3D:
 	var l := Label3D.new()
 	l.text = text
@@ -220,4 +270,6 @@ static func status_label(text := "", pixel_size := 0.01) -> Label3D:
 	l.font_size = 48
 	l.outline_size = 12
 	l.modulate = Color(1, 1, 1, 0.95)
+	l.visibility_range_end = 34.0
+	l.visibility_range_end_margin = 6.0
 	return l

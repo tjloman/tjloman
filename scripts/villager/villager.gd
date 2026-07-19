@@ -107,10 +107,17 @@ func _ready() -> void:
 
 	_visuals = Node3D.new()
 	add_child(_visuals)
-	var shirt := Color.from_hsv(randf(), 0.5, 0.75)
-	_body_mesh = Util.capsule(0.28, 1.0, shirt, Vector3(0, 0.55, 0))
+	# Shirt hue is quantised to 12 buckets so a crowd shares a handful of
+	# shared materials (and meshes) the renderer can batch, instead of 25
+	# unique ones. The body mesh is only ever rotated, never recoloured, so
+	# a shared material is safe.
+	var shirt := Color.from_hsv(snappedf(randf(), 1.0 / 12.0), 0.5, 0.75)
+	_body_mesh = Util.lite_capsule(0.28, 1.0, shirt, Vector3(0, 0.55, 0))
 	_visuals.add_child(_body_mesh)
-	_visuals.add_child(Util.sphere(0.18, Color(0.9, 0.75, 0.6), Vector3(0, 1.25, 0)))
+	_visuals.add_child(Util.lite_sphere(0.18, Color(0.9, 0.75, 0.6), Vector3(0, 1.25, 0)))
+	# Distant crowds stop drawing entirely — a big village no longer renders
+	# dozens of bodies at once on a budget phone.
+	Util.apply_lod(_visuals, Quality.actor_distance())
 
 	_label = Util.status_label()
 	_label.position = Vector3(0, 1.8, 0)
