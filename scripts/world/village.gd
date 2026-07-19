@@ -38,6 +38,8 @@ var store: FoodStore
 var houses: Array[House] = []
 var construction_site: House = null
 var tamed_animals: Array[Animal] = []
+var edubba: Edubba = null      # the schoolhouse, once built
+var teacher: Villager = null   # the one adult who minds the school
 
 var _totem_orb: MeshInstance3D
 var _influence_ring: MeshInstance3D
@@ -248,11 +250,56 @@ func _make_villager(start_age: float) -> Villager:
 	return v
 
 
-func spawn_child(pos: Vector3) -> void:
+func spawn_child(pos: Vector3, mother: Villager = null) -> void:
 	var v := _make_villager(0.0)
+	v.mother = mother
 	v.position = to_local(pos) + Vector3(randf_range(-0.5, 0.5), 0.5, randf_range(-0.5, 0.5))
 	add_child(v)
 	_assign_housing()
+
+
+## The village wants a school once it has a couple of children, the timber
+## and stone to raise one, and doesn't already have an Edubba.
+func child_count() -> int:
+	var n := 0
+	for v in my_villagers():
+		if not v.is_adult():
+			n += 1
+	return n
+
+
+func has_edubba() -> bool:
+	return edubba != null and is_instance_valid(edubba)
+
+
+func wants_edubba() -> bool:
+	return not has_edubba() and child_count() >= 2 \
+		and store.lumber >= 8 and store.stone >= 5 and construction_site == null
+
+
+func spawn_edubba_at(world_spot: Vector3) -> void:
+	if has_edubba():
+		return
+	if not store.try_spend_materials(8, 5):
+		return
+	var e := Edubba.new()
+	e.village = self
+	e.position = to_local(world_spot)
+	add_child(e)
+	edubba = e
+	if is_player_home:
+		GameState.announce("%s has raised an Edubba. Its children will learn there now." % village_name)
+
+
+## Keeps exactly one living teacher assigned while a school stands.
+func needs_teacher() -> bool:
+	if not has_edubba():
+		return false
+	if teacher != null and is_instance_valid(teacher) and teacher.village == self \
+			and teacher.is_adult():
+		return false
+	teacher = null
+	return true
 
 
 func _process(delta: float) -> void:

@@ -173,6 +173,7 @@ scripts/world/
   chunk.gd                    One 48m tile: mesh, collision, water, scatter
   village.gd                  Belief/conversion, diet, housing, pen, jobs
   house.gd                    Dwellings: sizes, health, age, collapse
+  edubba.gd                   The schoolhouse: gathers children, frees mothers
   wild_tree.gd                Harvestable trees (biome-styled)
   rock_deposit.gd             Harvestable stone
   farm.gd                     Crop growth, tending, rain bonus, harvest

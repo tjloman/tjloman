@@ -14,7 +14,8 @@ enum State {
 	GO_CHOP, CHOPPING, GO_QUARRY, QUARRYING, GO_BUILD, BUILDING,
 	GO_TAME, TAMING, GO_WORSHIP, WORSHIPPING, PLAY,
 	GO_PREACH, PREACHING, GO_FEED, GO_BUILD_FARM, BUILDING_FARM,
-	GO_FISH, FISHING,
+	GO_FISH, FISHING, COURT, FOLLOW_MOM, AT_SCHOOL, TEACH,
+	GO_BUILD_EDUBBA, BUILDING_EDUBBA,
 	FLEE, HELD, FALLING,
 }
 
@@ -39,6 +40,8 @@ var village: Village
 var home: House = null
 var villager_name := "Villager"
 var is_female := randf() < 0.5
+var mother: Villager = null      # who bore this one; children trail her
+var is_teacher := false          # minds the Edubba, keeping children close
 
 # Lifecycle.
 var age := 25.0
@@ -80,6 +83,8 @@ var _carrying_feed := false
 var _farm_spot := Vector3.INF
 var _fish_spot := Vector3.INF
 var _world_cache: WorldGen = null
+var _edubba_spot := Vector3.INF
+var _breed_cooldown := randf_range(4.0, 12.0)
 var _label: Label3D
 var _visuals: Node3D
 var _body_mesh: MeshInstance3D
@@ -235,6 +240,35 @@ func _physics_process(delta: float) -> void:
 			if _action_time <= 0.0:
 				village.spawn_farm_at(_farm_spot)
 				_farm_spot = Vector3.INF
+				_decide()
+		State.GO_BUILD_EDUBBA:
+			if _move_toward(_edubba_spot, WALK_SPEED * _speed_factor(), delta):
+				_dismount()
+				state = State.BUILDING_EDUBBA
+				_action_time = 22.0
+		State.BUILDING_EDUBBA:
+			_apply_gravity_only(delta)
+			_action_time -= delta
+			_work_noise("hammer", 0.8, delta)
+			if _action_time <= 0.0:
+				village.spawn_edubba_at(_edubba_spot)
+				_edubba_spot = Vector3.INF
+				_decide()
+		State.COURT:
+			# Court at the totem; conception happens while worshipping there.
+			if _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
+				state = State.WORSHIPPING
+				_action_time = 8.0
+		State.FOLLOW_MOM:
+			_process_follow_mom(delta)
+		State.AT_SCHOOL:
+			_process_at_school(delta)
+		State.TEACH:
+			# The teacher keeps station in the school yard.
+			if _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
+				_apply_gravity_only(delta)
+			_action_time -= delta
+			if _action_time <= 0.0 or not village.has_edubba():
 				_decide()
 		State.GO_HUNT:
 			_process_go_target(_target_animal, delta, State.HUNTING, 2.0)
@@ -446,7 +480,7 @@ func _tick_lifecycle(delta: float) -> void:
 		if pregnancy_progress >= PREGNANCY_YEARS:
 			pregnant = false
 			pregnancy_progress = 0.0
-			village.spawn_child(global_position)
+			village.spawn_child(global_position, self)
 			if village.is_player_home:
 				GameState.announce("%s has given birth! %s grows." % [villager_name, village.village_name])
 
@@ -470,24 +504,52 @@ func is_adult() -> bool:
 	return age >= ADULT_AGE
 
 
+## Interest reawakens at adulthood and stays high while the body is fed
+## and rested — but a mother won't conceive again while a child still
+## trails her (they must be grown or gone to school first).
+func wants_to_breed() -> bool:
+	if not is_adult() or pregnant or age > 45.0:
+		return false
+	if _breed_cooldown > 0.0:
+		return false
+	if hunger > 55.0 or energy < 35.0 or happiness < 45.0:
+		return false
+	if village.store.total_food() < 4 or village.at_capacity():
+		return false
+	if is_teacher:
+		return false
+	return not _has_dependent_child()
+
+
+## A child of mine still trailing me (young, and no school to mind it).
+func _has_dependent_child() -> bool:
+	if village.has_edubba():
+		return false
+	for v in village.my_villagers():
+		if v.mother == self and not v.is_adult():
+			return true
+	return false
+
+
 func _try_conceive(delta: float) -> void:
 	if not is_female or pregnant or not is_adult() or age > 45.0:
 		return
-	if happiness < 50.0 or village.store.total_food() < 4:
+	if happiness < 45.0 or village.store.total_food() < 4:
 		return
-	if village.at_capacity():
-		return  # shelter bounds the flock — build houses to grow
-	# ~1 in 3 chance over one 8-second worship session spent near a partner.
+	if village.at_capacity() or _has_dependent_child():
+		return  # shelter bounds the flock — and a mother finishes one child first
+	# ~1 in 3 chance over one 8-second courting session spent near a partner.
 	if randf() > 0.05 * delta:
 		return
 	for other in village.my_villagers():
 		if other == self or other.is_female or not other.is_adult():
 			continue
-		if other.state != State.WORSHIPPING or other.happiness < 50.0:
+		if other.state != State.WORSHIPPING or other.happiness < 45.0:
 			continue
 		if global_position.distance_to(other.global_position) < 5.0:
 			pregnant = true
 			pregnancy_progress = 0.0
+			_breed_cooldown = 30.0
 			if village.is_player_home:
 				GameState.announce("%s and %s are expecting a child."
 					% [villager_name, other.villager_name])
@@ -506,6 +568,7 @@ func _tick_needs(delta: float) -> void:
 			State.QUARRYING, State.BUILDING]
 		energy = maxf(energy - (0.5 if working else 0.25) * delta, 0.0)
 	social = maxf(social - 0.3 * delta, 0.0)
+	_breed_cooldown = maxf(_breed_cooldown - delta, 0.0)
 	# A fed body knits itself back together — small wounds heal.
 	if hunger < 70.0 and health < 100.0:
 		health = minf(health + 1.5 * delta, 100.0)
@@ -539,10 +602,37 @@ func _decide() -> void:
 	if GameState.is_night() and energy < 85.0:
 		_go_sleep()
 		return
+	# Children: off to school if the village has one, otherwise trailing
+	# their mother; only orphans and idlers just play.
 	if not is_adult():
+		if village.has_edubba():
+			state = State.AT_SCHOOL
+			return
+		if mother != null and is_instance_valid(mother) and mother.village == village:
+			state = State.FOLLOW_MOM
+			_action_time = randf_range(2.0, 4.0)
+			return
 		state = State.PLAY
 		_action_time = randf_range(3.0, 6.0)
 		_target = village.global_position + Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)) * 8.0
+		return
+	# Lost the post (school gone, or replaced)? Stop being a teacher.
+	if is_teacher and (not village.has_edubba() or village.teacher != self):
+		is_teacher = false
+	# A teacher is needed and I'm free to take the post.
+	if village.needs_teacher() and not _has_dependent_child():
+		is_teacher = true
+		village.teacher = self
+	if is_teacher and village.has_edubba():
+		state = State.TEACH
+		_action_time = randf_range(8.0, 16.0)
+		_target = village.edubba.yard_position()
+		return
+	# Breeding is a high drive once of age, when body and larder allow.
+	if wants_to_breed():
+		state = State.COURT
+		_breed_cooldown = randf_range(20.0, 40.0)
+		_target = village.totem.global_position + Vector3(randf_range(-3, 3), 0, randf_range(-3, 3))
 		return
 	if social < 30.0:
 		state = State.GO_WORSHIP
@@ -601,6 +691,9 @@ func _pick_job() -> bool:
 			scores["build_farm"] = 30.0 + food_worry * 0.5
 	if village.penned_hungry() and store.plant_food > 2:
 		scores["feed"] = 26.0
+	# A village with children and no school wants an Edubba raised.
+	if village.wants_edubba():
+		scores["build_edubba"] = 34.0
 	if village.diet == Village.Diet.CANNIBAL and store.meat_food < 4 \
 			and _will_eat_human_flesh() and _nearest_corpse() != null:
 		scores["butcher"] = 50.0 + food_worry
@@ -677,6 +770,15 @@ func _start_job(job: String) -> void:
 				_action_time = 2.0
 				return
 			state = State.GO_BUILD_FARM
+			_maybe_mount()
+		"build_edubba":
+			var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+			_edubba_spot = village.find_build_spot(world)
+			if _edubba_spot == Vector3.INF:
+				state = State.WANDER
+				_action_time = 2.0
+				return
+			state = State.GO_BUILD_EDUBBA
 			_maybe_mount()
 		"hunt":
 			_target_animal = _nearest_huntable()
@@ -904,6 +1006,44 @@ func _dismount() -> void:
 	_mount = null
 
 
+## Children ------------------------------------------------------------------
+
+## Trail mother: keep within a few paces of her, otherwise scamper close.
+func _process_follow_mom(delta: float) -> void:
+	if mother == null or not is_instance_valid(mother) or mother.village != village \
+			or village.has_edubba():
+		_decide()
+		return
+	var to_mom := mother.global_position - global_position
+	to_mom.y = 0
+	if to_mom.length() > 2.5:
+		_move_toward(mother.global_position, WALK_SPEED * 1.1, delta)
+	else:
+		_apply_gravity_only(delta)
+		_action_time -= delta
+		if _action_time <= 0.0:
+			_decide()  # re-check needs (hunger, sleep) now and then
+	social = minf(social + 2.0 * delta, 100.0)
+
+
+## At school: play in the Edubba yard near the teacher and the other children.
+func _process_at_school(delta: float) -> void:
+	if not village.has_edubba() or is_adult():
+		_decide()
+		return
+	var yard := village.edubba.yard_position()
+	if global_position.distance_to(yard) > 4.0:
+		_move_toward(yard + Vector3(randf_range(-2, 2), 0, randf_range(-2, 2)),
+			WALK_SPEED * _speed_factor(), delta)
+	else:
+		_apply_gravity_only(delta)
+		social = minf(social + 3.0 * delta, 100.0)
+		happiness = minf(happiness + 0.5 * delta, 100.0)
+		_action_time -= delta
+		if _action_time <= 0.0:
+			_decide()  # re-check needs now and then
+
+
 ## Movement ------------------------------------------------------------------
 
 func _move_toward(target: Vector3, speed: float, delta: float, arrive := ARRIVE_DIST) -> bool:
@@ -1118,7 +1258,12 @@ func _status_word() -> String:
 		State.GO_PREACH, State.PREACHING: return "on a mission"
 		State.GO_FEED: return "feeding the animals"
 		State.GO_BUILD_FARM, State.BUILDING_FARM: return "breaking new ground"
+		State.GO_BUILD_EDUBBA, State.BUILDING_EDUBBA: return "raising the Edubba"
 		State.GO_FISH, State.FISHING: return "fishing"
+		State.COURT: return "courting at the totem"
+		State.FOLLOW_MOM: return "following mother"
+		State.AT_SCHOOL: return "at school"
+		State.TEACH: return "teaching the children"
 		State.FLEE: return "fleeing in terror"
 		State.HELD: return "in the grip of a god"
 		State.FALLING: return "airborne"
@@ -1139,6 +1284,11 @@ func _status_text() -> String:
 		State.WORSHIPPING: return "pray"
 		State.PREACHING: return "hear me!"
 		State.FISHING: return "fish?"
+		State.COURT: return "♥"
+		State.FOLLOW_MOM: return "mama"
+		State.AT_SCHOOL: return "abc"
+		State.TEACH: return "teach"
+		State.BUILDING_EDUBBA, State.GO_BUILD_EDUBBA: return "build"
 		State.PLAY: return "wheee"
 		State.FLEE, State.FALLING: return "!!!"
 		State.HELD: return "?!"
