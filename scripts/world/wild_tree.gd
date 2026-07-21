@@ -76,15 +76,21 @@ func _ready() -> void:
 	col.position = Vector3(0, h * 0.5, 0)
 	add_child(col)
 
-	# Pooled, low-poly, shared-material parts: every tree of a style draws
-	# from the same handful of meshes and materials.
-	add_child(Util.lite_cylinder(0.25, h, trunk_color, Vector3(0, h * 0.5, 0)))
-	if style == "savanna":
-		# Acacia: wide flat canopy.
-		add_child(Util.lite_cylinder(2.2, 0.5, leaf_color, Vector3(0, h + 0.3, 0)))
+	# A custom tree model (tree_<style> or tree) replaces trunk + canopy; it
+	# still scales with growth and tumbles when uprooted.
+	var custom := ModelBank.instantiate_any(["tree_" + style, "tree"])
+	if custom != null:
+		add_child(custom)
 	else:
-		# Conifer cone (top radius 0).
-		add_child(Util.lite_cylinder(1.6, 2.8, leaf_color, Vector3(0, h + 1.2, 0), 0.0))
+		# Pooled, low-poly, shared-material parts: every tree of a style draws
+		# from the same handful of meshes and materials.
+		add_child(Util.lite_cylinder(0.25, h, trunk_color, Vector3(0, h * 0.5, 0)))
+		if style == "savanna":
+			# Acacia: wide flat canopy.
+			add_child(Util.lite_cylinder(2.2, 0.5, leaf_color, Vector3(0, h + 0.3, 0)))
+		else:
+			# Conifer cone (top radius 0).
+			add_child(Util.lite_cylinder(1.6, 2.8, leaf_color, Vector3(0, h + 1.2, 0), 0.0))
 
 	_apply_growth_scale()
 

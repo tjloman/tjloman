@@ -26,16 +26,21 @@ func _ready() -> void:
 	col.position = Vector3(0, 0.5, 0)
 	add_child(col)
 
-	var leaf := Color(0.18, 0.38, 0.16)
-	add_child(Util.lite_sphere(0.65, leaf, Vector3(0, 0.45, 0)))
-	add_child(Util.lite_sphere(0.45, leaf.lightened(0.1), Vector3(0.4, 0.35, 0.2)))
-	add_child(Util.lite_sphere(0.4, leaf.lightened(0.05), Vector3(-0.35, 0.35, -0.15)))
-	for i in MAX_BERRIES:
-		var a := TAU * i / MAX_BERRIES + 0.5
-		var berry := Util.lite_sphere(0.09, Color(0.75, 0.15, 0.25),
-			Vector3(cos(a) * 0.45, 0.65 + sin(i * 2.1) * 0.15, sin(a) * 0.45))
-		add_child(berry)
-		_berry_meshes.append(berry)
+	var custom := ModelBank.instantiate("bush")
+	if custom != null:
+		# A custom bush carries its own berries; the pickable count still works.
+		add_child(custom)
+	else:
+		var leaf := Color(0.18, 0.38, 0.16)
+		add_child(Util.lite_sphere(0.65, leaf, Vector3(0, 0.45, 0)))
+		add_child(Util.lite_sphere(0.45, leaf.lightened(0.1), Vector3(0.4, 0.35, 0.2)))
+		add_child(Util.lite_sphere(0.4, leaf.lightened(0.05), Vector3(-0.35, 0.35, -0.15)))
+		for i in MAX_BERRIES:
+			var a := TAU * i / MAX_BERRIES + 0.5
+			var berry := Util.lite_sphere(0.09, Color(0.75, 0.15, 0.25),
+				Vector3(cos(a) * 0.45, 0.65 + sin(i * 2.1) * 0.15, sin(a) * 0.45))
+			add_child(berry)
+			_berry_meshes.append(berry)
 	_update_berries()
 
 

@@ -56,22 +56,31 @@ func _ready() -> void:
 	_intake.add_child(zone)
 	add_child(_intake)
 
-	# The round market floor on a slightly wider base, sunk into the slope
-	# so the platform never floats on its downhill side.
+	# A custom store model replaces the structure; the resource piles still
+	# stack on its four quadrants (withdraw/deposit works by position).
+	var custom := ModelBank.instantiate("store")
+	if custom != null:
+		add_child(custom)
+	else:
+		_build_structure()
+
+	_refresh_stack()
+
+
+## The procedural granary: a round market floor, quartering walls, a canopy
+## pole, and a colour-coded marker post at each quadrant's rim.
+func _build_structure() -> void:
 	add_child(Util.cylinder(PLATFORM_RADIUS + 0.2, 1.4, Color(0.45, 0.36, 0.26),
 		Vector3(0, -0.58, 0)))
 	add_child(Util.cylinder(PLATFORM_RADIUS, 0.3, Color(0.58, 0.47, 0.33), Vector3(0, 0.2, 0)))
 
-	# Low walls quartering the circle.
 	var wall := Color(0.48, 0.38, 0.27)
 	add_child(Util.box(Vector3(PLATFORM_RADIUS * 2.0, 0.5, 0.18), wall, Vector3(0, 0.55, 0)))
 	add_child(Util.box(Vector3(0.18, 0.5, PLATFORM_RADIUS * 2.0), wall, Vector3(0, 0.55, 0)))
 
-	# Center pole and a little canopy.
 	add_child(Util.cylinder(0.12, 2.4, Color(0.5, 0.4, 0.28), Vector3(0, 1.2, 0)))
 	add_child(Util.prism(Vector3(1.6, 0.7, 1.6), Color(0.65, 0.55, 0.3), Vector3(0, 2.7, 0)))
 
-	# A colored marker post at the rim of each quadrant.
 	for entry: Array in [
 		[Vector3(1, 0, 1), GRAIN_COLOR], [Vector3(-1, 0, 1), MEAT_COLOR],
 		[Vector3(-1, 0, -1), LUMBER_COLOR], [Vector3(1, 0, -1), STONE_COLOR],
@@ -81,8 +90,6 @@ func _ready() -> void:
 		var rim := dir.normalized() * (PLATFORM_RADIUS - 0.35)
 		add_child(Util.cylinder(0.06, 1.2, Color(0.5, 0.4, 0.28), rim + Vector3(0, 0.6, 0)))
 		add_child(Util.sphere(0.18, color, rim + Vector3(0, 1.35, 0), true))
-
-	_refresh_stack()
 
 
 ## Absorb items resting on the platform (polled: released items don't

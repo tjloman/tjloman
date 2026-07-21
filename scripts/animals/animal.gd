@@ -107,7 +107,13 @@ func _ready() -> void:
 	col.shape = shape
 	col.position = Vector3(0, (body.y + leg_h) * 0.5, 0)
 	add_child(col)
-	_build_body(body, leg_h)
+	# A custom per-species model (e.g. sheep.glb) replaces the box-beast.
+	var custom := ModelBank.instantiate(species)
+	if custom != null:
+		add_child(custom)
+		Util.apply_lod(self, Quality.actor_distance())
+	else:
+		_build_body(body, leg_h)
 
 
 func _build_body(body: Vector3, leg_h: float) -> void:

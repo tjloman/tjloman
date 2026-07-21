@@ -137,6 +137,14 @@ func _clear_visuals() -> void:
 
 
 func _build_visuals() -> void:
+	# A custom house model replaces the whole dwelling. It brings its own
+	# windows, so the night-glow (which drives _window_mat) simply idles.
+	var custom := ModelBank.instantiate("house")
+	if custom != null:
+		add_child(custom)
+		_window_mat = null
+		return
+
 	var w: float = SPECS[size]["width"]
 	var depth := w * (1.6 if size == Size.LONGHOUSE else 1.0)
 	var wall := Color(0.78, 0.68, 0.52)

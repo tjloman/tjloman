@@ -24,12 +24,17 @@ func _ready() -> void:
 	col.position = Vector3(0, 0.7, 0)
 	add_child(col)
 
-	for i in 3:
-		var r := randf_range(0.5, 0.9)
-		var b := Util.lite_sphere(r, Color(0.52, 0.51, 0.53),
-			Vector3(randf_range(-0.7, 0.7), r * 0.6, randf_range(-0.7, 0.7)))
-		add_child(b)
-		_boulders.append(b)
+	var custom := ModelBank.instantiate("rock")
+	if custom != null:
+		# A custom rock model won't shrink as it's worked, but quarries fine.
+		add_child(custom)
+	else:
+		for i in 3:
+			var r := randf_range(0.5, 0.9)
+			var b := Util.lite_sphere(r, Color(0.52, 0.51, 0.53),
+				Vector3(randf_range(-0.7, 0.7), r * 0.6, randf_range(-0.7, 0.7)))
+			add_child(b)
+			_boulders.append(b)
 
 
 ## One quarrying pass: yields stone, wears the pile down, frees when spent.

@@ -87,21 +87,28 @@ func _ready() -> void:
 
 
 func _build_hand_mesh() -> void:
-	# One shared material so the whole hand recolors with the player's karma.
-	_hand_material = Util.mat(GameState.alignment_color())
-	# Palm.
-	_add_hand_part(Util.box(Vector3(0.9, 0.18, 1.0), Color.WHITE, Vector3.ZERO))
-	# Four fingers.
-	for i in 4:
-		var x := -0.33 + i * 0.22
-		var length := 0.55 if (i == 1 or i == 2) else 0.45
-		_add_hand_part(Util.box(
-			Vector3(0.16, 0.15, length), Color.WHITE,
-			Vector3(x, 0.0, -0.5 - length * 0.5)))
-	# Thumb.
-	var thumb := Util.box(Vector3(0.16, 0.15, 0.42), Color.WHITE, Vector3(0.55, 0.0, 0.05))
-	thumb.rotation_degrees.y = -40
-	_add_hand_part(thumb)
+	# A custom hand model replaces the palm-and-fingers; the divine glow still
+	# tints with karma even when the model brings its own material.
+	var custom := ModelBank.instantiate("hand")
+	if custom != null:
+		add_child(custom)
+		_hand_material = null
+	else:
+		# One shared material so the whole hand recolors with the player's karma.
+		_hand_material = Util.mat(GameState.alignment_color())
+		# Palm.
+		_add_hand_part(Util.box(Vector3(0.9, 0.18, 1.0), Color.WHITE, Vector3.ZERO))
+		# Four fingers.
+		for i in 4:
+			var x := -0.33 + i * 0.22
+			var length := 0.55 if (i == 1 or i == 2) else 0.45
+			_add_hand_part(Util.box(
+				Vector3(0.16, 0.15, length), Color.WHITE,
+				Vector3(x, 0.0, -0.5 - length * 0.5)))
+		# Thumb.
+		var thumb := Util.box(Vector3(0.16, 0.15, 0.42), Color.WHITE, Vector3(0.55, 0.0, 0.05))
+		thumb.rotation_degrees.y = -40
+		_add_hand_part(thumb)
 	# Faint divine glow.
 	_glow = OmniLight3D.new()
 	_glow.light_color = Color(1.0, 0.95, 0.8)
@@ -119,7 +126,8 @@ func _add_hand_part(part: MeshInstance3D) -> void:
 
 func _on_alignment_changed(_value: float) -> void:
 	var c := GameState.alignment_color()
-	_hand_material.albedo_color = c
+	if _hand_material != null:
+		_hand_material.albedo_color = c
 	_glow.light_color = c
 
 

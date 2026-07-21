@@ -100,16 +100,22 @@ func _ready() -> void:
 	_body = Node3D.new()
 	add_child(_body)
 
-	var fur := Color(0.55, 0.42, 0.3)
-	_body.add_child(Util.capsule(0.6, 1.8, fur, Vector3(0, 1.0, 0)))
-	_body.add_child(Util.sphere(0.45, fur, Vector3(0, 2.1, 0.15)))
-	for side in [-1, 1]:
-		_body.add_child(Util.sphere(0.12, Color.WHITE, Vector3(0.18 * side, 2.25, 0.5)))
-		_body.add_child(Util.sphere(0.05, Color.BLACK, Vector3(0.18 * side, 2.25, 0.6)))
-	for side in [-1, 1]:
-		var arm := Util.capsule(0.15, 0.8, fur, Vector3(0.7 * side, 1.3, 0))
-		arm.rotation_degrees.z = 25 * side
-		_body.add_child(arm)
+	# A custom creature model (creature.glb) stands in for the whole beast;
+	# the waddle/idle animation acts on _body, so it works either way.
+	var custom := ModelBank.instantiate("creature")
+	if custom != null:
+		_body.add_child(custom)
+	else:
+		var fur := Color(0.55, 0.42, 0.3)
+		_body.add_child(Util.capsule(0.6, 1.8, fur, Vector3(0, 1.0, 0)))
+		_body.add_child(Util.sphere(0.45, fur, Vector3(0, 2.1, 0.15)))
+		for side in [-1, 1]:
+			_body.add_child(Util.sphere(0.12, Color.WHITE, Vector3(0.18 * side, 2.25, 0.5)))
+			_body.add_child(Util.sphere(0.05, Color.BLACK, Vector3(0.18 * side, 2.25, 0.6)))
+		for side in [-1, 1]:
+			var arm := Util.capsule(0.15, 0.8, fur, Vector3(0.7 * side, 1.3, 0))
+			arm.rotation_degrees.z = 25 * side
+			_body.add_child(arm)
 
 	_label = Util.status_label()
 	_label.position = Vector3(0, 3.0, 0)
