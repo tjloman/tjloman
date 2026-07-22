@@ -1516,7 +1516,12 @@ func hover_text() -> String:
 
 ## What to call the thing it's hauling — honest about lumber and stone,
 ## not "food" for everything.
-func _carriable_word(item: Node3D) -> String:
+## Variant (not Node3D): the carried/targeted item may have been freed between
+## the creature's physics tick and a HUD read, and passing a freed object to a
+## typed parameter crashes. Guard it here instead.
+func _carriable_word(item: Variant) -> String:
+	if not is_instance_valid(item):
+		return "food"
 	if item is ResourceItem:
 		return (item as ResourceItem).kind
 	if item is WildTree:
