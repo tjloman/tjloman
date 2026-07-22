@@ -54,6 +54,10 @@ static func create(root: Node) -> ModelAnimator:
 		return null
 	var anim := ModelAnimator.new()
 	anim._player = player
+	# When a one-shot (non-looping) clip ends, settle back so the entity's
+	# next play() re-decides — returning to idle/walk if the action is over,
+	# or repeating it if the entity is still in that state.
+	player.animation_finished.connect(anim._on_finished)
 	return anim
 
 
@@ -78,6 +82,14 @@ func play(state: String) -> void:
 	if anim != null:
 		anim.loop_mode = Animation.LOOP_LINEAR if LOOPING.get(state, false) else Animation.LOOP_NONE
 	_player.play(clip, BLEND)
+
+
+## A one-shot finished (looping clips never emit this — we force their loop
+## mode). Clear the tracked state so the entity's per-frame play() drives the
+## next clip: idle when the deed is done, or the same action again if it's a
+## sustained one (a creature still mid-rampage keeps swinging).
+func _on_finished(_anim_name: StringName) -> void:
+	_current = ""
 
 
 ## Resolve (and cache) a semantic state to an actual clip name on this model.

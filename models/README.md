@@ -73,3 +73,8 @@ Names match case-insensitively and tolerate Blender's rig prefixes
 **looping** in Blender (the game also forces a sensible loop mode as a
 backstop). Keep rigs modest — **≤ ~30 bones** for villagers/animals — so a
 crowd stays smooth on a phone; the creature (one instance) can be richer.
+
+One-shot clips (`attack`, `play`, etc.) play once and then **settle back on
+their own** — to `idle`/`walk` if the deed is done, or repeat if the entity
+is still in that action (a creature mid-rampage keeps swinging). You don't
+need a "return to idle" frame at the end of the clip.
