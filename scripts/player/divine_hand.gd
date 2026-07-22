@@ -78,6 +78,7 @@ var _menu_timer := 0.0
 
 var _hand_material: StandardMaterial3D
 var _glow: OmniLight3D
+var _animator: ModelAnimator = null   # non-null only for a rigged hand model
 
 
 func _ready() -> void:
@@ -93,6 +94,7 @@ func _build_hand_mesh() -> void:
 	if custom != null:
 		add_child(custom)
 		_hand_material = null
+		_animator = ModelAnimator.create(custom)
 	else:
 		# One shared material so the whole hand recolors with the player's karma.
 		_hand_material = Util.mat(GameState.alignment_color())
@@ -146,6 +148,15 @@ func _physics_process(delta: float) -> void:
 	var target := ground_point + Vector3(0, HOVER_HEIGHT, 0)
 	target.y += sin(Time.get_ticks_msec() / 400.0) * 0.08  # idle bob
 	global_position = global_position.lerp(target, minf(delta * 14.0, 1.0))
+
+	# Yaw-follow: the hand turns with the camera's heading (palm-down, B&W
+	# style), so it reads right from any angle. Eased so it swings, not snaps.
+	if camera_rig != null:
+		rotation.y = lerp_angle(rotation.y, camera_rig.rotation.y, minf(delta * 8.0, 1.0))
+
+	# A rigged hand model plays grab/cast/idle clips as the hand works.
+	if _animator != null:
+		_animator.play(_anim_state())
 
 	_pos_history.append(global_position)
 	if _pos_history.size() > 10:
@@ -497,3 +508,15 @@ func _finish_gesture() -> void:
 		miracles.select(_armed_menu, gesture)
 		_armed_menu = ""
 		_menu_timer = 0.0
+
+
+## The clip a rigged hand model plays for what the hand is doing now.
+func _anim_state() -> String:
+	match state:
+		HandState.HOLDING:
+			return "grab"
+		HandState.GESTURING:
+			return "cast"
+		HandState.DRAG_LAND:
+			return "grab"
+	return "idle"
