@@ -78,3 +78,28 @@ One-shot clips (`attack`, `play`, etc.) play once and then **settle back on
 their own** — to `idle`/`walk` if the deed is done, or repeat if the entity
 is still in that action (a creature mid-rampage keeps swinging). You don't
 need a "return to idle" frame at the end of the clip.
+
+### Root motion (one-shot actions only)
+
+For a lunge/kick/hop that should actually move the creature, set a
+**`root_motion_track`** on the model's `AnimationPlayer` (pointing at the root
+bone's position track) in Blender/Godot import. The game reads it and moves
+the creature during its one-shot actions (attack, play); ordinary walking
+stays game-driven, and if no track is set nothing changes. Keep such motion
+short — it's a flourish layered on the game's own movement.
+
+## Creature shader hooks (optional, for custom `creature.glb`)
+
+The creature's mood and morality are pushed to your model as **instance
+shader parameters** (declare them as `instance uniform` in your shader) and
+matching **blend shapes** if present. Ignore any you don't use.
+
+| Signal | How it arrives |
+|---|---|
+| Alignment | instance uniform `float alignment` (−1 monstrous … +1 angelic) **and** a `menace` blend shape (0…1) |
+| Expression | instance uniform `float expression` — a code your shader switches on: 0 neutral, 1 happy, 2 sad, 3 angry, 4 scared, 5 curious, 6 love, 7 hurt |
+
+So a wicked creature can darken/redden/grow spikes via the shader or the
+`menace` morph, and its face can change with `expression` — all with no code.
+Without these hooks the model just renders normally (alignment/expression
+still show on the primitive fallback creature).

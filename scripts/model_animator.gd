@@ -84,6 +84,17 @@ func play(state: String) -> void:
 	_player.play(clip, BLEND)
 
 
+## Root motion for one-shot actions (a lunge, kick, pounce). Returns the
+## model-local position delta the current clip moved its root THIS frame, or
+## zero unless the model's AnimationPlayer has a `root_motion_track` set (the
+## modeller opts in). The caller rotates it into world space and applies it
+## only during the discrete action — ordinary walking stays game-driven.
+func root_motion() -> Vector3:
+	if not is_instance_valid(_player) or _player.root_motion_track == NodePath(""):
+		return Vector3.ZERO
+	return _player.get_root_motion_position()
+
+
 ## A one-shot finished (looping clips never emit this — we force their loop
 ## mode). Clear the tracked state so the entity's per-frame play() drives the
 ## next clip: idle when the deed is done, or the same action again if it's a

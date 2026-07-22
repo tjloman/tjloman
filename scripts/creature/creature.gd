@@ -880,6 +880,7 @@ func _hurl_carried() -> void:
 
 ## Stomp the house: heavy damage, a boom, terror for anyone watching.
 func _process_kick_house(delta: float) -> void:
+	_apply_root_motion()
 	if _catch_target == null or not is_instance_valid(_catch_target):
 		_catch_target = null
 		_decide()
@@ -924,6 +925,7 @@ func _nearest_hurlable() -> Node3D:
 
 
 func _process_play(delta: float) -> void:
+	_apply_root_motion()
 	_action_time -= delta
 	_cheer_time -= delta
 	if _play_toy != null and is_instance_valid(_play_toy):
@@ -1416,6 +1418,20 @@ func _tick_expression(delta: float) -> void:
 	for m in _model_meshes:
 		if is_instance_valid(m):
 			m.set_instance_shader_parameter("expression", EXPR_CODE.get(_expression, 0.0))
+
+
+## Apply this frame's ROOT MOTION from a one-shot action clip (a lunge into a
+## kick, a hop while playing), rotated into world space and kept planar. A
+## no-op unless the model's AnimationPlayer has a root_motion_track set, so it
+## never disturbs ordinary game-driven movement.
+func _apply_root_motion() -> void:
+	if _animator == null:
+		return
+	var delta_pos := _animator.root_motion()
+	if delta_pos == Vector3.ZERO:
+		return
+	var world := global_transform.basis * delta_pos
+	global_position += Vector3(world.x, 0.0, world.z)
 
 
 ## Set a named blend shape on a model mesh if it has one (else a no-op).
