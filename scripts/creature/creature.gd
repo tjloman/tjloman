@@ -29,6 +29,19 @@ const GROWTH_PER_MEAL := 0.015
 const STUCK_SECONDS := 30.0   # no state may hold the creature hostage
 const OBSERVE_PERIOD := 2.5
 
+## Eye shapes (scale x,y) for the procedural face, one per emotion.
+const EXPR_EYE := {
+	"neutral": Vector2(1.0, 1.0), "happy": Vector2(1.1, 0.5), "sad": Vector2(0.9, 0.7),
+	"angry": Vector2(1.25, 0.55), "scared": Vector2(1.35, 1.4), "curious": Vector2(1.1, 1.2),
+	"love": Vector2(1.2, 1.15), "hurt": Vector2(0.8, 0.55),
+}
+## A numeric code per emotion, handed to a model shader as the "expression"
+## instance param so custom art can switch faces.
+const EXPR_CODE := {
+	"neutral": 0.0, "happy": 1.0, "sad": 2.0, "angry": 3.0,
+	"scared": 4.0, "curious": 5.0, "love": 6.0, "hurt": 7.0,
+}
+
 var hunger := 40.0
 var energy := 90.0
 var growth := 0.01            # 0..1 of its destined size; every game starts small
@@ -83,6 +96,17 @@ var _label: Label3D
 var _animator: ModelAnimator = null   # non-null only for a rigged custom model
 var _walk_phase := 0.0
 
+# Appearance & expression. Procedural parts are recoloured/animated directly;
+# a custom model is driven through instance shader params ("alignment",
+# "expression") and matching blend shapes if it has them.
+var _fur_mat: StandardMaterial3D = null
+var _eyes: Array[MeshInstance3D] = []      # eye whites, scaled for expressions
+var _pupils: Array[MeshInstance3D] = []    # pupils, recoloured for mood/menace
+var _model_meshes: Array[GeometryInstance3D] = []
+var _shown_align := 999.0                  # last applied alignment (throttle)
+var _expression := "neutral"
+var _expr_time := 0.0
+
 
 func _ready() -> void:
 	add_to_group("creature")
@@ -108,15 +132,31 @@ func _ready() -> void:
 	if custom != null:
 		_body.add_child(custom)
 		_animator = ModelAnimator.create(custom)
+		# Collect renderables so alignment/expression can be pushed to the
+		# model's shader (instance params) or blend shapes.
+		for m in custom.find_children("*", "GeometryInstance3D", true, false):
+			_model_meshes.append(m as GeometryInstance3D)
+		if custom is GeometryInstance3D:
+			_model_meshes.append(custom as GeometryInstance3D)
 	else:
-		var fur := Color(0.55, 0.42, 0.3)
-		_body.add_child(Util.capsule(0.6, 1.8, fur, Vector3(0, 1.0, 0)))
-		_body.add_child(Util.sphere(0.45, fur, Vector3(0, 2.1, 0.15)))
+		# One shared fur material so the whole hide recolours with alignment.
+		_fur_mat = Util.mat(Color(0.55, 0.42, 0.3))
+		var body_part := Util.capsule(0.6, 1.8, Color.WHITE, Vector3(0, 1.0, 0))
+		body_part.material_override = _fur_mat
+		_body.add_child(body_part)
+		var head := Util.sphere(0.45, Color.WHITE, Vector3(0, 2.1, 0.15))
+		head.material_override = _fur_mat
+		_body.add_child(head)
 		for side in [-1, 1]:
-			_body.add_child(Util.sphere(0.12, Color.WHITE, Vector3(0.18 * side, 2.25, 0.5)))
-			_body.add_child(Util.sphere(0.05, Color.BLACK, Vector3(0.18 * side, 2.25, 0.6)))
+			var white := Util.sphere(0.12, Color.WHITE, Vector3(0.18 * side, 2.25, 0.5))
+			_eyes.append(white)
+			_body.add_child(white)
+			var pupil := Util.sphere(0.05, Color.BLACK, Vector3(0.18 * side, 2.25, 0.6))
+			_pupils.append(pupil)
+			_body.add_child(pupil)
 		for side in [-1, 1]:
-			var arm := Util.capsule(0.15, 0.8, fur, Vector3(0.7 * side, 1.3, 0))
+			var arm := Util.capsule(0.15, 0.8, Color.WHITE, Vector3(0.7 * side, 1.3, 0))
+			arm.material_override = _fur_mat
 			arm.rotation_degrees.z = 25 * side
 			_body.add_child(arm)
 
@@ -233,6 +273,8 @@ func _physics_process(delta: float) -> void:
 		_animator.play(_anim_state())
 	else:
 		_animate_waddle(delta)
+	_apply_appearance()
+	_tick_expression(delta)
 	var status := _status_text()
 	if _label.text != status:
 		_label.text = status
@@ -503,6 +545,12 @@ func _finish_deed(deed: String, mood_gain: float) -> void:
 	boredom = maxf(boredom - 25.0, 0.0)
 	if deed in ["tend", "gather", "guard", "gift", "fish"]:
 		morality = clampf(morality + 1.0, -100.0, 100.0)
+	match deed:
+		"play": express("happy")
+		"guard": express("angry", 1.2)
+		"watch": express("curious")
+		"hunt", "mischief", "rampage": express("angry")
+		"gift", "tend", "gather": express("happy", 1.2)
 	_decide()
 
 
@@ -596,6 +644,7 @@ func _try_catch_throw() -> void:
 	mood = minf(mood + 10.0, 100.0)
 	bond = minf(bond + 2.0, 100.0)
 	attention = minf(attention + 10.0, 100.0)
+	express("happy")
 	GameState.announce("Your creature CAUGHT it! It looks extremely pleased with itself.")
 
 
@@ -607,6 +656,7 @@ func receive_gift(item: Node3D) -> void:
 	attention = minf(attention + 15.0, 100.0)
 	bond = minf(bond + 2.0, 100.0)
 	mood = minf(mood + 6.0, 100.0)
+	express("curious")
 	_pick_up_thing(item, _intent_for(item))
 	_last_deed = "receive"
 
@@ -998,6 +1048,7 @@ func praise() -> void:
 	var key := _deed_desire_key(_last_deed)
 	if key != "":
 		_bump_desire(key, 0.25)
+	express("love")
 	if _last_deed in ["hunt", "mischief"]:
 		morality = clampf(morality - 3.0, -100.0, 100.0)
 		GameState.announce("Your creature purrs. It believes cruelty pleases you.")
@@ -1018,6 +1069,7 @@ func scold() -> void:
 		GameState.announce("Your creature cowers. It understands that was wrong.")
 	else:
 		GameState.announce("Your creature whimpers, confused. It was only trying to help.")
+	express("hurt", 2.4)
 	state = State.SULK
 	_action_time = 8.0
 
@@ -1309,6 +1361,71 @@ func _animate_waddle(_delta: float) -> void:
 func receive_heal() -> void:
 	energy = minf(energy + 40.0, 100.0)
 	mood = minf(mood + 10.0, 100.0)
+	express("love")
+
+
+## Appearance & expression ---------------------------------------------------
+
+## Flash an emotion for a moment. It shapes the procedural eyes and drives a
+## model's "expression" instance shader param; then it settles to neutral.
+func express(emotion: String, dur := 1.6) -> void:
+	_expression = emotion
+	_expr_time = dur
+
+
+## The hide and eyes reflect the soul: a gentle beast is pale and calm-eyed; a
+## monster darkens, reddens, and its pupils burn. On a custom model this is the
+## instance shader param "alignment" (-1 monstrous .. +1 angelic) plus a
+## "menace" blend shape if the mesh has one. Throttled to real changes.
+func _apply_appearance() -> void:
+	var align := clampf(morality / 100.0, -1.0, 1.0)
+	if absf(align - _shown_align) < 0.02:
+		return
+	_shown_align = align
+	var menace := maxf(-align, 0.0)
+	var grace := maxf(align, 0.0)
+	if _fur_mat != null:
+		var fur := Color(0.55, 0.42, 0.3)
+		fur = fur.lerp(Color(0.78, 0.7, 0.52), grace * 0.6)     # good: pale, warm
+		fur = fur.lerp(Color(0.26, 0.12, 0.11), menace * 0.85)  # evil: dark, blood-dark
+		_fur_mat.albedo_color = fur
+		_fur_mat.emission_enabled = menace > 0.45
+		_fur_mat.emission = Color(0.45, 0.05, 0.04)
+		_fur_mat.emission_energy_multiplier = menace * 0.7
+	var pupil := Color.BLACK.lerp(Color(0.95, 0.12, 0.05), menace)  # eyes burn when wicked
+	for p in _pupils:
+		if is_instance_valid(p) and p.material_override != null:
+			p.material_override.albedo_color = pupil
+	for m in _model_meshes:
+		if is_instance_valid(m):
+			m.set_instance_shader_parameter("alignment", align)
+			_set_blend_shape(m, "menace", menace)
+
+
+func _tick_expression(delta: float) -> void:
+	if _expr_time > 0.0:
+		_expr_time -= delta
+		if _expr_time <= 0.0:
+			_expression = "neutral"
+	var target: Vector2 = EXPR_EYE.get(_expression, Vector2.ONE)
+	var t := minf(delta * 10.0, 1.0)
+	for e in _eyes:
+		if is_instance_valid(e):
+			e.scale.x = lerpf(e.scale.x, target.x, t)
+			e.scale.y = lerpf(e.scale.y, target.y, t)
+	for m in _model_meshes:
+		if is_instance_valid(m):
+			m.set_instance_shader_parameter("expression", EXPR_CODE.get(_expression, 0.0))
+
+
+## Set a named blend shape on a model mesh if it has one (else a no-op).
+func _set_blend_shape(mesh: GeometryInstance3D, sh_name: String, value: float) -> void:
+	if not (mesh is MeshInstance3D):
+		return
+	var mi := mesh as MeshInstance3D
+	var idx := mi.find_blend_shape_by_name(sh_name)
+	if idx >= 0:
+		mi.set_blend_shape_value(idx, value)
 
 
 ## Words ----------------------------------------------------------------------
