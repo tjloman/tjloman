@@ -82,6 +82,7 @@ var _flee_from := Vector3.ZERO
 var _fall_speed := 0.0
 var _gentle_drop := false
 var _spin_ang := Vector3.ZERO   # aftertouch spin axis*rate while thrown (rad/s)
+var _animator: ModelAnimator = null   # non-null only for a rigged custom model
 var _rider: Node3D = null
 
 
@@ -107,10 +108,12 @@ func _ready() -> void:
 	col.shape = shape
 	col.position = Vector3(0, (body.y + leg_h) * 0.5, 0)
 	add_child(col)
-	# A custom per-species model (e.g. sheep.glb) replaces the box-beast.
+	# A custom per-species model (e.g. sheep.glb) replaces the box-beast; if
+	# it's rigged, an animator plays its clips.
 	var custom := ModelBank.instantiate(species)
 	if custom != null:
 		add_child(custom)
+		_animator = ModelAnimator.create(custom)
 		Util.apply_lod(self, Quality.actor_distance())
 	else:
 		_build_body(body, leg_h)
@@ -157,6 +160,9 @@ func _physics_process(delta: float) -> void:
 		var cam := get_viewport().get_camera_3d()
 		if cam != null and cam.global_position.distance_to(global_position) > 90.0:
 			return
+
+	if _animator != null:
+		_animator.play(_anim_state())
 
 	# Watchdogs: no chase or trek lasts forever, and nothing falls out of
 	# the world when its chunk streams away.
@@ -598,6 +604,17 @@ func in_flight_push(dv: Vector3) -> void:
 
 func set_flight_spin(angular: Vector3) -> void:
 	_spin_ang = angular
+
+
+## The semantic clip a rigged model plays for the current state.
+func _anim_state() -> String:
+	match state:
+		State.FALLING: return "fall"
+		State.HELD: return "idle"
+		State.FLEE, State.CHASE: return "run"
+		State.DRINKING: return "drink"
+		State.GRAZE: return "graze"
+	return "walk" if Vector2(velocity.x, velocity.z).length() > 0.3 else "idle"
 
 
 func hover_text() -> String:

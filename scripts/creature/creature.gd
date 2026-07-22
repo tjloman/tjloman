@@ -80,6 +80,7 @@ var _prev_state := State.IDLE
 var _cheer_time := 0.0
 var _body: Node3D
 var _label: Label3D
+var _animator: ModelAnimator = null   # non-null only for a rigged custom model
 var _walk_phase := 0.0
 
 
@@ -100,11 +101,13 @@ func _ready() -> void:
 	_body = Node3D.new()
 	add_child(_body)
 
-	# A custom creature model (creature.glb) stands in for the whole beast;
-	# the waddle/idle animation acts on _body, so it works either way.
+	# A custom creature model (creature.glb) stands in for the whole beast. If
+	# it's rigged with clips, an animator drives them and the procedural
+	# waddle/pose steps aside.
 	var custom := ModelBank.instantiate("creature")
 	if custom != null:
 		_body.add_child(custom)
+		_animator = ModelAnimator.create(custom)
 	else:
 		var fur := Color(0.55, 0.42, 0.3)
 		_body.add_child(Util.capsule(0.6, 1.8, fur, Vector3(0, 1.0, 0)))
@@ -164,9 +167,11 @@ func _physics_process(delta: float) -> void:
 		State.SLEEPING:
 			_apply_gravity_only(delta)
 			energy = minf(energy + 6.0 * delta, 100.0)
-			_body.rotation_degrees.z = 80
+			if _animator == null:
+				_body.rotation_degrees.z = 80
 			if energy > 85.0:
-				_body.rotation_degrees.z = 0
+				if _animator == null:
+					_body.rotation_degrees.z = 0
 				_decide()
 		State.WATCH:
 			_process_watch(delta)
@@ -185,9 +190,11 @@ func _physics_process(delta: float) -> void:
 		State.FISHING:
 			_apply_gravity_only(delta)
 			_action_time -= delta
-			_body.rotation_degrees.x = sin(Time.get_ticks_msec() / 300.0) * 10.0
+			if _animator == null:
+				_body.rotation_degrees.x = sin(Time.get_ticks_msec() / 300.0) * 10.0
 			if _action_time <= 0.0:
-				_body.rotation_degrees.x = 0
+				if _animator == null:
+					_body.rotation_degrees.x = 0
 				_land_a_fish()
 		State.GO_STORE:
 			var store := _nearest_store()
@@ -222,7 +229,10 @@ func _physics_process(delta: float) -> void:
 		else:
 			_carried = null
 
-	_animate_waddle(delta)
+	if _animator != null:
+		_animator.play(_anim_state())
+	else:
+		_animate_waddle(delta)
 	var status := _status_text()
 	if _label.text != status:
 		_label.text = status
@@ -874,7 +884,8 @@ func _process_play(delta: float) -> void:
 		# No toy? Dance. Spin on the spot near whoever will watch.
 		_apply_gravity_only(delta)
 		rotate_y(delta * 4.0)
-		_body.position.y = absf(sin(_walk_phase)) * 0.3
+		if _animator == null:
+			_body.position.y = absf(sin(_walk_phase)) * 0.3
 		_walk_phase += delta * 10.0
 	if _cheer_time <= 0.0:
 		_cheer_time = 1.5
@@ -1310,6 +1321,22 @@ func state_name() -> String:
 ## creature dashboard). Public wrapper over the internal status word.
 func activity_word() -> String:
 	return _status_word()
+
+
+## The semantic clip a rigged model plays for the current state. Missing clips
+## are ignored, so a model with only walk/idle still animates sensibly.
+func _anim_state() -> String:
+	match state:
+		State.SLEEPING: return "sleep"
+		State.EATING: return "eat"
+		State.GO_TEND, State.TENDING, State.FISHING: return "work"
+		State.WATCH, State.SULK: return "idle"
+		State.CARRYING: return "carry"
+		State.PLAY: return "play"
+		State.GUARD: return "guard"
+		State.CATCH: return "run"
+		State.KICK_HOUSE: return "attack"
+	return "walk" if Vector2(velocity.x, velocity.z).length() > 0.3 else "idle"
 
 
 func morality_word() -> String:

@@ -76,6 +76,7 @@ var _mount: Animal = null
 var _flee_from := Vector3.ZERO
 var _fall_speed := 0.0
 var _spin_ang := Vector3.ZERO   # aftertouch spin axis*rate while thrown (rad/s)
+var _animator: ModelAnimator = null   # non-null only for a rigged custom model
 var _work_sound_time := 0.0
 var _state_time := 0.0
 var _prev_state := State.WANDER
@@ -116,10 +117,11 @@ func _ready() -> void:
 	# villager model, then the primitive body.
 	var custom := ModelBank.instantiate_any([_sex_model(), "villager"])
 	if custom != null:
-		# A custom villager model stands in for the whole body; the working
-		# "bend" animation just tilts it as one piece.
+		# A custom villager model stands in for the whole body. If it's rigged
+		# with clips, an animator drives them and the procedural "bend" yields.
 		_body_mesh = custom
 		_visuals.add_child(_body_mesh)
+		_animator = ModelAnimator.create(custom)
 	else:
 		# Shirt hue is quantised to 12 buckets so a crowd shares a handful of
 		# shared materials (and meshes) the renderer can batch, instead of 25
@@ -148,6 +150,8 @@ func _physics_process(delta: float) -> void:
 	var status := _status_text()
 	if _label.text != status:  # Label3D re-renders on every assignment
 		_label.text = status
+	if _animator != null:
+		_animator.play(_anim_state())
 
 	match state:
 		State.HELD:
@@ -184,7 +188,7 @@ func _physics_process(delta: float) -> void:
 		State.GO_SLEEP:
 			if _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
 				state = State.SLEEPING
-				_body_mesh.rotation_degrees.x = 80
+				_pitch_body(80.0)
 		State.SLEEPING:
 			_apply_gravity_only(delta)
 			# Homeless recovery is miserable: slower sleep, sapped spirits.
@@ -195,10 +199,10 @@ func _physics_process(delta: float) -> void:
 			# Nobody starves to death IN BED: a growling stomach wakes you,
 			# and _decide puts eating before everything else.
 			if hunger > 80.0:
-				_body_mesh.rotation_degrees.x = 0
+				_pitch_body(0.0)
 				_decide()
 			elif energy >= 100.0 or (energy > 60.0 and not GameState.is_night()):
-				_body_mesh.rotation_degrees.x = 0
+				_pitch_body(0.0)
 				_decide()
 		State.GO_FARM:
 			if _target_farm == null or not is_instance_valid(_target_farm):
@@ -543,6 +547,34 @@ func _random_name() -> String:
 
 func sex_word() -> String:
 	return "woman" if is_female else "man"
+
+
+## Animation ----------------------------------------------------------------
+
+## Tilt the body forward to mime work — but only when NOT driven by a rigged
+## model, whose own clips own the pose.
+func _pitch_body(deg: float) -> void:
+	if _animator == null:
+		_body_mesh.rotation_degrees.x = deg
+
+
+## The semantic clip a rigged model should play for the current state. Missing
+## clips are ignored, so a model with only walk/idle still works.
+func _anim_state() -> String:
+	match state:
+		State.FALLING: return "fall"
+		State.HELD: return "idle"
+		State.FLEE: return "run"
+		State.SLEEPING: return "sleep"
+		State.EATING: return "eat"
+		State.WORSHIPPING, State.PREACHING: return "pray"
+		State.PLAY: return "play"
+		State.FARMING, State.CHOPPING, State.QUARRYING, State.BUILDING, \
+		State.BUILDING_FARM, State.BUILDING_EDUBBA, State.BUTCHERING, \
+		State.TAMING, State.HUNTING, State.FISHING, State.TEACH:
+			return "work"
+	# Everything else: walking if moving, otherwise idle.
+	return "walk" if Vector2(velocity.x, velocity.z).length() > 0.3 else "idle"
 
 
 ## Interest reawakens at adulthood and stays high while the body is fed
@@ -1235,7 +1267,7 @@ func scare(from_pos: Vector3) -> void:
 	_flee_from = from_pos
 	_action_time = 4.0
 	happiness = maxf(happiness - 10.0, 0.0)
-	_body_mesh.rotation_degrees.x = 0
+	_pitch_body(0.0)
 
 
 func witness_horror(weight: float) -> void:
@@ -1257,7 +1289,7 @@ func is_worshipping() -> bool:
 func pick_up() -> void:
 	_dismount()
 	state = State.HELD
-	_body_mesh.rotation_degrees.x = 0
+	_pitch_body(0.0)
 	velocity = Vector3.ZERO
 
 
