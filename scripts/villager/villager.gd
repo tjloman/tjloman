@@ -19,10 +19,14 @@ enum State {
 	FLEE, HELD, FALLING,
 }
 
-const NAMES := [
-	"Aldo", "Bess", "Cormac", "Dara", "Edwin", "Fen", "Greta", "Hobb",
-	"Isolde", "Jarek", "Kira", "Lomax", "Mabel", "Nol", "Opal", "Pip",
-	"Quill", "Rosa", "Sten", "Tilda", "Ulf", "Vera", "Wick", "Yara",
+## Names are drawn by sex, so a villager's name reads with its model.
+const FEMALE_NAMES := [
+	"Bess", "Dara", "Greta", "Isolde", "Kira", "Mabel",
+	"Opal", "Rosa", "Tilda", "Vera", "Yara", "Freya",
+]
+const MALE_NAMES := [
+	"Aldo", "Cormac", "Edwin", "Fen", "Hobb", "Jarek",
+	"Lomax", "Nol", "Pip", "Sten", "Ulf", "Wick",
 ]
 
 const WALK_SPEED := 3.0
@@ -96,7 +100,7 @@ func _ready() -> void:
 	add_to_group("pickable")
 	collision_layer = 2
 	collision_mask = 1
-	villager_name = NAMES[randi() % NAMES.size()]
+	villager_name = _random_name()
 
 	var col := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
@@ -108,7 +112,9 @@ func _ready() -> void:
 
 	_visuals = Node3D.new()
 	add_child(_visuals)
-	var custom := ModelBank.instantiate("villager")
+	# Sex-specific art first (villager_female / villager_male), then a generic
+	# villager model, then the primitive body.
+	var custom := ModelBank.instantiate_any([_sex_model(), "villager"])
 	if custom != null:
 		# A custom villager model stands in for the whole body; the working
 		# "bend" animation just tilts it as one piece.
@@ -519,6 +525,24 @@ func _speed_factor() -> float:
 
 func is_adult() -> bool:
 	return age >= ADULT_AGE
+
+
+## Sex framework ------------------------------------------------------------
+## `is_female` (set at birth) already drives courtship, pregnancy, and the
+## "she/he" of the hover. These give it a name and a model to match, so
+## custom male/female art and gendered names slot straight in.
+
+func _sex_model() -> String:
+	return "villager_female" if is_female else "villager_male"
+
+
+func _random_name() -> String:
+	var pool := FEMALE_NAMES if is_female else MALE_NAMES
+	return pool[randi() % pool.size()]
+
+
+func sex_word() -> String:
+	return "woman" if is_female else "man"
 
 
 ## Interest reawakens at adulthood and stays high while the body is fed
@@ -1251,7 +1275,13 @@ func drop(throw_velocity: Vector3, gentle := false) -> void:
 ## Descriptions --------------------------------------------------------------
 
 func hover_text() -> String:
-	var stage := "child" if age < ADULT_AGE else ("elder" if age >= ELDER_AGE else "adult")
+	var stage: String
+	if age < ADULT_AGE:
+		stage = "girl" if is_female else "boy"
+	elif age >= ELDER_AGE:
+		stage = "elder"
+	else:
+		stage = "woman" if is_female else "man"
 	var extra := ", pregnant" if pregnant else ""
 	if home == null:
 		extra += ", HOMELESS"

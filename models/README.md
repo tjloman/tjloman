@@ -8,7 +8,8 @@ Nothing here is required — the game ships and runs with this folder empty.
 
 | File (any extension below) | Replaces |
 |---|---|
-| `villager` | a villager's body |
+| `villager_female` / `villager_male` | a villager's body, by sex (falls back to `villager`) |
+| `villager` | any villager, when no sex-specific model is present |
 | `creature` | your creature |
 | `tree` | any tree (or `tree_forest`, `tree_grassland`, `tree_savanna`, `tree_wetland` for per-biome art) |
 | `bush` | a forage bush |
