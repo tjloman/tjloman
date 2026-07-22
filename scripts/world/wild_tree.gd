@@ -40,6 +40,7 @@ var _burn_time := 0.0
 var _fire_tick := 0.0
 var _fire_visual: Node3D = null
 var _spin_ang := Vector3.ZERO   # aftertouch spin axis*rate while airborne (rad/s)
+var _plant_yaw := 0.0           # the tree's random facing, restored after a throw
 var _grow_accum := randf() * 0.4   # de-sync the growth tick across trees
 
 
@@ -91,6 +92,12 @@ func _ready() -> void:
 		else:
 			# Conifer cone (top radius 0).
 			add_child(Util.lite_cylinder(1.6, 2.8, leaf_color, Vector3(0, h + 1.2, 0), 0.0))
+
+	# A random facing so a stand doesn't look stamped from one mould. Seeded,
+	# so the same tree faces the same way every time the world loads; kept in
+	# _plant_yaw so an uprooted tree replants at its own angle, not due north.
+	_plant_yaw = rng.randf() * TAU
+	rotation.y = _plant_yaw
 
 	_apply_growth_scale()
 
@@ -220,7 +227,7 @@ func set_flight_spin(angular: Vector3) -> void:
 ## Touchdown. Storehouse first; then either a rough landing (splinters
 ## into lumber, most of it lost — a wasteful god) or a fresh planting.
 func _land(impact_speed: float) -> void:
-	rotation = Vector3.ZERO
+	rotation = Vector3(0.0, _plant_yaw, 0.0)  # upright again, at its own facing
 	for s in get_tree().get_nodes_in_group("stores"):
 		var store := s as FoodStore
 		if is_instance_valid(store) \

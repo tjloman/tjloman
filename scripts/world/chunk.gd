@@ -181,6 +181,7 @@ func _scatter_bushes(rng: RandomNumberGenerator, count: int) -> void:
 		var bush := ForageBush.new()
 		bush.berries = rng.randi_range(1, ForageBush.MAX_BERRIES)
 		_place(bush, spot, 0.1)
+		bush.rotation.y = rng.randf() * TAU  # a random facing, not all alike
 		Util.apply_lod(bush, Quality.clutter_distance())
 
 
@@ -191,6 +192,7 @@ func _scatter_deposits(rng: RandomNumberGenerator, count: int) -> void:
 			continue
 		var rock := RockDeposit.new()
 		_place(rock, spot, 0.2)
+		rock.rotation.y = rng.randf() * TAU  # a random facing, not all alike
 		Util.apply_lod(rock, Quality.clutter_distance())
 
 
