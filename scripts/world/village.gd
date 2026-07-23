@@ -18,6 +18,7 @@ const MIN_INFLUENCE := 14.0
 const MAX_INFLUENCE := 65.0
 const MAX_TAMED := 8
 const PRAYER_PER_VILLAGE := 120.0   # each convert widens your prayer reservoir
+const FARM_HALF := 3.9              # a field's clearance radius (no overlaps)
 
 ## Hand-placed founding homes, clear of the farm (E), store (NW), and pen (S).
 const STARTER_HOUSE_SPOTS: Array[Vector3] = [
@@ -189,22 +190,54 @@ func pick_farm(from: Vector3, by: Villager) -> Farm:
 	return best
 
 
-## A dry, field-sized position near a preferred local offset: snap to dry
-## land, and if that offset is hopeless (a lake), ring the village's own
-## (dry) centre until a dry field footprint is found.
+## A dry, field-sized position near a preferred local offset that also DOESN'T
+## overlap any existing structure. Snap to dry land; if the preferred spot is
+## wet or crowded, ring the village's (dry) centre for a clear, dry footprint.
 func _farm_position(preferred: Vector3) -> Vector3:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	var grounded := _grounded(preferred, 3.6)
-	if world == null or not world.is_underwater(
-			global_position.x + grounded.x, global_position.z + grounded.z):
+	if world == null or _farm_spot_ok(world, grounded):
 		return grounded
-	for i in 16:
-		var a := TAU * i / 16.0
-		var cand := _grounded(Vector3(cos(a), 0, sin(a)) * randf_range(7.0, 12.0), 3.6)
-		if not world.is_underwater(
-				global_position.x + cand.x, global_position.z + cand.z):
+	for i in 24:
+		var a := TAU * i / 24.0
+		var cand := _grounded(Vector3(cos(a), 0, sin(a)) * randf_range(7.0, 16.0), 3.6)
+		if _farm_spot_ok(world, cand):
 			return cand
 	return grounded  # give up gracefully; at least it sits on the ground
+
+
+func _farm_spot_ok(world: WorldGen, local: Vector3) -> bool:
+	var wx := global_position.x + local.x
+	var wz := global_position.z + local.z
+	return not world.is_underwater(wx, wz) and _spot_clear(wx, wz, FARM_HALF)
+
+
+## True if a footprint of half-width `half` at a WORLD point clears every
+## structure this village has raised — so nothing is ever built through
+## anything else.
+func _spot_clear(wx: float, wz: float, half: float) -> bool:
+	var p := Vector2(wx, wz)
+	if totem != null and p.distance_to(_flat(totem.global_position)) < 2.5 + half:
+		return false
+	if store != null and is_instance_valid(store) \
+			and p.distance_to(_flat(store.global_position)) < FoodStore.PLATFORM_RADIUS + 1.0 + half:
+		return false
+	if edubba != null and is_instance_valid(edubba) \
+			and p.distance_to(_flat(edubba.global_position)) < 3.2 + half:
+		return false
+	if p.distance_to(_flat(pen_position())) < 5.5 + half:
+		return false
+	for h in houses:
+		if is_instance_valid(h) and p.distance_to(_flat(h.global_position)) < 3.2 + half:
+			return false
+	for f in farms:
+		if is_instance_valid(f) and p.distance_to(_flat(f.global_position)) < FARM_HALF + half:
+			return false
+	return true
+
+
+func _flat(v: Vector3) -> Vector2:
+	return Vector2(v.x, v.z)
 
 
 ## Wants another field? One per ~7 mouths, capped so villages stay villages.

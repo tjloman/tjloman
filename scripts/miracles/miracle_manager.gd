@@ -191,10 +191,18 @@ func _cast_rain(pos: Vector3, potency := 1.0) -> void:
 	cloud.add_child(drops)
 	add_child(cloud)
 
+	var bless := 12.0 * potency
 	for f in get_tree().get_nodes_in_group("farms"):
 		var farm := f as Farm
 		if farm.global_position.distance_to(pos) < reach:
-			farm.water(12.0 * potency)
+			farm.water(bless)
+	# Rain also quickens the wild larder: trees and berry bushes it falls on.
+	for grp in ["trees", "forage"]:
+		for n in get_tree().get_nodes_in_group(grp):
+			var plant := n as Node3D
+			if is_instance_valid(plant) and plant.has_method("rain") \
+					and plant.global_position.distance_to(pos) < reach:
+				plant.call("rain", bless)
 
 	# Rain is the counter to fire: it douses every blaze it falls on —
 	# trees, and burning villagers and beasts alike.

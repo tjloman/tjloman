@@ -4,13 +4,15 @@ extends StaticBody3D
 ## herbivores browse it between trips to water. Berries regrow with time,
 ## so the land itself is a slow, renewable larder.
 
-const MAX_BERRIES := 4
+const MAX_BERRIES := 10
 const REGROW_SECONDS := 45.0
+const RAIN_REGROW := 0.45   # rain shortens the regrow wait to this fraction
 
 var berries := 3
 
 var _berry_meshes: Array[MeshInstance3D] = []
 var _regrow_time := REGROW_SECONDS
+var _rain_time := 0.0
 
 
 func _ready() -> void:
@@ -47,24 +49,38 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if berries >= MAX_BERRIES:
 		return
-	_regrow_time -= delta
+	# Berries ripen over time — faster in the rain (the land's slow larder,
+	# quickened by a downpour).
+	var step := delta
+	if _rain_time > 0.0:
+		_rain_time -= delta
+		step = delta / RAIN_REGROW
+	_regrow_time -= step
 	if _regrow_time <= 0.0:
 		_regrow_time = REGROW_SECONDS
 		berries += 1
 		_update_berries()
 
 
+## A rain miracle passing over quickens the ripening for a while.
+func rain(duration: float) -> void:
+	_rain_time = maxf(_rain_time, duration)
+
+
 func has_berries() -> bool:
 	return berries > 0
 
 
-## One handful picked (by hand, hoof, or beak). False if bare.
+## One handful picked (by hand, hoof, or beak). False if bare. A bush picked
+## to nothing is spent — it withers away (berries range 1..10; zero is death).
 func take_berry() -> bool:
 	if berries <= 0:
 		return false
 	berries -= 1
 	_regrow_time = REGROW_SECONDS
 	_update_berries()
+	if berries <= 0:
+		queue_free()
 	return true
 
 

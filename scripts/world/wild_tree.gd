@@ -12,6 +12,7 @@ const MAX_LUMBER := 10.0
 ## saplings. lumber advances by GROWTH_BASE / (1 + lumber * GROWTH_TAPER).
 const GROWTH_BASE := 0.06
 const GROWTH_TAPER := 0.7
+const RAIN_GROWTH := 1.6    # a rain miracle speeds growth while it lasts
 const SAPLING_SCALE := 0.22
 const REPLANT_PERIOD := 50.0
 const REPLANT_CROWDING := 4     # no seeding when this many trees stand close
@@ -42,6 +43,7 @@ var _fire_visual: Node3D = null
 var _spin_ang := Vector3.ZERO   # aftertouch spin axis*rate while airborne (rad/s)
 var _plant_yaw := 0.0           # the tree's random facing, restored after a throw
 var _grow_accum := randf() * 0.4   # de-sync the growth tick across trees
+var _rain_time := 0.0              # seconds of lingering rain-blessing
 
 
 func _ready() -> void:
@@ -123,8 +125,12 @@ func _process(delta: float) -> void:
 		return
 	var d := _grow_accum
 	_grow_accum = 0.0
+	if _rain_time > 0.0:
+		_rain_time -= d
 	if lumber < MAX_LUMBER:
 		var step := GROWTH_BASE / (1.0 + lumber * GROWTH_TAPER)
+		if _rain_time > 0.0:
+			step *= RAIN_GROWTH  # a downpour quickens the timber
 		# A miracle-sown sapling races to its quickened size, then slows.
 		if has_meta("quicken_to"):
 			if lumber < float(get_meta("quicken_to")):
@@ -139,6 +145,11 @@ func _process(delta: float) -> void:
 		if _replant_time <= 0.0:
 			_replant_time = REPLANT_PERIOD * randf_range(0.8, 1.6)
 			_try_replant()
+
+
+## A passing rain miracle blesses the tree with faster growth for a while.
+func rain(duration: float) -> void:
+	_rain_time = maxf(_rain_time, duration)
 
 
 ## The whole tree scales with its stored lumber: 1 = sapling, 30 = giant.
