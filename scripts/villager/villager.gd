@@ -16,7 +16,7 @@ enum State {
 	GO_PREACH, PREACHING, GO_FEED, GO_BUILD_FARM, BUILDING_FARM,
 	GO_FISH, FISHING, COURT, FOLLOW_MOM, AT_SCHOOL, TEACH,
 	GO_BUILD_EDUBBA, BUILDING_EDUBBA,
-	FLEE, HELD, FALLING,
+	FLEE, HELD, FALLING, DYING,
 }
 
 ## Names are drawn by sex, so a villager's name reads with its model.
@@ -40,6 +40,12 @@ const PREGNANCY_YEARS := 0.75  # nine months
 const STARVING_HUNGER := 90.0
 const TAME_MORALITY := 40.0    # benevolent and saintly souls only
 
+## Hazards: fire and deep water each drain 100 health to 0 in ten seconds.
+const HAZARD_RATE := 10.0
+const DROWN_DEPTH := 1.1        # water this deep over the feet drowns them
+const DYING_SECONDS := 10.0     # the window to be healed or lifted back to life
+const REVIVE_HEALTH := 10.0     # what a rescue restores them to
+
 var village: Village
 var home: House = null
 var villager_name := "Villager"
@@ -59,6 +65,7 @@ var energy := 80.0
 var social := 70.0
 var happiness := 60.0
 var health := 100.0
+var burning := false   # ablaze: drains health until doused or dead
 
 ## Personal karma: -100 wicked .. +100 saintly.
 var morality := randf_range(10.0, 40.0)
@@ -75,6 +82,8 @@ var _build_site: House = null
 var _mount: Animal = null
 var _flee_from := Vector3.ZERO
 var _fall_speed := 0.0
+var _burn_visual: Node3D = null
+var _dying_time := 0.0
 var _spin_ang := Vector3.ZERO   # aftertouch spin axis*rate while thrown (rad/s)
 var _animator: ModelAnimator = null   # non-null only for a rigged custom model
 var _work_sound_time := 0.0
@@ -144,9 +153,15 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# Dying suspends the whole normal life — they lie there, out of the fight,
+	# until healed/lifted back or the window closes.
+	if state == State.DYING:
+		_process_dying(delta)
+		return
 	_tick_lifecycle(delta)
 	_tick_needs(delta)
 	_tick_watchdogs(delta)
+	_tick_hazards(delta)
 	var status := _status_text()
 	if _label.text != status:  # Label3D re-renders on every assignment
 		_label.text = status
@@ -562,6 +577,7 @@ func _pitch_body(deg: float) -> void:
 ## clips are ignored, so a model with only walk/idle still works.
 func _anim_state() -> String:
 	match state:
+		State.DYING: return "dying"
 		State.FALLING: return "fall"
 		State.HELD: return "idle"
 		State.FLEE: return "run"
@@ -1162,13 +1178,113 @@ func _world() -> WorldGen:
 
 ## Harm, fear, death ---------------------------------------------------------
 
-func take_damage(amount: float, by_god := false) -> void:
+## Hazards: fire & drowning ---------------------------------------------------
+
+## Fire and deep water drain health every frame; either brings on the DYING
+## state at zero rather than instant death, leaving a window for rescue.
+func _tick_hazards(delta: float) -> void:
+	if state == State.HELD or state == State.FALLING:
+		return
+	var world := _world()
+	if world != null:
+		var depth := WorldGen.WATER_LEVEL - world.height_at(global_position.x, global_position.z)
+		if depth > DROWN_DEPTH and global_position.y < WorldGen.WATER_LEVEL + 0.4:
+			if burning:
+				extinguish()  # water douses the flames, but the drowning goes on
+			health -= HAZARD_RATE * delta
+			if health <= 0.0:
+				enter_dying()
+				return
+	if burning:
+		health -= HAZARD_RATE * delta
+		_flicker_flame()
+		if health <= 0.0:
+			enter_dying()
+
+
+## The 10-second twilight: prone and helpless, waiting for a healing miracle
+## or a merciful hand/creature — or the end.
+func _process_dying(delta: float) -> void:
+	_apply_gravity_only(delta)
+	if _animator != null:
+		_animator.play("dying")
+	elif _visuals != null:
+		_visuals.rotation_degrees.x = 88.0  # fallen prone
+	if burning:
+		_flicker_flame()
+	_dying_time -= delta
+	if _dying_time <= 0.0:
+		die(false)
+
+
+func enter_dying() -> void:
+	if state == State.DYING:
+		return
+	_dismount()
+	state = State.DYING
+	_dying_time = DYING_SECONDS
+	health = 0.0
+	velocity = Vector3.ZERO
+	if village != null and village.is_player_home:
+		GameState.announce("%s is dying! A heal — or a merciful hand — could still save them."
+			% villager_name)
+
+
+## Back from the brink at a sliver of life. From heal miracles and from a
+## kindly hand/creature lifting them up.
+func rescue() -> void:
+	extinguish()
+	health = maxf(health, REVIVE_HEALTH)
+	if state == State.DYING:
+		state = State.WANDER
+		_dying_time = 0.0
+		if _animator == null and _visuals != null:
+			_visuals.rotation = Vector3.ZERO
+		happiness = maxf(happiness, 30.0)
+		if village != null and village.is_player_home:
+			GameState.announce("%s was pulled back from death's door." % villager_name)
+		_decide()
+
+
+func is_dying() -> bool:
+	return state == State.DYING
+
+
+func ignite() -> void:
+	if burning or state == State.HELD or state == State.DYING:
+		return
+	var world := _world()
+	if world != null and world.is_underwater(global_position.x, global_position.z):
+		return  # can't catch fire soaking wet
+	burning = true
+	_burn_visual = Util.small_flame(1.4)
+	_visuals.add_child(_burn_visual)
+
+
+func extinguish() -> void:
+	burning = false
+	if is_instance_valid(_burn_visual):
+		_burn_visual.queue_free()
+	_burn_visual = null
+
+
+func _flicker_flame() -> void:
+	if is_instance_valid(_burn_visual):
+		_burn_visual.scale.y = 1.0 + sin(Time.get_ticks_msec() / 60.0) * 0.2
+
+
+func take_damage(amount: float, by_god := false, instant := false) -> void:
+	if state == State.DYING:
+		return
 	health -= amount
 	happiness = maxf(happiness - 10.0, 0.0)
 	if health <= 0.0:
 		if by_god:
 			village.change_belief(3.0)
-		die(false)
+		if instant:
+			die(false)
+		else:
+			enter_dying()
 
 
 func die(of_old_age: bool) -> void:
@@ -1208,6 +1324,8 @@ func _land() -> void:
 		take_damage((_fall_speed - 14.0) * 5.0, true)
 	if not is_instance_valid(self) or is_queued_for_deletion():
 		return
+	if state == State.DYING:
+		return  # a killing toss — they lie dying, don't snap into a flee
 	scare(global_position + Vector3(randf() - 0.5, 0, randf() - 0.5))
 	GameState.announce("%s survived a divine toss. Mostly." % villager_name)
 
@@ -1260,7 +1378,7 @@ func _defect_to(host: Village) -> void:
 
 
 func scare(from_pos: Vector3) -> void:
-	if state == State.HELD:
+	if state == State.HELD or state == State.DYING:
 		return
 	_dismount()
 	state = State.FLEE
@@ -1275,6 +1393,10 @@ func witness_horror(weight: float) -> void:
 
 
 func receive_heal() -> void:
+	extinguish()
+	if state == State.DYING:
+		rescue()  # healed from the brink -> back at a sliver of life
+		return
 	health = 100.0
 	energy = minf(energy + 40.0, 100.0)
 	happiness = minf(happiness + 15.0, 100.0)
@@ -1366,6 +1488,7 @@ func _status_word() -> String:
 
 func _status_text() -> String:
 	match state:
+		State.DYING: return "SAVE ME!"
 		State.SLEEPING: return "zzz"
 		State.EATING: return "nom"
 		State.FARMING: return "farm"

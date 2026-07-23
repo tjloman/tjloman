@@ -18,7 +18,7 @@ const BLEND := 0.15
 const LOOPING := {
 	"idle": true, "walk": true, "run": true, "sleep": true, "swim": true,
 	"graze": true, "carry": true, "fly": true, "pray": true, "guard": true,
-	"work": true, "fall": true,
+	"work": true, "fall": true, "dying": true,
 }
 
 ## Clip-name aliases per semantic state, tried in order. The last entries give
@@ -39,6 +39,7 @@ const ALIASES := {
 	"graze": ["graze", "eat", "feed"],
 	"guard": ["guard", "alert", "watch"],
 	"drink": ["drink", "graze", "eat"],
+	"dying": ["dying", "die", "collapse", "faint", "down", "hurt"],
 }
 
 var _player: AnimationPlayer

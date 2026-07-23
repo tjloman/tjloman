@@ -90,9 +90,10 @@ func _explode() -> void:
 		var d := villager.global_position.distance_to(pos)
 		if d < KILL_RADIUS:
 			GameState.shift_alignment(KARMA_PER_KILL)
-			villager.take_damage(999.0, true)
+			villager.take_damage(999.0, true, true)  # point-blank is instant
 		elif d < BLAST_RADIUS:
 			villager.take_damage(45.0, true)
+			villager.ignite()  # the blast sets them alight
 			villager.scare(pos)
 
 	for a in get_tree().get_nodes_in_group("animals"):
@@ -101,6 +102,8 @@ func _explode() -> void:
 		if d < KILL_RADIUS:
 			animal.die()
 		elif d < BLAST_RADIUS * 2.0:
+			if d < BLAST_RADIUS:
+				animal.ignite()
 			animal.scare(pos)
 
 	for h in get_tree().get_nodes_in_group("houses"):

@@ -196,12 +196,19 @@ func _cast_rain(pos: Vector3, potency := 1.0) -> void:
 		if farm.global_position.distance_to(pos) < reach:
 			farm.water(12.0 * potency)
 
-	# Rain is the counter to fire: it douses every blaze it falls on.
+	# Rain is the counter to fire: it douses every blaze it falls on —
+	# trees, and burning villagers and beasts alike.
 	for t in get_tree().get_nodes_in_group("trees"):
 		var tree := t as WildTree
 		if is_instance_valid(tree) and tree.burning \
 				and tree.global_position.distance_to(pos) < reach:
 			tree.extinguish()
+	for grp in ["villagers", "animals"]:
+		for n in get_tree().get_nodes_in_group(grp):
+			var body := n as Node3D
+			if is_instance_valid(body) and body.get("burning") \
+					and body.global_position.distance_to(pos) < reach:
+				body.call("extinguish")
 
 	get_tree().create_timer(12.0).timeout.connect(cloud.queue_free)
 
@@ -237,14 +244,18 @@ func _cast_lightning(pos: Vector3) -> void:
 		var dist := villager.global_position.distance_to(pos)
 		if dist < LIGHTNING_KILL_RADIUS:
 			GameState.shift_alignment(-4.0)  # on top of the cast itself
-			villager.take_damage(999.0, true)
+			villager.take_damage(999.0, true, true)  # a direct bolt is instant
 		elif dist < LIGHTNING_BURN_RADIUS:
 			villager.take_damage(40.0, true)
+			villager.ignite()  # the near-miss sets them ablaze
 
 	for a in get_tree().get_nodes_in_group("animals"):
 		var animal := a as Animal
-		if animal.global_position.distance_to(pos) < LIGHTNING_KILL_RADIUS:
+		var adist := animal.global_position.distance_to(pos)
+		if adist < LIGHTNING_KILL_RADIUS:
 			animal.die()  # drops cooked-ish meat where it stood
+		elif adist < LIGHTNING_BURN_RADIUS:
+			animal.ignite()
 
 	# A bolt sets the nearest trees alight — the seed of a spreading fire.
 	ignite_trees_near(pos, 5.0)

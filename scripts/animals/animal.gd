@@ -59,6 +59,7 @@ const SPECIES := {
 var species := "sheep"
 var spec: Dictionary
 var health := 30.0
+var burning := false           # ablaze: drains health until doused or dead
 var tamed_by: Village = null
 var night_spawned := false     # wolves of the wolf-raid despawn at dawn
 
@@ -83,6 +84,7 @@ var _fall_speed := 0.0
 var _gentle_drop := false
 var _spin_ang := Vector3.ZERO   # aftertouch spin axis*rate while thrown (rad/s)
 var _animator: ModelAnimator = null   # non-null only for a rigged custom model
+var _burn_visual: Node3D = null
 var _rider: Node3D = null
 
 
@@ -163,6 +165,8 @@ func _physics_process(delta: float) -> void:
 
 	if _animator != null:
 		_animator.play(_anim_state())
+
+	_tick_hazards(delta)
 
 	# Watchdogs: no chase or trek lasts forever, and nothing falls out of
 	# the world when its chunk streams away.
@@ -502,6 +506,48 @@ func _ambient_sound(delta: float) -> void:
 
 
 ## Interactions ---------------------------------------------------------------
+
+## Hazards: beasts drown in deep water and burn — both drain 10 health/sec
+## (100 -> 0 in ten seconds) and, unlike villagers, simply kill.
+func _tick_hazards(delta: float) -> void:
+	if state == State.HELD or state == State.FALLING:
+		return
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world != null:
+		var depth := WorldGen.WATER_LEVEL - world.height_at(global_position.x, global_position.z)
+		if depth > 1.0 and global_position.y < WorldGen.WATER_LEVEL + 0.4:
+			if burning:
+				extinguish()
+			health -= 10.0 * delta
+			if health <= 0.0:
+				die()
+				return
+	if burning:
+		health -= 10.0 * delta
+		if is_instance_valid(_burn_visual):
+			_burn_visual.scale.y = 1.0 + sin(Time.get_ticks_msec() / 60.0) * 0.2
+		if health <= 0.0:
+			die()
+
+
+func ignite() -> void:
+	if burning or state == State.HELD:
+		return
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world != null and world.is_underwater(global_position.x, global_position.z):
+		return
+	burning = true
+	var body: Vector3 = spec["body"]
+	_burn_visual = Util.small_flame(body.y + spec["leg"])
+	add_child(_burn_visual)
+
+
+func extinguish() -> void:
+	burning = false
+	if is_instance_valid(_burn_visual):
+		_burn_visual.queue_free()
+	_burn_visual = null
+
 
 func take_damage(amount: float) -> void:
 	health -= amount

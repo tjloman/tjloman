@@ -241,6 +241,19 @@ static func blossom_material() -> StandardMaterial3D:
 	return m
 
 
+## A small clinging flame for a burning creature/villager/animal: a few
+## emissive cones, no light (so a whole village ablaze stays cheap on mobile).
+## `top` is roughly how tall the body is.
+static func small_flame(top := 1.4) -> Node3D:
+	var fire := Node3D.new()
+	for i in 3:
+		fire.add_child(lite_cylinder(
+			0.16, 0.55, Color(1.0, 0.5, 0.12),
+			Vector3(randf_range(-0.14, 0.14), top * 0.35 + i * 0.22, randf_range(-0.14, 0.14)),
+			0.0, 6, true))
+	return fire
+
+
 ## Distance culling: every renderable under `root` stops drawing past
 ## `end_dist` metres (with a soft margin). Distance fog hides the cutoff.
 ## Physics and gameplay are untouched — only the GPU work goes away.

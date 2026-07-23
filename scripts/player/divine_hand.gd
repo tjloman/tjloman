@@ -289,6 +289,11 @@ func _on_grab() -> void:
 		return
 	if is_instance_valid(hover_target) and hover_target.is_in_group("pickable"):
 		held_body = hover_target
+		# Lifting a dying villager with a clean conscience (neutral or better)
+		# cradles them back to a sliver of life.
+		if held_body is Villager and (held_body as Villager).is_dying() \
+				and GameState.alignment >= 0.0:
+			(held_body as Villager).rescue()
 		state = HandState.HOLDING
 		if held_body is RigidBody3D:
 			(held_body as RigidBody3D).freeze = true

@@ -335,6 +335,9 @@ func _harm_nearby() -> void:
 					node.call("scare", global_position)
 				if node.has_method("take_damage"):
 					node.call("take_damage", 4.0)
+				# Standing in a blaze, they catch fire (villagers/animals).
+				if node.has_method("ignite") and randf() < 0.5:
+					node.call("ignite")
 
 
 ## Spread only to close neighbours, by chance — so a blaze runs through a
