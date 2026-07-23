@@ -116,7 +116,7 @@ func _scatter() -> void:
 			_scatter_animals(rng, {"deer": 0.9, "bear": 0.12, "wolf": 0.12, "tiger": 0.04})
 		"grassland":
 			_scatter_trees(rng, rng.randi_range(1, 3), "grassland")
-			_scatter_flowers(rng, rng.randi_range(3, 6))
+			_scatter_flowers(rng, rng.randi_range(6, 12))
 			_scatter_deposits(rng, rng.randi_range(0, 1))
 			_scatter_bushes(rng, rng.randi_range(2, 3))
 			_scatter_animals(rng, {"sheep": 0.8, "horse": 0.25, "chicken": 0.3,
@@ -202,11 +202,18 @@ func _scatter_deposits(rng: RandomNumberGenerator, count: int) -> void:
 ## version was 7 high-poly nodes EACH; a meadow of them was a big slice of
 ## the resource burst that backgrounded budget phones as chunks streamed in.
 func _scatter_flowers(rng: RandomNumberGenerator, count: int) -> void:
-	# A custom flower model (res://models/flower.glb) replaces the billboard: it
-	# brings its own textured material, so we skip per-instance colour tinting
-	# and vary the bloom by yaw and scale instead. Both paths are one MultiMesh
-	# — one draw call for the whole chunk's meadow.
+	# A custom flower model (res://models/flower.glb) replaces the billboard.
+	# Either way it's ONE MultiMesh (a single draw call for the chunk's meadow),
+	# and every bloom is a different hue, turned a different way, and sized a
+	# little differently. For the custom mesh we clone its material with
+	# vertex-colour tinting ON, so each instance's hue multiplies its texture.
 	var custom := ModelBank.mesh_for("flower")
+	var custom_mat: StandardMaterial3D = null
+	if custom != null:
+		var base := custom.surface_get_material(0)
+		if base is StandardMaterial3D:
+			custom_mat = (base as StandardMaterial3D).duplicate()
+			custom_mat.vertex_color_use_as_albedo = true
 	var xforms: Array[Transform3D] = []
 	var colors: Array[Color] = []
 	for i in count:
@@ -214,26 +221,31 @@ func _scatter_flowers(rng: RandomNumberGenerator, count: int) -> void:
 		if not _spot_ok(spot):
 			continue
 		spot.y = world.height_at(position.x + spot.x, position.z + spot.z) + 0.02
+		# Random yaw always; the 3D model also gets a natural lean and a size.
 		var basis := Basis(Vector3.UP, rng.randf() * TAU)
 		if custom != null:
-			basis = basis.scaled(Vector3.ONE * rng.randf_range(1.3, 1.9))  # ~match the old bloom
+			var lean_ang := rng.randf() * TAU
+			var lean_axis := Vector3(cos(lean_ang), 0.0, sin(lean_ang))
+			basis = Basis(lean_axis, deg_to_rad(rng.randf_range(0.0, 18.0))) * basis
+			basis = basis.scaled(Vector3.ONE * rng.randf_range(1.2, 2.0))
 		xforms.append(Transform3D(basis, spot))
-		colors.append(Color.from_hsv(rng.randf(), 0.6, 0.95))
+		colors.append(Color.from_hsv(rng.randf(), rng.randf_range(0.5, 0.85), 0.98))
 	if xforms.is_empty():
 		return
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = custom == null  # the model is already coloured by its texture
+	mm.use_colors = true
 	mm.mesh = custom if custom != null else Util.blossom_mesh()
 	mm.instance_count = xforms.size()
 	for i in xforms.size():
 		mm.set_instance_transform(i, xforms[i])
-		if custom == null:
-			mm.set_instance_color(i, colors[i])
+		mm.set_instance_color(i, colors[i])
 	var mmi := MultiMeshInstance3D.new()
 	mmi.multimesh = mm
-	if custom == null:
-		mmi.material_override = Util.blossom_material()  # billboard needs its shared mat
+	# Custom: the cloned, vertex-tinted texture material. Billboard: its shared
+	# white material. (If the model carried no readable material, its own one is
+	# used as-is — textured, just untinted.)
+	mmi.material_override = custom_mat if custom != null else Util.blossom_material()
 	Util.apply_lod(mmi, Quality.clutter_distance())
 	add_child(mmi)
 
