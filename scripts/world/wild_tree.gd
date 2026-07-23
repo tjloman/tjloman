@@ -356,6 +356,13 @@ func _spread() -> void:
 				and bush.global_position.distance_to(global_position) < SPREAD_RADIUS * 0.7:
 			if randf() < SPREAD_CHANCE * 0.5:
 				bush.queue_free()  # kindling gone
+	# A nearby field catches the drifting embers.
+	for f in get_tree().get_nodes_in_group("farms"):
+		var farm := f as Farm
+		if is_instance_valid(farm) and not farm.burning \
+				and farm.global_position.distance_to(global_position) < SPREAD_RADIUS:
+			if randf() < SPREAD_CHANCE * 0.5:
+				farm.ignite()
 
 
 ## Called by a lumberjack when the chop completes. Timber!

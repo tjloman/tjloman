@@ -9,15 +9,23 @@ extends Node3D
 
 const BASE_GROWTH_PER_SEC := 0.008
 const TEND_BONUS_PER_SEC := 0.03
-const MAX_TENDERS := 3      # extra hands beyond this add nothing
 const RAIN_MULTIPLIER := 4.0
 const HARVEST_YIELD := 7
 const HALF_X := 3.5
 const HALF_Z := 2.5
+const BURN_SECONDS := 60.0   # a field ablaze is ash in a minute
 
 var growth := 0.4  # 0..1; harvestable at >= 0.8
+var burning := false
+## The single villager who has laid claim to this field — reserved by WANTING
+## to work it, so no two farmers pile onto the same rows.
+var claimed_by: Villager = null
+
 var _rain_time_left := 0.0
-var _tenders := 0
+var _tended := false
+var _workable := true
+var _burn_time := 0.0
+var _fire_visual: Node3D = null
 var _crop_meshes: Array[MeshInstance3D] = []
 
 
@@ -25,6 +33,9 @@ func _ready() -> void:
 	add_to_group("farms")
 	set_meta("hover_name", "Farm")
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	# A field whose ground is underwater can never be worked — flag it so
+	# farmers never trek out to drown tending it.
+	_workable = world == null or not world.is_underwater(global_position.x, global_position.z)
 
 	_build_soil(world)
 
@@ -82,14 +93,18 @@ func _build_soil(world: WorldGen) -> void:
 
 
 func _process(delta: float) -> void:
+	if burning:
+		_burn(delta)
+		return
 	var rate := BASE_GROWTH_PER_SEC
 	if _rain_time_left > 0.0:
 		_rain_time_left -= delta
 		rate *= RAIN_MULTIPLIER
-	# Many hands make crops grow: each tender adds their bonus, up to a cap.
-	rate += TEND_BONUS_PER_SEC * mini(_tenders, MAX_TENDERS)
+	# One pair of hands works a field (reserved by claim); their care speeds it.
+	if _tended:
+		rate += TEND_BONUS_PER_SEC
 	growth = clampf(growth + rate * delta, 0.0, 1.0)
-	_tenders = 0  # workers re-assert this every frame they work
+	_tended = false  # the worker re-asserts this every frame they tend
 
 	# Crops rise straight out of the soil: bottom pinned to the ground it
 	# was planted on, growing taller with maturity.
@@ -100,7 +115,70 @@ func _process(delta: float) -> void:
 
 
 func tend() -> void:
-	_tenders += 1
+	_tended = true
+
+
+## Reservation ----------------------------------------------------------------
+
+func claim(who: Villager) -> void:
+	claimed_by = who
+
+
+func release(who: Villager) -> void:
+	if claimed_by == who:
+		claimed_by = null
+
+
+## Free for this villager to work? (Unclaimed, or already theirs.)
+func is_free_for(who: Villager) -> bool:
+	return claimed_by == null or not is_instance_valid(claimed_by) or claimed_by == who
+
+
+func is_workable() -> bool:
+	return _workable and not burning
+
+
+## Fire -----------------------------------------------------------------------
+
+func ignite() -> void:
+	if burning:
+		return
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world != null and world.is_underwater(global_position.x, global_position.z):
+		return
+	burning = true
+	_burn_time = BURN_SECONDS
+	_build_fire(world)
+
+
+func extinguish() -> void:
+	burning = false
+	if is_instance_valid(_fire_visual):
+		_fire_visual.queue_free()
+	_fire_visual = null
+
+
+func _burn(delta: float) -> void:
+	_burn_time -= delta
+	growth = maxf(growth - 0.03 * delta, 0.0)  # the crop chars away
+	var height := 0.15 + growth * 1.1
+	for crop in _crop_meshes:
+		crop.scale.y = height
+		crop.position.y = crop.get_meta("base_y") + height * 0.5
+	if is_instance_valid(_fire_visual):
+		_fire_visual.scale.y = 1.0 + sin(Time.get_ticks_msec() / 70.0) * 0.15
+	if _burn_time <= 0.0:
+		queue_free()  # the field is ash; village.pick_farm prunes freed farms
+
+
+func _build_fire(world: WorldGen) -> void:
+	_fire_visual = Node3D.new()
+	for spot in [Vector3(-2.2, 0, -1.2), Vector3(2.2, 0, 1.2), Vector3(0, 0, 0),
+			Vector3(-1.6, 0, 1.3), Vector3(1.6, 0, -1.3)]:
+		var flame := Util.small_flame(0.5)
+		flame.position = Vector3(spot.x, _local_ground(world, spot.x, spot.z) + 0.1, spot.z)
+		_fire_visual.add_child(flame)
+	add_child(_fire_visual)
 
 
 func is_harvestable() -> bool:
@@ -119,4 +197,6 @@ func water(duration: float) -> void:
 
 
 func hover_text() -> String:
+	if burning:
+		return "Farm — ABLAZE (%ds left)" % int(_burn_time)
 	return "Farm — %d%% grown%s" % [int(growth * 100), " (rain-blessed)" if _rain_time_left > 0 else ""]

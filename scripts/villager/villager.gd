@@ -221,16 +221,17 @@ func _physics_process(delta: float) -> void:
 				_decide()
 		State.GO_FARM:
 			if _target_farm == null or not is_instance_valid(_target_farm):
-				_target_farm = null
 				_decide()
+			elif _state_time > 10.0:
+				_decide()  # can't reach the field — give it up (frees the claim)
 			elif _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
 				state = State.FARMING
 				_action_time = 3.0
 		State.FARMING:
 			_apply_gravity_only(delta)
 			_action_time -= delta
-			if _target_farm == null or not is_instance_valid(_target_farm):
-				_target_farm = null
+			if _target_farm == null or not is_instance_valid(_target_farm) \
+					or not _target_farm.is_workable():
 				_decide()
 				return
 			_target_farm.tend()
@@ -241,7 +242,6 @@ func _physics_process(delta: float) -> void:
 					village.store.add(FoodItem.FoodType.PLANT, _target_farm.harvest() + yield_bonus)
 					if village.is_player_home:
 						GameState.announce("%s brought in the harvest." % villager_name)
-				_target_farm = null
 				_decide()
 		State.GO_FEED:
 			if not _carrying_feed:
@@ -546,6 +546,13 @@ func is_adult() -> bool:
 	return age >= ADULT_AGE
 
 
+## Give up any claimed field so another farmer may work it.
+func _release_farm() -> void:
+	if _target_farm != null and is_instance_valid(_target_farm):
+		_target_farm.release(self)
+	_target_farm = null
+
+
 ## Sex framework ------------------------------------------------------------
 ## `is_female` (set at birth) already drives courtship, pregnancy, and the
 ## "she/he" of the hover. These give it a name and a model to match, so
@@ -681,6 +688,7 @@ func cheer(amount: float) -> void:
 
 func _decide() -> void:
 	_dismount()
+	_release_farm()  # re-deciding drops any field claim, so others may take it
 	# Survival first.
 	if energy < 20.0:
 		_go_sleep()
@@ -840,13 +848,13 @@ func _start_job(job: String) -> void:
 			state = State.GO_QUARRY
 			_maybe_mount()
 		"farm":
-			_target_farm = village.pick_farm(global_position)
+			_target_farm = village.pick_farm(global_position, self)
 			if _target_farm == null:
 				state = State.WANDER
 				_action_time = 2.0
 				return
 			state = State.GO_FARM
-			_target = _target_farm.global_position + Vector3(randf_range(-2, 2), 0, randf_range(-2, 2))
+			_target = _target_farm.global_position  # the field centre is dry
 		"feed":
 			_carrying_feed = false
 			state = State.GO_FEED

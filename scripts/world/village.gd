@@ -59,7 +59,7 @@ func _ready() -> void:
 	_build_pen()
 
 	farm = Farm.new()
-	farm.position = _grounded(Vector3(10, 0, -4), 3.6)
+	farm.position = _farm_position(Vector3(10, 0, -4))
 	add_child(farm)
 	farms.append(farm)
 
@@ -169,16 +169,42 @@ func feed_penned() -> void:
 
 
 ## The nearest of this village's fields (villagers work whichever is closest).
-func pick_farm(from: Vector3) -> Farm:
+## The nearest field this villager may work: dry, not burning, and not already
+## claimed by someone else. Claims it for them (one farmer per field), reserved
+## by the WANTING — so others look elsewhere the moment this one decides to go.
+func pick_farm(from: Vector3, by: Villager) -> Farm:
 	farms = farms.filter(func(f): return is_instance_valid(f))
 	var best: Farm = null
 	var best_dist := INF
 	for f in farms:
-		var d := from.distance_to(f.global_position)
+		var farm := f as Farm
+		if not farm.is_workable() or not farm.is_free_for(by):
+			continue
+		var d := from.distance_to(farm.global_position)
 		if d < best_dist:
 			best_dist = d
-			best = f
+			best = farm
+	if best != null:
+		best.claim(by)
 	return best
+
+
+## A dry, field-sized position near a preferred local offset: snap to dry
+## land, and if that offset is hopeless (a lake), ring the village's own
+## (dry) centre until a dry field footprint is found.
+func _farm_position(preferred: Vector3) -> Vector3:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	var grounded := _grounded(preferred, 3.6)
+	if world == null or not world.is_underwater(
+			global_position.x + grounded.x, global_position.z + grounded.z):
+		return grounded
+	for i in 16:
+		var a := TAU * i / 16.0
+		var cand := _grounded(Vector3(cos(a), 0, sin(a)) * randf_range(7.0, 12.0), 3.6)
+		if not world.is_underwater(
+				global_position.x + cand.x, global_position.z + cand.z):
+			return cand
+	return grounded  # give up gracefully; at least it sits on the ground
 
 
 ## Wants another field? One per ~7 mouths, capped so villages stay villages.
@@ -190,7 +216,7 @@ func wants_new_farm() -> bool:
 ## A farmer finished breaking new ground: register the field.
 func spawn_farm_at(world_spot: Vector3) -> void:
 	var new_farm := Farm.new()
-	new_farm.position = to_local(world_spot)
+	new_farm.position = _farm_position(to_local(world_spot))  # guaranteed dry
 	add_child(new_farm)
 	farms.append(new_farm)
 	if is_player_home:

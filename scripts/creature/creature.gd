@@ -1128,7 +1128,17 @@ func witness(weight: float) -> void:
 ## Target finding -------------------------------------------------------------
 
 func _nearest_farm() -> Farm:
-	return _nearest_in_group("farms", 60.0) as Farm
+	var best: Farm = null
+	var best_d := 60.0
+	for f in get_tree().get_nodes_in_group("farms"):
+		var farm := f as Farm
+		if not is_instance_valid(farm) or not farm.is_workable():
+			continue
+		var d := global_position.distance_to(farm.global_position)
+		if d < best_d:
+			best_d = d
+			best = farm
+	return best
 
 
 func _nearest_store() -> FoodStore:

@@ -203,7 +203,7 @@ func _cast_rain(pos: Vector3, potency := 1.0) -> void:
 		if is_instance_valid(tree) and tree.burning \
 				and tree.global_position.distance_to(pos) < reach:
 			tree.extinguish()
-	for grp in ["villagers", "animals"]:
+	for grp in ["villagers", "animals", "farms"]:
 		for n in get_tree().get_nodes_in_group(grp):
 			var body := n as Node3D
 			if is_instance_valid(body) and body.get("burning") \
@@ -257,8 +257,12 @@ func _cast_lightning(pos: Vector3) -> void:
 		elif adist < LIGHTNING_BURN_RADIUS:
 			animal.ignite()
 
-	# A bolt sets the nearest trees alight — the seed of a spreading fire.
+	# A bolt sets the nearest trees — and any field it strikes — alight.
 	ignite_trees_near(pos, 5.0)
+	for f in get_tree().get_nodes_in_group("farms"):
+		var farm := f as Farm
+		if is_instance_valid(farm) and farm.global_position.distance_to(pos) < LIGHTNING_BURN_RADIUS:
+			farm.ignite()
 
 
 ## Sets trees within `radius` of a point ablaze. The fire spreads and

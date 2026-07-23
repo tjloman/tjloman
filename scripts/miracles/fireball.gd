@@ -117,6 +117,12 @@ func _explode() -> void:
 		if is_instance_valid(tree) and tree.global_position.distance_to(pos) < BLAST_RADIUS:
 			tree.ignite()
 
+	# A field in the blast goes up too.
+	for f in get_tree().get_nodes_in_group("farms"):
+		var farm := f as Farm
+		if is_instance_valid(farm) and farm.global_position.distance_to(pos) < BLAST_RADIUS:
+			farm.ignite()
+
 	# The blast is the sermon: terror converts where the fireball LANDS.
 	for v in get_tree().get_nodes_in_group("village"):
 		(v as Village).witness_miracle("fireball", pos)
