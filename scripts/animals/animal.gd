@@ -76,6 +76,7 @@ var _prey: Node3D = null
 var _water_target := Vector3.INF
 var _bush: ForageBush = null
 var _action_time := 2.0
+var _sim_skip := 0
 var _state_time := 0.0
 var _prev_state := State.IDLE
 var _think_time := 0.0
@@ -156,12 +157,17 @@ func _physics_process(delta: float) -> void:
 			die(false)  # returns to the earth, no butcher involved
 			return
 
-	# Far-off beasts stand still: the world shouldn't pay physics for what
-	# nobody can see. (Held/falling animals always simulate.)
+	# Simulation LOD: a beast the player isn't looking at runs on a slower
+	# clock — still alive and wandering, just updated every few frames with the
+	# skipped time folded into delta. (Held/falling always simulate full-rate.)
 	if state != State.HELD and state != State.FALLING:
-		var cam := get_viewport().get_camera_3d()
-		if cam != null and cam.global_position.distance_to(global_position) > 90.0:
-			return
+		var stride := Util.sim_stride(global_position)
+		if stride > 1:
+			_sim_skip += 1
+			if _sim_skip < stride:
+				return
+			delta *= _sim_skip
+			_sim_skip = 0
 
 	if _animator != null:
 		_animator.play(_anim_state())
@@ -482,6 +488,7 @@ func _move_toward(target: Vector3, speed: float, delta: float) -> bool:
 	velocity.z = dir.z * speed
 	velocity.y -= GRAVITY * delta
 	move_and_slide()
+	_stick_to_ground()
 	# Heads are modeled at +Z; look_at aims -Z. Look away from travel to face it.
 	look_at(global_position - Vector3(dir.x, 0, dir.z), Vector3.UP)
 	return false
@@ -492,6 +499,23 @@ func _apply_gravity_only(delta: float) -> void:
 	velocity.z = 0
 	velocity.y -= GRAVITY * delta
 	move_and_slide()
+	_stick_to_ground()
+
+
+## Glue to the analytic terrain surface (which exists even where the collision
+## chunk hasn't streamed in) so far-off or just-warped-to beasts never fall
+## through unloaded ground. Skipped while held or in flight.
+func _stick_to_ground() -> void:
+	if state == State.HELD or state == State.FALLING:
+		return
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world == null:
+		return
+	var h := world.height_at(global_position.x, global_position.z)
+	if global_position.y < h - 0.3:
+		global_position.y = h
+		if velocity.y < 0.0:
+			velocity.y = 0.0
 
 
 func _ambient_sound(delta: float) -> void:

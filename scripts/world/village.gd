@@ -47,6 +47,7 @@ var _influence_ring: MeshInstance3D
 var _ring_material: StandardMaterial3D
 var _pen_center := Vector3(0, 0, -11)
 var _housing_timer := 0.0
+var _sim_skip := 0                  # frames skipped while far from the camera
 var _breed_timer := 30.0
 
 
@@ -368,6 +369,16 @@ func needs_teacher() -> bool:
 
 
 func _process(delta: float) -> void:
+	# Simulation LOD: a village far from the camera runs its bookkeeping (prayer,
+	# belief, housing) on a slower clock — the per-frame worshipper scan is the
+	# priciest thing here, and distant towns needn't pay it every frame.
+	var stride := Util.sim_stride(global_position)
+	if stride > 1:
+		_sim_skip += 1
+		if _sim_skip < stride:
+			return
+		delta *= _sim_skip
+		_sim_skip = 0
 	var worshippers := 0
 	for v in my_villagers():
 		if v.is_worshipping():

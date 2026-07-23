@@ -43,6 +43,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	GameState.camera_focus = global_position  # sim-LOD anchor for the whole world
 	if follow_target != null and is_instance_valid(follow_target):
 		var t := follow_target.global_position
 		global_position.x = lerpf(global_position.x, t.x, minf(delta * 4.0, 1.0))

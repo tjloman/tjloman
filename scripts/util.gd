@@ -271,6 +271,22 @@ static func apply_lod(root: Node, end_dist: float) -> void:
 		gi.visibility_range_end_margin = end_dist * 0.15
 
 
+## Simulation level-of-detail: how many physics frames an entity at `pos` may
+## skip between full updates, by distance from the camera's focus. Keeps a big
+## streamed world cheap — a crowd the player isn't looking at ticks coarsely
+## (still alive, just less often), while everything nearby runs full-rate.
+static func sim_stride(pos: Vector3) -> int:
+	var f := GameState.camera_focus
+	var dx := pos.x - f.x
+	var dz := pos.z - f.z
+	var d2 := dx * dx + dz * dz
+	if d2 > 260.0 * 260.0:
+		return 10
+	if d2 > 130.0 * 130.0:
+		return 4
+	return 1
+
+
 ## Simple billboard status label used above villagers/creature heads.
 ## Each is a transparent, camera-facing text quad — cheap alone, but a crowd
 ## of them is real overdraw on a tiled mobile GPU. So it only renders up

@@ -99,6 +99,7 @@ var _mission_village: Village = null
 var _ground_check_time := randf_range(1.0, 3.0)
 var _wd_pos := Vector3.ZERO       # last spot we made real headway from
 var _wd_still := 0.0             # seconds of a travel state spent going nowhere
+var _sim_skip := 0               # physics frames skipped while far from the camera
 var _target_bush: ForageBush = null
 var _target_farm: Farm = null
 var _carrying_feed := false
@@ -165,10 +166,23 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# Simulation LOD: a villager the player isn't looking at runs on a slower
+	# clock — it still lives and works, just updated every few frames with the
+	# skipped time folded into delta. Held/falling always run full-rate so the
+	# hand stays responsive wherever it reaches.
+	if state != State.HELD and state != State.FALLING:
+		var stride := Util.sim_stride(global_position)
+		if stride > 1:
+			_sim_skip += 1
+			if _sim_skip < stride:
+				return
+			delta *= _sim_skip
+			_sim_skip = 0
 	# Dying suspends the whole normal life — they lie there, out of the fight,
 	# until healed/lifted back or the window closes.
 	if state == State.DYING:
 		_process_dying(delta)
+		_stick_to_ground()
 		return
 	_tick_lifecycle(delta)
 	_tick_needs(delta)
@@ -477,6 +491,24 @@ func _physics_process(delta: float) -> void:
 			_try_conceive(delta)
 			if _action_time <= 0.0:
 				_decide()
+	_stick_to_ground()
+
+
+## Glue to the terrain SURFACE every frame (using the analytic height, which
+## exists even where the collision chunk hasn't streamed in). This is what
+## stops far-off — or just-warped-to — villagers from falling through unloaded
+## ground and being popped back up a second later; they simply never leave it.
+func _stick_to_ground() -> void:
+	if state == State.FALLING or state == State.HELD:
+		return
+	var world := _world()
+	if world == null:
+		return
+	var h := world.height_at(global_position.x, global_position.z)
+	if global_position.y < h - 0.3:  # tolerance clears resting offsets/mesh dips
+		global_position.y = h
+		if velocity.y < 0.0:
+			velocity.y = 0.0
 
 
 ## True while the villager is en route somewhere (as opposed to working,

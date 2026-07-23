@@ -37,6 +37,11 @@ var game_years := 0.0
 ## the hand and influence ring recolor from gold to blood-red.
 var alignment := 0.0
 
+## The camera's ground focus, published each frame by CameraRig. Distant
+## entities read it to throttle their own simulation — the farther from what
+## the player is looking at, the fewer physics frames they spend.
+var camera_focus := Vector3.ZERO
+
 
 func _process(delta: float) -> void:
 	game_years += delta / YEAR_SECONDS
