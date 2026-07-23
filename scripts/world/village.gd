@@ -571,6 +571,9 @@ func find_build_spot(world: WorldGen) -> Vector3:
 			# The WHOLE footprint must be dry — no floating over an inlet.
 			if not world.footprint_dry(pos.x, pos.z, 2.2):
 				continue
+			# And the way there must stay on land — never build across a lake.
+			if not world.line_dry(global_position.x, global_position.z, pos.x, pos.z):
+				continue
 			pos.y = world.settle_height(pos.x, pos.z, 2.2)
 		var blocked := false
 		for h in houses:

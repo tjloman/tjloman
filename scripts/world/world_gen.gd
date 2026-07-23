@@ -113,6 +113,34 @@ func footprint_dry(x: float, z: float, half := 2.5) -> bool:
 	return true
 
 
+## True only if a whole village FOOTPRINT is dry land out to `radius` (centre
+## plus three rings). A site that fails this is rejected outright, so a
+## settlement never straddles a lakeshore with a house, farm, or pen ending up
+## sitting in the water — the source of endless pathfinding grief.
+func village_site_dry(x: float, z: float, radius := 18.0) -> bool:
+	if is_underwater(x, z):
+		return false
+	for ring: Array in [[radius, 16], [radius * 0.66, 12], [radius * 0.33, 8]]:
+		var r: float = ring[0]
+		var steps: int = ring[1]
+		for i in steps:
+			var a := TAU * i / float(steps)
+			if is_underwater(x + cos(a) * r, z + sin(a) * r):
+				return false
+	return true
+
+
+## True if the straight line between two points stays on dry land (sampled) —
+## keeps a village from raising a house on a dry patch across a lake from its
+## centre, where its own people could never reach it.
+func line_dry(ax: float, az: float, bx: float, bz: float, samples := 6) -> bool:
+	for i in range(1, samples + 1):
+		var t := float(i) / float(samples + 1)
+		if is_underwater(lerpf(ax, bx, t), lerpf(az, bz, t)):
+			return false
+	return true
+
+
 ## The HIGHEST ground under a footprint. Structures settle on the high
 ## side so their sunken foundations bridge the downhill gap — never the
 ## uphill wall buried in the slope.
@@ -225,12 +253,17 @@ func _maybe_found_village(cell: Vector2i) -> void:
 		(cell.x + 0.5) * CHUNK_SIZE, 0, (cell.y + 0.5) * CHUNK_SIZE)
 	# Find a buildable site near the chunk center.
 	var rng := chunk_rng(cell, 5)
-	for attempt in 12:
-		var pos := center + Vector3(rng.randf_range(-14, 14), 0, rng.randf_range(-14, 14))
+	# More tries now that the whole footprint must be dry — a cell near water
+	# may need several probes to find a clear pocket (and some simply won't
+	# host a village, which is fine in an endless world).
+	for attempt in 24:
+		var pos := center + Vector3(rng.randf_range(-16, 16), 0, rng.randf_range(-16, 16))
 		var biome := biome_at(pos.x, pos.z)
 		if biome != "grassland" and biome != "savanna":
 			continue
-		if is_underwater(pos.x, pos.z) or slope_at(pos.x, pos.z) > 0.8:
+		# The WHOLE settlement footprint must be dry, not just its centre —
+		# no more villages founded straddling a lakeshore.
+		if not village_site_dry(pos.x, pos.z) or slope_at(pos.x, pos.z) > 0.8:
 			continue
 		var village := Village.new()
 		village.is_player_home = false
