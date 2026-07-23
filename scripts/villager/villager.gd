@@ -97,6 +97,8 @@ var _prev_state := State.WANDER
 var _gentle_drop := false
 var _mission_village: Village = null
 var _ground_check_time := randf_range(1.0, 3.0)
+var _wd_pos := Vector3.ZERO       # last spot we made real headway from
+var _wd_still := 0.0             # seconds of a travel state spent going nowhere
 var _target_bush: ForageBush = null
 var _target_farm: Farm = null
 var _carrying_feed := false
@@ -477,6 +479,18 @@ func _physics_process(delta: float) -> void:
 				_decide()
 
 
+## True while the villager is en route somewhere (as opposed to working,
+## resting, or socialising in place) — the states the no-progress breaker
+## watches, since only a moving villager can be "blocked".
+func _is_travelling() -> bool:
+	return state in [
+		State.WANDER, State.GO_EAT, State.GO_SLEEP, State.GO_FARM, State.GO_FEED,
+		State.GO_FISH, State.GO_BUILD_FARM, State.GO_BUILD_EDUBBA, State.GO_HUNT,
+		State.GO_BUTCHER, State.GO_CHOP, State.GO_QUARRY, State.GO_BUILD,
+		State.GO_TAME, State.GO_WORSHIP, State.GO_PREACH, State.COURT, State.HAULING,
+	]
+
+
 ## Never stuck, never lost: re-decide if any state drags on too long
 ## (blocked paths, vanished targets), and snap back onto the terrain if
 ## the ground was streamed out from underneath us while the camera roamed.
@@ -488,6 +502,23 @@ func _tick_watchdogs(delta: float) -> void:
 	if _state_time > 40.0 and state not in [State.SLEEPING, State.HELD]:
 		_state_time = 0.0
 		_decide()
+	# No-progress breaker: a villager on a TRIP (heading somewhere) that hasn't
+	# covered ground for a few seconds is blocked — a lakeshore it can't round,
+	# a knot of bodies. Re-decide now so it picks a reachable errand instead of
+	# starving at the water's edge until the 40s timeout.
+	if _is_travelling():
+		if global_position.distance_to(_wd_pos) > 0.5:
+			_wd_pos = global_position
+			_wd_still = 0.0
+		else:
+			_wd_still += delta
+			if _wd_still > 4.0:
+				_wd_still = 0.0
+				_wd_pos = global_position
+				_decide()
+	else:
+		_wd_still = 0.0
+		_wd_pos = global_position
 	if global_position.y < -12.0:
 		var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 		if world != null:
@@ -1291,7 +1322,7 @@ func _move_toward(target: Vector3, speed: float, delta: float, arrive := ARRIVE_
 	# Villagers cannot swim: route ALONG the shore around open water rather
 	# than stepping in. Only a body hemmed in by water on every side stalls
 	# (and the stuck watchdog re-decides them).
-	dir = NavField.water_steer(global_position, dir, _world())
+	dir = NavField.water_route(self, global_position, dir, _world())
 	if dir == Vector3.ZERO:
 		_apply_gravity_only(delta)
 		return false

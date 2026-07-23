@@ -473,8 +473,8 @@ func _move_toward(target: Vector3, speed: float, delta: float) -> bool:
 	# Beasts don't swim: route along the shore around water (frogs excepted —
 	# they belong to both worlds).
 	if not spec.get("hops", false):
-		dir = NavField.water_steer(
-			global_position, dir, get_tree().get_first_node_in_group("world_gen") as WorldGen)
+		dir = NavField.water_route(
+			self, global_position, dir, get_tree().get_first_node_in_group("world_gen") as WorldGen)
 		if dir == Vector3.ZERO:
 			_apply_gravity_only(delta)
 			return false
