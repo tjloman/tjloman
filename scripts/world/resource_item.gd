@@ -38,9 +38,12 @@ func _ready() -> void:
 		add_child(Util.box(Vector3(0.5, 0.4, 0.45), Color(0.55, 0.54, 0.56)))
 		add_child(Util.box(Vector3(0.3, 0.22, 0.28), Color(0.5, 0.49, 0.52), Vector3(0.05, 0.3, 0)))
 
-	# A bigger bundle looks bigger (a stacked armful).
-	if count > 1:
-		scale = Vector3.ONE * clampf(1.0 + (count - 1) * 0.05, 1.0, 1.7)
+	refresh_bundle()  # a bigger bundle looks bigger
+
+
+## Re-fit the visual to the current count — called as a held bundle grows.
+func refresh_bundle() -> void:
+	scale = Vector3.ONE * clampf(1.0 + (count - 1) * 0.05, 1.0, 1.7)
 
 
 func hover_text() -> String:

@@ -197,7 +197,7 @@ func _physics_process(delta: float) -> void:
 			_process_go_eat(delta)
 		State.EATING:
 			if _wait(delta):
-				hunger = maxf(hunger - FoodItem.NUTRITION, 0.0)
+				_eat_meal()
 				happiness = minf(happiness + 8.0, 100.0)
 				_decide()
 		State.GO_SLEEP:
@@ -954,8 +954,8 @@ func _process_go_eat(delta: float) -> void:
 				if village.is_player_home:
 					GameState.announce("%s has eaten human flesh. Something in them dims."
 						% villager_name)
-			_target_food.queue_free()
-			_target_food = null
+			# Keep the food (it may be a bundle) — EATING takes only as much
+			# as this belly needs, leaving the rest for the next hungry mouth.
 			_dismount()
 			state = State.EATING
 			_action_time = 2.0
@@ -968,6 +968,25 @@ func _process_go_eat(delta: float) -> void:
 					_action_time = 2.0
 					return
 			_decide()
+
+
+## Consume the meal at hand. A ground bundle (_target_food) is eaten a mouthful
+## at a time — only as many units as this belly needs, leaving the rest of the
+## bundle on the ground for the next hungry villager. Bush berries and store
+## meals are already single servings, so they just top up hunger by one unit.
+func _eat_meal() -> void:
+	if _target_food != null and is_instance_valid(_target_food) \
+			and not _target_food.is_queued_for_deletion():
+		var need := clampi(int(ceil(hunger / FoodItem.NUTRITION)), 1, maxi(_target_food.count, 1))
+		hunger = maxf(hunger - need * FoodItem.NUTRITION, 0.0)
+		_target_food.count -= need
+		if _target_food.count <= 0:
+			_target_food.queue_free()
+		else:
+			_target_food.refresh_bundle()
+	else:
+		hunger = maxf(hunger - FoodItem.NUTRITION, 0.0)
+	_target_food = null
 
 
 ## Target finding ------------------------------------------------------------

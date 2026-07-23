@@ -35,6 +35,7 @@ const LOFT_PER_PULL := 0.16         # radians of loft per m/s of BACKWARD flick
 const CURVE_GAIN := 3.2             # sideways flick -> in-flight lateral accel
 const SPIN_GAIN := 1.4              # flick deviation -> projectile spin (rad/s)
 const MAX_SPIN := 11.0              # cap so a wild flick doesn't blur into a top
+const BUNDLE_TOPUP := 0.06          # seconds between pulling each extra unit (hold-to-grab)
 
 var camera_rig: CameraRig
 var miracles: MiracleManager
@@ -79,6 +80,10 @@ var _menu_timer := 0.0
 var _hand_material: StandardMaterial3D
 var _glow: OmniLight3D
 var _animator: ModelAnimator = null   # non-null only for a rigged hand model
+
+# The primary pointer is still pressed (for hold-to-grab-more at a store).
+var _pointer_down := false
+var _bundle_time := 0.0
 
 
 func _ready() -> void:
@@ -180,6 +185,7 @@ func _physics_process(delta: float) -> void:
 				var carry := ground_point + Vector3(0, HOVER_HEIGHT - 0.6, 0)
 				held_body.global_position = held_body.global_position.lerp(
 					carry, minf(delta * 16.0, 1.0))
+				_tick_bundle_grab(delta)
 			else:
 				held_body = null
 				state = HandState.IDLE
@@ -250,6 +256,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
+			_pointer_down = event.pressed
 			if event.pressed:
 				# Every fresh press begins a new stroke: a poke can never
 				# inherit the momentum of the drag before it.
@@ -306,6 +313,21 @@ func _on_grab() -> void:
 			return
 		state = HandState.DRAG_LAND
 		drag_anchor = _mouse_on_plane(mouse_pos)
+
+
+## Black & White's grab-more: while the pointer stays pressed and the held
+## bundle hovers over the storehouse it came from, keep pulling its resource
+## into the hand — an armful that swells the longer you hold. Drag off the
+## platform (or let go) to stop.
+func _tick_bundle_grab(delta: float) -> void:
+	if not _pointer_down or not (hover_target is FoodStore):
+		return
+	if camera_rig != null and camera_rig.is_multitouching():
+		return
+	_bundle_time -= delta
+	if _bundle_time <= 0.0:
+		_bundle_time = BUNDLE_TOPUP
+		(hover_target as FoodStore).top_up(held_body)
 
 
 func _on_release() -> void:

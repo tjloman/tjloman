@@ -186,6 +186,41 @@ func withdraw_at(world_point: Vector3) -> RigidBody3D:
 	return item
 
 
+## Pull ONE more unit of the held bundle's own resource into it, if the pile
+## has any — the "hold to keep grabbing" trickle. Returns false when the
+## matching quarter is empty (or the item isn't a resource/food bundle).
+func top_up(item: Node) -> bool:
+	var pulled := false
+	if item is FoodItem:
+		var f := item as FoodItem
+		if f.food_type == FoodItem.FoodType.PLANT and plant_food > 0:
+			plant_food -= 1
+			f.count += 1
+			pulled = true
+		elif f.food_type == FoodItem.FoodType.MEAT and meat_food > 0:
+			meat_food -= 1
+			f.count += 1
+			pulled = true
+		if pulled:
+			f.refresh_bundle()
+	elif item is ResourceItem:
+		var r := item as ResourceItem
+		if r.kind == "lumber" and lumber > 0:
+			lumber -= 1
+			r.count += 1
+			pulled = true
+		elif r.kind == "stone" and stone > 0:
+			stone -= 1
+			r.count += 1
+			pulled = true
+		if pulled:
+			r.refresh_bundle()
+	if pulled:
+		item.set_meta("no_deposit_until", Time.get_ticks_msec() + 2500)
+		_refresh_stack()
+	return pulled
+
+
 func add(type: FoodItem.FoodType, amount: int) -> void:
 	if type == FoodItem.FoodType.PLANT:
 		plant_food += amount

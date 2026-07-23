@@ -46,9 +46,13 @@ func _ready() -> void:
 	else:
 		_build_meat()
 
-	# A bigger bundle looks bigger (a whole armful when grabbed en masse).
-	if count > 1:
-		scale = Vector3.ONE * clampf(1.0 + (count - 1) * 0.05, 1.0, 1.7)
+	refresh_bundle()  # a bigger bundle looks bigger
+
+
+## Re-fit the visual to the current count — called when a bundle grows (held
+## over a store) or shrinks (partly eaten).
+func refresh_bundle() -> void:
+	scale = Vector3.ONE * clampf(1.0 + (count - 1) * 0.05, 1.0, 1.7)
 
 
 ## A bound sheaf of grain: golden bundle, darker tie, splayed tips.
