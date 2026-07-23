@@ -16,6 +16,8 @@ var _hover_label: Label
 var _message_label: Label
 var _message_timer := 0.0
 var _help_panel: PanelContainer
+var _miracle_panel: PanelContainer
+var _miracle_show := 0.0   # seconds the miracle panel stays up
 var _cast_label: Label
 var _creature_panel: PanelContainer
 var _creature_label: Label
@@ -60,6 +62,8 @@ func _make_label(text: String) -> Label:
 ## noise of the world (world announcements go elsewhere and can't erase it).
 func _build_miracle_panel() -> void:
 	var panel := PanelContainer.new()
+	_miracle_panel = panel
+	panel.visible = false   # shown only while casting (see _process)
 	panel.set_anchors_and_offsets_preset(
 		Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, 8)
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -286,11 +290,29 @@ func _process(delta: float) -> void:
 	_hover_label.position = _hover_label.get_viewport().get_mouse_position() + Vector2(18, 18)
 
 	_update_creature_panel()
+	_update_miracle_panel(delta)
 
 	if _message_timer > 0.0:
 		_message_timer -= delta
 		if _message_timer <= 0.0:
 			_message_label.text = ""
+
+
+## The miracle guide is only up while you're actually casting: on touch, when
+## CAST mode is on; on desktop, while the right mouse button is held. Either
+## way it lingers ~5s after (and whenever a cast hint fires) so you can read
+## the last step, then tucks itself away to keep the screen clean.
+func _update_miracle_panel(delta: float) -> void:
+	var active := false
+	if DisplayServer.is_touchscreen_available():
+		active = divine_hand != null and divine_hand.cast_mode
+	else:
+		active = Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+	if active:
+		_miracle_show = 5.0
+	else:
+		_miracle_show = maxf(_miracle_show - delta, 0.0)
+	_miracle_panel.visible = _miracle_show > 0.0
 
 
 ## Shown only while the camera is LOCKED onto the creature. Its stats live
@@ -327,6 +349,7 @@ func _on_scold() -> void:
 func _on_cast_hint(text: String) -> void:
 	if _cast_label != null:
 		_cast_label.text = text
+	_miracle_show = maxf(_miracle_show, 5.0)  # keep the guide up to read this step
 
 
 func _unhandled_input(event: InputEvent) -> void:

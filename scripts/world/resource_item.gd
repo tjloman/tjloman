@@ -6,6 +6,7 @@ extends RigidBody3D
 ## whichever storehouse it comes to rest on.
 
 var kind := "lumber"  # or "stone"
+var count := 1        # a bundle: this many units in one carriable
 
 
 func _init() -> void:
@@ -37,6 +38,11 @@ func _ready() -> void:
 		add_child(Util.box(Vector3(0.5, 0.4, 0.45), Color(0.55, 0.54, 0.56)))
 		add_child(Util.box(Vector3(0.3, 0.22, 0.28), Color(0.5, 0.49, 0.52), Vector3(0.05, 0.3, 0)))
 
+	# A bigger bundle looks bigger (a stacked armful).
+	if count > 1:
+		scale = Vector3.ONE * clampf(1.0 + (count - 1) * 0.05, 1.0, 1.7)
+
 
 func hover_text() -> String:
-	return "%s — drop it on a storehouse to store it" % kind.capitalize()
+	var tail := " ×%d" % count if count > 1 else ""
+	return "%s%s — drop it on a storehouse to store it" % [kind.capitalize(), tail]

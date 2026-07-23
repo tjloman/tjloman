@@ -12,6 +12,7 @@ const NUTRITION := 40.0
 var food_type := FoodType.PLANT
 var meat_name := "mutton"
 var is_human_meat := false
+var count := 1  # a bundle: this many units in one carriable
 
 
 func _init() -> void:
@@ -44,6 +45,10 @@ func _ready() -> void:
 		_build_fish()
 	else:
 		_build_meat()
+
+	# A bigger bundle looks bigger (a whole armful when grabbed en masse).
+	if count > 1:
+		scale = Vector3.ONE * clampf(1.0 + (count - 1) * 0.05, 1.0, 1.7)
 
 
 ## A bound sheaf of grain: golden bundle, darker tie, splayed tips.
@@ -86,8 +91,9 @@ func _build_fish() -> void:
 
 
 func hover_text() -> String:
+	var tail := " ×%d" % count if count > 1 else ""
 	if food_type == FoodType.PLANT:
-		return "Sheaf of grain"
+		return "Sheaf of grain" + tail
 	if is_human_meat:
-		return "Meat (of unspeakable origin)"
-	return "Meat (%s)" % meat_name
+		return "Meat (of unspeakable origin)" + tail
+	return "Meat (%s)%s" % [meat_name, tail]

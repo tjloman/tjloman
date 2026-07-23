@@ -12,6 +12,7 @@ extends StaticBody3D
 
 const PLATFORM_RADIUS := 3.4
 const MAX_SHOWN := 12  # per resource; hover for exact counts
+const WITHDRAW_BUNDLE := 10  # units pulled per grab (a whole armful)
 
 const GRAIN_COLOR := Color(0.9, 0.6, 0.2)
 const MEAT_COLOR := Color(0.72, 0.22, 0.18)
@@ -107,14 +108,16 @@ func _process(delta: float) -> void:
 				and Time.get_ticks_msec() < int(rb.get_meta("no_deposit_until")):
 			continue  # freshly withdrawn: give the hand time to carry it off
 		if rb is FoodItem:
-			add((rb as FoodItem).food_type, 1)
+			var f := rb as FoodItem
+			add(f.food_type, maxi(f.count, 1))  # a bundle banks all its units
 			rb.queue_free()
 			_thank_the_giver()
 		elif rb is ResourceItem:
-			if (rb as ResourceItem).kind == "lumber":
-				add_lumber(1)
+			var r := rb as ResourceItem
+			if r.kind == "lumber":
+				add_lumber(maxi(r.count, 1))
 			else:
-				add_stone(1)
+				add_stone(maxi(r.count, 1))
 			rb.queue_free()
 			_thank_the_giver()
 
@@ -133,33 +136,44 @@ func _thank_the_giver() -> void:
 func withdraw_at(world_point: Vector3) -> RigidBody3D:
 	var local := to_local(world_point)
 	var item: RigidBody3D = null
+	# One grab pulls a whole armful — up to WITHDRAW_BUNDLE units at once as a
+	# single carriable (no fiddly per-unit tapping on touch).
 	if local.x >= 0.0 and local.z >= 0.0:
-		if plant_food > 0:
-			plant_food -= 1
-			item = FoodItem.new()
+		var n := mini(plant_food, WITHDRAW_BUNDLE)
+		if n > 0:
+			plant_food -= n
+			var f := FoodItem.new()
+			f.count = n
+			item = f
 		else:
 			GameState.announce("The grain quarter is empty.")
 	elif local.x < 0.0 and local.z >= 0.0:
-		if meat_food > 0:
-			meat_food -= 1
+		var n := mini(meat_food, WITHDRAW_BUNDLE)
+		if n > 0:
+			meat_food -= n
 			var f := FoodItem.new()
 			f.food_type = FoodItem.FoodType.MEAT
+			f.count = n
 			item = f
 		else:
 			GameState.announce("The meat quarter is empty.")
 	elif local.x < 0.0 and local.z < 0.0:
-		if lumber > 0:
-			lumber -= 1
+		var n := mini(lumber, WITHDRAW_BUNDLE)
+		if n > 0:
+			lumber -= n
 			var r := ResourceItem.new()
 			r.kind = "lumber"
+			r.count = n
 			item = r
 		else:
 			GameState.announce("The lumber quarter is empty.")
 	else:
-		if stone > 0:
-			stone -= 1
+		var n := mini(stone, WITHDRAW_BUNDLE)
+		if n > 0:
+			stone -= n
 			var r := ResourceItem.new()
 			r.kind = "stone"
+			r.count = n
 			item = r
 		else:
 			GameState.announce("The stone quarter is empty.")
