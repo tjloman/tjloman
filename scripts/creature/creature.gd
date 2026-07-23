@@ -106,6 +106,7 @@ var _model_meshes: Array[GeometryInstance3D] = []
 var _shown_align := 999.0                  # last applied alignment (throttle)
 var _expression := "neutral"
 var _expr_time := 0.0
+var _wedge_time := 0.0             # seconds shoving forward without advancing
 
 
 func _ready() -> void:
@@ -313,6 +314,12 @@ func _tick_watchdogs(delta: float) -> void:
 	_state_time += delta
 	if _state_time > STUCK_SECONDS and state != State.SLEEPING:
 		_state_time = 0.0
+		_decide()
+	# Wedged against a grove for more than a beat: give up this target now
+	# rather than grinding a huge collider into the trunks (jank AND physics
+	# lag) until STUCK_SECONDS finally trips.
+	if _wedge_time > 1.4 and state != State.SLEEPING:
+		_wedge_time = 0.0
 		_decide()
 	# Fell out of the world (chunk streamed away) or buried in a hillside
 	# (bad spawn, collision hiccup)? Pop back to the surface.
@@ -1373,21 +1380,35 @@ func _move_toward(target: Vector3, speed: float, delta: float) -> bool:
 	to_target.y = 0
 	if to_target.length() < 1.0:
 		_apply_gravity_only(delta)
+		_wedge_time = 0.0
 		return true
 	var dir := to_target.normalized()
-	# Steer around trees and rocks (not the one it's heading for). A modest
-	# radius so a giant creature glides past groves without over-swerving.
-	dir = NavField.steer(global_position, dir, 0.6, target)
+	# Steer around trees and rocks (not the one it's heading for). The avoid
+	# radius tracks the creature's ACTUAL size (its collider is 0.6 * scale) so
+	# a grown beast swerves wide around groves instead of ramming the trunks.
+	dir = NavField.steer(global_position, dir, 0.6 * scale.x + 0.4, target)
 	# The creature WADES: water is passable but slow — half speed with
 	# its legs in the lake. (A future miracle will let it walk ON water.)
 	if not walks_on_water:
 		var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 		if world != null and world.is_underwater(global_position.x, global_position.z):
 			speed *= 0.5
+	var before := global_position
 	velocity.x = dir.x * speed
 	velocity.z = dir.z * speed
 	velocity.y -= GRAVITY * delta
 	move_and_slide()
+	# Wedged? If it's pushing but barely advancing, RELAX the drive so a
+	# giant collider stops grinding into the trunks (the source of the jank
+	# and the physics-contact lag); the watchdog re-decides shortly after.
+	var advanced := Vector2(global_position.x - before.x, global_position.z - before.z).length()
+	if is_on_wall() and advanced < speed * delta * 0.3:
+		_wedge_time += delta
+		if _wedge_time > 0.35:
+			velocity.x = 0.0  # stop shoving the trunk (kills the jank and lag)
+			velocity.z = 0.0
+	else:
+		_wedge_time = 0.0
 	# Body faces +Z; look_at aims -Z. Look away from travel to face it.
 	look_at(global_position - Vector3(dir.x, 0, dir.z), Vector3.UP)
 	_walk_phase += delta * 9.0
