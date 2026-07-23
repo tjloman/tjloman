@@ -9,17 +9,19 @@ const BLAST_RADIUS := 6.0
 const KILL_RADIUS := 2.2
 const FUSE_SECONDS := 25.0
 const KARMA_PER_KILL := -3.0
+const TRAIL_INTERVAL := 0.09     # seconds between flames dropped in flight
+const TRAIL_IGNITE_RADIUS := 1.7  # a narrow lick of fire along the path
+const REST_SPEED := 0.6           # below this it has come to rest -> bursts
 
 var _armed := false
 var _exploded := false
+var _trail_time := 0.0
 
 
 func _init() -> void:
 	collision_layer = 4
 	collision_mask = 1 | 2 | 4
 	mass = 2.0
-	contact_monitor = true
-	max_contacts_reported = 4
 	var phys := PhysicsMaterial.new()
 	phys.friction = 0.9
 	phys.bounce = 0.0
@@ -54,7 +56,6 @@ func _ready() -> void:
 	embers.gravity = Vector3(0, 1.5, 0)
 	add_child(embers)
 
-	body_entered.connect(_on_body_entered)
 	get_tree().create_timer(FUSE_SECONDS).timeout.connect(_explode)
 
 
@@ -66,15 +67,58 @@ func _ember_mesh() -> SphereMesh:
 	return m
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
+	if freeze:
+		return  # still in the grip
 	# Arms the moment the hand lets go and it's genuinely in flight.
-	if not _armed and not freeze and linear_velocity.length() > 2.0:
+	if not _armed and linear_velocity.length() > 2.0:
 		_armed = true
-
-
-func _on_body_entered(_body: Node) -> void:
 	if _armed:
-		_explode()
+		_lay_trail(delta)
+		# It rolls until friction stops it, then bursts where it settles.
+		if linear_velocity.length() < REST_SPEED:
+			_explode()
+
+
+## Drops a small flame at the ball's ground track and lightly sets alight
+## whatever it rolls past — a narrow, spreading wake of fire behind the throw.
+func _lay_trail(delta: float) -> void:
+	_trail_time -= delta
+	if _trail_time > 0.0:
+		return
+	_trail_time = TRAIL_INTERVAL
+	var scene := get_tree().current_scene
+	if scene == null:
+		return
+	var gp := global_position
+	var ground_y := gp.y
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world != null:
+		ground_y = maxf(world.height_at(gp.x, gp.z), WorldGen.WATER_LEVEL)
+	var flame := Util.small_flame(0.4)
+	flame.scale = Vector3.ONE * 0.5
+	flame.position = Vector3(gp.x, ground_y, gp.z)
+	scene.add_child(flame)
+	get_tree().create_timer(2.2).timeout.connect(flame.queue_free)
+	_ignite_trail(gp)
+
+
+## The narrow trail catches trees, fields, and any soul it brushes.
+func _ignite_trail(pos: Vector3) -> void:
+	for t in get_tree().get_nodes_in_group("trees"):
+		var tree := t as WildTree
+		if is_instance_valid(tree) and tree.global_position.distance_to(pos) < TRAIL_IGNITE_RADIUS:
+			tree.ignite()
+	for f in get_tree().get_nodes_in_group("farms"):
+		var farm := f as Farm
+		if is_instance_valid(farm) and farm.global_position.distance_to(pos) < TRAIL_IGNITE_RADIUS:
+			farm.ignite()
+	for grp in ["villagers", "animals"]:
+		for n in get_tree().get_nodes_in_group(grp):
+			var node := n as Node3D
+			if is_instance_valid(node) and node.global_position.distance_to(pos) < TRAIL_IGNITE_RADIUS \
+					and node.has_method("ignite"):
+				node.call("ignite")
 
 
 func _explode() -> void:

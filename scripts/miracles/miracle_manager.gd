@@ -132,7 +132,7 @@ func conjure(miracle: String) -> bool:
 
 ## Called by a thrown orb when it lands: unleash the effect at that spot,
 ## apply karma, and let the villages witness it.
-func resolve(miracle: String, pos: Vector3) -> void:
+func resolve(miracle: String, pos: Vector3, momentum := Vector3.ZERO) -> void:
 	pos.y = 0
 	var potency := power()
 	match miracle:
@@ -143,8 +143,8 @@ func resolve(miracle: String, pos: Vector3) -> void:
 		"forest_seed": _cast_forest_seed(pos, potency)
 		"forage_thicket": _cast_forage_thicket(pos, potency)
 		"lightning_storm": _cast_lightning_storm(pos, potency)
-		"tornado": _cast_tornado(pos, potency)
-		"bird_flock": _cast_bird_flock(pos, potency)
+		"tornado": _cast_tornado(pos, potency, momentum)
+		"bird_flock": _cast_bird_flock(pos, potency, momentum)
 		_: return
 	_apply_karma(miracle, pos)
 	for v in get_tree().get_nodes_in_group("village"):
@@ -369,7 +369,7 @@ func _cast_lightning_storm(pos: Vector3, potency := 1.0) -> void:
 
 ## A tornado: a spinning funnel that wanders, flinging loose things and
 ## terrifying (and battering) whoever it passes.
-func _cast_tornado(pos: Vector3, potency := 1.0) -> void:
+func _cast_tornado(pos: Vector3, potency := 1.0, momentum := Vector3.ZERO) -> void:
 	var funnel := Node3D.new()
 	funnel.position = pos
 	add_child(funnel)
@@ -379,7 +379,13 @@ func _cast_tornado(pos: Vector3, potency := 1.0) -> void:
 			Vector3(0, 0.7 + i * 1.4, 0))
 		funnel.add_child(ring)
 	var life := 8.0 + potency * 2.0
-	var drift := Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)).normalized()
+	# The throw sets it wandering: it drifts the way you flung it, and a harder
+	# fling sends it careening faster. A merely placed twister roams at random.
+	var heading := Vector3(momentum.x, 0.0, momentum.z)
+	if heading.length() < 0.5:
+		heading = Vector3(randf_range(-1, 1), 0, randf_range(-1, 1))
+	var strength := clampf(heading.length() / 12.0, 0.6, 1.8)
+	var drift := heading.normalized() * strength
 	_run_tornado(funnel, drift, life, 5.0 * potency)
 
 
@@ -409,7 +415,7 @@ func _run_tornado(funnel: Node3D, drift: Vector3, life: float, radius: float) ->
 
 ## A V of birds sweeps overhead — doves if you are good, ravens if neutral,
 ## screeching bats if you are wicked. An omen the villages read plainly.
-func _cast_bird_flock(pos: Vector3, potency := 1.0) -> void:
+func _cast_bird_flock(pos: Vector3, potency := 1.0, momentum := Vector3.ZERO) -> void:
 	var flock := Node3D.new()
 	var body_color := Color(0.95, 0.95, 0.95)
 	var sound := "coo"
@@ -435,11 +441,15 @@ func _cast_bird_flock(pos: Vector3, potency := 1.0) -> void:
 			placed += 1
 		k += 1
 
-	var start := pos + Vector3(-34, 15, -20)
-	var finish := pos + Vector3(34, 17, 20)
-	var forward := finish - start
-	forward.y = 0.0
+	# The flock flies the way you flung it: the throw's heading is the line of
+	# flight, sweeping in over the cast point and on past it. A placed (not
+	# thrown) omen takes a default diagonal sweep.
+	var forward := Vector3(momentum.x, 0.0, momentum.z)
+	if forward.length() < 0.5:
+		forward = Vector3(1, 0, 0.6)
 	forward = forward.normalized()
+	var start := pos - forward * 34.0 + Vector3(0, 15, 0)
+	var finish := pos + forward * 34.0 + Vector3(0, 17, 0)
 	# Basis.looking_at (not look_at) so this is safe before the node is in
 	# the tree — a -Z-forward orientation aligned to the flight path.
 	flock.transform.basis = Basis.looking_at(forward, Vector3.UP)

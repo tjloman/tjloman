@@ -14,6 +14,7 @@ var manager: MiracleManager = null
 
 var _armed := false
 var _spent := false
+var _momentum := Vector3.ZERO  # last real horizontal flight velocity of the throw
 
 
 func _init() -> void:
@@ -53,8 +54,14 @@ func _physics_process(_delta: float) -> void:
 	# Arms once genuinely thrown; a placed orb resolves when it settles.
 	if not _armed and not freeze and linear_velocity.length() > 1.5:
 		_armed = true
-	elif _armed and not freeze and linear_velocity.length() < 0.4:
-		_resolve()
+	if _armed and not freeze:
+		# Remember the throw's heading (its last real horizontal speed) so the
+		# effect can fly the way you flung it — birds, tornado, and the rest.
+		var horiz := Vector3(linear_velocity.x, 0.0, linear_velocity.z)
+		if horiz.length() > 1.0:
+			_momentum = horiz
+		if linear_velocity.length() < 0.4:
+			_resolve()
 
 
 func _on_body_entered(_body: Node) -> void:
@@ -67,7 +74,7 @@ func _resolve() -> void:
 		return
 	_spent = true
 	if manager != null and is_instance_valid(manager):
-		manager.resolve(miracle_name, global_position)
+		manager.resolve(miracle_name, global_position, _momentum)
 	queue_free()
 
 
