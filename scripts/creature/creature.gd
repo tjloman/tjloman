@@ -376,6 +376,16 @@ func _decide() -> void:
 		return
 	if hunger > 55.0 and _plan_food():
 		return
+	# A creature that isn't wicked drops everything to save a dying villager.
+	if morality >= 0.0:
+		var dying := _nearest_dying_villager(32.0)
+		if dying != null:
+			_catch_target = dying
+			_carry_intent = "rescue"
+			state = State.CATCH
+			var home := _home_village()
+			_target = home.global_position if home != null else global_position
+			return
 	if GameState.is_night():
 		if morality > 0.0 and energy > 40.0 and desires["guard"] * (0.5 + bond / 100.0) > 0.6:
 			state = State.GUARD
@@ -698,6 +708,10 @@ func _run_speed() -> float:
 
 
 func _pick_up_thing(node: Node3D, intent: String) -> void:
+	# A neutral-or-better creature lifting a dying villager cradles them back
+	# to a sliver of life, same as the hand.
+	if node is Villager and (node as Villager).is_dying() and morality >= 0.0:
+		(node as Villager).rescue()
 	_carried = node
 	_carry_intent = intent
 	if node is RigidBody3D:
@@ -763,6 +777,19 @@ func _process_carrying(delta: float) -> void:
 				_release_carried(false)
 				_last_deed = "mischief"
 				_decide()
+		"rescue":
+			# Carry the saved soul home and set them gently down.
+			var village := _home_village()
+			var dest := village.global_position if village != null else global_position
+			if _move_toward(dest, WALK_SPEED, delta):
+				var saved_name := ""
+				if _carried is Villager:
+					saved_name = (_carried as Villager).villager_name
+				_release_carried(true)
+				express("love")
+				_finish_deed("gift", 10.0)  # a saintly act
+				if saved_name != "":
+					GameState.announce("Your creature carried %s to safety." % saved_name)
 		"hurl":
 			# A brief wind-up, then FLING it far and hard. Cruel joy.
 			_action_time -= delta
@@ -1110,6 +1137,20 @@ func _nearest_store() -> FoodStore:
 
 func _nearest_villager() -> Villager:
 	return _nearest_in_group("villagers", 50.0) as Villager
+
+
+func _nearest_dying_villager(max_dist: float) -> Villager:
+	var best: Villager = null
+	var best_d := max_dist
+	for v in get_tree().get_nodes_in_group("villagers"):
+		var vil := v as Villager
+		if not is_instance_valid(vil) or not vil.is_dying():
+			continue
+		var d := global_position.distance_to(vil.global_position)
+		if d < best_d:
+			best_d = d
+			best = vil
+	return best
 
 
 func _home_village() -> Village:
