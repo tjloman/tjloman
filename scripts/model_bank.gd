@@ -8,7 +8,7 @@ extends Node
 ##
 ## Recognised names (any of the extensions below):
 ##   villager · creature · tree · tree_forest/grassland/savanna/wetland ·
-##   bush · rock · house · school · store · hand ·
+##   bush · flower · rock · house · school · store · hand ·
 ##   and one per animal SPECIES: sheep, wolf, deer, horse, ox, pig, chicken,
 ##   dog, llama, giraffe, bear, lion, tiger, frog
 ##
@@ -24,6 +24,8 @@ const EXTS := [".glb", ".gltf", ".obj", ".scn", ".tscn", ".tres", ".res"]
 # name -> loaded Resource, or null when we've checked and found nothing. Both
 # outcomes are cached so a spawn storm never re-hits the filesystem.
 var _cache := {}
+# name -> extracted Mesh (for MultiMesh clutter), cached the same way.
+var _mesh_cache := {}
 
 
 ## True if a custom model exists for this name.
@@ -54,6 +56,27 @@ func instantiate_any(names: Array) -> Node3D:
 		if node != null:
 			return node
 	return null
+
+
+## The first Mesh inside a custom model — for clutter that draws through a
+## MultiMesh (flowers) and needs the raw mesh, not a node. Null if there is no
+## custom model, or it holds no mesh. Cached like everything else here.
+func mesh_for(model_name: String) -> Mesh:
+	if _mesh_cache.has(model_name):
+		return _mesh_cache[model_name]
+	var mesh: Mesh = null
+	var res := _resolve(model_name)
+	if res is Mesh:
+		mesh = res as Mesh
+	elif res is PackedScene:
+		var inst := (res as PackedScene).instantiate()
+		for mi in inst.find_children("*", "MeshInstance3D", true, false):
+			mesh = (mi as MeshInstance3D).mesh
+			if mesh != null:
+				break
+		inst.free()  # the Mesh is ref-counted and outlives the throwaway node
+	_mesh_cache[model_name] = mesh
+	return mesh
 
 
 func _resolve(model_name: String) -> Resource:

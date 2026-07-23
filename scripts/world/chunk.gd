@@ -202,6 +202,11 @@ func _scatter_deposits(rng: RandomNumberGenerator, count: int) -> void:
 ## version was 7 high-poly nodes EACH; a meadow of them was a big slice of
 ## the resource burst that backgrounded budget phones as chunks streamed in.
 func _scatter_flowers(rng: RandomNumberGenerator, count: int) -> void:
+	# A custom flower model (res://models/flower.glb) replaces the billboard: it
+	# brings its own textured material, so we skip per-instance colour tinting
+	# and vary the bloom by yaw and scale instead. Both paths are one MultiMesh
+	# — one draw call for the whole chunk's meadow.
+	var custom := ModelBank.mesh_for("flower")
 	var xforms: Array[Transform3D] = []
 	var colors: Array[Color] = []
 	for i in count:
@@ -209,21 +214,26 @@ func _scatter_flowers(rng: RandomNumberGenerator, count: int) -> void:
 		if not _spot_ok(spot):
 			continue
 		spot.y = world.height_at(position.x + spot.x, position.z + spot.z) + 0.02
-		xforms.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU), spot))
+		var basis := Basis(Vector3.UP, rng.randf() * TAU)
+		if custom != null:
+			basis = basis.scaled(Vector3.ONE * rng.randf_range(1.3, 1.9))  # ~match the old bloom
+		xforms.append(Transform3D(basis, spot))
 		colors.append(Color.from_hsv(rng.randf(), 0.6, 0.95))
 	if xforms.is_empty():
 		return
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = true
-	mm.mesh = Util.blossom_mesh()
+	mm.use_colors = custom == null  # the model is already coloured by its texture
+	mm.mesh = custom if custom != null else Util.blossom_mesh()
 	mm.instance_count = xforms.size()
 	for i in xforms.size():
 		mm.set_instance_transform(i, xforms[i])
-		mm.set_instance_color(i, colors[i])
+		if custom == null:
+			mm.set_instance_color(i, colors[i])
 	var mmi := MultiMeshInstance3D.new()
 	mmi.multimesh = mm
-	mmi.material_override = Util.blossom_material()
+	if custom == null:
+		mmi.material_override = Util.blossom_material()  # billboard needs its shared mat
 	Util.apply_lod(mmi, Quality.clutter_distance())
 	add_child(mmi)
 

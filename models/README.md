@@ -13,6 +13,7 @@ Nothing here is required — the game ships and runs with this folder empty.
 | `creature` | your creature |
 | `tree` | any tree (or `tree_forest`, `tree_grassland`, `tree_savanna`, `tree_wetland` for per-biome art) |
 | `bush` | a forage bush |
+| `flower` | the meadow flowers (drawn as one MultiMesh per chunk — one mesh, no per-instance tint) |
 | `rock` | a rock deposit |
 | `house` | a village house |
 | `school` | the Edubba (schoolhouse) |
@@ -29,7 +30,8 @@ Extensions checked, in order: `.glb` `.gltf` `.obj` `.scn` `.tscn` `.tres` `.res
   more than triangle count on mobile.
 - **Triangle ceilings** (staying under these keeps the current framerate):
   villager 400 · animal 300 · creature 6000 · tree 150 · bush 400 · rock 350 ·
-  house 300 · school 500 · store 1800 · hand 600.
+  house 300 · school 500 · store 1800 · hand 600 · flower 150 (it's drawn many
+  times over via MultiMesh, so keep it lean).
 - **Pivot at the feet** (model sits on Y=0), **+Z is forward** (the way it
   walks / the front of a building's door), scaled to roughly match the
   primitive it replaces so physics capsules and the throw arc still fit.
