@@ -202,6 +202,16 @@ func _yaw_around_focus(angle: float) -> void:
 	global_position = Vector3(focus.x + offset.x, global_position.y, focus.z + offset.z)
 
 
+## Jump the rig to look at a world point (used by the village roster). Breaks
+## any follow, centres on the point, and pulls back to a comfortable survey
+## height so the whole settlement sits in frame.
+func snap_to(world_pos: Vector3) -> void:
+	follow_target = null
+	global_position.x = world_pos.x
+	global_position.z = world_pos.z
+	zoom_distance = clampf(zoom_distance, 22.0, 45.0)
+
+
 ## Pan by a world-space delta (used by DivineHand's grab-the-land drag).
 func pan_world(delta_vec: Vector3) -> void:
 	follow_target = null  # grabbing the land breaks the follow

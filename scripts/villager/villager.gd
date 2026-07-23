@@ -16,6 +16,7 @@ enum State {
 	GO_PREACH, PREACHING, GO_FEED, GO_BUILD_FARM, BUILDING_FARM,
 	GO_FISH, FISHING, COURT, FOLLOW_MOM, AT_SCHOOL, TEACH,
 	GO_BUILD_EDUBBA, BUILDING_EDUBBA,
+	HAULING,
 	FLEE, HELD, FALLING, DYING,
 }
 
@@ -45,6 +46,10 @@ const HAZARD_RATE := 10.0
 const DROWN_DEPTH := 1.1        # water this deep over the feet drowns them
 const DYING_SECONDS := 10.0     # the window to be healed or lifted back to life
 const REVIVE_HEALTH := 10.0     # what a rescue restores them to
+
+## How much an already-taken job is discouraged for each villager on it, so
+## the flock spreads across the village's needs instead of all rushing one.
+const CROWD_PENALTY := 7.0
 
 var village: Village
 var home: House = null
@@ -95,6 +100,11 @@ var _ground_check_time := randf_range(1.0, 3.0)
 var _target_bush: ForageBush = null
 var _target_farm: Farm = null
 var _carrying_feed := false
+var _carry_kind := ""            # non-empty while hauling a gathered load home
+var _carry_amount := 0
+var _carry_job := ""             # the job this load came from (for crowd tally)
+var _carry_announce := ""        # spoken on delivery, if the player's home
+var _carry_visual: Node3D = null
 var _farm_spot := Vector3.INF
 var _fish_spot := Vector3.INF
 var _world_cache: WorldGen = null
@@ -239,10 +249,12 @@ func _physics_process(delta: float) -> void:
 			if _action_time <= 0.0:
 				if _target_farm.is_harvestable():
 					var yield_bonus := 1 if village.has_pack_animal() else 0
-					village.store.add(FoodItem.FoodType.PLANT, _target_farm.harvest() + yield_bonus)
-					if village.is_player_home:
-						GameState.announce("%s brought in the harvest." % villager_name)
-				_decide()
+					var grain := _target_farm.harvest() + yield_bonus
+					_release_farm()  # done here; free the field before the long walk back
+					_carry_announce = "%s brought in the harvest." % villager_name
+					_begin_haul("plant", grain, "farm")
+				else:
+					_decide()
 		State.GO_FEED:
 			if not _carrying_feed:
 				if _move_toward(village.store.global_position, WALK_SPEED * _speed_factor(), delta):
@@ -265,11 +277,10 @@ func _physics_process(delta: float) -> void:
 			_apply_gravity_only(delta)
 			_action_time -= delta
 			if _action_time <= 0.0:
-				village.store.add(FoodItem.FoodType.MEAT, 1)
 				if village.is_player_home and randf() < 0.3:
 					GameState.announce("%s pulled a fish from the shallows." % villager_name)
 				_fish_spot = Vector3.INF
-				_decide()
+				_begin_haul("meat", 1, "fish")
 		State.GO_BUILD_FARM:
 			if _move_toward(_farm_spot, WALK_SPEED * _speed_factor(), delta):
 				_dismount()
@@ -296,6 +307,17 @@ func _physics_process(delta: float) -> void:
 				village.spawn_edubba_at(_edubba_spot)
 				_edubba_spot = Vector3.INF
 				_decide()
+		State.HAULING:
+			# Carry the gathered load home on foot — nothing teleports to the
+			# store; if the store is gone, the load is simply dropped.
+			if village == null or village.store == null \
+					or not is_instance_valid(village.store):
+				_clear_carry()
+				_decide()
+			elif _move_toward(village.store.global_position,
+					WALK_SPEED * _speed_factor(), delta, 2.2):
+				_deliver_carry()
+				_decide()
 		State.COURT:
 			# Court at the totem; conception happens while worshipping there.
 			if _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
@@ -316,26 +338,33 @@ func _physics_process(delta: float) -> void:
 			_process_go_target(_target_animal, delta, State.HUNTING, 2.0)
 		State.HUNTING:
 			if _wait(delta):
+				var meat := 0
 				if is_instance_valid(_target_animal):
-					var meat := _target_animal.meat_yield() + (1 if village.has_pack_animal() else 0)
+					meat = _target_animal.meat_yield() + (1 if village.has_pack_animal() else 0)
 					_target_animal.die(false)
-					village.store.add(FoodItem.FoodType.MEAT, meat)
 				_target_animal = null
-				_decide()
+				if meat > 0:
+					_begin_haul("meat", meat, "hunt")
+				else:
+					_decide()
 		State.GO_BUTCHER:
 			_process_go_target(_target_corpse, delta, State.BUTCHERING, 2.5)
 		State.BUTCHERING:
 			if _wait(delta):
+				var butchered := false
 				if is_instance_valid(_target_corpse):
 					var corpse_name := _target_corpse.villager_name
 					_target_corpse.queue_free()
-					village.store.add(FoodItem.FoodType.MEAT, 2)
 					morality = maxf(morality - 20.0, -100.0)
+					butchered = true
 					if village.is_player_home:
 						GameState.announce("%s butchered the remains of %s. The gods avert their eyes."
 							% [villager_name, corpse_name])
 				_target_corpse = null
-				_decide()
+				if butchered:
+					_begin_haul("meat", 2, "butcher")
+				else:
+					_decide()
 		State.GO_CHOP:
 			_process_go_target(_target_tree, delta, State.CHOPPING, 4.0)
 		State.CHOPPING:
@@ -343,12 +372,15 @@ func _physics_process(delta: float) -> void:
 			_action_time -= delta
 			_work_noise("saw", 0.9, delta)
 			if _action_time <= 0.0:
+				var lumber := 0
 				if is_instance_valid(_target_tree) and not _target_tree.is_felled() \
 						and not _target_tree.is_held():
-					var lumber := _target_tree.fell() + (1 if village.has_pack_animal() else 0)
-					village.store.add_lumber(lumber)
+					lumber = _target_tree.fell() + (1 if village.has_pack_animal() else 0)
 				_target_tree = null
-				_decide()
+				if lumber > 0:
+					_begin_haul("lumber", lumber, "chop")
+				else:
+					_decide()
 		State.GO_QUARRY:
 			_process_go_target(_target_deposit, delta, State.QUARRYING, 4.0)
 		State.QUARRYING:
@@ -356,11 +388,14 @@ func _physics_process(delta: float) -> void:
 			_action_time -= delta
 			_work_noise("pick", 0.8, delta)
 			if _action_time <= 0.0:
+				var stone := 0
 				if is_instance_valid(_target_deposit):
-					var stone := _target_deposit.quarry() + (1 if village.has_pack_animal() else 0)
-					village.store.add_stone(stone)
+					stone = _target_deposit.quarry() + (1 if village.has_pack_animal() else 0)
 				_target_deposit = null
-				_decide()
+				if stone > 0:
+					_begin_haul("stone", stone, "quarry")
+				else:
+					_decide()
 		State.GO_BUILD:
 			if _build_site == null or not is_instance_valid(_build_site):
 				_build_site = null
@@ -586,6 +621,7 @@ func _anim_state() -> String:
 	match state:
 		State.DYING: return "dying"
 		State.FALLING: return "fall"
+		State.HAULING: return "carry"
 		State.HELD: return "idle"
 		State.FLEE: return "run"
 		State.SLEEPING: return "sleep"
@@ -689,6 +725,8 @@ func cheer(amount: float) -> void:
 func _decide() -> void:
 	_dismount()
 	_release_farm()  # re-deciding drops any field claim, so others may take it
+	if _carry_kind != "":
+		_clear_carry()  # a load abandoned mid-haul is lost (interrupted by fear, etc.)
 	# Survival first.
 	if energy < 20.0:
 		_go_sleep()
@@ -811,13 +849,20 @@ func _pick_job() -> bool:
 
 	if scores.is_empty():
 		return false
+	# Pooled distribution: discourage jobs the flock is already crowding onto,
+	# so villagers fan out across the village's needs instead of all rushing the
+	# nearest tree or field (the first-run conga line).
+	var crowd := village.job_counts()
 	var best: String = ""
-	var best_score := 0.0
+	var best_score := -INF
 	for job: String in scores:
-		var jittered: float = scores[job] + randf_range(-5.0, 5.0)
+		var jittered: float = scores[job] + randf_range(-5.0, 5.0) \
+			- CROWD_PENALTY * float(crowd.get(job, 0))
 		if jittered > best_score:
 			best_score = jittered
 			best = job
+	if best == "":
+		return false
 	_start_job(best)
 	return true
 
@@ -987,6 +1032,77 @@ func _eat_meal() -> void:
 	else:
 		hunger = maxf(hunger - FoodItem.NUTRITION, 0.0)
 	_target_food = null
+
+
+## Hauling -------------------------------------------------------------------
+
+## Shoulder a gathered load and set off for the storehouse on foot. Nothing is
+## banked until they actually arrive (see State.HAULING / _deliver_carry).
+func _begin_haul(kind: String, amount: int, origin_job: String) -> void:
+	if amount <= 0 or village == null:
+		_decide()
+		return
+	_carry_kind = kind
+	_carry_amount = amount
+	_carry_job = origin_job
+	_make_carry_visual(kind)
+	state = State.HAULING
+
+
+## Bank the carried load into the store and put the load down.
+func _deliver_carry() -> void:
+	if village != null and is_instance_valid(village.store):
+		match _carry_kind:
+			"plant": village.store.add(FoodItem.FoodType.PLANT, _carry_amount)
+			"meat": village.store.add(FoodItem.FoodType.MEAT, _carry_amount)
+			"lumber": village.store.add_lumber(_carry_amount)
+			"stone": village.store.add_stone(_carry_amount)
+		if _carry_announce != "" and village.is_player_home:
+			GameState.announce(_carry_announce)
+	_clear_carry()
+
+
+## Drop whatever is being carried (delivered, or abandoned) and forget it.
+func _clear_carry() -> void:
+	_carry_kind = ""
+	_carry_amount = 0
+	_carry_job = ""
+	_carry_announce = ""
+	if is_instance_valid(_carry_visual):
+		_carry_visual.queue_free()
+	_carry_visual = null
+
+
+## A little bundle in the hands so the eye can see WHAT they are carrying.
+func _make_carry_visual(kind: String) -> void:
+	if is_instance_valid(_carry_visual):
+		_carry_visual.queue_free()
+	var color := Color(0.87, 0.72, 0.32)  # plant / grain
+	match kind:
+		"meat": color = Color(0.72, 0.24, 0.2)
+		"lumber": color = Color(0.55, 0.4, 0.25)
+		"stone": color = Color(0.55, 0.54, 0.56)
+	_carry_visual = Util.lite_box(Vector3(0.34, 0.28, 0.34), color, Vector3(0, 0.95, 0.34))
+	_visuals.add_child(_carry_visual)
+
+
+## The job this villager currently occupies, for the village's crowd tally
+## (so the flock spreads across needs). "" when idle/at home tasks.
+func current_job() -> String:
+	match state:
+		State.GO_BUILD, State.BUILDING: return "build"
+		State.GO_CHOP, State.CHOPPING: return "chop"
+		State.GO_QUARRY, State.QUARRYING: return "quarry"
+		State.GO_FARM, State.FARMING: return "farm"
+		State.GO_FEED: return "feed"
+		State.GO_BUILD_FARM, State.BUILDING_FARM: return "build_farm"
+		State.GO_BUILD_EDUBBA, State.BUILDING_EDUBBA: return "build_edubba"
+		State.GO_HUNT, State.HUNTING: return "hunt"
+		State.GO_FISH, State.FISHING: return "fish"
+		State.GO_BUTCHER, State.BUTCHERING: return "butcher"
+		State.GO_TAME, State.TAMING: return "tame"
+		State.HAULING: return _carry_job
+	return ""
 
 
 ## Target finding ------------------------------------------------------------
@@ -1502,6 +1618,7 @@ func _status_word() -> String:
 		State.GO_BUILD_FARM, State.BUILDING_FARM: return "breaking new ground"
 		State.GO_BUILD_EDUBBA, State.BUILDING_EDUBBA: return "raising the Edubba"
 		State.GO_FISH, State.FISHING: return "fishing"
+		State.HAULING: return "hauling to the storehouse"
 		State.COURT: return "courting at the totem"
 		State.FOLLOW_MOM: return "following mother"
 		State.AT_SCHOOL: return "at school"
@@ -1527,6 +1644,7 @@ func _status_text() -> String:
 		State.WORSHIPPING: return "pray"
 		State.PREACHING: return "hear me!"
 		State.FISHING: return "fish?"
+		State.HAULING: return "haul"
 		State.COURT: return "♥"
 		State.FOLLOW_MOM: return "mama"
 		State.AT_SCHOOL: return "abc"

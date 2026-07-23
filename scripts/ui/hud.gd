@@ -22,6 +22,10 @@ var _cast_label: Label
 var _creature_panel: PanelContainer
 var _creature_label: Label
 var _praise_scold: HBoxContainer
+var _roster_panel: PanelContainer
+var _roster_list: VBoxContainer
+var _roster_button: Button
+var _roster_refresh := 0.0
 
 
 func _ready() -> void:
@@ -33,6 +37,7 @@ func _ready() -> void:
 	_build_hover_label()
 	_build_message_label()
 	_build_help_panel()
+	_build_roster()
 
 	GameState.announcement.connect(_on_announcement)
 	GameState.cast_hint.connect(_on_cast_hint)
@@ -209,6 +214,7 @@ Q / E ...................... rotate camera
 1 / 2 / 3 / 4 .............. village diet: Vegan / Omnivore / Carnivore / Cannibal
 P / L (hand near creature) . PET (reward) / SCOLD (discourage) its last deed
 C .......................... LOCK the camera onto your creature (again to release)
+V .......................... open the VILLAGES roster — snap the camera to any of yours
 F1 ......................... toggle this help
 F2 ......................... cycle graphics quality: Low / Medium / High
 
@@ -291,6 +297,7 @@ func _process(delta: float) -> void:
 
 	_update_creature_panel()
 	_update_miracle_panel(delta)
+	_update_roster(delta)
 
 	if _message_timer > 0.0:
 		_message_timer -= delta
@@ -336,6 +343,121 @@ func _update_creature_panel() -> void:
 			int(creature.bond), int(creature.hunger), int(creature.energy)]
 
 
+## Village roster ------------------------------------------------------------
+
+## A toggleable directory of the villages that believe in you: population,
+## distance, and a Go button that snaps the camera to each. Lines are kept
+## roomy — more per-village readouts (belief, unrest, unlocks) will slot in
+## as those systems land.
+func _build_roster() -> void:
+	_roster_button = Button.new()
+	_roster_button.text = "Villages [V]"
+	_roster_button.position = Vector2(16, 46)
+	_roster_button.custom_minimum_size = Vector2(160, 34)
+	_roster_button.focus_mode = Control.FOCUS_NONE
+	_roster_button.add_theme_font_size_override("font_size", 15)
+	_roster_button.pressed.connect(_toggle_roster)
+	add_child(_roster_button)
+
+	_roster_panel = PanelContainer.new()
+	_roster_panel.visible = false
+	_roster_panel.set_anchors_and_offsets_preset(
+		Control.PRESET_CENTER_LEFT, Control.PRESET_MODE_MINSIZE, 16)
+	_roster_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_roster_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_roster_panel.add_theme_stylebox_override("panel", _dim_panel_style())
+
+	var outer := VBoxContainer.new()
+	outer.add_theme_constant_override("separation", 6)
+	var title := Label.new()
+	title.text = "YOUR VILLAGES"
+	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_color_override("font_color", Color(0.85, 0.9, 1.0))
+	outer.add_child(title)
+
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(330, 300)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_roster_list = VBoxContainer.new()
+	_roster_list.add_theme_constant_override("separation", 8)
+	_roster_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_roster_list)
+	outer.add_child(scroll)
+	_roster_panel.add_child(outer)
+	add_child(_roster_panel)
+
+
+func _toggle_roster() -> void:
+	_roster_panel.visible = not _roster_panel.visible
+	if _roster_panel.visible:
+		_rebuild_roster()
+		_roster_refresh = 0.5
+
+
+## While open, refresh every half-second so population and distance stay live
+## and newly converted villages appear.
+func _update_roster(delta: float) -> void:
+	if _roster_panel == null or not _roster_panel.visible:
+		return
+	_roster_refresh -= delta
+	if _roster_refresh <= 0.0:
+		_roster_refresh = 0.5
+		_rebuild_roster()
+
+
+func _rebuild_roster() -> void:
+	for child in _roster_list.get_children():
+		child.queue_free()
+	var cam := camera_rig.global_position if camera_rig != null else Vector3.ZERO
+	var mine: Array = []
+	for v in get_tree().get_nodes_in_group("village"):
+		var vil := v as Village
+		if is_instance_valid(vil) and vil.converted:
+			mine.append(vil)
+	mine.sort_custom(func(a: Village, b: Village) -> bool:
+		return a.global_position.distance_to(cam) < b.global_position.distance_to(cam))
+	if mine.is_empty():
+		var none := Label.new()
+		none.text = "No village yet believes in you.\nConvert one with your miracles."
+		none.add_theme_font_size_override("font_size", 14)
+		_roster_list.add_child(none)
+		return
+	for vil: Village in mine:
+		_roster_list.add_child(_roster_row(vil, cam))
+
+
+func _roster_row(vil: Village, cam: Vector3) -> Control:
+	var row := HBoxContainer.new()
+	row.custom_minimum_size = Vector2(300, 60)  # roomy — future stats go here
+	row.add_theme_constant_override("separation", 10)
+
+	var go := Button.new()
+	go.text = "Go"
+	go.custom_minimum_size = Vector2(58, 52)
+	go.focus_mode = Control.FOCUS_NONE
+	go.add_theme_font_size_override("font_size", 16)
+	go.pressed.connect(_snap_to_village.bind(vil))
+	row.add_child(go)
+
+	var flat := Vector2(vil.global_position.x - cam.x, vil.global_position.z - cam.z)
+	var home := "  (home)" if vil.is_player_home else ""
+	var label := Label.new()
+	label.text = "%s%s\nPop %d  ·  %d m away\n " % [
+		vil.village_name, home, vil.population(), int(round(flat.length()))]
+	label.add_theme_font_size_override("font_size", 15)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(label)
+	return row
+
+
+func _snap_to_village(vil: Village) -> void:
+	if is_instance_valid(vil) and camera_rig != null:
+		camera_rig.snap_to(vil.global_position)
+		GameState.announce("Surveying %s." % vil.village_name)
+
+
 func _on_praise() -> void:
 	if is_instance_valid(creature):
 		creature.praise()
@@ -355,6 +477,8 @@ func _on_cast_hint(text: String) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_help"):
 		_help_panel.visible = not _help_panel.visible
+	elif event.is_action_pressed("toggle_villages"):
+		_toggle_roster()
 
 
 func _on_announcement(text: String) -> void:

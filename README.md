@@ -47,6 +47,7 @@ you're done. No system install required.
 | 1 / 2 / 3 / 4 | Village diet: Vegan / Omnivore / Carnivore / Cannibal |
 | P / L (hand near creature) | **Pet** (reward) / **scold** (discourage) its last deed |
 | C | **Lock** the camera onto your creature — centered, orbitable; C again (or pan) releases |
+| V | **Villages roster** — list your faithful villages (population, distance) and **snap the camera** to any of them |
 | F1 | Help panel |
 
 ### Miracles — two gestures, then throw (hold right mouse)
@@ -124,7 +125,13 @@ Everything you conjure is a throwable you place where you choose.
 - **Jobs are chosen, not assigned**: every adult scores what the village
   lacks — food, lumber, stone, housing, repairs, livestock — and takes the
   most urgent work: farming, hunting, felling timber, quarrying, building,
-  taming. Starvation is lethal — and the god who allowed it is judged.
+  taming. Choices are **pooled and spread** — a job the flock is already
+  crowding onto is discouraged, so villagers fan out across the village's
+  needs instead of conga-lining to one resource. Starvation is lethal —
+  and the god who allowed it is judged.
+- **Nothing teleports**: a gathered catch, harvest, timber, or stone must be
+  **carried home on foot** to the storehouse (you can see the load in their
+  hands) before it counts. A load abandoned in fright is dropped and lost.
 - **Houses are mortal too**: hut / house / longhouse (sleeps 2/4/6), each
   with health and age. A **lived-in house is a kept house** — only empty
   ones decay with age and collapse. Builders raise new ones (lumber +

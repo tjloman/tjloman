@@ -59,17 +59,19 @@ func _ready() -> void:
 	_build_totem()
 	_build_pen()
 
-	farm = Farm.new()
-	farm.position = _farm_position(Vector3(10, 0, -4))
-	add_child(farm)
-	farms.append(farm)
-
 	# The round market sits well clear of the house ring to the northwest.
 	store = FoodStore.new()
 	store.position = _grounded(Vector3(-9, 0, 6), 3.5)
 	add_child(store)
 	if is_player_home:
 		store.plant_food += 8  # a founding surplus, so the game starts kind
+
+	# The founding field is placed AFTER the store so its clearance check reads
+	# the store's final spot — no field ends up buried under the market floor.
+	farm = Farm.new()
+	farm.position = _farm_position(Vector3(10, 0, -4))
+	add_child(farm)
+	farms.append(farm)
 
 	_build_influence_ring()
 	_build_starting_houses()
@@ -178,13 +180,13 @@ func pick_farm(from: Vector3, by: Villager) -> Farm:
 	var best: Farm = null
 	var best_dist := INF
 	for f in farms:
-		var farm := f as Farm
-		if not farm.is_workable() or not farm.is_free_for(by):
+		var field := f as Farm
+		if not field.is_workable() or not field.is_free_for(by):
 			continue
-		var d := from.distance_to(farm.global_position)
+		var d := from.distance_to(field.global_position)
 		if d < best_dist:
 			best_dist = d
-			best = farm
+			best = field
 	if best != null:
 		best.claim(by)
 	return best
@@ -400,6 +402,18 @@ func my_villagers() -> Array[Villager]:
 
 func population() -> int:
 	return my_villagers().size()
+
+
+## How many of my villagers are currently occupied by each job — a deciding
+## villager reads this to steer toward under-served work, so the flock spreads
+## across the village's needs instead of all conga-lining to one resource.
+func job_counts() -> Dictionary:
+	var counts := {}
+	for v in my_villagers():
+		var job := v.current_job()
+		if job != "":
+			counts[job] = counts.get(job, 0) + 1
+	return counts
 
 
 func average_morality() -> float:

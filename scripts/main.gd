@@ -144,6 +144,7 @@ func _setup_input() -> void:
 		"cam_rotate_right": [KEY_E],
 		"toggle_help": [KEY_F1],
 		"cycle_quality": [KEY_F2],
+		"toggle_villages": [KEY_V],
 		"diet_vegan": [KEY_1],
 		"diet_omnivore": [KEY_2],
 		"diet_carnivore": [KEY_3],
