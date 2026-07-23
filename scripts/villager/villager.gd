@@ -1153,14 +1153,13 @@ func _move_toward(target: Vector3, speed: float, delta: float, arrive := ARRIVE_
 	var dir := to_target.normalized()
 	# Steer around trees and rocks (but not the one we're walking to).
 	dir = NavField.steer(global_position, dir, 0.4, target)
-	# Villagers cannot swim: refuse to step into open water. (The stuck
-	# watchdog re-decides anyone left pacing the shore.)
-	var world := _world()
-	if world != null:
-		var ahead := global_position + dir * 1.2
-		if world.is_underwater(ahead.x, ahead.z):
-			_apply_gravity_only(delta)
-			return false
+	# Villagers cannot swim: route ALONG the shore around open water rather
+	# than stepping in. Only a body hemmed in by water on every side stalls
+	# (and the stuck watchdog re-decides them).
+	dir = NavField.water_steer(global_position, dir, _world())
+	if dir == Vector3.ZERO:
+		_apply_gravity_only(delta)
+		return false
 	velocity.x = dir.x * speed
 	velocity.z = dir.z * speed
 	velocity.y -= GRAVITY * delta

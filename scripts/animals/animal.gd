@@ -470,15 +470,14 @@ func _move_toward(target: Vector3, speed: float, delta: float) -> bool:
 	var dir := to_target.normalized()
 	# Steer around trees and rocks on the way (but not the target).
 	dir = NavField.steer(global_position, dir, 0.4, target)
-	# Beasts don't swim: stop at the water's edge (frogs excepted — they
-	# belong to both worlds).
+	# Beasts don't swim: route along the shore around water (frogs excepted —
+	# they belong to both worlds).
 	if not spec.get("hops", false):
-		var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-		if world != null:
-			var ahead := global_position + dir * 1.2
-			if world.is_underwater(ahead.x, ahead.z):
-				_apply_gravity_only(delta)
-				return false
+		dir = NavField.water_steer(
+			global_position, dir, get_tree().get_first_node_in_group("world_gen") as WorldGen)
+		if dir == Vector3.ZERO:
+			_apply_gravity_only(delta)
+			return false
 	velocity.x = dir.x * speed
 	velocity.z = dir.z * speed
 	velocity.y -= GRAVITY * delta

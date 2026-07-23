@@ -87,3 +87,26 @@ func steer(pos: Vector3, desired: Vector3, self_radius: float,
 		return desired
 	var steered := (des2 + push * 1.4).normalized()
 	return Vector3(steered.x, 0, steered.y)
+
+
+## Route a non-swimmer AROUND water instead of into it. If the desired
+## heading steps onto water within `probe` metres, sweep outward for the
+## nearest dry heading that still makes headway (shore-following), preferring
+## the smallest turn. Returns Vector3.ZERO only when boxed in by water on
+## every side — the caller then holds still (and a watchdog re-decides).
+##
+## This is what lets villagers and beasts walk along a lakeshore to reach the
+## far side, rather than stopping dead at the water's edge and starving.
+func water_steer(pos: Vector3, desired: Vector3, world: WorldGen, probe := 1.6) -> Vector3:
+	if world == null or desired == Vector3.ZERO:
+		return desired
+	if not world.is_underwater(pos.x + desired.x * probe, pos.z + desired.z * probe):
+		return desired
+	# The straight path is wet — try ever-wider turns to either side. Up to
+	# 90 deg keeps forward progress; beyond that is a last resort to escape a
+	# cove. Small turns first, alternating sides, so it hugs the shoreline.
+	for deg: float in [30.0, -30.0, 55.0, -55.0, 80.0, -80.0, 110.0, -110.0, 145.0, -145.0]:
+		var d := desired.rotated(Vector3.UP, deg_to_rad(deg))
+		if not world.is_underwater(pos.x + d.x * probe, pos.z + d.z * probe):
+			return d
+	return Vector3.ZERO
