@@ -929,6 +929,9 @@ func _hurl_carried() -> void:
 func _sway_trees() -> void:
 	var reach := 0.6 * scale.x + 2.5
 	var reach2 := reach * reach
+	# The lean angle grows with the creature's size: a hatchling barely nudges a
+	# tree, a full-grown giant bends it right over. (WildTree clamps to MAX_LEAN.)
+	var strength := clampf(scale.x * 0.09, 0.2, 1.1)
 	for t in get_tree().get_nodes_in_group("trees"):
 		var tree := t as WildTree
 		if not is_instance_valid(tree):
@@ -938,7 +941,7 @@ func _sway_trees() -> void:
 		var d2 := dx * dx + dz * dz
 		if d2 > reach2 or d2 < 0.0001:
 			continue
-		tree.sway(global_position, (1.0 - sqrt(d2) / reach) * 0.6)
+		tree.sway(global_position, (1.0 - sqrt(d2) / reach) * strength)
 
 
 func _process_kick_house(delta: float) -> void:

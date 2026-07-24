@@ -15,6 +15,7 @@ const GROWTH_TAPER := 0.7
 const RAIN_GROWTH := 1.6    # a rain miracle speeds growth while it lasts
 const SAPLING_SCALE := 0.15   # a knee-high seedling
 const MATURE_SCALE := 5.0     # a full-grown giant towers ~30m over the land
+const GROW_LERP := 5.0        # how fast the visible scale eases toward its target
 const REPLANT_PERIOD := 50.0
 const REPLANT_CROWDING := 4     # no seeding when this many trees stand close
 
@@ -31,7 +32,7 @@ const HARM_RADIUS := 3.5
 const LEAN_SPRING := 60.0
 const LEAN_DAMP := 9.0
 const LEAN_DECAY := 3.0     # how fast the push fades once the creature has passed
-const MAX_LEAN := 0.5       # radians (~29°) — the hardest a shove can bend it
+const MAX_LEAN := 1.1       # radians (~63°) — a giant's shove can bend it right over
 
 var style := "forest"
 var rng_seed := 0
@@ -42,7 +43,8 @@ var _felled := false
 var _held := false
 var _flying := false
 var _fly_velocity := Vector3.ZERO
-var _shown_lumber := -1
+var _target_scale := Vector3.ONE   # eased growth scale the tree animates toward
+var _grow_anim := false            # true while the visible scale is catching up
 var _base_height := 3.5
 var _replant_time := REPLANT_PERIOD * randf_range(0.5, 1.5)
 var _burn_time := 0.0
@@ -112,7 +114,8 @@ func _ready() -> void:
 	_plant_yaw = rng.randf() * TAU
 	rotation.y = _plant_yaw
 
-	_apply_growth_scale()
+	scale = _scale_for_lumber()   # start at the right size immediately
+	_target_scale = scale
 
 
 func _process(delta: float) -> void:
@@ -126,6 +129,7 @@ func _process(delta: float) -> void:
 		_fly(delta)
 		return
 	_update_lean(delta)
+	_animate_growth(delta)
 	if burning:
 		_burn(delta)
 		return
@@ -150,8 +154,10 @@ func _process(delta: float) -> void:
 			else:
 				remove_meta("quicken_to")
 		lumber = minf(lumber + step * d, MAX_LUMBER)
-		if int(lumber) != _shown_lumber:
-			_apply_growth_scale()
+		var target := _scale_for_lumber()
+		if not target.is_equal_approx(_target_scale):
+			_target_scale = target
+			_grow_anim = true
 	else:
 		_replant_time -= d
 		if _replant_time <= 0.0:
@@ -176,7 +182,7 @@ func sway(from_pos: Vector3, amount: float) -> void:
 		return
 	away = away.normalized()
 	# Tilt the top toward `away` = rotate about the perpendicular horizontal axis.
-	_lean_target = Vector3(-away.z, 0.0, away.x) * clampf(amount, 0.0, MAX_LEAN)
+	_lean_target = Vector3(away.z, 0.0, -away.x) * clampf(amount, 0.0, MAX_LEAN)
 
 
 ## Advance the lean spring and write it into the tree's rotation. Costs nothing
@@ -199,14 +205,25 @@ func _update_lean(delta: float) -> void:
 	rotation = b.get_euler()
 
 
-## The whole tree scales with its stored lumber: a knee-high sapling grows into
+## The eased growth scale for the current lumber: a knee-high sapling grows into
 ## a towering ~30m giant. The ramp is eased-in (t²) so young trees stay small
 ## and only the mature ones loom — the alternative (a straight lerp to a big
 ## mature scale) would make every sapling a monster the moment it sprouts.
-func _apply_growth_scale() -> void:
-	_shown_lumber = int(lumber)
+func _scale_for_lumber() -> Vector3:
 	var t := lumber / MAX_LUMBER
-	scale = Vector3.ONE * (SAPLING_SCALE + (MATURE_SCALE - SAPLING_SCALE) * t * t)
+	return Vector3.ONE * (SAPLING_SCALE + (MATURE_SCALE - SAPLING_SCALE) * t * t)
+
+
+## Ease the visible scale toward the growth target a little each frame, so the
+## tree swells smoothly instead of jumping a step at every 0.4s growth tick.
+## Only a tree that's actively growing pays this; mature and idle trees skip it.
+func _animate_growth(delta: float) -> void:
+	if not _grow_anim:
+		return
+	scale = scale.lerp(_target_scale, minf(delta * GROW_LERP, 1.0))
+	if scale.distance_to(_target_scale) < 0.0008:
+		scale = _target_scale
+		_grow_anim = false
 
 
 ## A mature tree drops a seed nearby — if the stand isn't already crowded
@@ -346,7 +363,9 @@ func extinguish() -> void:
 
 func _build_fire_visual() -> void:
 	_fire_visual = Node3D.new()
-	var top := current_height()
+	# LOCAL height (pre-scale): the node scales this, so the already-scaled
+	# current_height() would float the fire up by scale squared.
+	var top := _base_height
 	for i in 4:
 		var cone := CylinderMesh.new()
 		cone.top_radius = 0.0
