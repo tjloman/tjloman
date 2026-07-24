@@ -570,8 +570,10 @@ func _finish_deed(deed: String, mood_gain: float) -> void:
 	_last_deed = deed
 	mood = minf(mood + mood_gain, 100.0)
 	boredom = maxf(boredom - 25.0, 0.0)
-	if deed in ["tend", "gather", "guard", "gift", "fish"]:
-		morality = clampf(morality + 1.0, -100.0, 100.0)
+	# Good work nudges it kinder — but only up to "gentle" on its own. Rising to
+	# truly ANGELIC takes YOUR praise; a creature isn't a saint by mere habit.
+	if deed in ["tend", "gather", "guard", "gift", "fish"] and morality < 40.0:
+		morality = minf(morality + 1.0, 40.0)
 	match deed:
 		"play": express("happy")
 		"guard": express("angry", 1.2)
@@ -701,6 +703,15 @@ func _intent_for(item: Node3D) -> String:
 		if animal.is_tamable() and morality > 0.0:
 			return "gift"
 		return "release"
+	if item is Corpse:
+		return "eat"  # feeding it the dead is a dark offering it won't refuse
+	if item is Villager:
+		# Force-fed a living villager: a wild or cruel beast DEVOURS them — a
+		# black deed that corrupts it fast. Only a good-hearted one (gentle+)
+		# refuses, sparing the person (and cradling a dying one back to life).
+		if morality >= 20.0:
+			return "release"
+		return "eat"
 	return "release"
 
 
@@ -725,9 +736,10 @@ func _run_speed() -> float:
 
 
 func _pick_up_thing(node: Node3D, intent: String) -> void:
-	# A neutral-or-better creature lifting a dying villager cradles them back
-	# to a sliver of life, same as the hand.
-	if node is Villager and (node as Villager).is_dying() and morality >= 0.0:
+	# A GOOD creature (gentle+) lifting a dying villager cradles them back to a
+	# sliver of life, same as the hand. A wild or cruel one does no such mercy —
+	# it will eat what it's handed (see _intent_for / _eat_carried).
+	if node is Villager and (node as Villager).is_dying() and morality >= 20.0:
 		(node as Villager).rescue()
 	_carried = node
 	_carry_intent = intent
@@ -864,6 +876,23 @@ func _find_shore() -> Vector3:
 
 ## The moment of truth: some things are food, some things are lessons.
 func _eat_carried() -> void:
+	# The darkest meals: a villager it was handed (or ran down), or a corpse.
+	if _carried is Villager:
+		_devour_villager(_carried as Villager)
+		_carried = null
+		state = State.EATING
+		_action_time = 2.0
+		return
+	if _carried is Corpse:
+		morality = clampf(morality - 3.0, -100.0, 100.0)
+		hunger = maxf(hunger - 50.0, 0.0)
+		GameState.announce("Your creature feeds on the dead. The villagers look away.")
+		_last_deed = "mischief"
+		_carried.queue_free()
+		_carried = null
+		state = State.EATING
+		_action_time = 2.0
+		return
 	var animal := _carried as Animal
 	if animal == null:
 		_release_carried(true)

@@ -1494,6 +1494,13 @@ func take_damage(amount: float, by_god := false, instant := false) -> void:
 
 func die(of_old_age: bool) -> void:
 	_dismount()
+	# The creature learns cruelty from the deaths it witnesses its god allow —
+	# a violent end nearby drags its heart toward the dark. (Old age teaches
+	# nothing; the creature is only reading its god's hand in the world.)
+	if not of_old_age:
+		var creature := get_tree().get_first_node_in_group("creature") as Creature
+		if creature != null and creature.global_position.distance_to(global_position) < 40.0:
+			creature.witness(-2.0)
 	var corpse := Corpse.new()
 	corpse.villager_name = villager_name
 	var parent := get_parent() as Node3D
