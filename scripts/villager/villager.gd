@@ -122,7 +122,7 @@ func _ready() -> void:
 	add_to_group("villagers")
 	add_to_group("pickable")
 	collision_layer = 2
-	collision_mask = 1
+	collision_mask = 1 | 8  # world + trees (their own layer)
 	villager_name = _random_name()
 
 	var col := CollisionShape3D.new()

@@ -109,6 +109,7 @@ var _shown_align := 999.0                  # last applied alignment (throttle)
 var _expression := "neutral"
 var _expr_time := 0.0
 var _wedge_time := 0.0             # seconds shoving forward without advancing
+var _sway_tick := 0                # throttles the push-trees-aside sweep
 
 
 func _ready() -> void:
@@ -263,6 +264,13 @@ func _physics_process(delta: float) -> void:
 		_observe_world()
 
 	_try_catch_throw()
+
+	# Bulldoze the meadow: nearby trees lean out of the giant's way (they spring
+	# back once it passes). Throttled — the trees' own spring keeps it smooth.
+	_sway_tick += 1
+	if _sway_tick >= 3:
+		_sway_tick = 0
+		_sway_trees()
 
 	# Whatever the claws hold rides along, up at the shoulder.
 	if _carried != null:
@@ -915,6 +923,24 @@ func _hurl_carried() -> void:
 
 
 ## Stomp the house: heavy damage, a boom, terror for anyone watching.
+## Shove every tree within reach out of the way (they lean and spring back).
+## Reach scales with the creature's size, so a full-grown giant clears a wide
+## swathe. Only trees near enough do any work; the rest are skipped by distance.
+func _sway_trees() -> void:
+	var reach := 0.6 * scale.x + 2.5
+	var reach2 := reach * reach
+	for t in get_tree().get_nodes_in_group("trees"):
+		var tree := t as WildTree
+		if not is_instance_valid(tree):
+			continue
+		var dx := tree.global_position.x - global_position.x
+		var dz := tree.global_position.z - global_position.z
+		var d2 := dx * dx + dz * dz
+		if d2 > reach2 or d2 < 0.0001:
+			continue
+		tree.sway(global_position, (1.0 - sqrt(d2) / reach) * 0.6)
+
+
 func _process_kick_house(delta: float) -> void:
 	_apply_root_motion()
 	if _catch_target == null or not is_instance_valid(_catch_target):
@@ -924,8 +950,7 @@ func _process_kick_house(delta: float) -> void:
 	if _move_toward(_catch_target.global_position, _run_speed(), delta):
 		var house := _catch_target as House
 		if house != null:
-			house.damage(60.0)
-			SoundBank.play_at("boom", global_position, -2.0)
+			house.kick(global_position, 1.0)  # heavy damage AND a visible knock
 		morality = clampf(morality - 2.5, -100.0, 100.0)
 		mood = minf(mood + 8.0, 100.0)
 		boredom = maxf(boredom - 25.0, 0.0)
@@ -1388,7 +1413,9 @@ func _move_toward(target: Vector3, speed: float, delta: float) -> bool:
 	# Steer around trees and rocks (not the one it's heading for). The avoid
 	# radius tracks the creature's ACTUAL size (its collider is 0.6 * scale) so
 	# a grown beast swerves wide around groves instead of ramming the trunks.
-	dir = NavField.steer(global_position, dir, 0.6 * scale.x + 0.4, target)
+	# skip_trees: the creature wades straight THROUGH groves (shoving them aside,
+	# see _sway_trees), steering only around solid rock.
+	dir = NavField.steer(global_position, dir, 0.6 * scale.x + 0.4, target, true)
 	# The creature WADES: water is passable but slow — half speed with
 	# its legs in the lake. (A future miracle will let it walk ON water.)
 	if not walks_on_water:

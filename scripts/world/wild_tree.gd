@@ -26,6 +26,13 @@ const SPREAD_RADIUS := 6.0
 const SPREAD_CHANCE := 0.35      # per spread-tick, per near neighbour
 const HARM_RADIUS := 3.5
 
+## Sway: when the creature wades through, trees lean out of its way and spring
+## back. An underdamped spring gives the little bounce as they right themselves.
+const LEAN_SPRING := 60.0
+const LEAN_DAMP := 9.0
+const LEAN_DECAY := 3.0     # how fast the push fades once the creature has passed
+const MAX_LEAN := 0.5       # radians (~29°) — the hardest a shove can bend it
+
 var style := "forest"
 var rng_seed := 0
 var lumber := 1.0
@@ -45,12 +52,15 @@ var _spin_ang := Vector3.ZERO   # aftertouch spin axis*rate while airborne (rad/
 var _plant_yaw := 0.0           # the tree's random facing, restored after a throw
 var _grow_accum := randf() * 0.4   # de-sync the growth tick across trees
 var _rain_time := 0.0              # seconds of lingering rain-blessing
+var _lean := Vector3.ZERO          # current tilt as an axis*angle vector
+var _lean_vel := Vector3.ZERO
+var _lean_target := Vector3.ZERO   # where a push wants it; decays back to zero
 
 
 func _ready() -> void:
 	add_to_group("trees")
 	add_to_group("pickable")  # any tree can be UPROOTED by the hand
-	collision_layer = 1
+	collision_layer = 8  # its own layer: walkers collide + steer, the creature passes through
 	collision_mask = 0
 	set_meta("hover_name", "Tree")
 
@@ -115,6 +125,7 @@ func _process(delta: float) -> void:
 	if _flying:
 		_fly(delta)
 		return
+	_update_lean(delta)
 	if burning:
 		_burn(delta)
 		return
@@ -151,6 +162,41 @@ func _process(delta: float) -> void:
 ## A passing rain miracle blesses the tree with faster growth for a while.
 func rain(duration: float) -> void:
 	_rain_time = maxf(_rain_time, duration)
+
+
+## Shoved aside by something wading past (the creature): lean the crown AWAY
+## from `from_pos`, harder the closer it is. Called every frame while near; the
+## lean decays and springs upright once the pushing stops.
+func sway(from_pos: Vector3, amount: float) -> void:
+	if _felled or _held or _flying:
+		return
+	var away := global_position - from_pos
+	away.y = 0.0
+	if away.length() < 0.01:
+		return
+	away = away.normalized()
+	# Tilt the top toward `away` = rotate about the perpendicular horizontal axis.
+	_lean_target = Vector3(-away.z, 0.0, away.x) * clampf(amount, 0.0, MAX_LEAN)
+
+
+## Advance the lean spring and write it into the tree's rotation. Costs nothing
+## for the overwhelming majority of trees, which are never touched.
+func _update_lean(delta: float) -> void:
+	_lean_target = _lean_target.move_toward(Vector3.ZERO, LEAN_DECAY * delta)
+	if _lean == Vector3.ZERO and _lean_vel == Vector3.ZERO and _lean_target == Vector3.ZERO:
+		return
+	var accel := (_lean_target - _lean) * LEAN_SPRING - _lean_vel * LEAN_DAMP
+	_lean_vel += accel * delta
+	_lean += _lean_vel * delta
+	if _lean.length() < 0.001 and _lean_vel.length() < 0.005 and _lean_target == Vector3.ZERO:
+		_lean = Vector3.ZERO
+		_lean_vel = Vector3.ZERO
+		rotation = Vector3(0.0, _plant_yaw, 0.0)
+		return
+	var b := Basis(Vector3.UP, _plant_yaw)
+	if _lean.length() > 0.0001:
+		b = Basis(_lean.normalized(), _lean.length()) * b
+	rotation = b.get_euler()
 
 
 ## The whole tree scales with its stored lumber: a knee-high sapling grows into
@@ -266,7 +312,7 @@ func _land(impact_speed: float) -> void:
 				+ Vector3(randf_range(-1, 1), 1.0, randf_range(-1, 1))
 		queue_free()
 		return
-	collision_layer = 1  # replanted, roots take hold, growth resumes
+	collision_layer = 8  # replanted, roots take hold, growth resumes
 
 
 func is_held() -> bool:

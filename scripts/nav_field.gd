@@ -38,17 +38,17 @@ func _rebuild() -> void:
 		var tree := t as WildTree
 		if not is_instance_valid(tree) or tree.is_felled() or tree.is_held():
 			continue
-		_add(tree.global_position, 0.45 * tree.scale.x + 0.35)
+		_add(tree.global_position, 0.45 * tree.scale.x + 0.35, true)
 	for r in st.get_nodes_in_group("rock_deposits"):
 		if is_instance_valid(r):
-			_add((r as Node3D).global_position, 1.5)
+			_add((r as Node3D).global_position, 1.5, false)
 
 
-func _add(pos: Vector3, radius: float) -> void:
+func _add(pos: Vector3, radius: float, is_tree: bool) -> void:
 	var cell := Vector2i(floori(pos.x / CELL), floori(pos.z / CELL))
 	if not _grid.has(cell):
 		_grid[cell] = []
-	_grid[cell].append({"p": Vector2(pos.x, pos.z), "r": radius})
+	_grid[cell].append({"p": Vector2(pos.x, pos.z), "r": radius, "tree": is_tree})
 
 
 ## Given a spot, a desired (normalized, xz) direction, and the mover's
@@ -56,7 +56,7 @@ func _add(pos: Vector3, radius: float) -> void:
 ## rocks. `ignore` is a world point whose obstacle is the mover's actual
 ## goal (the tree it's walking to chop) — so it isn't repelled from it.
 func steer(pos: Vector3, desired: Vector3, self_radius: float,
-		ignore := Vector3.INF) -> Vector3:
+		ignore := Vector3.INF, skip_trees := false) -> Vector3:
 	var here := Vector2(pos.x, pos.z)
 	var des2 := Vector2(desired.x, desired.z)
 	if des2 == Vector2.ZERO:
@@ -71,6 +71,8 @@ func steer(pos: Vector3, desired: Vector3, self_radius: float,
 			if not _grid.has(cell):
 				continue
 			for o: Dictionary in _grid[cell]:
+				if skip_trees and o.get("tree", false):
+					continue  # this mover shoves through trees, not around them
 				var op: Vector2 = o["p"]
 				if has_ignore and op.distance_to(ignore2) < 2.0:
 					continue  # this is the goal; don't flee it

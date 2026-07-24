@@ -18,6 +18,10 @@ const SPECS := {
 
 const BUILD_RATE := 6.0         # construction progress per builder-second
 const DECAY_START_AGE := 30.0   # years before a house starts crumbling
+## A monster's kick knocks the whole dwelling askew, then it springs back
+## upright (underdamped, for the wobble) — unless the blow was the last it took.
+const KNOCK_SPRING := 45.0
+const KNOCK_DAMP := 7.0
 
 var size := Size.HUT
 var health := 100.0
@@ -29,6 +33,12 @@ var village: Village
 
 var _window_mat: StandardMaterial3D
 var _night_check := 0.0
+var _base_pos := Vector3.INF     # captured on the first kick, restored after
+var _base_rot := Vector3.ZERO    # the house's true facing, preserved through a knock
+var _knock := Vector3.ZERO       # current tilt (axis*angle, small)
+var _knock_vel := Vector3.ZERO
+var _shove := Vector3.ZERO        # current positional skid
+var _shove_vel := Vector3.ZERO
 
 
 func _ready() -> void:
@@ -59,6 +69,7 @@ func capacity() -> int:
 func _process(delta: float) -> void:
 	if under_construction:
 		return
+	_settle_knock(delta)
 	var years := delta / GameState.YEAR_SECONDS
 	age += years
 	# A lived-in house is a kept house: hearth smoke, patched thatch,
@@ -108,6 +119,40 @@ func damage(amount: float) -> void:
 
 func needs_repair() -> bool:
 	return not under_construction and health < 55.0
+
+
+## A monstrous creature's kick: heavy damage AND a visible knock — the whole
+## dwelling leans and skids from the blow, then springs back upright (or, if
+## that was the killing blow, collapses into rubble).
+func kick(from_pos: Vector3, force := 1.0) -> void:
+	SoundBank.play_at("boom", global_position, 0.0)
+	if not under_construction:
+		if _base_pos == Vector3.INF:
+			_base_pos = position
+			_base_rot = rotation
+		var away := global_position - from_pos
+		away.y = 0.0
+		away = away.normalized() if away.length() > 0.01 else Vector3.FORWARD
+		_knock = Vector3(-away.z, 0.0, away.x) * (0.45 * force)
+		_shove = away * (0.9 * force)
+	damage(55.0 * force)
+
+
+## Advance the kick's spring back to true. Idles for a house nobody's kicking.
+func _settle_knock(delta: float) -> void:
+	if _base_pos == Vector3.INF:
+		return
+	_knock_vel += (-_knock * KNOCK_SPRING - _knock_vel * KNOCK_DAMP) * delta
+	_knock += _knock_vel * delta
+	_shove_vel += (-_shove * KNOCK_SPRING - _shove_vel * KNOCK_DAMP) * delta
+	_shove += _shove_vel * delta
+	if _knock.length() < 0.002 and _knock_vel.length() < 0.01 and _shove.length() < 0.01:
+		rotation = _base_rot
+		position = _base_pos
+		_base_pos = Vector3.INF
+	else:
+		rotation = _base_rot + _knock
+		position = _base_pos + _shove
 
 
 func _collapse() -> void:

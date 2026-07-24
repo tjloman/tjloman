@@ -101,7 +101,7 @@ func _ready() -> void:
 	add_to_group("animals")
 	add_to_group("pickable")
 	collision_layer = 2
-	collision_mask = 1
+	collision_mask = 1 | 8  # world + trees (their own layer)
 
 	var body: Vector3 = spec["body"]
 	var leg_h: float = spec["leg"]

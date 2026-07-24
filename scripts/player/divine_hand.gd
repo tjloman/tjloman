@@ -10,7 +10,7 @@ enum HandState { IDLE, DRAG_LAND, HOLDING, GESTURING }
 
 const HOVER_HEIGHT := 1.4
 const RAY_LENGTH := 500.0
-const HIT_MASK := 1 | 2 | 4  # ground | units | props
+const HIT_MASK := 1 | 2 | 4 | 8  # ground | units | props | trees
 const THROW_BOOST := 1.6     # hand velocity -> projectile velocity
 const MAX_THROW_SPEED := 55.0
 ## A release only THROWS if the pointer was dragged this far in one unbroken
