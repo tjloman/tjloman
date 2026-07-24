@@ -13,7 +13,8 @@ const MAX_LUMBER := 10.0
 const GROWTH_BASE := 0.06
 const GROWTH_TAPER := 0.7
 const RAIN_GROWTH := 1.6    # a rain miracle speeds growth while it lasts
-const SAPLING_SCALE := 0.22
+const SAPLING_SCALE := 0.15   # a knee-high seedling
+const MATURE_SCALE := 5.0     # a full-grown giant towers ~30m over the land
 const REPLANT_PERIOD := 50.0
 const REPLANT_CROWDING := 4     # no seeding when this many trees stand close
 
@@ -152,10 +153,14 @@ func rain(duration: float) -> void:
 	_rain_time = maxf(_rain_time, duration)
 
 
-## The whole tree scales with its stored lumber: 1 = sapling, 30 = giant.
+## The whole tree scales with its stored lumber: a knee-high sapling grows into
+## a towering ~30m giant. The ramp is eased-in (t²) so young trees stay small
+## and only the mature ones loom — the alternative (a straight lerp to a big
+## mature scale) would make every sapling a monster the moment it sprouts.
 func _apply_growth_scale() -> void:
 	_shown_lumber = int(lumber)
-	scale = Vector3.ONE * lerpf(SAPLING_SCALE, 1.0, lumber / MAX_LUMBER)
+	var t := lumber / MAX_LUMBER
+	scale = Vector3.ONE * (SAPLING_SCALE + (MATURE_SCALE - SAPLING_SCALE) * t * t)
 
 
 ## A mature tree drops a seed nearby — if the stand isn't already crowded

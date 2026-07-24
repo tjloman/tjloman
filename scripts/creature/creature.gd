@@ -24,7 +24,9 @@ const GRAVITY := 20.0
 ## The growth arc: at 1% grown the creature stands about twice a villager's
 ## height; at 100% it towers over the tallest trees.
 const MIN_SCALE := 1.1
-const MAX_SCALE := 4.2
+## At full growth the creature stands ~38m — a clear head above the tallest
+## ~30m trees, the towering B&W silhouette over the land.
+const MAX_SCALE := 15.0
 const GROWTH_PER_MEAL := 0.015
 const STUCK_SECONDS := 30.0   # no state may hold the creature hostage
 const OBSERVE_PERIOD := 2.5

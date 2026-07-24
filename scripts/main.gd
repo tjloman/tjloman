@@ -228,7 +228,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			camera_rig.follow_target = null
 		else:
 			camera_rig.follow_target = creature
-			camera_rig.zoom_distance = clampf(camera_rig.zoom_distance, 6.0, 16.0)
+			# Frame the whole beast — the lock-on distance scales with its size,
+			# so a towering full-grown creature isn't shot from inside its ankle.
+			var s := creature.scale.y
+			camera_rig.zoom_distance = clampf(camera_rig.zoom_distance, s * 2.5, s * 6.0)
 
 
 ## Training only counts when the hand is actually AT the creature — you

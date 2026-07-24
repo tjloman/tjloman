@@ -227,7 +227,7 @@ func _scatter_flowers(rng: RandomNumberGenerator, count: int) -> void:
 			var lean_ang := rng.randf() * TAU
 			var lean_axis := Vector3(cos(lean_ang), 0.0, sin(lean_ang))
 			basis = Basis(lean_axis, deg_to_rad(rng.randf_range(0.0, 18.0))) * basis
-			basis = basis.scaled(Vector3.ONE * rng.randf_range(1.2, 2.0))
+			basis = basis.scaled(Vector3.ONE * rng.randf_range(2.4, 4.0))
 		xforms.append(Transform3D(basis, spot))
 		colors.append(Color.from_hsv(rng.randf(), rng.randf_range(0.5, 0.85), 0.98))
 	if xforms.is_empty():
