@@ -1,0 +1,55 @@
+; Engine configuration file.
+; Godot 4.7. Edited by hand on purpose — this project builds its UI from
+; code, so there is almost nothing here but autoloads and window setup.
+
+config_version=5
+
+[application]
+
+config/name="Trip Logbook"
+config/version="0.1.0"
+config/description="An offline-first logbook for a long ebike tour: continuous GPS, a map that works with no data, journal, ebike battery telemetry, and weather."
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.7", "Mobile")
+
+[autoload]
+
+; Order matters: each autoload may only touch the ones above it during
+; _ready(), because that is the order Godot adds them to the tree.
+Cfg="*res://scripts/autoload/config.gd"
+Logbook="*res://scripts/autoload/log_store.gd"
+Bridge="*res://scripts/autoload/platform_bridge.gd"
+Net="*res://scripts/autoload/net.gd"
+Tiles="*res://scripts/map/tile_cache.gd"
+Prefetch="*res://scripts/map/prefetch.gd"
+Trip="*res://scripts/autoload/trip.gd"
+Bike="*res://scripts/ble/ble_manager.gd"
+Music="*res://scripts/autoload/now_playing.gd"
+Wx="*res://scripts/weather/weather.gd"
+
+[display]
+
+; A handlebar phone, either orientation, plus desktop for development.
+window/size/viewport_width=720
+window/size/viewport_height=1280
+window/handheld/orientation=6
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+; The screen stays on while riding — this is a bike computer.
+window/energy_saving/keep_screen_on=true
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+
+[rendering]
+
+renderer/rendering_method="mobile"
+; A 2D map app: no 3D, no MSAA cost, and the GPU stays cool in a bar bag.
+textures/canvas_textures/default_texture_filter=1
+
+[file_customization]
+
+folder_colors={
+"res://scripts/": "blue"
+}

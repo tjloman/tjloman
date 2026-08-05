@@ -1,0 +1,11 @@
+[config]
+
+name="TripLogbook"
+binary_type="local"
+binary="TripLogbook.aar"
+
+[dependencies]
+
+local=[]
+remote=[]
+custom_maven_repos=[]

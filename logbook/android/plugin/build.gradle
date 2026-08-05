@@ -1,0 +1,38 @@
+// Godot 4 Android plugin: builds an .aar that the Godot export dropped into
+// android/plugins/ alongside a matching .gdap file.
+//
+//   ./gradlew :plugin:assembleRelease
+//   cp build/outputs/aar/plugin-release.aar ../../android/plugins/TripLogbook.aar
+//
+// The Godot editor must have the Android build template installed
+// (Project → Install Android Build Template) before it will pick plugins up.
+
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.tjloman.logbook'
+    compileSdk 34
+
+    defaultConfig {
+        // 24 is where the modern location + notification listener behaviour we
+        // rely on settles down. Nothing here needs anything older.
+        minSdk 24
+        targetSdk 34
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = '17' }
+}
+
+dependencies {
+    // Must match the Godot version the game is exported with, or the plugin
+    // will load and then fail at the first signal.
+    compileOnly 'org.godotengine:godot:4.3.0.stable'
+    implementation 'androidx.core:core-ktx:1.13.1'
+}

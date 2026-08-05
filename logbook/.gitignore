@@ -1,0 +1,13 @@
+# Godot generated cache/import data — never commit
+.godot/
+*.translation
+
+# Exported builds and the compiled plugin
+/builds/
+android/plugins/*.aar
+android/plugin/build/
+android/.gradle/
+
+# OS junk
+.DS_Store
+Thumbs.db
