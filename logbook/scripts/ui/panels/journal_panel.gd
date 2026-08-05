@@ -145,8 +145,8 @@ func _stamp_weather() -> void:
 	if _edit == null:
 		return
 	var line := Wx.summary_line()
-	if not Bike.state.is_empty():
-		line += "  ·  battery " + Bike.summary_line()
+	if Bike.any_connected():
+		line += "  ·  " + Bike.summary_line()
 	_edit.insert_text_at_caret("\n[%s — %s]\n" % [UI.clock(Time.get_unix_time_from_system()), line])
 	_dirty = true
 	_save_timer = 1.0

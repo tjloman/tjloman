@@ -80,7 +80,7 @@ class LogService : Service(), LocationListener {
     private var captureBodies = false
     private var capturePhotos = true
     private var captureMusic = true
-    private var bleAddress = ""
+    private var bleAddresses = listOf<String>()
     private var bleSampleSeconds = 300.0
 
     private var lastKeptTime = 0L
@@ -128,9 +128,12 @@ class LogService : Service(), LocationListener {
         capturePhotos = bundle.getBoolean("capture_photos", capturePhotos)
         captureMusic = bundle.getBoolean("capture_music", captureMusic)
         bleSampleSeconds = bundle.getDouble("ble_sample_seconds", bleSampleSeconds)
-        val address = bundle.getString("ble_device", "")
-        if (address.isNotEmpty() && address != bleAddress) {
-            bleAddress = address
+        // A comma-separated list because a Bundle of scalars is all the plugin
+        // marshals — the rig currently means the bike and the cart.
+        val addresses = (bundle.getString("ble_addresses") ?: "")
+            .split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        if (addresses.isNotEmpty() && addresses != bleAddresses) {
+            bleAddresses = addresses
             worker.post { bleEnsureConnected() }
         }
         if (!locating) startLocating()
@@ -292,23 +295,29 @@ class LogService : Service(), LocationListener {
         val action = intent?.action ?: return
         worker.post {
             val link = bleEnsureLink()
+            val address = intent.getStringExtra("address") ?: ""
             when (action) {
                 ACTION_BLE_SCAN -> link.scan(intent.getDoubleExtra("seconds", 8.0))
                 ACTION_BLE_STOP_SCAN -> link.stopScan()
                 ACTION_BLE_CONNECT -> {
-                    bleAddress = intent.getStringExtra("address") ?: ""
-                    link.connect(bleAddress)
+                    if (address.isNotEmpty() && !bleAddresses.contains(address)) {
+                        bleAddresses = bleAddresses + address
+                    }
+                    link.connect(address)
                 }
-                ACTION_BLE_DISCONNECT -> link.disconnect()
+                ACTION_BLE_DISCONNECT -> link.disconnect(address)
                 ACTION_BLE_SUBSCRIBE -> link.subscribe(
+                    address,
                     intent.getStringExtra("service") ?: "",
                     intent.getStringExtra("characteristic") ?: ""
                 )
                 ACTION_BLE_READ -> link.read(
+                    address,
                     intent.getStringExtra("service") ?: "",
                     intent.getStringExtra("characteristic") ?: ""
                 )
                 ACTION_BLE_WRITE -> link.write(
+                    address,
                     intent.getStringExtra("service") ?: "",
                     intent.getStringExtra("characteristic") ?: "",
                     intent.getByteArrayExtra("data") ?: ByteArray(0),
@@ -328,14 +337,15 @@ class LogService : Service(), LocationListener {
     }
 
     private fun bleEnsureConnected() {
-        if (bleAddress.isEmpty()) return
-        bleEnsureLink().connect(bleAddress)
+        val link = bleEnsureLink()
+        for (address in bleAddresses) link.connect(address)
     }
 
     /**
-     * Called by [BleLink] when a profile decoded a battery reading. Sampled on
-     * a slow timer rather than logged per notification: a BMS chatters every
-     * second and a trip does not need 80,000 rows of it.
+     * Called by [BleLink] with a slow raw sample from one machine. Deliberately
+     * slow: a BMS chatters every second and a trip does not need 80,000 rows of
+     * it — but a pack curve should still exist for the hours the app was not
+     * running to decode anything.
      */
     fun onBatterySample(fields: MutableMap<String, Any>) {
         val event = LogWriter.Event("battery")

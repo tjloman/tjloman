@@ -67,8 +67,9 @@ func refresh() -> void:
 	_dist.text = Cfg.dist(Trip.today_meters)
 	_clock.text = UI.clock(Time.get_unix_time_from_system())
 
-	if Bike.connected and Bike.state.has("soc"):
-		var soc := int(float(Bike.state["soc"]))
+	var rig := Bike.aggregate()
+	if Bike.any_connected() and float(rig.get("soc", 0.0)) > 0.0:
+		var soc := int(float(rig["soc"]))
 		_batt.text = "%d%%" % soc
 		var col := UI.GOOD
 		if soc <= Cfg.get_i("low_battery_warn_pct"):

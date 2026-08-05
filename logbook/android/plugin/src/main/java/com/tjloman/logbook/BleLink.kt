@@ -18,13 +18,20 @@ import org.godotengine.godot.Dictionary
 import java.util.UUID
 
 /**
- * The Bluetooth LE link to the bike, living inside the service so the pack is
- * still being sampled when the app is closed.
+ * The Bluetooth LE links to the rig, living inside the service so the packs
+ * are still being sampled when the app is closed.
+ *
+ * Plural links: the rig is a bike and a powered cart, two peripherals with
+ * their own packs, and Android is perfectly happy holding several GATT
+ * connections at once — as long as each one gets its own operation queue. The
+ * stack allows exactly one outstanding operation *per connection* and silently
+ * drops the rest, which is the single most common cause of "it worked for ten
+ * seconds and then stopped".
  *
  * This class is deliberately dumb: it connects, subscribes, and moves bytes.
- * It knows nothing about what a BMS frame means — that lives in GDScript, in
- * the profiles, where it can be changed without rebuilding an APK. Getting a
- * new bike supported should be a text edit, not a toolchain.
+ * It knows nothing about what a BMS or cart frame means — that lives in
+ * GDScript, in the profiles, where it can be changed without rebuilding an
+ * APK. Supporting a new machine should be a text edit, not a toolchain.
  */
 class BleLink(private val service: LogService, private val worker: Handler) {
 
@@ -33,13 +40,17 @@ class BleLink(private val service: LogService, private val worker: Handler) {
         private const val RECONNECT_MS = 20_000L
     }
 
-    private var gatt: BluetoothGatt? = null
+    /** One connected machine: its GATT handle and its own operation queue. */
+    private class Conn(val address: String) {
+        var gatt: BluetoothGatt? = null
+        var want = true
+        var lastSampleAt = 0L
+        val pending = ArrayDeque<() -> Unit>()
+        var busy = false
+    }
+
+    private val conns = HashMap<String, Conn>()
     private var scanning = false
-    private var address = ""
-    private var wantConnection = false
-    private var lastSampleAt = 0L
-    private val pending = ArrayDeque<() -> Unit>()
-    private var busy = false
 
     private val adapter: BluetoothAdapter?
         get() = (service.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
@@ -85,36 +96,51 @@ class BleLink(private val service: LogService, private val worker: Handler) {
 
     fun connect(deviceAddress: String) {
         if (!allowed() || deviceAddress.isEmpty()) return
-        address = deviceAddress
-        wantConnection = true
+        val conn = conns.getOrPut(deviceAddress) { Conn(deviceAddress) }
+        conn.want = true
         val device = try { adapter?.getRemoteDevice(deviceAddress) } catch (_: Exception) { null }
             ?: return
-        gatt?.close()
-        gatt = try {
+        try { conn.gatt?.close() } catch (_: SecurityException) {}
+        conn.gatt = try {
+            // autoConnect=true: the stack keeps trying in the background, which
+            // is what reconnects the cart when it comes back into range after a
+            // stop without the app doing anything.
             device.connectGatt(service, true, callback, BluetoothGatt.TRANSPORT_LE)
         } catch (_: SecurityException) {
             null
         }
     }
 
-    fun disconnect() {
-        wantConnection = false
-        try { gatt?.disconnect(); gatt?.close() } catch (_: SecurityException) {}
-        gatt = null
-        emitState(false)
+    /** Disconnect one machine, or everything when the address is empty. */
+    fun disconnect(deviceAddress: String = "") {
+        val targets = if (deviceAddress.isEmpty()) conns.values.toList()
+        else listOfNotNull(conns[deviceAddress])
+        for (conn in targets) {
+            conn.want = false
+            try { conn.gatt?.disconnect(); conn.gatt?.close() } catch (_: SecurityException) {}
+            conn.gatt = null
+            emitState(conn.address, false, "")
+        }
     }
+
+    private fun connFor(gatt: BluetoothGatt): Conn? = conns[gatt.device.address]
 
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
+            val conn = connFor(g) ?: return
             if (newState == BluetoothGatt.STATE_CONNECTED) {
                 try { g.discoverServices() } catch (_: SecurityException) {}
-                emitState(true)
+                emitState(conn.address, true, deviceName(g))
             } else {
-                emitState(false)
-                // autoConnect=true means the stack retries on its own, but a
-                // bike that was switched off needs a fresh attempt when it
-                // comes back — hence the timer as well.
-                if (wantConnection) worker.postDelayed({ connect(address) }, RECONNECT_MS)
+                // A dropped link must not leave its queue jammed: the machine
+                // that comes back is the same object.
+                conn.pending.clear()
+                conn.busy = false
+                emitState(conn.address, false, deviceName(g))
+                // autoConnect retries on its own, but a cart that was switched
+                // off needs a fresh attempt when it comes back — hence the
+                // timer as well.
+                if (conn.want) worker.postDelayed({ connect(conn.address) }, RECONNECT_MS)
             }
         }
 
@@ -126,24 +152,26 @@ class BleLink(private val service: LogService, private val worker: Handler) {
                 d["characteristics"] = s.characteristics.map { it.uuid.toString() }.toTypedArray()
                 services.add(d)
             }
-            TripLogbookPlugin.instance?.emit("ble_services_discovered", services.toTypedArray())
+            TripLogbookPlugin.instance?.emit(
+                "ble_services_discovered", g.device.address, services.toTypedArray()
+            )
         }
 
         override fun onCharacteristicChanged(
             g: BluetoothGatt, c: BluetoothGattCharacteristic, value: ByteArray
-        ) = deliver(c.uuid, value)
+        ) = deliver(g, c.uuid, value)
 
         @Deprecated("Pre-33 signature, still the one older devices call")
         override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic) {
             @Suppress("DEPRECATION")
-            deliver(c.uuid, c.value ?: ByteArray(0))
+            deliver(g, c.uuid, c.value ?: ByteArray(0))
         }
 
         override fun onCharacteristicRead(
             g: BluetoothGatt, c: BluetoothGattCharacteristic, value: ByteArray, status: Int
         ) {
-            deliver(c.uuid, value)
-            next()
+            deliver(g, c.uuid, value)
+            next(connFor(g))
         }
 
         @Deprecated("Pre-33 signature, still the one older devices call")
@@ -151,75 +179,86 @@ class BleLink(private val service: LogService, private val worker: Handler) {
             g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int
         ) {
             @Suppress("DEPRECATION")
-            deliver(c.uuid, c.value ?: ByteArray(0))
-            next()
+            deliver(g, c.uuid, c.value ?: ByteArray(0))
+            next(connFor(g))
         }
 
         override fun onCharacteristicWrite(
             g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int
-        ) = next()
+        ) = next(connFor(g))
 
         override fun onDescriptorWrite(
             g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int
-        ) = next()
+        ) = next(connFor(g))
     }
 
-    private fun deliver(uuid: UUID, value: ByteArray) {
-        TripLogbookPlugin.instance?.emit("ble_value", uuid.toString(), value)
-        // The app decodes these into a state dictionary; the service only needs
-        // to know that something arrived, so it can log a periodic sample even
-        // when nothing is watching.
+    private fun deviceName(g: BluetoothGatt): String =
+        try { g.device.name ?: "" } catch (_: SecurityException) { "" }
+
+    private fun deliver(g: BluetoothGatt, uuid: UUID, value: ByteArray) {
+        val address = g.device.address
+        TripLogbookPlugin.instance?.emit("ble_value", address, uuid.toString(), value)
+        // The app decodes these into a state dictionary; the service only keeps
+        // a slow raw sample of its own, so a pack curve still exists for the
+        // hours when nothing was watching.
+        val conn = conns[address] ?: return
         val now = System.currentTimeMillis()
-        if (now - lastSampleAt > 300_000L) {
-            lastSampleAt = now
+        if (now - conn.lastSampleAt > 300_000L) {
+            conn.lastSampleAt = now
             val fields = HashMap<String, Any>()
-            fields["raw"] = value.joinToString(" ") { "%02X".format(it) }
+            fields["address"] = address
             fields["uuid"] = uuid.toString()
+            fields["raw"] = value.joinToString(" ") { "%02X".format(it) }
             service.onBatterySample(fields)
         }
     }
 
-    private fun emitState(connected: Boolean) {
+    private fun emitState(address: String, connected: Boolean, name: String) {
         val d = Dictionary()
         d["connected"] = connected
         d["address"] = address
-        d["name"] = try { gatt?.device?.name ?: "" } catch (_: SecurityException) { "" }
+        d["name"] = name
         TripLogbookPlugin.instance?.emit("ble_state", d)
     }
 
     // --------------------------------------------------------------- access
 
     /**
-     * Android's GATT stack allows exactly one outstanding operation at a time
-     * and silently drops the rest, which is the single most common source of
-     * "it works for ten seconds then stops". Everything therefore goes through
-     * one queue, advanced by the completion callbacks.
+     * One queue per connection, advanced by the completion callbacks. Two
+     * machines can therefore have an operation in flight at the same time
+     * without either one stalling the other.
      */
-    private fun enqueue(op: () -> Unit) {
-        pending.addLast(op)
-        if (!busy) next()
+    private fun enqueue(address: String, op: () -> Unit) {
+        val conn = conns[address] ?: return
+        conn.pending.addLast(op)
+        if (!conn.busy) next(conn)
     }
 
-    private fun next() {
-        val op = pending.removeFirstOrNull()
+    private fun next(conn: Conn?) {
+        if (conn == null) return
+        val op = conn.pending.removeFirstOrNull()
         if (op == null) {
-            busy = false
+            conn.busy = false
             return
         }
-        busy = true
-        try { op() } catch (_: Exception) { busy = false }
+        conn.busy = true
+        try { op() } catch (_: Exception) { conn.busy = false }
     }
 
-    private fun find(service: String, characteristic: String): BluetoothGattCharacteristic? {
-        val g = gatt ?: return null
+    private fun find(
+        address: String, service: String, characteristic: String
+    ): BluetoothGattCharacteristic? {
+        val g = conns[address]?.gatt ?: return null
         val s = g.getService(UUID.fromString(service)) ?: return null
         return s.getCharacteristic(UUID.fromString(characteristic))
     }
 
-    fun subscribe(serviceUuid: String, characteristic: String) = enqueue {
-        val g = gatt
-        val c = find(serviceUuid, characteristic)
-        if (g == null || c == null) { next(); return@enqueue }
+    fun subscribe(address: String, serviceUuid: String, characteristic: String) =
+            enqueue(address) {
+        val conn = conns[address]
+        val g = conn?.gatt
+        val c = find(address, serviceUuid, characteristic)
+        if (g == null || c == null) { next(conn); return@enqueue }
         try {
             g.setCharacteristicNotification(c, true)
             val cccd = c.getDescriptor(UUID.fromString(CCCD))
@@ -234,25 +273,28 @@ class BleLink(private val service: LogService, private val worker: Handler) {
                     }
                 }
             } else {
-                next()
+                next(conn)
             }
         } catch (_: SecurityException) {
-            next()
+            next(conn)
         }
     }
 
-    fun read(serviceUuid: String, characteristic: String) = enqueue {
-        val c = find(serviceUuid, characteristic)
-        if (c == null) { next(); return@enqueue }
-        try { gatt?.readCharacteristic(c) } catch (_: SecurityException) { next() }
+    fun read(address: String, serviceUuid: String, characteristic: String) = enqueue(address) {
+        val conn = conns[address]
+        val c = find(address, serviceUuid, characteristic)
+        if (c == null) { next(conn); return@enqueue }
+        try { conn?.gatt?.readCharacteristic(c) } catch (_: SecurityException) { next(conn) }
     }
 
     fun write(
-        serviceUuid: String, characteristic: String, data: ByteArray, withResponse: Boolean
-    ) = enqueue {
-        val g = gatt
-        val c = find(serviceUuid, characteristic)
-        if (g == null || c == null) { next(); return@enqueue }
+        address: String, serviceUuid: String, characteristic: String,
+        data: ByteArray, withResponse: Boolean
+    ) = enqueue(address) {
+        val conn = conns[address]
+        val g = conn?.gatt
+        val c = find(address, serviceUuid, characteristic)
+        if (g == null || c == null) { next(conn); return@enqueue }
         val type = if (withResponse) BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         else BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
         try {
@@ -267,7 +309,7 @@ class BleLink(private val service: LogService, private val worker: Handler) {
                 }
             }
         } catch (_: SecurityException) {
-            next()
+            next(conn)
         }
     }
 }

@@ -58,8 +58,8 @@ class TripLogbookPlugin(godot: Godot) : GodotPlugin(godot) {
         SignalInfo("permissions_changed", Dictionary::class.java),
         SignalInfo("ble_state", Dictionary::class.java),
         SignalInfo("ble_device_found", Dictionary::class.java),
-        SignalInfo("ble_services_discovered", Array<Any>::class.java),
-        SignalInfo("ble_value", String::class.java, ByteArray::class.java),
+        SignalInfo("ble_services_discovered", String::class.java, Array<Any>::class.java),
+        SignalInfo("ble_value", String::class.java, String::class.java, ByteArray::class.java),
     )
 
     override fun onMainCreate(activity: Activity): android.view.View? {
@@ -269,27 +269,37 @@ class TripLogbookPlugin(godot: Godot) : GodotPlugin(godot) {
     fun bleConnect(address: String) =
         LogService.post(context, LogService.ACTION_BLE_CONNECT) { putExtra("address", address) }
 
-    @UsedByGodot
-    fun bleDisconnect() = LogService.post(context, LogService.ACTION_BLE_DISCONNECT) {}
+    // Every call is scoped to one machine: the rig is a bike and a powered
+    // cart, connected at the same time.
 
     @UsedByGodot
-    fun bleSubscribe(service: String, characteristic: String) =
+    fun bleDisconnect(address: String) =
+        LogService.post(context, LogService.ACTION_BLE_DISCONNECT) {
+            putExtra("address", address)
+        }
+
+    @UsedByGodot
+    fun bleSubscribe(address: String, service: String, characteristic: String) =
         LogService.post(context, LogService.ACTION_BLE_SUBSCRIBE) {
+            putExtra("address", address)
             putExtra("service", service)
             putExtra("characteristic", characteristic)
         }
 
     @UsedByGodot
-    fun bleRead(service: String, characteristic: String) =
+    fun bleRead(address: String, service: String, characteristic: String) =
         LogService.post(context, LogService.ACTION_BLE_READ) {
+            putExtra("address", address)
             putExtra("service", service)
             putExtra("characteristic", characteristic)
         }
 
     @UsedByGodot
     fun bleWrite(
-        service: String, characteristic: String, data: ByteArray, withResponse: Boolean
+        address: String, service: String, characteristic: String,
+        data: ByteArray, withResponse: Boolean
     ) = LogService.post(context, LogService.ACTION_BLE_WRITE) {
+        putExtra("address", address)
         putExtra("service", service)
         putExtra("characteristic", characteristic)
         putExtra("data", data)

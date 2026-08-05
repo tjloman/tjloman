@@ -74,12 +74,31 @@ stamped with where you were when you started them, and there is a button that
 drops the current weather and battery into the text — six months later "it was
 hot" means nothing, "94°F, 18 mph headwind" is the day you remember.
 
-**The bike.** BLE profiles for smart BMS boards (JBD/Xiaoxiang — voltage,
-current, per-cell voltages, temperature, cycles, and the protection bits that
-explain a cut-out), the standard Battery Service, and the standardized cycling
-sensors. Range left is measured — watt-hours actually pulled per mile on this
-trip — not claimed. A device nothing recognizes still lists its whole GATT
-table, which is exactly what writing a new profile needs.
+**The rig.** Not one battery — a Senada Saber pulling a powered cart with two
+motors, its own much larger pack, a solar panel and regenerative braking. The
+app holds a Bluetooth link to each machine at once, keeps their state separate
+(averaging a small pack against a large one hides the one that runs out first),
+and adds up only what can actually turn a wheel.
+
+Energy is a signed ledger. Pack current is signed on both machines, so
+integrating it gives *net* watt-hours: draw counts up, solar and regen count
+back down. That one choice means the measured Wh/mile already includes
+everything the sky and the descents gave back, and range is a measurement
+rather than a manufacturer's number. A long day downhill in sunshine can end
+with more aboard than it started, and the panel says so instead of clamping.
+Each day's ledger — used, solar, regen — lands in the day's record and in the
+exported journal.
+
+Profiles ship for smart BMS boards (JBD/Xiaoxiang — voltage, current, per-cell
+voltages, temperature, cycles, and the protection bits that explain a
+cut-out), the standard Battery Service, the standardized cycling sensors, and
+**the cart**. The cart's protocol is defined in
+[docs/cart-telemetry.md](docs/cart-telemetry.md) — written before the cart
+exists so the firmware has a fixed target, with every frame inside the 20-byte
+payload of a default-MTU notification so it never has to fragment or negotiate.
+The simulator emits byte-exact cart frames, so that path is tested long before
+there is a cart to test against. A machine nothing recognizes still lists its
+whole GATT table, which is what writing a new profile needs.
 
 **Stops.** Not "where is the diner" but "will it be open when I get there, at
 the speed I am actually going". Hours are free text per day the way they are
@@ -152,11 +171,13 @@ scripts/
   autoload/   config · log_store · platform_bridge · net · trip · now_playing
   core/       geo · events · stops · exporter
   map/        tile_source · tile_cache · map_view · prefetch
-  ble/        ble_manager · ble_profile · profiles/{jbd_bms,battery_service,cycling}
+  ble/        ble_manager · ble_profile · profiles/{cart,jbd_bms,battery_service,cycling}
   weather/    weather
   ui/         app · status_bar · timeline · keyboard · sheet · ui · panels/
 android/
   plugin/     the Kotlin foreground service and its bridge
+docs/
+  cart-telemetry.md   the contract the cart's firmware should implement
 ```
 
 Autoload order matters and is documented in `project.godot`: each one may only

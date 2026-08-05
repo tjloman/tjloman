@@ -147,7 +147,11 @@ static func summary(e: Dictionary) -> String:
 		STOP_DEPART:
 			return "Left: %s" % String(e.get("name", "stop"))
 		BATTERY:
-			return "Battery %d%%  %.1fV" % [int(e.get("soc", 0)), float(e.get("volts", 0.0))]
+			var pack := String(e.get("pack", "battery"))
+			var line := "%s %d%%  %.1fV" % [pack, int(e.get("soc", 0)), float(e.get("volts", 0.0))]
+			if float(e.get("solar_watts", 0.0)) > 5.0:
+				line += "  ☀%dW" % int(float(e["solar_watts"]))
+			return line
 		BIKE:
 			return String(e.get("text", "Bike"))
 		WEATHER:

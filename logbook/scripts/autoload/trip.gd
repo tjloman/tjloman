@@ -192,13 +192,20 @@ func _check_day_roll(t: float) -> void:
 		return
 	var day := Logbook.day_number(t) - 1
 	if _current_day != "":
+		var summary := "%s ridden, %s moving" % [Cfg.dist(today_meters), _hms(today_moving)]
+		if Bike.wh_solar > 1.0 or Bike.wh_regen > 1.0:
+			summary += ", %d Wh from the sun, %d Wh back from braking" \
+				% [int(Bike.wh_solar), int(Bike.wh_regen)]
 		Logbook.append_event(Ev.DAY_END, {
 			"t": t - 1.0,
 			"day": maxi(1, day),
-			"summary": "%s ridden, %s moving" % [Cfg.dist(today_meters), _hms(today_moving)],
+			"summary": summary,
 			"meters": today_meters,
 			"moving": today_moving,
 			"climb": today_climb,
+			"wh_used": Bike.wh_out,
+			"wh_solar": Bike.wh_solar,
+			"wh_regen": Bike.wh_regen,
 		})
 	_current_day = key
 	today_meters = 0.0
@@ -300,18 +307,28 @@ func _sample_battery() -> void:
 	# reading for as long as the app happens to be open.
 	if Logbook.service_mode:
 		return
-	if not Bike.connected:
-		return
-	var s := Bike.state
-	if s.is_empty() or not s.has("soc"):
-		return
-	Logbook.append_event(Ev.BATTERY, {
-		"soc": float(s.get("soc", 0.0)),
-		"volts": float(s.get("volts", 0.0)),
-		"amps": float(s.get("amps", 0.0)),
-		"wh_used": float(s.get("wh_used", 0.0)),
-		"temp_c": float(s.get("temp_c", 0.0)),
-	})
+	# One sample per pack, not one per rig: the bike and the cart drain at
+	# completely different rates and averaging them hides the interesting one.
+	for link in Bike.ordered_links():
+		if not link.connected or not link.state.has("soc"):
+			continue
+		var s: Dictionary = link.state
+		var e := {
+			"pack": link.label(),
+			"role": link.role,
+			"soc": float(s.get("soc", 0.0)),
+			"volts": float(s.get("volts", 0.0)),
+			"amps": float(s.get("amps", 0.0)),
+			"wh_out": link.wh_out,
+			"wh_in": link.wh_in,
+			"temp_c": float(s.get("temp_c", 0.0)),
+		}
+		if s.has("solar_watts"):
+			e["solar_watts"] = float(s["solar_watts"])
+			e["solar_wh_today"] = float(s.get("solar_wh_today", 0.0))
+		if s.has("motor_temp_c"):
+			e["motor_temp_c"] = float(s["motor_temp_c"])
+		Logbook.append_event(Ev.BATTERY, e)
 
 
 # ------------------------------------------------------------------ derived

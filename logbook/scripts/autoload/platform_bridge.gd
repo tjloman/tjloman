@@ -34,8 +34,10 @@ signal device_battery_changed(battery: Dictionary)
 
 signal ble_state(state: Dictionary)
 signal ble_device_found(device: Dictionary)
-signal ble_services_discovered(services: Array)
-signal ble_value(uuid: String, bytes: PackedByteArray)
+## The rig is more than one device — the bike and the powered cart are
+## separate peripherals — so everything BLE is scoped by address.
+signal ble_services_discovered(address: String, services: Array)
+signal ble_value(address: String, uuid: String, bytes: PackedByteArray)
 
 signal media_changed(info: Dictionary)
 signal service_state(state: Dictionary)
@@ -88,8 +90,10 @@ func _wire_native() -> void:
 		"device_battery_changed": func(b: Dictionary) -> void: device_battery_changed.emit(b),
 		"ble_state": _on_ble_state,
 		"ble_device_found": func(d: Dictionary) -> void: ble_device_found.emit(d),
-		"ble_services_discovered": func(s: Array) -> void: ble_services_discovered.emit(s),
-		"ble_value": func(u: String, b: PackedByteArray) -> void: ble_value.emit(u, b),
+		"ble_services_discovered": func(a: String, s: Array) -> void:
+			ble_services_discovered.emit(a, s),
+		"ble_value": func(a: String, u: String, b: PackedByteArray) -> void:
+			ble_value.emit(a, u, b),
 		"media_changed": func(i: Dictionary) -> void: media_changed.emit(i),
 		"service_state": func(s: Dictionary) -> void: service_state.emit(s),
 		"permissions_changed": _on_permissions,
@@ -132,9 +136,20 @@ func configure_service() -> void:
 		"capture_message_bodies": Cfg.get_b("capture_message_bodies"),
 		"capture_photos": Cfg.get_b("capture_photos"),
 		"capture_music": Cfg.get_b("capture_music"),
-		"ble_device": Cfg.get_s("ble_device"),
+		"ble_addresses": _remembered_addresses(),
 		"ble_sample_seconds": Cfg.get_f("ble_sample_minutes") * 60.0,
 	})
+
+
+## The service reconnects to every machine on the rig by itself, so it needs
+## the whole list, not just the bike.
+func _remembered_addresses() -> String:
+	var out: Array[String] = []
+	for entry in Cfg.get_value("ble_devices"):
+		var address := String((entry as Dictionary).get("address", ""))
+		if address != "":
+			out.push_back(address)
+	return ",".join(out)
 
 
 func service_running() -> bool:
@@ -338,32 +353,31 @@ func ble_connect(address: String) -> void:
 		_sim.fake_connect(address)
 
 
-func ble_disconnect() -> void:
+func ble_disconnect(address: String = "") -> void:
 	if native != null and native.has_method("bleDisconnect"):
-		native.call("bleDisconnect")
+		native.call("bleDisconnect", address)
 	elif _sim != null:
-		_sim.connected = false
-		ble_state.emit({"connected": false})
+		_sim.fake_disconnect(address)
 
 
-func ble_subscribe(service: String, characteristic: String) -> void:
+func ble_subscribe(address: String, service: String, characteristic: String) -> void:
 	if native != null and native.has_method("bleSubscribe"):
-		native.call("bleSubscribe", service, characteristic)
+		native.call("bleSubscribe", address, service, characteristic)
 
 
-func ble_read(service: String, characteristic: String) -> void:
+func ble_read(address: String, service: String, characteristic: String) -> void:
 	if native != null and native.has_method("bleRead"):
-		native.call("bleRead", service, characteristic)
+		native.call("bleRead", address, service, characteristic)
 	elif _sim != null:
-		_sim.fake_read(characteristic)
+		_sim.fake_read(address, characteristic)
 
 
-func ble_write(service: String, characteristic: String, data: PackedByteArray,
-		with_response: bool = false) -> void:
+func ble_write(address: String, service: String, characteristic: String,
+		data: PackedByteArray, with_response: bool = false) -> void:
 	if native != null and native.has_method("bleWrite"):
-		native.call("bleWrite", service, characteristic, data, with_response)
+		native.call("bleWrite", address, service, characteristic, data, with_response)
 	elif _sim != null:
-		_sim.fake_write(characteristic, data)
+		_sim.fake_write(address, characteristic, data)
 
 
 # ------------------------------------------------------------------- sim
@@ -385,6 +399,10 @@ func sim() -> RideSimulator:
 ## Stands in for the phone. Rides a plausible route at a plausible speed,
 ## drains a plausible battery, and every so often someone calls.
 class RideSimulator extends Node:
+	const BIKE_ADDR := "AA:BB:CC:00:11:22"
+	const CART_ADDR := "AA:BB:CC:00:44:55"
+	const CART_WH := 2400          ## A cart pack is the size of several bikes'.
+
 	const SIM_TRACKS := [
 		["Talking Heads", "Road to Nowhere"],
 		["Neil Young", "Long May You Run"],
@@ -404,10 +422,16 @@ class RideSimulator extends Node:
 	var soc := 88.0
 	var volts := 51.8
 	var music_playing := true
+	var cart_soc := 74.0
+	var solar_wh_today := 0.0
+	var solar_wh_total := 41850.0
+	var regen := false
+	var connected := {}
 	var _t := 0.0
 	var _fix_accum := 0.0
 	var _drift := 0.0
 	var _event_accum := 0.0
+	var _last_speed := 0.0
 	var _track_accum := 0.0
 	var _track_i := 0
 
@@ -435,6 +459,17 @@ class RideSimulator extends Node:
 		lon = p.y
 		soc = maxf(0.0, soc - delta * 0.0025)
 		volts = 42.0 + (soc / 100.0) * 12.6
+
+		# The cart brakes regeneratively on the downhills, which here means
+		# whenever the simulated speed is falling.
+		regen = speed_mps < _last_speed - 0.01
+		_last_speed = speed_mps
+		var harvest := _solar_watts() * delta / 3600.0
+		solar_wh_today += harvest
+		solar_wh_total += harvest
+		var drawn := (0.0 if regen else 210.0) * delta / 3600.0
+		var returned := harvest + (240.0 * delta / 3600.0 if regen else 0.0)
+		cart_soc = clampf(cart_soc + (returned - drawn) / CART_WH * 100.0, 0.0, 100.0)
 
 		_fix_accum += delta
 		if _fix_accum >= 2.0:
@@ -511,18 +546,34 @@ class RideSimulator extends Node:
 	func backfill(_since: float) -> void:
 		pass
 
+	## Two peripherals, because the rig is two machines: the Saber's pack and
+	## the cart's controller. Both are simulated well enough to exercise the
+	## real parsing paths — the cart frames below are byte-for-byte what
+	## docs/cart-telemetry.md asks the firmware to send, so the profile is
+	## tested long before there is a cart to test it against.
 	func fake_scan() -> void:
 		bridge.ble_device_found.emit({
-			"name": "EBIKE-BMS", "address": "AA:BB:CC:00:11:22", "rssi": -62,
+			"name": "SENADA-BMS", "address": BIKE_ADDR, "rssi": -58,
+		})
+		bridge.ble_device_found.emit({
+			"name": "TRAIL-CART", "address": CART_ADDR, "rssi": -49,
 		})
 		bridge.ble_device_found.emit({
 			"name": "Wahoo CADENCE", "address": "AA:BB:CC:00:11:33", "rssi": -78,
 		})
 
 	func fake_connect(address: String) -> void:
-		connected = true
-		bridge.ble_state.emit({"connected": true, "address": address, "name": "EBIKE-BMS"})
-		bridge.ble_services_discovered.emit([
+		connected[address] = true
+		if address == CART_ADDR:
+			bridge.ble_state.emit({"connected": true, "address": address, "name": "TRAIL-CART"})
+			bridge.ble_services_discovered.emit(address, [{
+				"service": CartProfile.SERVICE,
+				"characteristics": [CartProfile.PACK, CartProfile.MOTORS,
+					CartProfile.SOLAR, CartProfile.COMMAND, CartProfile.INFO],
+			}])
+			return
+		bridge.ble_state.emit({"connected": true, "address": address, "name": "SENADA-BMS"})
+		bridge.ble_services_discovered.emit(address, [
 			{"service": "0000ff00-0000-1000-8000-00805f9b34fb",
 			"characteristics": ["0000ff01-0000-1000-8000-00805f9b34fb",
 				"0000ff02-0000-1000-8000-00805f9b34fb"]},
@@ -530,15 +581,35 @@ class RideSimulator extends Node:
 			"characteristics": ["00002a19-0000-1000-8000-00805f9b34fb"]},
 		])
 
-	func fake_read(uuid: String) -> void:
-		if uuid.begins_with("00002a19"):
-			var b := PackedByteArray([int(soc)])
-			bridge.ble_value.emit(uuid, b)
+	func fake_disconnect(address: String) -> void:
+		if address == "":
+			for a: String in connected.keys():
+				connected[a] = false
+				bridge.ble_state.emit({"connected": false, "address": a})
+			return
+		connected[address] = false
+		bridge.ble_state.emit({"connected": false, "address": address})
 
-	## Answers a JBD/Xiaoxiang-style 0x03 "basic info" request with a frame
-	## the real profile parser can chew on, so the parsing path is exercised
-	## off the bike too.
-	func fake_write(_uuid: String, data: PackedByteArray) -> void:
+	func fake_read(address: String, uuid: String) -> void:
+		if address == CART_ADDR and uuid.begins_with("0000c006"):
+			bridge.ble_value.emit(address, CartProfile.INFO, _cart_info())
+			return
+		if uuid.begins_with("00002a19"):
+			bridge.ble_value.emit(address, uuid, PackedByteArray([int(soc)]))
+
+	func fake_write(address: String, _uuid: String, data: PackedByteArray) -> void:
+		if address == CART_ADDR:
+			if data.size() >= 1 and data[0] == CartProfile.CMD_REPORT:
+				bridge.ble_value.emit(address, CartProfile.PACK, _cart_pack())
+				bridge.ble_value.emit(address, CartProfile.MOTORS, _cart_motors())
+				bridge.ble_value.emit(address, CartProfile.SOLAR, _cart_solar())
+			return
+		_jbd_reply(address, data)
+
+	## Answers a JBD/Xiaoxiang-style 0x03 "basic info" request with a frame the
+	## real profile parser has to chew on, so the parsing path is exercised off
+	## the bike too.
+	func _jbd_reply(address: String, data: PackedByteArray) -> void:
 		if data.size() < 4 or data[0] != 0xDD or data[2] != 0x03:
 			return
 		var body := PackedByteArray()
@@ -561,4 +632,85 @@ class RideSimulator extends Node:
 			sum += frame[i]
 		var chk := (0x10000 - sum) & 0xFFFF
 		frame.append_array([(chk >> 8) & 0xFF, chk & 0xFF, 0x77])
-		bridge.ble_value.emit("0000ff01-0000-1000-8000-00805f9b34fb", frame)
+		bridge.ble_value.emit(address, "0000ff01-0000-1000-8000-00805f9b34fb", frame)
+
+	# -- cart frames, little-endian, exactly as the contract specifies
+
+	static func _le16(v: int) -> PackedByteArray:
+		var u := int(v) & 0xFFFF
+		return PackedByteArray([u & 0xFF, (u >> 8) & 0xFF])
+
+	static func _le32(v: int) -> PackedByteArray:
+		var u := int(v) & 0xFFFFFFFF
+		return PackedByteArray([u & 0xFF, (u >> 8) & 0xFF, (u >> 16) & 0xFF, (u >> 24) & 0xFF])
+
+	func _cart_pack() -> PackedByteArray:
+		var solar_w := _solar_watts()
+		# Net current into the pack: the two motors pulling against whatever the
+		# sun and any braking are putting back.
+		var draw_w := 0.0 if regen else 210.0
+		var net_w := solar_w + (240.0 if regen else 0.0) - draw_w
+		var volts_cart := 52.0 + (cart_soc / 100.0) * 6.0
+		var status := 0x02
+		if net_w > 0.0:
+			status = 0x01
+		if solar_w > 5.0:
+			status |= 0x10
+		if regen:
+			status |= 0x20
+		var f := PackedByteArray([1, status])
+		f.append_array(_le16(int(volts_cart * 100.0)))
+		f.append_array(_le16(int(net_w / volts_cart * 100.0)))
+		f.append_array([int(cart_soc)])
+		f.append_array(_le16(int(CART_WH * cart_soc / 100.0)))
+		f.append_array(_le16(CART_WH))
+		f.append_array(_le16(int(24.0 * 10.0)))
+		f.append_array(_le16(37))
+		f.append_array(_le16(3810))
+		f.append_array([18])
+		return f
+
+	func _cart_motors() -> PackedByteArray:
+		var amps := -4.1 if regen else 2.05
+		var rpm := int(speed_mps * 60.0 / 2.36)
+		var f := PackedByteArray([1, 2])
+		for m in 2:
+			f.append_array(_le16(int(amps * 100.0)))
+			f.append_array(_le16(int((52.0 + m * 4.0) * 10.0)))
+			f.append_array(_le16(rpm))
+		f.append_array([3 if regen else 0, 0])
+		return f
+
+	func _cart_solar() -> PackedByteArray:
+		var w := _solar_watts()
+		var panel_v := 34.0 if w > 5.0 else 0.0
+		var f := PackedByteArray([1])
+		f.append_array(_le16(int(panel_v * 100.0)))
+		f.append_array(_le16(int((w / maxf(panel_v, 1.0)) * 100.0)))
+		f.append_array(_le16(int(w)))
+		f.append_array(_le16(int(solar_wh_today)))
+		f.append_array(_le32(int(solar_wh_total)))
+		f.append_array([0 if w > 5.0 else 4])
+		return f
+
+	func _cart_info() -> PackedByteArray:
+		var f := PackedByteArray([1, 2])
+		f.append_array(_le16(CART_WH))
+		f.append_array(_le16(400))
+		f.append_array(_le16(2360))
+		var name := "sim-0.1".to_ascii_buffer()
+		name.resize(12)
+		f.append_array(name)
+		return f
+
+	## A believable solar curve: nothing at night, peaking near local noon,
+	## knocked down a bit for the panel never being square to the sun.
+	func _solar_watts() -> float:
+		var bias: int = Time.get_time_zone_from_system().get("bias", 0)
+		var d := Time.get_datetime_dict_from_unix_time(
+			int(Time.get_unix_time_from_system()) + bias * 60)
+		var hour := float(d["hour"]) + float(d["minute"]) / 60.0
+		if hour < 6.5 or hour > 19.5:
+			return 0.0
+		var arc := sin(PI * (hour - 6.5) / 13.0)
+		return maxf(0.0, 400.0 * arc * 0.78)

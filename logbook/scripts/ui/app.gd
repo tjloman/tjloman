@@ -56,7 +56,7 @@ func _ready() -> void:
 
 	Wx.alerts_changed.connect(_on_alerts)
 	Bike.connection_changed.connect(func(on: bool) -> void:
-		toast("Bike connected" if on else "Bike disconnected"))
+		toast(Bike.summary_line() if on else "Rig link lost"))
 	Prefetch.finished.connect(func(ok: bool) -> void:
 		toast("Offline map ready" if ok else "Offline map stopped"))
 
@@ -94,7 +94,7 @@ func _build_nav() -> void:
 		["✎", "journal", "Journal"],
 		["⚑", "stops", "Stops"],
 		["☂", "weather", "Weather"],
-		["⚙", "bike", "Bike"],
+		["⚙", "bike", "Rig"],
 		["⋯", "settings", "Settings"],
 	]
 	for item: Array in items:

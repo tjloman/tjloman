@@ -79,6 +79,14 @@ static func write_journal(path: String) -> void:
 		f.store_line("%s ridden, %s moving, %s climbed."
 			% [Cfg.dist(float(d["meters"])), Trip.format_duration(float(d["moving"])),
 			Cfg.elev(float(d["climb"]))])
+		# The energy ledger for the day, if the rig was reporting.
+		for e in Logbook.events_between(float(d["t0"]), float(d["t1"]), [Ev.DAY_END]):
+			if not e.has("wh_used"):
+				continue
+			f.store_line("")
+			f.store_line("Energy: %d Wh used · %d Wh solar · %d Wh regen."
+				% [int(e.get("wh_used", 0.0)), int(e.get("wh_solar", 0.0)),
+				int(e.get("wh_regen", 0.0))])
 		f.store_line("")
 		for e in Logbook.events_between(float(d["t0"]), float(d["t1"])):
 			var kind := String(e.get("kind", ""))

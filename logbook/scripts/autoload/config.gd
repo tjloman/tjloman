@@ -56,12 +56,18 @@ const DEFAULTS := {
 	"weather_poll_minutes": 20,
 	"radar_enabled": true,
 
-	# -- ebike
+	# -- the rig: a Senada Saber pulling a powered cart
 	"ble_enabled": true,
-	"ble_device": "",                 ## Remembered address; empty = ask.
+	"ble_devices": [],                ## [{address, name, role}] — bike, cart, house.
+	"ble_device": "",                 ## Legacy single-device key, migrated on load.
 	"ble_profile": "auto",
-	"ble_sample_minutes": 5.0,        ## How often a battery reading is logged.
-	"battery_wh": 700.0,              ## Pack size, for range estimates.
+	"ble_sample_minutes": 5.0,        ## How often a pack reading is logged.
+	"battery_wh": 960.0,              ## Saber pack: 48 V x 20 Ah. Correct it if yours differs.
+	"cart_battery_wh": 2400.0,        ## The cart carries far more than the bike.
+	"cart_motor_count": 2,
+	"solar_watts_peak": 400.0,
+	"wheel_circumference_m": 2.36,    ## 26x4.0 fat tyre. Roll the wheel to measure yours.
+	"assumed_wh_per_mile": 22.0,      ## Loaded bike + powered cart, until measured.
 	"low_battery_warn_pct": 20,
 
 	# -- stop photos
