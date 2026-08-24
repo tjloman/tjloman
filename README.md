@@ -46,6 +46,7 @@ you're done. No system install required.
 | Q / E | Rotate camera |
 | 1 / 2 / 3 / 4 | Village diet: Vegan / Omnivore / Carnivore / Cannibal |
 | P / L (hand near creature) | **Pet** (reward) / **scold** (discourage) its last deed |
+| G | **Lead your creature** to where your hand points — it goes there and waits (G again releases) |
 | C | **Lock** the camera onto your creature — centered, orbitable; C again (or pan) releases |
 | V | **Villages roster** — list your faithful villages (population, distance) and **snap the camera** to any of them |
 | F1 | Help panel |
@@ -62,11 +63,29 @@ different menus.)
 |---|---|---|
 | **Spiral** — Nature | Circle → Food · Vertical → Forest seed (13 trees) · Horizontal → Forage thicket · Diagonal → Rain | 20 / 45 / 30 / 25 |
 | **Reverse-spiral** — Wrath | Vertical → Lightning · Circle → Lightning **storm** · Diagonal → Fireball · Horizontal → **Tornado** | 30 / 90 / 25 / 110 |
-| **Wave** — Sky | Horizontal → Heal · Circle → **Bird flock** (doves/ravens/bats by alignment) · Vertical → Rain | 15 / 40 / 25 |
+| **Wave** — Sky | Horizontal → Heal · Circle → **Bird flock** · Vertical → **Flight** (your creature soars) · Diagonal → **Portal** | 15 / 40 / 55 / 70 |
 
-The mightiest miracles need a **wide reservoir of prayer** — each converted
-village raises your cap (+120) and widens the fury of storms and flocks.
-Everything you conjure is a throwable you place where you choose.
+**Your dominion is your spellbook.** Miracles are **unlocked by villages** —
+each village that comes to believe teaches you the next set of wonders. Once
+known, a miracle is paid for with the **pooled prayer of every town you hold**.
+
+| Villages | Unlocks |
+|---|---|
+| 1 | Food · Heal · Rain |
+| 2 | Forest seed · Forage thicket · Lightning |
+| 3 | Fireball · Bird flock · **Flight** |
+| 4 | **Portal** · Lightning storm · Tornado |
+
+**Portals** are cast in **pairs**: the first gate hangs open and waiting, the
+second links to it — and from then on villagers, livestock, your creature and
+anything you throw can step through and cross the world. Casting a third
+begins a fresh pair. **Flight** lifts your creature into the air, where it
+soars over water, wood and hill alike — the sane way to keep it beside you on
+a map this size.
+
+The mightiest miracles also need a **wide reservoir of prayer** — each
+converted village raises your cap (+120) and widens the fury of storms and
+flocks. Everything you conjure is a throwable you place where you choose.
 
 ## The world
 
@@ -106,8 +125,11 @@ Everything you conjure is a throwable you place where you choose.
   watered, and die of old age way out in the woods. Forage bushes with
   regrowing berries dot every biome (villagers forage them too when the
   granary runs dry). Trees grow from 1-lumber saplings to 30-lumber
-  giants — the model scales with maturity — and mature trees replant
-  themselves. Rock deposits hold 300 stone and visibly wear down.
+  giants — the model scales with maturity. **Woods do not swallow the map**:
+  growth is a lottery (a tree only *might* thicken on any given tick), only a
+  **fully grown** tree drops seed, and crowding cuts both the growing and the
+  seeding odds — so a stand thins at its own edges and creeps instead of
+  marching. Rock deposits hold 300 stone and visibly wear down.
 - **Sound**: every sound is synthesized in code at startup (no assets) and
   played positionally — bleating, clucking, sawing, quarry picks, hammers,
   worship murmur, barks, howls, frog croaks, and the boom of a fireball.

@@ -89,7 +89,8 @@ func _build_miracle_panel() -> void:
 	var ref := Label.new()
 	ref.text = ("spiral ▸ NATURE:  O Food · | Forest · — Thicket · \\ Rain\n"
 		+ "rev-spiral ▸ WRATH:  | Lightning · O Storm · \\ Fireball · — Tornado\n"
-		+ "wave / S ▸ SKY:  — Heal · O Birds · | Rain      (F1 — full controls)")
+		+ "wave / S ▸ SKY:  — Heal · O Birds · | Flight · \\ Portal\n"
+		+ "(locked miracles need more villages — F1 for the full list)")
 	ref.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ref.add_theme_font_size_override("font_size", 13)
 	ref.add_theme_color_override("font_color", Color(1, 1, 0.85, 0.85))
@@ -214,6 +215,8 @@ Q / E ...................... rotate camera
 1 / 2 / 3 / 4 .............. village diet: Vegan / Omnivore / Carnivore / Cannibal
 P / L (hand near creature) . PET (reward) / SCOLD (discourage) its last deed
 C .......................... LOCK the camera onto your creature (again to release)
+G .......................... LEAD your creature to where your hand points
+                             (it goes there and waits; G again releases it)
 V .......................... open the VILLAGES roster — snap the camera to any of yours
 F1 ......................... toggle this help
 F2 ......................... cycle graphics quality: Low / Medium / High
@@ -236,7 +239,18 @@ The miracle drops into your hand as an orb — THROW it where you want.
                      — Forage thicket (30) · \\ Bloom/Rain (25)
   REVERSE-SPIRAL — Wrath:  | Lightning (30) · O Lightning STORM (90)
                      \\ Fireball (25) · — Tornado (110)
-  WAVE or S — Sky:  — Heal (15) · O Bird flock, an omen (40) · | Rain (25)
+  WAVE or S — Sky:  — Heal (15) · O Bird flock (40)
+                     | FLIGHT — your creature soars (55)
+                     \\ PORTAL — cast twice to join two gates (70)
+
+YOUR DOMINION IS YOUR SPELLBOOK
+Miracles are UNLOCKED BY VILLAGES. Each village that comes to believe
+teaches you the next set of wonders — and once known, a miracle can be
+paid for with the pooled prayer of EVERY town you hold.
+  1 village .... Food · Heal · Rain
+  2 villages ... Forest seed · Forage thicket · Lightning
+  3 villages ... Fireball · Bird flock · Flight
+  4 villages ... Portal · Lightning storm · Tornado
 
 The grandest miracles (storm, tornado) need a wide reservoir of prayer —
 convert more villages to hold and wield them, and your reach (belief +

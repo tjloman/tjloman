@@ -16,7 +16,7 @@ extends CharacterBody3D
 enum State {
 	IDLE, WANDER, SEEK_FOOD, EATING, SLEEPING, GO_TEND, TENDING,
 	WATCH, GO_GATHER, CARRYING, PLAY, GUARD, SULK, CATCH,
-	GO_FISH, FISHING, GO_STORE, SMASH, FLEE, CAST,
+	GO_FISH, FISHING, GO_STORE, SMASH, FLEE, CAST, LEASHED,
 }
 
 const WALK_SPEED := 3.5
@@ -48,6 +48,14 @@ var hunger := 40.0
 var energy := 90.0
 var growth := 0.01            # 0..1 of its destined size; every game starts small
 var walks_on_water := false   # granted by a future miracle buff
+## FLIGHT, granted by a miracle: while aloft the creature ignores the ground
+## entirely — it soars over water, forest and hill alike, which is how it keeps
+## up with a god on a map this wide.
+var flight_time := 0.0
+## THE LEASH: where you have ordered it to go. While set, your command overrides
+## its own wants — it goes there and waits — but it still LEARNS from whatever
+## happens on the way, so leading it somewhere is itself a way of teaching.
+var leash_target := Vector3.INF
 
 ## Feelings. Mood is the weather of its heart; bond is trust in your hand;
 ## boredom is the itch that play and curiosity scratch.
@@ -122,6 +130,7 @@ var _shown_align := 999.0                  # last applied alignment (throttle)
 var _expression := "neutral"
 var _expr_time := 0.0
 var _wedge_time := 0.0             # seconds shoving forward without advancing
+var _fly_height := 0.0             # how high the flight miracle currently holds it
 var _sway_tick := 0                # throttles the push-trees-aside sweep
 
 
@@ -272,6 +281,8 @@ func _physics_process(delta: float) -> void:
 			_process_flee(delta)
 		State.CAST:
 			_process_cast(delta)
+		State.LEASHED:
+			_process_leashed(delta)
 
 	_observe_time -= delta
 	if _observe_time <= 0.0:
@@ -301,6 +312,7 @@ func _physics_process(delta: float) -> void:
 		_animate_waddle(delta)
 	_apply_appearance()
 	_tick_expression(delta)
+	_tick_flight(delta)
 	var status := _status_text()
 	if _label.text != status:
 		_label.text = status
@@ -426,6 +438,12 @@ func _decide() -> void:
 		"hunger": hunger, "energy": energy, "boredom": boredom,
 		"mood": mood, "fear": fear,
 	}
+	# YOUR COMMAND FIRST: while leashed it goes where it was sent, whatever it
+	# would rather be doing.
+	if leash_target != Vector3.INF:
+		state = State.LEASHED
+		_action_time = 2.0
+		return
 	var choice := mind.choose(_perceive(), drive)
 	_act_verb = choice["verb"]
 	_act_type = choice.get("type", "none")
@@ -1520,6 +1538,77 @@ func _animate_waddle(_delta: float) -> void:
 		_body.rotation_degrees.z = lerpf(_body.rotation_degrees.z, 0.0, 0.2)
 
 
+## A miracle lifts the beast into the air for a while. Cast it again to top up.
+func grant_flight(seconds: float) -> void:
+	flight_time = maxf(flight_time, seconds)
+	walks_on_water = true
+	express("happy")
+	GameState.announce("Your creature takes to the air!")
+
+
+## Order it to a spot (the hand's ground point). It drops what it is doing.
+func leash_to(pos: Vector3) -> void:
+	leash_target = pos
+	if _carried != null:
+		_release_carried(true)
+	state = State.LEASHED
+	express("curious")
+	attention = minf(attention + 25.0, 100.0)
+
+
+func release_leash() -> void:
+	if leash_target == Vector3.INF:
+		return
+	leash_target = Vector3.INF
+	if state == State.LEASHED:
+		_decide()
+
+
+func is_leashed() -> bool:
+	return leash_target != Vector3.INF
+
+
+## Walk to where it was sent and wait there. It stays put (drifting a little)
+## until you release it, so you can post it somewhere and leave it.
+func _process_leashed(delta: float) -> void:
+	if leash_target == Vector3.INF:
+		_decide()
+		return
+	if global_position.distance_to(leash_target) > 3.0:
+		_move_toward(leash_target, _run_speed() * 0.9, delta)
+		return
+	_apply_gravity_only(delta)
+	_action_time -= delta
+	if _action_time <= 0.0:
+		_action_time = 3.0
+		# Waiting where it was told, but still watching the world go by.
+		_observe_world()
+
+
+func is_flying() -> bool:
+	return flight_time > 0.0
+
+
+## While aloft the body rises off the terrain and drifts; when the miracle runs
+## out it settles back down to walking.
+func _tick_flight(delta: float) -> void:
+	var want := 0.0
+	if flight_time > 0.0:
+		flight_time -= delta
+		want = 9.0 + scale.y * 1.5
+		if flight_time <= 0.0:
+			walks_on_water = false
+			GameState.announce("Your creature sinks back to the earth.")
+	_fly_height = lerpf(_fly_height, want, minf(delta * 1.6, 1.0))
+	if _fly_height > 0.05:
+		var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+		if world != null:
+			var ground := maxf(
+				world.height_at(global_position.x, global_position.z), WorldGen.WATER_LEVEL)
+			global_position.y = ground + _fly_height
+			velocity.y = 0.0
+
+
 ## Pain: the creature has no health bar, but it FEELS being hurt — fright rises,
 ## mood drops, and the mind learns that whatever it was just doing hurt. Enough
 ## of that near people and it may become a nervous recluse.
@@ -1644,6 +1733,7 @@ func _anim_state() -> String:
 		State.SMASH: return "attack"
 		State.FLEE: return "run"
 		State.CAST: return "work"
+		State.LEASHED: return "walk"
 	return "walk" if Vector2(velocity.x, velocity.z).length() > 0.3 else "idle"
 
 
@@ -1728,6 +1818,7 @@ func _status_word() -> String:
 		State.SMASH: return "smashing something"
 		State.FLEE: return "fleeing, frightened"
 		State.CAST: return "working a miracle"
+		State.LEASHED: return "going where you sent it"
 		State.PLAY: return "playing"
 		State.GUARD: return "standing guard"
 		State.SULK: return "sulking"
@@ -1751,4 +1842,5 @@ func _status_text() -> String:
 		State.SMASH: return "RAAWR"
 		State.FLEE: return "!!!"
 		State.CAST: return "***"
+		State.LEASHED: return "yes?"
 	return ""

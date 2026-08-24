@@ -1285,7 +1285,7 @@ func _process_fight(delta: float) -> void:
 ## your creature off, if they have come to hate it enough.
 func _strike(foe: Node3D) -> void:
 	var dmg := Weapon.damage(weapon)
-	SoundBank.play_at("hammer" if weapon != "bow" else "chop", global_position, -6.0)
+	SoundBank.play_at("hammer" if weapon != "bow" else "pick", global_position, -6.0)
 	if foe is Animal:
 		var beast := foe as Animal
 		beast.take_damage(dmg)

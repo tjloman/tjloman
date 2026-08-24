@@ -152,6 +152,7 @@ func _setup_input() -> void:
 		"pet_creature": [KEY_P],
 		"scold_creature": [KEY_L],
 		"find_creature": [KEY_C],
+		"leash_creature": [KEY_G],
 	}
 	for action: String in actions:
 		if InputMap.has_action(action):
@@ -221,6 +222,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		_touch_creature(true)
 	elif event.is_action_pressed("scold_creature"):
 		_touch_creature(false)
+	elif event.is_action_pressed("leash_creature") and is_instance_valid(creature):
+		# G LEADS the creature: it goes where your hand is pointing and waits
+		# there. Press G again (or with the hand off the land) to release it.
+		if creature.is_leashed():
+			creature.release_leash()
+			GameState.announce("You release your creature. It returns to its own mind.")
+		else:
+			creature.leash_to(divine_hand.ground_point)
+			GameState.announce("You lead your creature there. (G again to release.)")
 	elif event.is_action_pressed("find_creature") and is_instance_valid(creature):
 		# C toggles a LOCK-ON: the camera glides to the creature, keeps it
 		# centered, and orbits around it until you pan away (or press C again).
@@ -264,6 +274,9 @@ func _run_smoke_test() -> void:
 	])
 	# Two-step casting: open each menu, conjure a selection, and resolve it.
 	GameState.set_max_prayer_power(400.0)
+	print("SMOKE TEST: unlocks — villages=%d known=%s next=%s" % [
+		miracles.faithful_villages(), str(miracles.unlocked_miracles()),
+		str(miracles.next_tier_preview())])
 	for entry: Array in [["spiral", "circle"], ["rev_spiral", "vline"],
 			["wave", "hline"], ["rev_spiral", "circle"], ["spiral", "vline"],
 			["wave", "circle"], ["rev_spiral", "hline"]]:
@@ -275,10 +288,29 @@ func _run_smoke_test() -> void:
 		await get_tree().create_timer(0.2).timeout
 	# Directly resolve one of each new miracle to exercise every effect.
 	for miracle: String in ["food", "rain", "heal", "lightning", "forest_seed",
-			"forage_thicket", "lightning_storm", "tornado", "bird_flock"]:
+			"forage_thicket", "lightning_storm", "tornado", "bird_flock", "flight"]:
 		miracles.resolve(miracle, Vector3(6, 0, 6))
 		print("SMOKE TEST: resolve %s" % miracle)
 		await get_tree().create_timer(0.3).timeout
+
+	# PORTALS come in pairs: the first waits, the second links to it.
+	miracles.resolve("portal", Vector3(12, 0, 12))
+	await get_tree().create_timer(0.2).timeout
+	miracles.resolve("portal", Vector3(-40, 0, 25))
+	await get_tree().create_timer(0.2).timeout
+	var gates := get_tree().get_nodes_in_group("portals")
+	var linked := 0
+	for g in gates:
+		if (g as Portal).twin != null:
+			linked += 1
+	print("SMOKE TEST: portals=%d linked=%d | creature flying=%s" % [
+		gates.size(), linked, creature.is_flying()])
+
+	# THE LEASH: sent somewhere, it obeys; released, it thinks for itself again.
+	creature.leash_to(Vector3(20, 0, 20))
+	var leashed := creature.is_leashed() and creature.state == Creature.State.LEASHED
+	creature.release_leash()
+	print("SMOKE TEST: leash — obeyed=%s released=%s" % [leashed, not creature.is_leashed()])
 
 	for diet: Village.Diet in [Village.Diet.VEGAN, Village.Diet.CARNIVORE,
 			Village.Diet.CANNIBAL, Village.Diet.OMNIVORE]:

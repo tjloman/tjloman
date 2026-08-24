@@ -478,6 +478,14 @@ func _convert() -> void:
 	_totem_orb.material_override = Util.mat(Color(1.0, 0.85, 0.3), true)
 	GameState.announce("%s BELIEVES! Their prayers now feed your power." % village_name)
 	GameState.shift_alignment(1.0)
+	# Every convert widens your spellbook: their faith teaches you new wonders,
+	# and their prayers can pay for any miracle you already know.
+	var manager := get_tree().get_first_node_in_group("miracles") as MiracleManager
+	if manager != null:
+		var taught: Array = manager.newly_taught()
+		if not taught.is_empty():
+			GameState.announce("Their devotion teaches you: %s!"
+				% ", ".join(taught).replace("_", " "))
 
 
 ## The world is the interface: ring size = population, ring color =

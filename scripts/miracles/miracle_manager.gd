@@ -26,8 +26,11 @@ const MENUS := {
 		},
 	},
 	"wave": {
-		"label": "SKY:  —  heal   O  birds   |  rain",
-		"selectors": {"hline": "heal", "circle": "bird_flock", "vline": "rain"},
+		"label": "SKY:  —  heal   O  birds   |  flight   \\  portal",
+		"selectors": {
+			"hline": "heal", "circle": "bird_flock",
+			"vline": "flight", "dline": "portal",
+		},
 	},
 }
 
@@ -45,6 +48,8 @@ const MIRACLES := {
 	"lightning_storm": {"cost": 90.0, "color": Color(0.8, 0.85, 1.0)},
 	"tornado": {"cost": 110.0, "color": Color(0.6, 0.6, 0.65)},
 	"bird_flock": {"cost": 40.0, "color": Color(0.85, 0.85, 0.9)},
+	"flight": {"cost": 55.0, "color": Color(0.7, 0.9, 1.0)},
+	"portal": {"cost": 70.0, "color": Color(0.5, 0.75, 1.0)},
 }
 
 ## How each resolved miracle moves the player's karma, and what the creature
@@ -56,11 +61,24 @@ const KARMA := {
 	"forest_seed": {"player": 2.5, "creature": 2.0},
 	"forage_thicket": {"player": 2.0, "creature": 1.5},
 	"bird_flock": {"player": 1.0, "creature": 1.0},
+	"flight": {"player": 1.5, "creature": 2.0},
+	"portal": {"player": 1.0, "creature": 1.5},
 	"lightning": {"player": -4.0, "creature": -3.0},
 	"lightning_storm": {"player": -7.0, "creature": -5.0},
 	"tornado": {"player": -8.0, "creature": -6.0},
 	"fireball": {"player": -2.5, "creature": -2.0},
 }
+
+## THE UNLOCK LADDER: your dominion is your spellbook. Every village that comes
+## to believe teaches you the next set of wonders — so expanding the faith is
+## how the game opens up. Prayer itself is POOLED: once known, a miracle can be
+## paid for with the devotion of every town you hold.
+const UNLOCK_TIERS := [
+	["food", "heal", "rain"],
+	["forest_seed", "forage_thicket", "lightning"],
+	["fireball", "bird_flock", "flight"],
+	["portal", "lightning_storm", "tornado"],
+]
 
 const LIGHTNING_KILL_RADIUS := 3.0
 const LIGHTNING_BURN_RADIUS := 8.0
@@ -106,10 +124,53 @@ func select(opener: String, selector: String) -> bool:
 	return conjure(selectors[selector])
 
 
+## How many villages hold your faith (the home village counts once converted).
+func faithful_villages() -> int:
+	var n := 0
+	for v in get_tree().get_nodes_in_group("village"):
+		if (v as Village).converted:
+			n += 1
+	return n
+
+
+## Every miracle your dominion has taught you so far.
+func unlocked_miracles() -> Array:
+	var known := []
+	var tiers := mini(maxi(faithful_villages(), 1), UNLOCK_TIERS.size())
+	for i in tiers:
+		for m: String in UNLOCK_TIERS[i]:
+			known.append(m)
+	return known
+
+
+func is_unlocked(miracle: String) -> bool:
+	return unlocked_miracles().has(miracle)
+
+
+## The tier just opened by the newest convert — announced on conversion.
+func newly_taught() -> Array:
+	var tier := faithful_villages() - 1
+	if tier > 0 and tier < UNLOCK_TIERS.size():
+		return UNLOCK_TIERS[tier]
+	return []
+
+
+## The wonders the NEXT convert would teach you — shown to tempt the player on.
+func next_tier_preview() -> Array:
+	var tier := faithful_villages()
+	if tier < UNLOCK_TIERS.size():
+		return UNLOCK_TIERS[tier]
+	return []
+
+
 ## Conjures a named miracle as an orb into the divine hand (or drops it
 ## in the air if the hand is full). Spends prayer power up front.
 func conjure(miracle: String) -> bool:
 	if not MIRACLES.has(miracle):
+		return false
+	if not is_unlocked(miracle):
+		GameState.hint("%s is beyond you yet — bring another village to the faith."
+			% miracle.capitalize().replace("_", " "))
 		return false
 	var cost: float = MIRACLES[miracle]["cost"]
 	if cost > GameState.max_prayer_power:
@@ -149,6 +210,8 @@ func resolve(miracle: String, pos: Vector3, momentum := Vector3.ZERO) -> void:
 		"lightning_storm": _cast_lightning_storm(pos, potency)
 		"tornado": _cast_tornado(pos, potency, momentum)
 		"bird_flock": _cast_bird_flock(pos, potency, momentum)
+		"flight": _cast_flight(pos, potency)
+		"portal": _cast_portal(pos)
 		_: return
 	_apply_karma(miracle, pos)
 	for v in get_tree().get_nodes_in_group("village"):
@@ -496,3 +559,61 @@ func creature_cast(miracle: String, pos: Vector3, skill: float) -> void:
 		_: return
 	for v in get_tree().get_nodes_in_group("village"):
 		(v as Village).witness_miracle(miracle, pos)
+
+
+## Sky, continued -------------------------------------------------------------
+
+## FLIGHT: the creature takes to the air and soars over water, wood and hill
+## alike — the only sane way to keep it beside you on a map this wide.
+func _cast_flight(pos: Vector3, potency := 1.0) -> void:
+	var creature := get_tree().get_first_node_in_group("creature") as Creature
+	if creature == null:
+		GameState.hint("Your creature is nowhere near enough to be lifted.")
+		return
+	if creature.global_position.distance_to(pos) > 60.0:
+		GameState.hint("Cast it nearer your creature to lift it.")
+		return
+	creature.grant_flight(35.0 + potency * 25.0)
+	var swirl := CPUParticles3D.new()
+	swirl.amount = 60
+	swirl.lifetime = 1.6
+	swirl.one_shot = true
+	swirl.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	swirl.emission_sphere_radius = 3.0
+	swirl.direction = Vector3.UP
+	swirl.initial_velocity_min = 5.0
+	swirl.initial_velocity_max = 9.0
+	swirl.gravity = Vector3(0, 2.0, 0)
+	swirl.position = creature.global_position
+	add_child(swirl)
+	get_tree().create_timer(4.0).timeout.connect(swirl.queue_free)
+
+
+## PORTAL: gates are cast in PAIRS. The first stands open and waiting; the next
+## links to it, and from then on anything entering one steps out of the other.
+## Casting a third begins a fresh pair (the old gates close).
+func _cast_portal(pos: Vector3) -> void:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world != null:
+		pos.y = maxf(world.height_at(pos.x, pos.z), WorldGen.WATER_LEVEL)
+	var waiting: Portal = null
+	var open: Array = []
+	for p in get_tree().get_nodes_in_group("portals"):
+		var gate := p as Portal
+		if not is_instance_valid(gate):
+			continue
+		open.append(gate)
+		if gate.twin == null or not is_instance_valid(gate.twin):
+			waiting = gate
+	# A finished pair already stands: this cast starts a new one, so retire them.
+	if waiting == null and open.size() >= 2:
+		for gate: Portal in open:
+			gate.queue_free()
+	var portal := Portal.new()
+	add_child(portal)
+	portal.global_position = pos
+	if waiting != null and is_instance_valid(waiting):
+		portal.link(waiting)
+		GameState.announce("The gates are joined! Step through and cross the world.")
+	else:
+		GameState.announce("A gate hangs open, waiting for its twin. Cast portal again elsewhere.")

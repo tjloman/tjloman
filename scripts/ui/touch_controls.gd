@@ -14,6 +14,7 @@ var creature: Creature
 
 var _mode_button: Button
 var _follow_button: Button
+var _leash_button: Button
 
 
 func _ready() -> void:
@@ -35,6 +36,10 @@ func _ready() -> void:
 	_follow_button.toggle_mode = true
 	_follow_button.toggled.connect(_on_follow_toggled)
 	column.add_child(_follow_button)
+
+	_leash_button = _make_button("Lead")
+	_leash_button.pressed.connect(_on_leash_pressed)
+	column.add_child(_leash_button)
 
 	_mode_button = _make_button("Mode: Move")
 	_mode_button.toggle_mode = true
@@ -71,3 +76,18 @@ func _on_mode_toggled(pressed: bool) -> void:
 		GameState.announce("Casting mode: draw a miracle gesture with one finger.")
 	else:
 		GameState.announce("Movement mode: drag the land, pick up, place, throw.")
+
+
+## Send the creature to wherever the hand is pointing — or call it off, if it
+## is already under orders.
+func _on_leash_pressed() -> void:
+	if not is_instance_valid(creature):
+		return
+	if creature.is_leashed():
+		creature.release_leash()
+		_leash_button.text = "Lead"
+		GameState.announce("You release your creature.")
+	else:
+		creature.leash_to(divine_hand.ground_point)
+		_leash_button.text = "Release"
+		GameState.announce("Your creature is going where you pointed.")
