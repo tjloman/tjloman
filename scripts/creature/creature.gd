@@ -1041,8 +1041,11 @@ func _process_smash(delta: float) -> void:
 		if tree.lumber > 1.0 and randf() < 0.5:
 			tree.fell()
 	elif victim is Villager:
-		(victim as Villager).take_damage(45.0)
-		(victim as Villager).scare(global_position)
+		# They know exactly what hit them — this is how a village comes to hate
+		# (and eventually take up arms against) your creature.
+		(victim as Villager).hurt_by(self, 45.0)
+		if is_instance_valid(victim):
+			(victim as Villager).scare(global_position)
 		_scare_witnesses(14.0, 4.0)
 	elif victim is Animal:
 		var beast := victim as Animal
@@ -1198,6 +1201,11 @@ func _consume_food_target() -> void:
 
 func _devour_villager(victim: Villager) -> void:
 	var victim_name := victim.villager_name
+	# Eating people is the fastest way to make a village hate you enough to
+	# arm itself against your creature.
+	if victim.village != null and is_instance_valid(victim.village):
+		victim.village.raise_alarm(global_position, true)
+		victim.village.grudge = minf(victim.village.grudge + 30.0, 100.0)
 	victim.queue_free()
 	hunger = maxf(hunger - 70.0, 0.0)
 	morality = clampf(morality - 5.0, -100.0, 100.0)

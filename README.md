@@ -129,6 +129,18 @@ Everything you conjure is a throwable you place where you choose.
   crowding onto is discouraged, so villagers fan out across the village's
   needs instead of conga-lining to one resource. Starvation is lethal —
   and the god who allowed it is judged.
+- **The militia — villagers fight back**: predators no longer farm defenceless
+  people. When one villager is hurt, the whole village is ROUSED: the able
+  arm themselves at the storehouse (club · spear · bow · sword, paid for in
+  lumber and stone — they make the best they can afford) and go for the
+  threat. Courage comes from NUMBERS: a villager caught **alone** will not
+  stand — they run, and a wolf usually runs them down. Two or three together
+  turn and kill it. If a villager **dies**, the village swears a blood debt
+  against that specific beast and hunts it wherever it goes, and clears any
+  predator inside its bounds. Hurt (or eat) their people with your creature
+  and their **grudge** grows — push it far enough and they will take up arms
+  against your creature too, wounding it and driving it off. A creature hurt
+  this way learns to fear them.
 - **Nothing teleports**: a gathered catch, harvest, timber, or stone must be
   **carried home on foot** to the storehouse (you can see the load in their
   hands) before it counts. A load abandoned in fright is dropped and lost.

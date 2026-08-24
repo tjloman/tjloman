@@ -323,6 +323,31 @@ func _run_smoke_test() -> void:
 		str(creature.mind.known_miracles())])
 	print("SMOKE TEST: mind urge -> %s" % creature.mind.strongest_urge())
 
+	# THE MILITIA: a wolf mauls someone, the village rouses, arms itself, and
+	# (in a band) fights back. A lone villager must NOT dare to stand.
+	village.store.add_lumber(12)
+	village.store.add_stone(9)
+	var folk := village.my_villagers()
+	if folk.size() >= 2:
+		var victim2 := folk[0]
+		var wolf := Animal.create("wolf")
+		add_child(wolf)
+		wolf.global_position = victim2.global_position + Vector3(2, 0, 0)
+		victim2.hurt_by(wolf, 20.0)
+		await get_tree().create_timer(0.2).timeout
+		var foe: Node3D = victim2._find_foe()
+		victim2._take_up_arms()
+		print("SMOKE TEST: militia — roused=%s grudge=%.0f foe=%s armed=%s allies=%d dares=%s" % [
+			village.is_roused(), village.grudge, foe != null, victim2.weapon,
+			victim2._allies_near(), victim2._dares_fight()])
+		var before := wolf.health
+		victim2._strike(wolf)
+		print("SMOKE TEST: militia strike — wolf %.0f -> %.0f hp (weapon %s)" % [
+			before, wolf.health if is_instance_valid(wolf) else 0.0, victim2.weapon])
+		if is_instance_valid(wolf):
+			village.mark_for_death(wolf)
+			print("SMOKE TEST: vendetta size=%d" % village.vendetta.size())
+
 	await get_tree().create_timer(2.0).timeout
 	print("SMOKE TEST: villagers=%d animals=%d houses=%d villages=%d creature=%s day=%.2f night=%s" % [
 		get_tree().get_nodes_in_group("villagers").size(),

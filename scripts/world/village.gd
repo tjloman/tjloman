@@ -20,6 +20,13 @@ const MAX_TAMED := 8
 const PRAYER_PER_VILLAGE := 120.0   # each convert widens your prayer reservoir
 const FARM_HALF := 3.9              # a field's clearance radius (no overlaps)
 
+## THE ALARM: when one of them is attacked, the whole village drops its work
+## and takes up arms for a while. Grudge is how much they blame the CREATURE
+## for their blood — once it passes GRUDGE_HOSTILE they will fight it too.
+const ALARM_SECONDS := 45.0
+const GRUDGE_HOSTILE := 35.0
+const GRUDGE_DECAY := 0.4          # per second: fear of the beast fades slowly
+
 ## Hand-placed founding homes, clear of the farm (E), store (NW), and pen (S).
 const STARTER_HOUSE_SPOTS: Array[Vector3] = [
 	Vector3(5, 0, 9), Vector3(-4.5, 0, 10), Vector3(10.5, 0, 5),
@@ -41,6 +48,15 @@ var construction_site: House = null
 var tamed_animals: Array[Animal] = []
 var edubba: Edubba = null      # the schoolhouse, once built
 var teacher: Villager = null   # the one adult who minds the school
+
+## Militia state. `alarm` counts down while the village is roused; `threat_pos`
+## is where the trouble was last seen; `grudge` is their anger at the creature.
+var alarm := 0.0
+var threat_pos := Vector3.INF
+var grudge := 0.0
+## Beasts marked for death. When one of ours is killed, its killer goes on this
+## list and the whole village hunts THAT animal until it is dead.
+var vendetta: Array[Animal] = []
 
 var _totem_orb: MeshInstance3D
 var _influence_ring: MeshInstance3D
@@ -389,6 +405,11 @@ func _process(delta: float) -> void:
 			GameState.add_prayer_power(worshippers * WORSHIP_PRAYER_PER_SEC * conviction * delta)
 			change_belief(worshippers * WORSHIP_BELIEF_PER_SEC * delta)
 	change_belief(-BELIEF_DECAY_PER_SEC * delta)
+
+	if alarm > 0.0:
+		alarm -= delta
+	if grudge > 0.0:
+		grudge = maxf(grudge - GRUDGE_DECAY * delta, 0.0)
 
 	_housing_timer -= delta
 	if _housing_timer <= 0.0:
@@ -785,3 +806,86 @@ func witness_miracle(type: String, pos: Vector3) -> void:
 func hover_text() -> String:
 	return "%s — %s" % [village_name,
 		"faithful" if converted else "unbelieving (belief %d/%d)" % [int(belief), int(CONVERT_BELIEF)]]
+
+
+## Militia ---------------------------------------------------------------------
+
+## One of ours has been hurt (or a menace was spotted): rouse the village. For
+## ALARM_SECONDS the able-bodied will arm themselves and drive the threat off
+## instead of going about their work.
+func raise_alarm(where: Vector3, from_creature := false) -> void:
+	var was_calm := alarm <= 0.0
+	alarm = ALARM_SECONDS
+	threat_pos = where
+	if from_creature:
+		grudge = minf(grudge + 18.0, 100.0)
+	if was_calm and is_player_home:
+		if from_creature and grudge >= GRUDGE_HOSTILE:
+			GameState.announce("%s has had enough of your creature. They are taking up arms!"
+				% village_name)
+		else:
+			GameState.announce("Alarm in %s! They are arming themselves." % village_name)
+
+
+func is_roused() -> bool:
+	return alarm > 0.0
+
+
+## True once the village blames your creature enough to actually fight it.
+func hates_creature() -> bool:
+	return grudge >= GRUDGE_HOSTILE
+
+
+## How many of my people are already carrying arms.
+func armed_count() -> int:
+	var n := 0
+	for v in my_villagers():
+		if v.weapon != "":
+			n += 1
+	return n
+
+
+## Blood debt: this beast killed one of ours. Every able hand will hunt it down
+## specifically, on top of clearing any predator inside the village bounds.
+func mark_for_death(beast: Animal) -> void:
+	if beast == null or not is_instance_valid(beast):
+		return
+	vendetta = vendetta.filter(func(a): return is_instance_valid(a))
+	if not vendetta.has(beast):
+		vendetta.append(beast)
+		if is_player_home:
+			GameState.announce("%s swears vengeance on the %s that killed their own."
+				% [village_name, beast.species])
+	raise_alarm(beast.global_position)
+
+
+## The beast this villager should hunt: a blood-debt target first (anywhere),
+## otherwise any predator that has come inside the village bounds. Returns null
+## when there is nothing to fight.
+func fight_target(from: Vector3) -> Animal:
+	vendetta = vendetta.filter(func(a): return is_instance_valid(a))
+	var best: Animal = null
+	var best_dist := INF
+	for a in vendetta:
+		var beast := a as Animal
+		var d := from.distance_to(beast.global_position)
+		if d < best_dist and d < 90.0:
+			best_dist = d
+			best = beast
+	if best != null:
+		return best
+	# No blood debt outstanding: drive off whatever prowls our ground.
+	for n in get_tree().get_nodes_in_group("animals"):
+		var beast := n as Animal
+		if not is_instance_valid(beast) or beast.tamed_by != null:
+			continue
+		if not beast.spec.get("predator", false):
+			continue
+		var here := beast.global_position.distance_to(global_position)
+		if here > influence_radius:
+			continue   # only what is INSIDE our bounds
+		var d := from.distance_to(beast.global_position)
+		if d < best_dist:
+			best_dist = d
+			best = beast
+	return best

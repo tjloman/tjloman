@@ -382,6 +382,14 @@ func _strike_prey() -> void:
 			hunger = maxf(hunger - 70.0, 0.0)
 			_prey = null
 			state = State.IDLE
+	elif _prey is Villager:
+		# Blood on the ground: the victim remembers WHO, and the village rouses.
+		(_prey as Villager).hurt_by(self, 20.0)
+		if is_instance_valid(_prey):
+			(_prey as Villager).scare(global_position)
+		hunger = maxf(hunger - 45.0, 0.0)
+		_prey = null
+		state = State.IDLE
 	elif _prey.has_method("take_damage"):
 		_prey.call("take_damage", 20.0, false)
 		_prey.call("scare", global_position)

@@ -16,7 +16,7 @@ enum State {
 	GO_PREACH, PREACHING, GO_FEED, GO_BUILD_FARM, BUILDING_FARM,
 	GO_FISH, FISHING, COURT, FOLLOW_MOM, AT_SCHOOL, TEACH,
 	GO_BUILD_EDUBBA, BUILDING_EDUBBA,
-	HAULING,
+	HAULING, GO_ARM, FIGHT,
 	FLEE, HELD, FALLING, DYING,
 }
 
@@ -40,6 +40,14 @@ const ELDER_AGE := 60.0
 const PREGNANCY_YEARS := 0.75  # nine months
 const STARVING_HUNGER := 90.0
 const TAME_MORALITY := 40.0    # benevolent and saintly souls only
+
+## COURAGE IN NUMBERS. A villager caught alone by a wolf runs (and is usually
+## run down); it takes a BAND to stand and fight. This is the whole balance of
+## the militia: one soul is prey, three are a hunting party.
+const ALLY_RADIUS := 14.0      # how far apart the band may be and still count
+const COURAGE_ARMED := 1       # allies an ARMED villager needs to hold ground
+const COURAGE_BARE := 2        # allies a bare-handed one needs
+const RETREAT_HEALTH := 30.0   # hurt this badly and even a brave one falls back
 
 ## Hazards: fire and deep water each drain 100 health to 0 in ten seconds.
 const HAZARD_RATE := 10.0
@@ -71,6 +79,7 @@ var social := 70.0
 var happiness := 60.0
 var health := 100.0
 var burning := false   # ablaze: drains health until doused or dead
+var weapon := ""      # "" = bare-handed; otherwise a Weapon.SPECS kind
 
 ## Personal karma: -100 wicked .. +100 saintly.
 var morality := randf_range(10.0, 40.0)
@@ -113,6 +122,9 @@ var _fish_spot := Vector3.INF
 var _world_cache: WorldGen = null
 var _edubba_spot := Vector3.INF
 var _breed_cooldown := randf_range(4.0, 12.0)
+var _fight_target: Node3D = null   # the beast (or creature) being fought
+var _attack_cd := 0.0
+var _weapon_visual: Node3D = null
 var _label: Label3D
 var _visuals: Node3D
 var _body_mesh: Node3D   # MeshInstance3D (procedural) or a custom model root
@@ -323,6 +335,17 @@ func _physics_process(delta: float) -> void:
 				village.spawn_edubba_at(_edubba_spot)
 				_edubba_spot = Vector3.INF
 				_decide()
+		State.GO_ARM:
+			# To the storehouse for arms. If the stores can't pay for a weapon
+			# they go bare-handed rather than stand about.
+			if village == null or not is_instance_valid(village.store):
+				_decide()
+			elif _move_toward(village.store.global_position,
+					WALK_SPEED * _speed_factor(), delta, 2.2):
+				_take_up_arms()
+				_decide()
+		State.FIGHT:
+			_process_fight(delta)
 		State.HAULING:
 			# Carry the gathered load home on foot — nothing teleports to the
 			# store; if the store is gone, the load is simply dropped.
@@ -520,6 +543,7 @@ func _is_travelling() -> bool:
 		State.GO_FISH, State.GO_BUILD_FARM, State.GO_BUILD_EDUBBA, State.GO_HUNT,
 		State.GO_BUTCHER, State.GO_CHOP, State.GO_QUARRY, State.GO_BUILD,
 		State.GO_TAME, State.GO_WORSHIP, State.GO_PREACH, State.COURT, State.HAULING,
+		State.GO_ARM,
 	]
 
 
@@ -685,6 +709,8 @@ func _anim_state() -> String:
 		State.DYING: return "dying"
 		State.FALLING: return "fall"
 		State.HAULING: return "carry"
+		State.GO_ARM: return "run"
+		State.FIGHT: return "attack"
 		State.HELD: return "idle"
 		State.FLEE: return "run"
 		State.SLEEPING: return "sleep"
@@ -836,6 +862,22 @@ func _decide() -> void:
 		state = State.GO_WORSHIP
 		_target = village.totem.global_position + Vector3(randf_range(-3, 3), 0, randf_range(-3, 3))
 		return
+	# THE ALARM outranks ordinary work: while the village is roused, the able
+	# arm themselves and go for the threat — but only if they dare. Caught alone
+	# and bare-handed, a villager runs instead (and is often run down).
+	if village != null and village.is_roused() and is_adult():
+		var foe := _find_foe()
+		if foe != null:
+			if weapon == "" and Weapon.affordable(village.store) != "" and _allies_near() >= 1:
+				state = State.GO_ARM
+				return
+			if _dares_fight():
+				_fight_target = foe
+				state = State.FIGHT
+				_attack_cd = 0.3
+				return
+			scare(foe.global_position)   # outnumbered: run for it
+			return
 	if _pick_job():
 		return
 	state = State.WANDER
@@ -1166,6 +1208,121 @@ func current_job() -> String:
 		State.GO_TAME, State.TAMING: return "tame"
 		State.HAULING: return _carry_job
 	return ""
+
+
+## The militia -----------------------------------------------------------------
+
+## Draw a weapon from the storehouse (paying its materials). Bare hands if the
+## village is too poor — a mob is still a mob.
+func _take_up_arms() -> void:
+	if weapon != "" or village == null:
+		return
+	var made := Weapon.forge(village.store)
+	if made == "":
+		return
+	weapon = made
+	if is_instance_valid(_weapon_visual):
+		_weapon_visual.queue_free()
+	_weapon_visual = Weapon.build_visual(weapon)
+	_visuals.add_child(_weapon_visual)
+
+
+## How many of my people are close enough to fight alongside me. Courage —
+## and therefore the whole balance of predator attacks — rests on this count.
+func _allies_near() -> int:
+	if village == null:
+		return 0
+	var n := 0
+	for v in village.my_villagers():
+		if v == self or not v.is_adult() or v.state == State.DYING:
+			continue
+		if v.global_position.distance_to(global_position) < ALLY_RADIUS:
+			n += 1
+	return n
+
+
+## Will this villager stand and fight, or run? Alone, they run — and a wolf
+## runs them down. Together, they turn and kill it.
+func _dares_fight() -> bool:
+	if health < RETREAT_HEALTH:
+		return false
+	var needed := COURAGE_ARMED if weapon != "" else COURAGE_BARE
+	return _allies_near() >= needed
+
+
+## Close with the enemy and strike it on the weapon's cooldown. Breaks off if
+## the target dies, if the villager is badly hurt, or if their nerve fails.
+func _process_fight(delta: float) -> void:
+	if _fight_target == null or not is_instance_valid(_fight_target) \
+			or _fight_target.is_queued_for_deletion():
+		_fight_target = null
+		_decide()
+		return
+	if health < RETREAT_HEALTH or not _dares_fight():
+		# Nerve broken: run, and let the fear spread the alarm further.
+		var flee_from := _fight_target.global_position
+		_fight_target = null
+		scare(flee_from)
+		return
+	var reach := Weapon.reach(weapon)
+	if global_position.distance_to(_fight_target.global_position) > reach:
+		_move_toward(_fight_target.global_position, FLEE_SPEED * 0.85, delta, reach * 0.8)
+		return
+	_apply_gravity_only(delta)
+	# Face the enemy while trading blows.
+	var to_foe := _fight_target.global_position - global_position
+	to_foe.y = 0.0
+	if to_foe.length() > 0.05:
+		look_at(global_position - to_foe.normalized(), Vector3.UP)
+	_attack_cd -= delta
+	if _attack_cd > 0.0:
+		return
+	_attack_cd = Weapon.cooldown(weapon)
+	_strike(_fight_target)
+
+
+## Land a blow. A band of villagers with real arms can kill a wolf — or drive
+## your creature off, if they have come to hate it enough.
+func _strike(foe: Node3D) -> void:
+	var dmg := Weapon.damage(weapon)
+	SoundBank.play_at("hammer" if weapon != "bow" else "chop", global_position, -6.0)
+	if foe is Animal:
+		var beast := foe as Animal
+		beast.take_damage(dmg)
+		if is_instance_valid(beast):
+			beast.scare(global_position)
+		else:
+			# It is dead: the debt is paid and the village settles.
+			if village != null:
+				village.vendetta.erase(beast)
+				if village.is_player_home:
+					GameState.announce("%s and their neighbours have killed the beast."
+						% villager_name)
+			_fight_target = null
+			happiness = minf(happiness + 12.0, 100.0)
+			_decide()
+	elif foe is Creature:
+		# Turning on a god's creature: they hurt it, and it learns to fear them.
+		(foe as Creature).take_damage(dmg * 0.8)
+		if village != null and village.is_player_home:
+			GameState.announce("%s strikes at your creature with %s!"
+				% [villager_name, Weapon.label(weapon)])
+
+
+## What this villager should be fighting right now, if anything: a marked beast
+## or a predator inside the bounds — or the creature itself, once the village
+## has taken enough from it.
+func _find_foe() -> Node3D:
+	if village == null:
+		return null
+	var beast := village.fight_target(global_position)
+	if beast != null:
+		return beast
+	if village.hates_creature():
+		var c := get_tree().get_first_node_in_group("creature") as Creature
+		if c != null and c.global_position.distance_to(global_position) < 30.0:
+			return c
+	return null
 
 
 ## Target finding ------------------------------------------------------------
@@ -1649,6 +1806,8 @@ func hover_text() -> String:
 	else:
 		stage = "woman" if is_female else "man"
 	var extra := ", pregnant" if pregnant else ""
+	if weapon != "":
+		extra += ", armed with %s" % Weapon.label(weapon)
 	if home == null:
 		extra += ", HOMELESS"
 	return "%s of %s — %s %s, age %d%s — %s\n(health %d · hunger %d · energy %d · happy %d · %s)" % [
@@ -1689,6 +1848,8 @@ func _status_word() -> String:
 		State.GO_BUILD_EDUBBA, State.BUILDING_EDUBBA: return "raising the Edubba"
 		State.GO_FISH, State.FISHING: return "fishing"
 		State.HAULING: return "hauling to the storehouse"
+		State.GO_ARM: return "running for a weapon"
+		State.FIGHT: return "FIGHTING for their life"
 		State.COURT: return "courting at the totem"
 		State.FOLLOW_MOM: return "following mother"
 		State.AT_SCHOOL: return "at school"
@@ -1715,6 +1876,8 @@ func _status_text() -> String:
 		State.PREACHING: return "hear me!"
 		State.FISHING: return "fish?"
 		State.HAULING: return "haul"
+		State.GO_ARM: return "arms!"
+		State.FIGHT: return "FIGHT!"
 		State.COURT: return "♥"
 		State.FOLLOW_MOM: return "mama"
 		State.AT_SCHOOL: return "abc"
