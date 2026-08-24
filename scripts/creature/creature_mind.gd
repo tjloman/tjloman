@@ -1,0 +1,172 @@
+class_name CreatureMind
+extends RefCounted
+## The creature's LEARNING brain — a lightweight online-learning agent in the
+## Black & White lineage: small learned models over a fixed motor repertoire,
+## NOT a scripted list of behaviours. Each decision, the creature perceives the
+## world as a set of (VERB, THING) opportunities, PREDICTS how each would feel
+## from what it has learned, picks one (with curiosity-driven exploration),
+## then updates its learned values from the actual outcome.
+##
+## Beliefs, aversions, cruelty, rituals, and courage EMERGE from experience.
+## Nothing here hard-codes "be evil" or "fear people": if it learns that
+## smashing animals feels good, it will smash animals — and become a monster
+## because that is what monsters do, not because a rule said so.
+
+const LR := 0.2             # learning rate: how fast an outcome reshapes a value
+const NOVELTY := 0.7        # curiosity: the pull of a (verb,type) never tried
+const EXPLORE := 0.55       # softmax temperature — higher means more experimenting
+const Q_CLAMP := 4.0
+const FORGET := 0.004       # values drift gently back toward zero (slow forgetting)
+const MIRACLE_STEP := 0.05  # familiarity gained per witnessed cast
+const MIRACLE_READY := 0.6  # familiarity needed before it can cast on its own
+
+## How KIND (+) or CRUEL (-) each verb is. This is the ONLY moral scaffolding,
+## and it does NOT choose actions — it only reads what a chosen deed MEANS, so
+## the emergent temperament tracks how the creature actually behaves.
+const VERB_VALENCE := {
+	"tend": 0.6, "gather": 0.5, "gift": 0.9, "rescue": 1.3, "guard": 0.4,
+	"watch": 0.1, "play": 0.2, "fish": 0.1, "cast": 0.0,
+	"smash": -1.0, "throw": -0.7, "eat_kin": -1.2, "eat": -0.1,
+	"flee": 0.0, "wander": 0.0, "rest": 0.0,
+}
+
+## The learned value of doing a VERB to a TYPE of thing. Starts near zero; every
+## reinforced experience nudges it toward the reward it produced. THIS TABLE IS
+## THE CREATURE'S PERSONALITY — two creatures never learn the same one.
+var q := {}                 # "verb|type" -> float, roughly -Q_CLAMP..+Q_CLAMP
+var seen := {}              # "verb|type" -> times tried (drives curiosity)
+var familiarity := {}       # miracle name -> 0..1, learned by witnessing casts
+var temperament := 0.0      # -100 monstrous .. +100 angelic: emergent, follows deeds
+
+var _last_key := ""         # the (verb,type) the next outcome is credited to
+var _last_verb := ""
+
+
+func _key(verb: String, type: String) -> String:
+	return verb + "|" + type
+
+
+## The predicted worth of an opportunity RIGHT NOW: what it has learned this
+## deed is worth, plus how well it serves a pressing drive, plus curiosity.
+func value(verb: String, type: String, drive: Dictionary) -> float:
+	var k := _key(verb, type)
+	var v: float = q.get(k, 0.0)
+	v += _drive_fit(verb, drive)
+	if not seen.has(k):
+		v += NOVELTY
+	return v
+
+
+## How much a verb answers the body's current needs. Keeps a starving or
+## exhausted creature sensible without scripting the choice — the pull is just
+## one more term the learned values compete with.
+func _drive_fit(verb: String, drive: Dictionary) -> float:
+	var hunger: float = drive.get("hunger", 0.0) / 100.0
+	var tired: float = (100.0 - drive.get("energy", 100.0)) / 100.0
+	var bored: float = drive.get("boredom", 0.0) / 100.0
+	var low: float = (100.0 - drive.get("mood", 50.0)) / 100.0
+	var afraid: float = drive.get("fear", 0.0) / 100.0
+	match verb:
+		"eat", "eat_kin": return hunger * 2.2
+		"gather": return hunger * 0.8 + 0.1
+		"fish": return hunger * 0.7 + bored * 0.3
+		"rest": return tired * 2.6
+		"play", "watch": return bored * 1.2
+		"smash", "throw": return bored * 0.7 + low * 0.7  # frustration fuels violence
+		"flee": return afraid * 2.4
+		"tend", "gift", "guard", "rescue": return 0.15
+		"cast": return bored * 0.4 + 0.1
+		"wander": return 0.3
+	return 0.0
+
+
+## Choose among the perceived opportunities. Softmax over predicted value, so
+## the best option is usually taken but a curious mind keeps trying others —
+## which is how new behaviours (and quirks) are ever discovered. `options` is an
+## Array of Dictionaries: {verb, type, target, pos}. Returns the chosen one.
+func choose(options: Array, drive: Dictionary) -> Dictionary:
+	if options.is_empty():
+		_last_key = ""
+		_last_verb = ""
+		return {"verb": "wander", "type": "none", "target": null}
+	var best_v := -INF
+	var scored := []
+	for opt: Dictionary in options:
+		var v := value(opt["verb"], opt.get("type", "none"), drive)
+		scored.append(v)
+		best_v = maxf(best_v, v)
+	# Softmax sample (temperature EXPLORE), numerically stabilised by best_v.
+	var total := 0.0
+	var weights := []
+	for v: float in scored:
+		var w: float = exp((v - best_v) / EXPLORE)
+		weights.append(w)
+		total += w
+	var roll := randf() * total
+	var pick := 0
+	for i in weights.size():
+		roll -= weights[i]
+		if roll <= 0.0:
+			pick = i
+			break
+	var chosen: Dictionary = options[pick]
+	_last_verb = chosen["verb"]
+	_last_key = _key(chosen["verb"], chosen.get("type", "none"))
+	return chosen
+
+
+## An outcome landed: teach the last deed how it FELT (delta rule toward the
+## reward), remember it was tried, and let the deed shift the creature's heart.
+func reinforce(reward: float) -> void:
+	if _last_key == "":
+		return
+	var cur: float = q.get(_last_key, 0.0)
+	q[_last_key] = clampf(cur + LR * (reward - cur), -Q_CLAMP, Q_CLAMP)
+	seen[_last_key] = int(seen.get(_last_key, 0)) + 1
+	var valence: float = VERB_VALENCE.get(_last_verb, 0.0)
+	temperament = clampf(temperament + valence * 2.5, -100.0, 100.0)
+
+
+## Teach a specific (verb,type) directly — used when the world reinforces
+## something the mind didn't just choose (a taste, a wound, the god's praise).
+func teach(verb: String, type: String, reward: float) -> void:
+	var k := _key(verb, type)
+	var cur: float = q.get(k, 0.0)
+	q[k] = clampf(cur + LR * (reward - cur), -Q_CLAMP, Q_CLAMP)
+	seen[k] = int(seen.get(k, 0)) + 1
+
+
+## Slow forgetting: unrehearsed opinions drift back toward neutral, so a
+## creature's character reflects what it does OFTEN, not one wild afternoon.
+func decay() -> void:
+	for k: String in q:
+		q[k] = move_toward(q[k], 0.0, FORGET)
+
+
+## Watching the god cast a miracle teaches it, a little, how the power feels.
+func witness_miracle(miracle: String) -> void:
+	familiarity[miracle] = minf(float(familiarity.get(miracle, 0.0)) + MIRACLE_STEP, 1.0)
+
+
+## The miracles it has watched enough to attempt itself.
+func known_miracles() -> Array:
+	var ready := []
+	for m: String in familiarity:
+		if float(familiarity[m]) >= MIRACLE_READY:
+			ready.append(m)
+	return ready
+
+
+## A short, human-readable peek at the strongest thing it has learned — for the
+## hover/dashboard, so its inner life is legible.
+func strongest_urge() -> String:
+	var best_k := ""
+	var best_v := 0.35   # ignore near-zero noise
+	for k: String in q:
+		if q[k] > best_v:
+			best_v = q[k]
+			best_k = k
+	if best_k == "":
+		return "still figuring the world out"
+	var parts := best_k.split("|")
+	return "has learned to love %s %s" % [parts[0], parts[1]]

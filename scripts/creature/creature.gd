@@ -16,7 +16,7 @@ extends CharacterBody3D
 enum State {
 	IDLE, WANDER, SEEK_FOOD, EATING, SLEEPING, GO_TEND, TENDING,
 	STALK_PREY, WATCH, GO_GATHER, CARRYING, PLAY, GUARD, SULK, CATCH,
-	GO_FISH, FISHING, GO_STORE, KICK_HOUSE,
+	GO_FISH, FISHING, GO_STORE, KICK_HOUSE, SMASH, FLEE, CAST,
 }
 
 const WALK_SPEED := 3.5
@@ -71,8 +71,22 @@ var desires := {
 var attention := 20.0
 var divine_hand: DivineHand = null  # wired by main
 
+## THE MIND: an online-learning agent that chooses what to do from what it has
+## learned, and updates those beliefs from how each deed turns out. Its
+## `temperament` is what `morality` now reads from — character is EMERGENT.
+var mind := CreatureMind.new()
+## Learned dread, raised by pain and fright. High fear makes fleeing attractive,
+## so a creature that keeps getting hurt near people can become a recluse.
+var fear := 0.0
+
 var state := State.IDLE
 var _last_deed := ""  # the deed a pet or scolding will be credited to
+var _act_verb := ""    # the verb the mind chose (what the next reward teaches)
+var _act_type := ""    # the kind of thing it chose to act on
+var _smash_target: Node3D = null
+var _cast_miracle := ""
+var _mood_before := 60.0   # mood when the deed began, to judge how it went
+var _decay_tick := 0.0
 var _target := Vector3.ZERO
 var _target_food: Node3D = null      # FoodItem or Corpse
 var _target_prey: Node3D = null      # Villager or livestock Animal
