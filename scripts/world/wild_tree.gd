@@ -16,8 +16,19 @@ const RAIN_GROWTH := 1.6    # a rain miracle speeds growth while it lasts
 const SAPLING_SCALE := 0.15   # a knee-high seedling
 const MATURE_SCALE := 5.0     # a full-grown giant towers ~30m over the land
 const GROW_LERP := 5.0        # how fast the visible scale eases toward its target
-const REPLANT_PERIOD := 50.0
-const REPLANT_CROWDING := 4     # no seeding when this many trees stand close
+const REPLANT_PERIOD := 90.0
+const REPLANT_CROWDING := 3     # no seeding at all when this many trees stand close
+
+## FORESTS MUST NOT SWALLOW THE MAP. Growth is a LOTTERY, not a certainty: each
+## tick a tree only *might* put on size, and a tree hemmed in by neighbours
+## competes for light and thickens slower still. Same for dropping seed — a
+## crowded stand nearly stops seeding, so woods thin out at their own edges
+## instead of marching across the world.
+const GROW_CHANCE := 0.1        # per tick: the 1-in-10 roll to actually grow
+const CROWD_RADIUS := 11.0      # neighbours this close compete with it
+const CROWD_GROW_PENALTY := 0.22  # each neighbour cuts the grow roll by this much
+const CROWD_SEED_PENALTY := 0.3   # ...and cuts the seeding roll harder
+const NEIGHBOUR_RECHECK := 9.0  # seconds between (costly) neighbour counts
 
 ## FIRE — contained by default. A burning tree lasts a few seconds, spreads
 ## only to close neighbours, and can't leap a gap or reach water — so a
@@ -54,6 +65,8 @@ var _spin_ang := Vector3.ZERO   # aftertouch spin axis*rate while airborne (rad/
 var _plant_yaw := 0.0           # the tree's random facing, restored after a throw
 var _grow_accum := randf() * 0.4   # de-sync the growth tick across trees
 var _rain_time := 0.0              # seconds of lingering rain-blessing
+var _neighbours := 0               # nearby trees, cached (counting them is costly)
+var _neighbour_time := 0.0
 var _lean := Vector3.ZERO          # current tilt as an axis*angle vector
 var _lean_vel := Vector3.ZERO
 var _lean_target := Vector3.ZERO   # where a push wants it; decays back to zero
@@ -144,25 +157,51 @@ func _process(delta: float) -> void:
 	if _rain_time > 0.0:
 		_rain_time -= d
 	if lumber < MAX_LUMBER:
-		var step := GROWTH_BASE / (1.0 + lumber * GROWTH_TAPER)
+		_tick_neighbours(d)
+		# THE GROWTH LOTTERY: most ticks nothing happens at all. Rain improves
+		# the odds; crowding worsens them, so a tree in dense woods creeps.
+		var odds := GROW_CHANCE
 		if _rain_time > 0.0:
-			step *= RAIN_GROWTH  # a downpour quickens the timber
-		# A miracle-sown sapling races to its quickened size, then slows.
-		if has_meta("quicken_to"):
-			if lumber < float(get_meta("quicken_to")):
+			odds *= RAIN_GROWTH  # a downpour quickens the timber
+		odds -= _neighbours * CROWD_GROW_PENALTY * GROW_CHANCE
+		var quickened := has_meta("quicken_to")
+		if quickened and lumber >= float(get_meta("quicken_to")):
+			remove_meta("quicken_to")
+			quickened = false
+		# A miracle-sown sapling races to its quickened size, ignoring the odds.
+		if quickened or randf() < maxf(odds, 0.01):
+			var step := GROWTH_BASE / (1.0 + lumber * GROWTH_TAPER)
+			if quickened:
 				step = 2.5
-			else:
-				remove_meta("quicken_to")
-		lumber = minf(lumber + step * d, MAX_LUMBER)
-		var target := _scale_for_lumber()
-		if not target.is_equal_approx(_target_scale):
-			_target_scale = target
-			_grow_anim = true
+			lumber = minf(lumber + step * d, MAX_LUMBER)
+			var target := _scale_for_lumber()
+			if not target.is_equal_approx(_target_scale):
+				_target_scale = target
+				_grow_anim = true
 	else:
 		_replant_time -= d
 		if _replant_time <= 0.0:
 			_replant_time = REPLANT_PERIOD * randf_range(0.8, 1.6)
 			_try_replant()
+
+
+## Count the trees crowding this one, refreshed only every few seconds — a
+## sweep of the whole forest per tree per tick would be O(n²) and pointless,
+## since woods change slowly.
+func _tick_neighbours(d: float) -> void:
+	_neighbour_time -= d
+	if _neighbour_time > 0.0:
+		return
+	_neighbour_time = NEIGHBOUR_RECHECK * randf_range(0.8, 1.3)
+	var n := 0
+	for t in get_tree().get_nodes_in_group("trees"):
+		if t == self or not is_instance_valid(t):
+			continue
+		if (t as Node3D).global_position.distance_to(global_position) < CROWD_RADIUS:
+			n += 1
+			if n >= 8:
+				break   # thoroughly hemmed in; no need for an exact count
+	_neighbours = n
 
 
 ## A passing rain miracle blesses the tree with faster growth for a while.
@@ -228,14 +267,20 @@ func _animate_growth(delta: float) -> void:
 
 ## A mature tree drops a seed nearby — if the stand isn't already crowded
 ## and the ground is dry.
+## Only a FULLY GROWN tree drops seed (this branch runs at MAX_LUMBER alone),
+## and even then only if there is room and luck: each neighbour makes seeding
+## markedly less likely, so a dense wood stops spreading and its edges creep
+## rather than march.
 func _try_replant() -> void:
 	var neighbors := 0
 	for t in get_tree().get_nodes_in_group("trees"):
 		if t != self and is_instance_valid(t) \
-				and (t as Node3D).global_position.distance_to(global_position) < 9.0:
+				and (t as Node3D).global_position.distance_to(global_position) < CROWD_RADIUS:
 			neighbors += 1
 			if neighbors >= REPLANT_CROWDING:
-				return
+				return   # no room at all
+	if randf() > maxf(1.0 - neighbors * CROWD_SEED_PENALTY, 0.05):
+		return   # room enough, but the seed did not take this time
 	var angle := randf() * TAU
 	var spot := global_position + Vector3(cos(angle), 0, sin(angle)) * randf_range(3.5, 7.5)
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
