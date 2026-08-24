@@ -71,6 +71,10 @@ var divine_hand: DivineHand = null  # wired by main; orbs land in the grip
 
 ## Your reach: 1.0 alone, rising with converted villages and their belief.
 ## Scales the extent of the grander miracles.
+func _ready() -> void:
+	add_to_group("miracles")
+
+
 func power() -> float:
 	var believers := 0
 	var belief_sum := 0.0
@@ -158,6 +162,8 @@ func _apply_karma(miracle: String, pos: Vector3) -> void:
 	var creature := get_tree().get_first_node_in_group("creature") as Creature
 	if creature != null and creature.global_position.distance_to(pos) < CREATURE_SIGHT_RANGE:
 		creature.witness(KARMA[miracle]["creature"])
+		# Watching the power work teaches it, a little, how to work it itself.
+		creature.mind.witness_miracle(miracle)
 
 
 func _cast_food(pos: Vector3) -> void:
@@ -466,3 +472,27 @@ func _add_bird(flock: Node3D, local_pos: Vector3, body_color: Color, bank: float
 	var bird := Util.box(Vector3(0.5, 0.12, 0.2), body_color, local_pos)
 	bird.rotation_degrees.z = bank
 	flock.add_child(bird)
+
+
+## The CREATURE casts a miracle it has learned by watching you. Its command is
+## imperfect: `skill` (0..1 familiarity) scales the potency, so an apprentice's
+## rain is a drizzle. It costs the creature nothing but effort — this is its own
+## power, not your prayer — and the villages read it as a wonder all the same.
+func creature_cast(miracle: String, pos: Vector3, skill: float) -> void:
+	if not MIRACLES.has(miracle):
+		return
+	pos.y = 0
+	var potency := maxf(power() * clampf(skill, 0.1, 1.0) * 0.6, 0.25)
+	match miracle:
+		"food": _cast_food(pos)
+		"rain": _cast_rain(pos, potency)
+		"lightning": _cast_lightning(pos)
+		"heal": _cast_heal(pos, potency)
+		"forest_seed": _cast_forest_seed(pos, potency)
+		"forage_thicket": _cast_forage_thicket(pos, potency)
+		"lightning_storm": _cast_lightning_storm(pos, potency)
+		"tornado": _cast_tornado(pos, potency)
+		"bird_flock": _cast_bird_flock(pos, potency)
+		_: return
+	for v in get_tree().get_nodes_in_group("village"):
+		(v as Village).witness_miracle(miracle, pos)

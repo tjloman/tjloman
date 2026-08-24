@@ -307,6 +307,22 @@ func _run_smoke_test() -> void:
 		creature.bond, creature.mood, creature.mood_word(),
 		desire_before, creature.desires["play"], creature.favorite_deed()])
 
+	# The LEARNING MIND: perceive options, choose, and be reinforced. Praising a
+	# smash must actually raise its learned value for smashing that thing.
+	var drive := {"hunger": 50.0, "energy": 80.0, "boredom": 60.0, "mood": 60.0, "fear": 0.0}
+	var opts := creature._perceive()
+	var picked: Dictionary = creature.mind.choose(opts, drive)
+	creature.mind.reinforce(1.5)
+	creature.mind.teach("smash", "villager", 2.0)
+	creature.mind.witness_miracle("rain")
+	for i in 20:
+		creature.mind.witness_miracle("rain")
+	print("SMOKE TEST: mind — options=%d picked=%s|%s learned_keys=%d smash|villager=%.2f temperament=%.1f known=%s" % [
+		opts.size(), picked["verb"], picked.get("type", "none"), creature.mind.q.size(),
+		float(creature.mind.q.get("smash|villager", 0.0)), creature.mind.temperament,
+		str(creature.mind.known_miracles())])
+	print("SMOKE TEST: mind urge -> %s" % creature.mind.strongest_urge())
+
 	await get_tree().create_timer(2.0).timeout
 	print("SMOKE TEST: villagers=%d animals=%d houses=%d villages=%d creature=%s day=%.2f night=%s" % [
 		get_tree().get_nodes_in_group("villagers").size(),

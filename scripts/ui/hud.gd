@@ -332,15 +332,24 @@ func _update_creature_panel() -> void:
 	_praise_scold.visible = locked
 	if not locked:
 		return
+	# Its inner life, in plain words — including what it has LEARNED to love and
+	# any miracles it has picked up by watching you.
+	var learned: String = creature.mind.strongest_urge()
+	var spells: Array = creature.mind.known_miracles()
+	var magic: String = ", ".join(spells) if not spells.is_empty() else "none yet"
 	_creature_label.text = ("YOUR CREATURE\n"
 		+ "Doing:    %s\n"
 		+ "Nature:   %s\n"
 		+ "Mood:     %s\n"
 		+ "Bond:     %d / 100\n"
 		+ "Hunger:   %d / 100\n"
-		+ "Energy:   %d / 100") % [
+		+ "Energy:   %d / 100\n"
+		+ "Fear:     %d / 100\n"
+		+ "Learned:  %s\n"
+		+ "Miracles: %s") % [
 			creature.activity_word(), creature.morality_word(), creature.mood_word(),
-			int(creature.bond), int(creature.hunger), int(creature.energy)]
+			int(creature.bond), int(creature.hunger), int(creature.energy),
+			int(creature.fear), learned, magic]
 
 
 ## Village roster ------------------------------------------------------------
