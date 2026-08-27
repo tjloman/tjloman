@@ -10,7 +10,7 @@ extends Node3D
 const BASE_GROWTH_PER_SEC := 0.008
 const TEND_BONUS_PER_SEC := 0.03
 const RAIN_MULTIPLIER := 4.0
-const HARVEST_YIELD := 7
+const HARVEST_YIELD := 14   # a field feeds a village: doubled so farming outpaces hunger
 const HALF_X := 3.5
 const HALF_Z := 2.5
 const BURN_SECONDS := 60.0   # a field ablaze is ash in a minute

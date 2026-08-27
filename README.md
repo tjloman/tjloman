@@ -166,6 +166,12 @@ flocks. Everything you conjure is a throwable you place where you choose.
   crowding onto is discouraged, so villagers fan out across the village's
   needs instead of conga-lining to one resource. Starvation is lethal —
   and the god who allowed it is judged.
+- **Villages grow where you tend them**: a village left alone barely
+  multiplies — conception is slow by default. **Divine attention** quickens a
+  people: miracles cast over them, your hand setting someone down among them,
+  your creature working in their fields. Attention fades over a minute or so,
+  so a kingdom expands where you actually *spend time*, not everywhere at
+  once. Hover a village to read whether it is thriving or merely quiet.
 - **The militia — villagers fight back**: predators no longer farm defenceless
   people. When one villager is hurt, the whole village is ROUSED: the able
   arm themselves at the storehouse (club · spear · bow · sword, paid for in

@@ -641,6 +641,12 @@ func _finish_deed(deed: String, mood_gain: float) -> void:
 	boredom = maxf(boredom - 25.0, 0.0)
 	# Every finished deed teaches the mind what it was worth.
 	mind.reinforce(clampf(mood_gain / 8.0 + (mood - _mood_before) / 50.0, -3.0, 3.0))
+	# A creature working among a people IS divine attention — the village it
+	# labours in quickens and grows.
+	if deed in ["tend", "gather", "guard", "gift", "play", "fish"]:
+		var home := _home_village()
+		if home != null and home.global_position.distance_to(global_position) < 45.0:
+			home.notice(14.0)
 	# Good work nudges its HEART kinder — but only up to "gentle" on its own.
 	# Rising to truly ANGELIC takes YOUR praise; no creature is a saint by habit.
 	# (The nudge goes into the mind, which is the single source of character.)

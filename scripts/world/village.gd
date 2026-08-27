@@ -27,6 +27,14 @@ const ALARM_SECONDS := 45.0
 const GRUDGE_HOSTILE := 35.0
 const GRUDGE_DECAY := 0.4          # per second: fear of the beast fades slowly
 
+## A village LEFT ALONE barely grows. Divine attention — your miracles, your
+## hand, your creature's work among them — is what quickens a people: it lifts
+## their spirits, and children follow. Attention fades if you wander off, so a
+## kingdom expands where you actually tend it rather than everywhere at once.
+const ATTENTION_DECAY := 0.5       # per second (a miracle's notice lasts ~a minute)
+const BREED_BASE := 0.008          # conception chance per second, untended
+const BREED_ATTENTION_GAIN := 25.0  # attention needed to double that
+
 ## Hand-placed founding homes, clear of the farm (E), store (NW), and pen (S).
 const STARTER_HOUSE_SPOTS: Array[Vector3] = [
 	Vector3(5, 0, 9), Vector3(-4.5, 0, 10), Vector3(10.5, 0, 5),
@@ -57,6 +65,8 @@ var grudge := 0.0
 ## Beasts marked for death. When one of ours is killed, its killer goes on this
 ## list and the whole village hunts THAT animal until it is dead.
 var vendetta: Array[Animal] = []
+## 0..100 — how much divine notice this village has had lately.
+var attention := 0.0
 
 var _totem_orb: MeshInstance3D
 var _influence_ring: MeshInstance3D
@@ -410,6 +420,8 @@ func _process(delta: float) -> void:
 		alarm -= delta
 	if grudge > 0.0:
 		grudge = maxf(grudge - GRUDGE_DECAY * delta, 0.0)
+	if attention > 0.0:
+		attention = maxf(attention - ATTENTION_DECAY * delta, 0.0)
 
 	_housing_timer -= delta
 	if _housing_timer <= 0.0:
@@ -523,14 +535,6 @@ func _on_alignment_changed(_value: float) -> void:
 	_update_influence()
 
 
-func is_inside_influence(point: Vector3) -> bool:
-	var flat := point
-	flat.y = 0
-	var here := global_position
-	here.y = 0
-	return flat.distance_to(here) <= influence_radius
-
-
 ## Housing --------------------------------------------------------------------
 
 func housing_capacity() -> int:
@@ -569,7 +573,9 @@ func _assign_housing() -> void:
 
 
 ## A villager set down here by the hand has joined us — welcome them home.
+## The god's own touch is the strongest attention of all.
 func adopt(_newcomer: Villager) -> void:
+	notice(40.0)
 	_assign_housing()
 
 
@@ -761,6 +767,7 @@ func allowed_food_types() -> Array[FoodItem.FoodType]:
 ## Miracles -------------------------------------------------------------------
 
 func witness_miracle(type: String, pos: Vector3) -> void:
+	notice(30.0)   # a wonder over their heads is the loudest kind of attention
 	var flat := pos
 	flat.y = 0
 	var here := global_position
@@ -812,8 +819,18 @@ func witness_miracle(type: String, pos: Vector3) -> void:
 
 
 func hover_text() -> String:
-	return "%s — %s" % [village_name,
-		"faithful" if converted else "unbelieving (belief %d/%d)" % [int(belief), int(CONVERT_BELIEF)]]
+	var faith: String = "faithful" if converted \
+		else "unbelieving (belief %d/%d)" % [int(belief), int(CONVERT_BELIEF)]
+	# Their growth is legible: a tended people quicken, a neglected one idles.
+	var mood := "quiet — they grow slowly untended"
+	if attention > 60.0:
+		mood = "THRIVING under your attention"
+	elif attention > 20.0:
+		mood = "heartened by your notice"
+	var extra := ""
+	if is_roused():
+		extra = "\nROUSED — %d under arms" % armed_count()
+	return "%s — %s\n%s (pop %d)%s" % [village_name, faith, mood, population(), extra]
 
 
 ## Militia ---------------------------------------------------------------------
@@ -897,3 +914,18 @@ func fight_target(from: Vector3) -> Animal:
 			best_dist = d
 			best = beast
 	return best
+
+
+## Divine attention -----------------------------------------------------------
+
+## Something of yours touched this village — a miracle, your hand, your
+## creature's labour among them. Lifts their spirits and, with them, the odds
+## of children. Untended villages coast along at BREED_BASE and barely grow.
+func notice(amount: float) -> void:
+	attention = minf(attention + amount, 100.0)
+
+
+## The per-second chance a courting pair conceives. An untended village crawls
+## along at BREED_BASE; divine attention multiplies it up to about fivefold.
+func conception_chance() -> float:
+	return BREED_BASE * (1.0 + attention / BREED_ATTENTION_GAIN)

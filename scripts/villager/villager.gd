@@ -760,8 +760,8 @@ func _try_conceive(delta: float) -> void:
 		return
 	if village.at_capacity() or _has_dependent_child():
 		return  # shelter bounds the flock — and a mother finishes one child first
-	# ~1 in 3 chance over one 8-second courting session spent near a partner.
-	if randf() > 0.05 * delta:
+	# Untended villages barely grow; tended ones quicken (see conception_chance).
+	if randf() > village.conception_chance() * delta:
 		return
 	for other in village.my_villagers():
 		if other == self or other.is_female or not other.is_adult():
@@ -781,7 +781,10 @@ func _try_conceive(delta: float) -> void:
 ## Needs ---------------------------------------------------------------------
 
 func _tick_needs(delta: float) -> void:
-	var hunger_rate := 0.5 * (1.4 if pregnant else 1.0)
+	# Bellies empty at HALF the old rate: with hauling, militia duty and spread
+	# job priorities all competing for hands, the village could not out-farm the
+	# old appetite and starved. A slower burn lets the granary keep ahead.
+	var hunger_rate := 0.25 * (1.4 if pregnant else 1.0)
 	if state == State.SLEEPING:
 		hunger_rate *= 0.4  # a sleeping body burns slow
 	hunger = minf(hunger + hunger_rate * delta, 100.0)

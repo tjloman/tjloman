@@ -465,8 +465,12 @@ func _roster_row(vil: Village, cam: Vector3) -> Control:
 	var flat := Vector2(vil.global_position.x - cam.x, vil.global_position.z - cam.z)
 	var home := "  (home)" if vil.is_player_home else ""
 	var label := Label.new()
-	label.text = "%s%s\nPop %d  ·  %d m away\n " % [
-		vil.village_name, home, vil.population(), int(round(flat.length()))]
+	var militia: int = vil.armed_count()
+	var arms := "  ·  %d armed" % militia if militia > 0 else ""
+	var roused := "  ·  ROUSED" if vil.is_roused() else ""
+	label.text = "%s%s\nPop %d  ·  %d m away%s%s\n " % [
+		vil.village_name, home, vil.population(),
+		int(round(flat.length())), arms, roused]
 	label.add_theme_font_size_override("font_size", 15)
 	label.add_theme_color_override("font_color", Color.WHITE)
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
