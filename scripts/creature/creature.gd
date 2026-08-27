@@ -31,19 +31,6 @@ const GROWTH_PER_MEAL := 0.015
 const STUCK_SECONDS := 30.0   # no state may hold the creature hostage
 const OBSERVE_PERIOD := 2.5
 
-## Eye shapes (scale x,y) for the procedural face, one per emotion.
-const EXPR_EYE := {
-	"neutral": Vector2(1.0, 1.0), "happy": Vector2(1.1, 0.5), "sad": Vector2(0.9, 0.7),
-	"angry": Vector2(1.25, 0.55), "scared": Vector2(1.35, 1.4), "curious": Vector2(1.1, 1.2),
-	"love": Vector2(1.2, 1.15), "hurt": Vector2(0.8, 0.55),
-}
-## A numeric code per emotion, handed to a model shader as the "expression"
-## instance param so custom art can switch faces.
-const EXPR_CODE := {
-	"neutral": 0.0, "happy": 1.0, "sad": 2.0, "angry": 3.0,
-	"scared": 4.0, "curious": 5.0, "love": 6.0, "hurt": 7.0,
-}
-
 var hunger := 40.0
 var energy := 90.0
 var growth := 0.01            # 0..1 of its destined size; every game starts small
@@ -94,6 +81,8 @@ var _act_type := ""    # the kind of thing it chose to act on
 var _smash_target: Node3D = null
 var _cast_miracle := ""
 var _mood_before := 60.0   # mood when the deed began, to judge how it went
+var _deed_verb := ""       # the last FINISHED deed — what praise/scold judges
+var _deed_type := ""
 var _decay_tick := 0.0
 var _target := Vector3.ZERO
 var _target_food: Node3D = null      # FoodItem or Corpse
@@ -215,7 +204,11 @@ func _physics_process(delta: float) -> void:
 			if _action_time <= 0.0:
 				_body.scale.y = 1.0
 				_grow()
-				_decide()
+				# A meal TEACHES: it filled the belly (good), but the mind also
+				# books the moral weight of what was eaten, so devouring people
+				# actually drags the creature's heart down. Without this the
+				# deed had no consequence at all and it never learned.
+				_finish_choice(1.0)
 		State.GO_TEND:
 			if _move_toward(_target, WALK_SPEED * 0.8, delta):
 				state = State.TENDING
@@ -436,7 +429,7 @@ func _decide() -> void:
 	_mood_before = mood
 	var drive := {
 		"hunger": hunger, "energy": energy, "boredom": boredom,
-		"mood": mood, "fear": fear,
+		"mood": mood, "fear": fear, "wounded": _wounded_nearby(),
 	}
 	# YOUR COMMAND FIRST: while leashed it goes where it was sent, whatever it
 	# would rather be doing.
@@ -454,56 +447,77 @@ func _decide() -> void:
 ## target) opportunities. This is PERCEPTION ONLY — it expresses what is
 ## POSSIBLE, never what is preferable; the mind alone weighs them.
 func _perceive() -> Array:
-	var opts := []
-	opts.append({"verb": "wander", "type": "none", "target": null})
+	# Keyed by "verb|type" so each distinct ACTION gets exactly ONE ballot. This
+	# matters enormously: listing every villager separately would give "eat a
+	# villager" a dozen entries against a single "cast heal", and the choice
+	# would be decided by how many bodies happen to be standing about rather
+	# than by what the creature actually values. Nearest target wins the slot.
+	var opts := {}
+	_offer(opts, "wander", "none", null)
 	if energy < 55.0:
-		opts.append({"verb": "rest", "type": "none", "target": null})
+		_offer(opts, "rest", "none", null)
 
-	# Food it could eat where it lies.
 	var food := _nearest_food()
 	if food != null:
-		opts.append({"verb": "eat", "type": _type_of(food), "target": food})
+		_offer(opts, "eat", _type_of(food), food)
 	# Things it could carry off — to the granary, or to hurl, or to devour.
 	var carriable := _nearest_carriable(35.0)
 	if carriable != null:
-		opts.append({"verb": "gather", "type": _type_of(carriable), "target": carriable})
-		opts.append({"verb": "throw", "type": _type_of(carriable), "target": carriable})
+		_offer(opts, "gather", _type_of(carriable), carriable)
+		_offer(opts, "throw", _type_of(carriable), carriable)
 	# Every creature, beast and building nearby is something it COULD attack,
 	# carry, hurl or eat. Whether it ever does is entirely learned.
 	for node in _things_around(26.0):
 		var t := _type_of(node)
-		opts.append({"verb": "smash", "type": t, "target": node})
+		_offer(opts, "smash", t, node)
 		if node is Animal or node is Villager:
-			opts.append({"verb": "throw", "type": t, "target": node})
+			_offer(opts, "throw", t, node)
 			if node is Villager:
-				opts.append({"verb": "eat_kin", "type": t, "target": node})
+				# Eating people is only ever CONSIDERED by a creature that has not
+				# grown kind. Its conscience does the rest of the work.
+				if mind.temperament < 20.0:
+					_offer(opts, "eat_kin", t, node)
 			elif (node as Animal).meat_yield() > 0 and not _inedible.has((node as Animal).species):
-				opts.append({"verb": "eat", "type": t, "target": node})
+				_offer(opts, "eat", t, node)
 		if node is Villager:
-			opts.append({"verb": "watch", "type": t, "target": node})
-			opts.append({"verb": "flee", "type": t, "target": node})
+			_offer(opts, "watch", t, node)
+			if fear > 25.0:
+				_offer(opts, "flee", t, node)   # only a frightened beast thinks of running
 			if (node as Villager).is_dying():
-				opts.append({"verb": "rescue", "type": t, "target": node})
+				_offer(opts, "rescue", t, node)
 		if node is Animal:
-			opts.append({"verb": "play", "type": t, "target": node})
+			_offer(opts, "play", t, node)
 			if (node as Animal).is_tamable():
-				opts.append({"verb": "gift", "type": t, "target": node})
+				_offer(opts, "gift", t, node)
 
 	var farm := _nearest_farm()
 	if farm != null:
-		opts.append({"verb": "tend", "type": "farm", "target": farm})
+		_offer(opts, "tend", "farm", farm)
 	if _find_shore() != Vector3.INF:
-		opts.append({"verb": "fish", "type": "water", "target": null})
+		_offer(opts, "fish", "water", null)
 	# The granary: an easy meal it can learn to raid (the villagers notice).
 	var store := _nearest_store()
 	if store != null and store.total_food() > 0:
-		opts.append({"verb": "eat", "type": "store", "target": store})
+		_offer(opts, "eat", "store", store)
 	if GameState.is_night():
-		opts.append({"verb": "guard", "type": "village", "target": null})
+		_offer(opts, "guard", "village", null)
 	# Miracles it has watched often enough to try itself.
 	for m: String in mind.known_miracles():
-		opts.append({"verb": "cast", "type": m, "target": null})
-	return opts
+		_offer(opts, "cast", m, null)
+	return opts.values()
+
+
+## Put an opportunity on the ballot, keeping the NEAREST target for each
+## distinct (verb, type) — one entry per action, never one per body.
+func _offer(opts: Dictionary, verb: String, type: String, target: Node3D) -> void:
+	var key := verb + "|" + type
+	if opts.has(key) and target != null:
+		var held: Node3D = opts[key]["target"]
+		if held != null and is_instance_valid(held) \
+				and held.global_position.distance_squared_to(global_position) \
+					<= target.global_position.distance_squared_to(global_position):
+			return
+	opts[key] = {"verb": verb, "type": type, "target": target}
 
 
 ## Whatever is close enough to be an opportunity, capped so a busy village
@@ -640,6 +654,8 @@ func _finish_deed(deed: String, mood_gain: float) -> void:
 	mood = minf(mood + mood_gain, 100.0)
 	boredom = maxf(boredom - 25.0, 0.0)
 	# Every finished deed teaches the mind what it was worth.
+	_deed_verb = _act_verb
+	_deed_type = _act_type
 	mind.reinforce(clampf(mood_gain / 8.0 + (mood - _mood_before) / 50.0, -3.0, 3.0))
 	# A creature working among a people IS divine attention — the village it
 	# labours in quickens and grows.
@@ -868,7 +884,8 @@ func _process_carrying(delta: float) -> void:
 			if _action_time <= 0.0:
 				if _carried is Villager:
 					(_carried as Villager).witness_horror(2.0)
-				morality = clampf(morality - 1.0, -100.0, 100.0)
+				mind.temperament = clampf(mind.temperament - 1.0, -100.0, 100.0)
+				morality = mind.temperament
 				mood = minf(mood + 6.0, 100.0)
 				_release_carried(false)
 				_last_deed = "mischief"
@@ -893,7 +910,8 @@ func _process_carrying(delta: float) -> void:
 			if _action_time <= 0.0:
 				_hurl_carried()
 				_last_deed = "rampage"
-				morality = clampf(morality - 2.0, -100.0, 100.0)
+				mind.temperament = clampf(mind.temperament - 2.0, -100.0, 100.0)
+				morality = mind.temperament
 				mood = minf(mood + 8.0, 100.0)
 				boredom = maxf(boredom - 25.0, 0.0)
 				_decide()
@@ -920,7 +938,8 @@ func _eat_from_store(store: FoodStore) -> void:
 		got = store.take(FoodItem.FoodType.MEAT, 1)
 	if got > 0:
 		hunger = maxf(hunger - FoodItem.NUTRITION, 0.0)
-		morality = clampf(morality - 0.5, -100.0, 100.0)  # that was somebody's dinner
+		mind.temperament = clampf(mind.temperament - 0.5, -100.0, 100.0)  # that was somebody's dinner
+		morality = mind.temperament
 		state = State.EATING
 		_action_time = 1.5
 	else:
@@ -951,7 +970,8 @@ func _eat_carried() -> void:
 		_action_time = 2.0
 		return
 	if _carried is Corpse:
-		morality = clampf(morality - 3.0, -100.0, 100.0)
+		mind.temperament = clampf(mind.temperament - 3.0, -100.0, 100.0)
+		morality = mind.temperament
 		hunger = maxf(hunger - 50.0, 0.0)
 		GameState.announce("Your creature feeds on the dead. The villagers look away.")
 		_last_deed = "mischief"
@@ -974,12 +994,15 @@ func _eat_carried() -> void:
 		_decide()
 		return
 	if animal.tamed_by != null:
-		morality = clampf(morality - 3.0, -100.0, 100.0)
+		mind.temperament = clampf(mind.temperament - 3.0, -100.0, 100.0)
+		morality = mind.temperament
 		GameState.announce("Your creature has eaten a penned %s. The herders grieve." % animal.species)
 	elif animal.spec.get("predator", false):
-		morality = clampf(morality + 1.0, -100.0, 100.0)  # culling wolves is a service
+		mind.temperament = clampf(mind.temperament + 1.0, -100.0, 100.0)  # culling wolves is a service
+		morality = mind.temperament
 	else:
-		morality = clampf(morality - 0.5, -100.0, 100.0)
+		mind.temperament = clampf(mind.temperament - 0.5, -100.0, 100.0)
+		morality = mind.temperament
 	hunger = maxf(hunger - (30.0 + animal.meat_yield() * 10.0), 0.0)
 	_last_deed = "hunt"
 	animal.die(false)
@@ -1118,13 +1141,50 @@ func _process_cast(delta: float) -> void:
 	if manager == null:
 		_decide()
 		return
+	# Aim where the miracle is WANTED — over the hurt, if any — rather than at a
+	# random patch of grass. A miracle that helps somebody teaches it far more.
+	var need := _neediest_villager()
 	var spot := global_position + Vector3(randf_range(-6, 6), 0, randf_range(-6, 6))
+	if need != null:
+		spot = need.global_position
 	manager.creature_cast(miracle, spot, float(mind.familiarity.get(miracle, 0.0)))
 	express("curious")
 	GameState.announce("Your creature works a miracle of its own: %s!" % miracle.replace("_", " "))
 	_last_deed = "cast"
 	mood = minf(mood + 10.0, 100.0)
-	_finish_choice(0.8)
+	_finish_choice(1.6 if need != null else 0.6)
+
+
+## How badly the people nearby need help right now (0..1) — the pull behind
+## reaching for a healing miracle instead of standing about.
+func _wounded_nearby() -> float:
+	var hurt := 0
+	for v in get_tree().get_nodes_in_group("villagers"):
+		var villager := v as Villager
+		if not is_instance_valid(villager):
+			continue
+		if villager.global_position.distance_to(global_position) > 30.0:
+			continue
+		if villager.is_dying() or villager.health < 60.0 or villager.burning:
+			hurt += 1
+	return clampf(hurt / 3.0, 0.0, 1.0)
+
+
+## Whoever most needs a miracle worked over them.
+func _neediest_villager() -> Villager:
+	var best: Villager = null
+	var worst := 60.0
+	for v in get_tree().get_nodes_in_group("villagers"):
+		var villager := v as Villager
+		if not is_instance_valid(villager):
+			continue
+		if villager.global_position.distance_to(global_position) > 30.0:
+			continue
+		var state_score := 0.0 if villager.is_dying() else villager.health
+		if state_score < worst:
+			worst = state_score
+			best = villager
+	return best
 
 
 ## Scare (and horrify) everyone who saw that.
@@ -1148,6 +1208,8 @@ func _cheer_nearby(radius: float, amount: float) -> void:
 ## it disliked (pain, fright, a bad taste) teach it to stop — that is the whole
 ## engine of its personality.
 func _finish_choice(payoff: float) -> void:
+	_deed_verb = _act_verb
+	_deed_type = _act_type
 	var felt: float = payoff + (mood - _mood_before) / 50.0
 	mind.reinforce(clampf(felt, -3.0, 3.0))
 	morality = mind.temperament
@@ -1210,7 +1272,8 @@ func _pick_guard_waypoint() -> void:
 
 func _consume_food_target() -> void:
 	if _target_food is Corpse:
-		morality = clampf(morality - 3.0, -100.0, 100.0)
+		mind.temperament = clampf(mind.temperament - 3.0, -100.0, 100.0)
+		morality = mind.temperament
 		GameState.announce("Your creature feeds on the dead. The villagers pretend not to see.")
 		hunger = maxf(hunger - 50.0, 0.0)
 		_last_deed = "mischief"
@@ -1232,7 +1295,8 @@ func _devour_villager(victim: Villager) -> void:
 		victim.village.grudge = minf(victim.village.grudge + 30.0, 100.0)
 	victim.queue_free()
 	hunger = maxf(hunger - 70.0, 0.0)
-	morality = clampf(morality - 5.0, -100.0, 100.0)
+	mind.temperament = clampf(mind.temperament - 5.0, -100.0, 100.0)
+	morality = mind.temperament
 	_last_deed = "hunt"
 	GameState.announce("Your creature has eaten %s. The village will not forget this." % victim_name)
 	var village := get_tree().get_first_node_in_group("village") as Village
@@ -1259,10 +1323,12 @@ func praise() -> void:
 	express("love")
 	# THE STRONGEST LESSON: your approval teaches the mind that whatever it just
 	# did is worth doing. Praise cruelty and it learns to be cruel.
-	if _act_verb != "":
-		mind.teach(_act_verb, _act_type, 2.5)
+	# Judge the deed it actually FINISHED, not whatever it has wandered off to
+	# start since — otherwise your approval lands on the wrong lesson entirely.
+	if _deed_verb != "":
+		mind.teach(_deed_verb, _deed_type, 3.0)
 		mind.temperament = clampf(
-			mind.temperament + CreatureMind.VERB_VALENCE.get(_act_verb, 0.0) * 6.0,
+			mind.temperament + CreatureMind.VERB_VALENCE.get(_deed_verb, 0.0) * 6.0,
 			-100.0, 100.0)
 		morality = mind.temperament
 	if _last_deed in ["hunt", "mischief", "smash"]:
@@ -1279,10 +1345,12 @@ func scold() -> void:
 	if key != "":
 		desires[key] = clampf(desires[key] - 0.3, 0.1, 2.5)
 	# Your disapproval teaches the mind that deed is not worth repeating.
-	if _act_verb != "":
-		mind.teach(_act_verb, _act_type, -2.5)
+	# Likewise: scolding must land on the deed it just did. A scolding is
+	# emphatic — one telling-off genuinely shifts what it believes.
+	if _deed_verb != "":
+		mind.teach(_deed_verb, _deed_type, -3.0)
 		mind.temperament = clampf(
-			mind.temperament - CreatureMind.VERB_VALENCE.get(_act_verb, 0.0) * 5.0,
+			mind.temperament - CreatureMind.VERB_VALENCE.get(_deed_verb, 0.0) * 5.0,
 			-100.0, 100.0)
 		morality = mind.temperament
 	if _last_deed in ["hunt", "mischief", "smash"]:
@@ -1643,33 +1711,13 @@ func express(emotion: String, dur := 1.6) -> void:
 	_expr_time = dur
 
 
-## The hide and eyes reflect the soul: a gentle beast is pale and calm-eyed; a
-## monster darkens, reddens, and its pupils burn. On a custom model this is the
-## instance shader param "alignment" (-1 monstrous .. +1 angelic) plus a
-## "menace" blend shape if the mesh has one. Throttled to real changes.
+## The hide and eyes reflect the soul (see CreatureLook). Throttled to changes.
 func _apply_appearance() -> void:
 	var align := clampf(morality / 100.0, -1.0, 1.0)
 	if absf(align - _shown_align) < 0.02:
 		return
 	_shown_align = align
-	var menace := maxf(-align, 0.0)
-	var grace := maxf(align, 0.0)
-	if _fur_mat != null:
-		var fur := Color(0.55, 0.42, 0.3)
-		fur = fur.lerp(Color(0.78, 0.7, 0.52), grace * 0.6)     # good: pale, warm
-		fur = fur.lerp(Color(0.26, 0.12, 0.11), menace * 0.85)  # evil: dark, blood-dark
-		_fur_mat.albedo_color = fur
-		_fur_mat.emission_enabled = menace > 0.45
-		_fur_mat.emission = Color(0.45, 0.05, 0.04)
-		_fur_mat.emission_energy_multiplier = menace * 0.7
-	var pupil := Color.BLACK.lerp(Color(0.95, 0.12, 0.05), menace)  # eyes burn when wicked
-	for p in _pupils:
-		if is_instance_valid(p) and p.material_override != null:
-			p.material_override.albedo_color = pupil
-	for m in _model_meshes:
-		if is_instance_valid(m):
-			m.set_instance_shader_parameter("alignment", align)
-			_set_blend_shape(m, "menace", menace)
+	CreatureLook.apply_alignment(align, _fur_mat, _pupils, _model_meshes)
 
 
 func _tick_expression(delta: float) -> void:
@@ -1677,15 +1725,7 @@ func _tick_expression(delta: float) -> void:
 		_expr_time -= delta
 		if _expr_time <= 0.0:
 			_expression = "neutral"
-	var target: Vector2 = EXPR_EYE.get(_expression, Vector2.ONE)
-	var t := minf(delta * 10.0, 1.0)
-	for e in _eyes:
-		if is_instance_valid(e):
-			e.scale.x = lerpf(e.scale.x, target.x, t)
-			e.scale.y = lerpf(e.scale.y, target.y, t)
-	for m in _model_meshes:
-		if is_instance_valid(m):
-			m.set_instance_shader_parameter("expression", EXPR_CODE.get(_expression, 0.0))
+	CreatureLook.apply_expression(_expression, delta, _eyes, _model_meshes)
 
 
 ## Apply this frame's ROOT MOTION from a one-shot action clip (a lunge into a
@@ -1700,16 +1740,6 @@ func _apply_root_motion() -> void:
 		return
 	var world := global_transform.basis * delta_pos
 	global_position += Vector3(world.x, 0.0, world.z)
-
-
-## Set a named blend shape on a model mesh if it has one (else a no-op).
-func _set_blend_shape(mesh: GeometryInstance3D, sh_name: String, value: float) -> void:
-	if not (mesh is MeshInstance3D):
-		return
-	var mi := mesh as MeshInstance3D
-	var idx := mi.find_blend_shape_by_name(sh_name)
-	if idx >= 0:
-		mi.set_blend_shape_value(idx, value)
 
 
 ## Words ----------------------------------------------------------------------

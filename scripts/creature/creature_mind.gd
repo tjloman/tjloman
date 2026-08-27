@@ -19,13 +19,21 @@ const Q_CLAMP := 4.0
 const FORGET := 0.004       # values drift gently back toward zero (slow forgetting)
 const MIRACLE_STEP := 0.05  # familiarity gained per witnessed cast
 const MIRACLE_READY := 0.6  # familiarity needed before it can cast on its own
+## CONSCIENCE: how strongly the creature's own character colours what it WANTS
+## to do. A saintly beast finds cruelty repellent; a monstrous one finds it
+## delicious. This is what makes an angelic creature refuse to eat people
+## without any rule forbidding it.
+const CONSCIENCE := 2.4
+## Your praise and scolding are the loudest teacher in its world — they move a
+## belief far harder than merely doing the thing does.
+const TEACH_LR := 0.75
 
 ## How KIND (+) or CRUEL (-) each verb is. This is the ONLY moral scaffolding,
 ## and it does NOT choose actions — it only reads what a chosen deed MEANS, so
 ## the emergent temperament tracks how the creature actually behaves.
 const VERB_VALENCE := {
 	"tend": 0.6, "gather": 0.5, "gift": 0.9, "rescue": 1.3, "guard": 0.4,
-	"watch": 0.1, "play": 0.2, "fish": 0.1, "cast": 0.0,
+	"watch": 0.1, "play": 0.2, "fish": 0.1, "cast": 0.25,
 	"smash": -1.0, "throw": -0.7, "eat_kin": -1.2, "eat": -0.1,
 	"flee": 0.0, "wander": 0.0, "rest": 0.0,
 }
@@ -52,6 +60,10 @@ func value(verb: String, type: String, drive: Dictionary) -> float:
 	var k := _key(verb, type)
 	var v: float = q.get(k, 0.0)
 	v += _drive_fit(verb, drive)
+	# Its conscience: a deed that runs against its character repels it, and one
+	# that suits it appeals. An angelic creature simply does not want to eat
+	# people; a monstrous one is drawn to it.
+	v += VERB_VALENCE.get(verb, 0.0) * (temperament / 100.0) * CONSCIENCE
 	if not seen.has(k):
 		v += NOVELTY
 	return v
@@ -66,6 +78,7 @@ func _drive_fit(verb: String, drive: Dictionary) -> float:
 	var bored: float = drive.get("boredom", 0.0) / 100.0
 	var low: float = (100.0 - drive.get("mood", 50.0)) / 100.0
 	var afraid: float = drive.get("fear", 0.0) / 100.0
+	var wounded: float = drive.get("wounded", 0.0)
 	match verb:
 		"eat", "eat_kin": return hunger * 2.2
 		"gather": return hunger * 0.8 + 0.1
@@ -75,7 +88,7 @@ func _drive_fit(verb: String, drive: Dictionary) -> float:
 		"smash", "throw": return bored * 0.7 + low * 0.7  # frustration fuels violence
 		"flee": return afraid * 2.4
 		"tend", "gift", "guard", "rescue": return 0.15
-		"cast": return bored * 0.4 + 0.1
+		"cast": return bored * 0.3 + wounded * 2.0 + 0.15
 		"wander": return 0.3
 	return 0.0
 
@@ -129,10 +142,10 @@ func reinforce(reward: float) -> void:
 
 ## Teach a specific (verb,type) directly — used when the world reinforces
 ## something the mind didn't just choose (a taste, a wound, the god's praise).
-func teach(verb: String, type: String, reward: float) -> void:
+func teach(verb: String, type: String, reward: float, strength := TEACH_LR) -> void:
 	var k := _key(verb, type)
 	var cur: float = q.get(k, 0.0)
-	q[k] = clampf(cur + LR * (reward - cur), -Q_CLAMP, Q_CLAMP)
+	q[k] = clampf(cur + strength * (reward - cur), -Q_CLAMP, Q_CLAMP)
 	seen[k] = int(seen.get(k, 0)) + 1
 
 
