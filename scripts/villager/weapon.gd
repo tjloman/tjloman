@@ -75,6 +75,28 @@ static func forge(store: FoodStore) -> String:
 	return kind
 
 
+## Resolve one blow from `attacker` (a villager) against `foe`. Returns true if
+## the blow KILLED the foe, so the caller can settle up. Combat resolution lives
+## here with the arms themselves rather than bloating the villager.
+static func strike(attacker: Node3D, foe: Node3D, kind: String) -> bool:
+	if foe == null or not is_instance_valid(foe):
+		return false
+	var dmg := damage(kind)
+	SoundBank.play_at("hammer" if kind != "bow" else "pick", attacker.global_position, -6.0)
+	if foe is Animal:
+		var beast := foe as Animal
+		beast.take_damage(dmg)
+		if not is_instance_valid(beast) or beast.is_queued_for_deletion():
+			return true
+		beast.scare(attacker.global_position)
+	elif foe is Creature:
+		# Turning on a god's creature: they hurt it, and it learns to fear them.
+		(foe as Creature).take_damage(dmg * 0.8)
+	elif foe.has_method("take_damage"):
+		foe.call("take_damage", dmg)
+	return false
+
+
 ## A small piece of kit held at the villager's side, so an armed crowd reads
 ## at a glance. Pooled primitives — a militia costs the renderer almost nothing.
 static func build_visual(kind: String) -> Node3D:

@@ -124,6 +124,7 @@ var _edubba_spot := Vector3.INF
 var _breed_cooldown := randf_range(4.0, 12.0)
 var _fight_target: Node3D = null   # the beast (or creature) being fought
 var _attack_cd := 0.0
+var _last_attacker: Node3D = null   # who drew blood last (for the blood debt)
 var _weapon_visual: Node3D = null
 var _label: Label3D
 var _visuals: Node3D
@@ -1281,32 +1282,21 @@ func _process_fight(delta: float) -> void:
 	_strike(_fight_target)
 
 
-## Land a blow. A band of villagers with real arms can kill a wolf — or drive
-## your creature off, if they have come to hate it enough.
+## Land a blow (Weapon resolves the damage) and settle up if the foe drops.
 func _strike(foe: Node3D) -> void:
-	var dmg := Weapon.damage(weapon)
-	SoundBank.play_at("hammer" if weapon != "bow" else "pick", global_position, -6.0)
-	if foe is Animal:
-		var beast := foe as Animal
-		beast.take_damage(dmg)
-		if is_instance_valid(beast):
-			beast.scare(global_position)
-		else:
-			# It is dead: the debt is paid and the village settles.
-			if village != null:
-				village.vendetta.erase(beast)
-				if village.is_player_home:
-					GameState.announce("%s and their neighbours have killed the beast."
-						% villager_name)
-			_fight_target = null
-			happiness = minf(happiness + 12.0, 100.0)
-			_decide()
-	elif foe is Creature:
-		# Turning on a god's creature: they hurt it, and it learns to fear them.
-		(foe as Creature).take_damage(dmg * 0.8)
-		if village != null and village.is_player_home:
-			GameState.announce("%s strikes at your creature with %s!"
-				% [villager_name, Weapon.label(weapon)])
+	var killed := Weapon.strike(self, foe, weapon)
+	if killed and foe is Animal:
+		if village != null:
+			village.vendetta.erase(foe)
+			if village.is_player_home:
+				GameState.announce("%s and their neighbours have killed the beast."
+					% villager_name)
+		_fight_target = null
+		happiness = minf(happiness + 12.0, 100.0)
+		_decide()
+	elif foe is Creature and village != null and village.is_player_home:
+		GameState.announce("%s strikes at your creature with %s!"
+			% [villager_name, Weapon.label(weapon)])
 
 
 ## What this villager should be fighting right now, if anything: a marked beast
@@ -1635,6 +1625,17 @@ func _flicker_flame() -> void:
 		_burn_visual.scale.y = 1.0 + sin(Time.get_ticks_msec() / 60.0) * 0.2
 
 
+## Struck by a beast (or your creature). Remembers WHO, rouses the village, and
+## then takes the wound. This is what turns a lone killing into a manhunt.
+func hurt_by(foe: Node3D, amount: float) -> void:
+	_last_attacker = foe
+	if village != null:
+		village.raise_alarm(
+			foe.global_position if is_instance_valid(foe) else global_position,
+			foe is Creature)
+	take_damage(amount)
+
+
 func take_damage(amount: float, by_god := false, instant := false) -> void:
 	if state == State.DYING:
 		return
@@ -1651,6 +1652,11 @@ func take_damage(amount: float, by_god := false, instant := false) -> void:
 
 func die(of_old_age: bool) -> void:
 	_dismount()
+	# Killed by a beast? The whole village swears a blood debt against THAT
+	# animal and will hunt it down wherever it runs.
+	if not of_old_age and village != null and _last_attacker is Animal \
+			and is_instance_valid(_last_attacker):
+		village.mark_for_death(_last_attacker as Animal)
 	# The creature learns cruelty from the deaths it witnesses its god allow —
 	# a violent end nearby drags its heart toward the dark. (Old age teaches
 	# nothing; the creature is only reading its god's hand in the world.)

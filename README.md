@@ -18,6 +18,21 @@ purpose — we are building *systems first, art later*.
 No other dependencies. No plugins, no assets to download — the whole world is
 generated from code.
 
+### Validating changes without running the game
+
+```
+gdparse scripts/**/*.gd          # syntax
+gdlint scripts/                  # style
+python3 tools/check_calls.py     # calls to methods that DON'T EXIST
+```
+
+That last one matters: `gdparse` only checks syntax and `gdlint` only checks
+style, so a call like `(v as Villager).hurt_by(...)` to a method that was never
+written passes both and then crashes the moment that code path runs.
+`check_calls.py` resolves `ClassName.foo()` and `(x as ClassName).foo()` against
+what each `class_name` script actually declares (following `extends`), and fails
+the build if a member is missing.
+
 ## Getting started
 
 1. Clone the repo.
