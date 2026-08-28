@@ -30,6 +30,9 @@ const MAX_SCALE := 15.0
 const GROWTH_PER_MEAL := 0.015
 const STUCK_SECONDS := 30.0   # no state may hold the creature hostage
 const OBSERVE_PERIOD := 2.5
+## How sharply a deed's moral weight colours how it FELT to do. This is what
+## makes cruelty sour for a kind creature and sweet for a wicked one.
+const REMORSE := 2.0
 
 var hunger := 40.0
 var energy := 90.0
@@ -663,11 +666,6 @@ func _finish_deed(deed: String, mood_gain: float) -> void:
 		var home := _home_village()
 		if home != null and home.global_position.distance_to(global_position) < 45.0:
 			home.notice(14.0)
-	# Good work nudges its HEART kinder — but only up to "gentle" on its own.
-	# Rising to truly ANGELIC takes YOUR praise; no creature is a saint by habit.
-	# (The nudge goes into the mind, which is the single source of character.)
-	if deed in ["tend", "gather", "guard", "gift", "fish"] and mind.temperament < 40.0:
-		mind.temperament = minf(mind.temperament + 1.0, 40.0)
 	morality = mind.temperament
 	match deed:
 		"play": express("happy")
@@ -884,7 +882,7 @@ func _process_carrying(delta: float) -> void:
 			if _action_time <= 0.0:
 				if _carried is Villager:
 					(_carried as Villager).witness_horror(2.0)
-				mind.temperament = clampf(mind.temperament - 1.0, -100.0, 100.0)
+				mind.judge(-0.20)
 				morality = mind.temperament
 				mood = minf(mood + 6.0, 100.0)
 				_release_carried(false)
@@ -910,7 +908,7 @@ func _process_carrying(delta: float) -> void:
 			if _action_time <= 0.0:
 				_hurl_carried()
 				_last_deed = "rampage"
-				mind.temperament = clampf(mind.temperament - 2.0, -100.0, 100.0)
+				mind.judge(-0.40)
 				morality = mind.temperament
 				mood = minf(mood + 8.0, 100.0)
 				boredom = maxf(boredom - 25.0, 0.0)
@@ -938,7 +936,7 @@ func _eat_from_store(store: FoodStore) -> void:
 		got = store.take(FoodItem.FoodType.MEAT, 1)
 	if got > 0:
 		hunger = maxf(hunger - FoodItem.NUTRITION, 0.0)
-		mind.temperament = clampf(mind.temperament - 0.5, -100.0, 100.0)  # that was somebody's dinner
+		mind.judge(-0.10)  # that was somebody's dinner
 		morality = mind.temperament
 		state = State.EATING
 		_action_time = 1.5
@@ -970,7 +968,7 @@ func _eat_carried() -> void:
 		_action_time = 2.0
 		return
 	if _carried is Corpse:
-		mind.temperament = clampf(mind.temperament - 3.0, -100.0, 100.0)
+		mind.judge(-0.60)
 		morality = mind.temperament
 		hunger = maxf(hunger - 50.0, 0.0)
 		GameState.announce("Your creature feeds on the dead. The villagers look away.")
@@ -994,14 +992,14 @@ func _eat_carried() -> void:
 		_decide()
 		return
 	if animal.tamed_by != null:
-		mind.temperament = clampf(mind.temperament - 3.0, -100.0, 100.0)
+		mind.judge(-0.60)
 		morality = mind.temperament
 		GameState.announce("Your creature has eaten a penned %s. The herders grieve." % animal.species)
 	elif animal.spec.get("predator", false):
-		mind.temperament = clampf(mind.temperament + 1.0, -100.0, 100.0)  # culling wolves is a service
+		mind.judge(0.20)  # culling wolves is a service
 		morality = mind.temperament
 	else:
-		mind.temperament = clampf(mind.temperament - 0.5, -100.0, 100.0)
+		mind.judge(-0.10)
 		morality = mind.temperament
 	hunger = maxf(hunger - (30.0 + animal.meat_yield() * 10.0), 0.0)
 	_last_deed = "hunt"
@@ -1078,7 +1076,9 @@ func _process_smash(delta: float) -> void:
 	_smash_target = null
 	SoundBank.play_at("boom", global_position, -2.0)
 	express("angry")
-	var thrill := 0.35 + boredom / 160.0   # violence is a release; it may LIKE it
+	# A release, yes — but not inherently more satisfying than honest work, or
+	# every creature drifts into vandalism whatever its nature.
+	var thrill := 0.15 + boredom / 260.0
 	if victim is House:
 		(victim as House).kick(global_position, 1.0)
 		_scare_witnesses(14.0, 3.0)
@@ -1211,6 +1211,16 @@ func _finish_choice(payoff: float) -> void:
 	_deed_verb = _act_verb
 	_deed_type = _act_type
 	var felt: float = payoff + (mood - _mood_before) / 50.0
+	# REMORSE (or relish). A deed also FEELS like what it means to this
+	# particular creature: a kind beast is sickened by its own cruelty, a
+	# monstrous one savours it. Without this, violence paid a flat thrill every
+	# time and became a habit no character could talk it out of — the conscience
+	# would steer it away from choosing, then reward it for having chosen.
+	var conscience: float = mind.conscience_of(_act_verb) * (REMORSE / CreatureMind.CONSCIENCE)
+	felt += conscience
+	if conscience < -0.5:
+		mood = maxf(mood - 8.0, 0.0)   # it did not like itself for that
+		express("sad", 2.0)
 	mind.reinforce(clampf(felt, -3.0, 3.0))
 	morality = mind.temperament
 	_decide()
@@ -1272,7 +1282,7 @@ func _pick_guard_waypoint() -> void:
 
 func _consume_food_target() -> void:
 	if _target_food is Corpse:
-		mind.temperament = clampf(mind.temperament - 3.0, -100.0, 100.0)
+		mind.judge(-0.60)
 		morality = mind.temperament
 		GameState.announce("Your creature feeds on the dead. The villagers pretend not to see.")
 		hunger = maxf(hunger - 50.0, 0.0)
@@ -1295,7 +1305,7 @@ func _devour_villager(victim: Villager) -> void:
 		victim.village.grudge = minf(victim.village.grudge + 30.0, 100.0)
 	victim.queue_free()
 	hunger = maxf(hunger - 70.0, 0.0)
-	mind.temperament = clampf(mind.temperament - 5.0, -100.0, 100.0)
+	mind.judge(-1.00)
 	morality = mind.temperament
 	_last_deed = "hunt"
 	GameState.announce("Your creature has eaten %s. The village will not forget this." % victim_name)
@@ -1327,9 +1337,9 @@ func praise() -> void:
 	# start since — otherwise your approval lands on the wrong lesson entirely.
 	if _deed_verb != "":
 		mind.teach(_deed_verb, _deed_type, 3.0)
-		mind.temperament = clampf(
-			mind.temperament + CreatureMind.VERB_VALENCE.get(_deed_verb, 0.0) * 6.0,
-			-100.0, 100.0)
+		# Approval endorses the deed's own moral weight, hard — but still as a
+		# pull toward the character it implies, never a free run to sainthood.
+		mind.judge(CreatureMind.VERB_VALENCE.get(_deed_verb, 0.0), 0.25)
 		morality = mind.temperament
 	if _last_deed in ["hunt", "mischief", "smash"]:
 		GameState.announce("Your creature purrs. It believes cruelty pleases you.")
@@ -1349,9 +1359,8 @@ func scold() -> void:
 	# emphatic — one telling-off genuinely shifts what it believes.
 	if _deed_verb != "":
 		mind.teach(_deed_verb, _deed_type, -3.0)
-		mind.temperament = clampf(
-			mind.temperament - CreatureMind.VERB_VALENCE.get(_deed_verb, 0.0) * 5.0,
-			-100.0, 100.0)
+		# Disapproval pushes its heart the OPPOSITE way from the deed's weight.
+		mind.judge(-CreatureMind.VERB_VALENCE.get(_deed_verb, 0.0), 0.22)
 		morality = mind.temperament
 	if _last_deed in ["hunt", "mischief", "smash"]:
 		GameState.announce("Your creature cowers. It understands that was wrong.")
@@ -1379,7 +1388,7 @@ func _deed_desire_key(deed: String) -> String:
 func witness(weight: float) -> void:
 	# Seeing its god act shifts the creature's own heart, and colours what it
 	# believes violence is worth — the lesson generalises to its own choices.
-	mind.temperament = clampf(mind.temperament + weight, -100.0, 100.0)
+	mind.observe_god(weight)
 	morality = mind.temperament
 	if weight < 0.0:
 		for t: String in ["villager", "house"]:
