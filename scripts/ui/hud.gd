@@ -87,7 +87,7 @@ func _build_miracle_panel() -> void:
 	vbox.add_child(title)
 
 	var ref := Label.new()
-	ref.text = ("spiral ▸ NATURE:  O Food · | Forest · — Thicket · \\ Rain\n"
+	ref.text = ("spiral ▸ NATURE:  O Food · | Forest · — Thicket · \\ Rain · ~ Strength\n"
 		+ "rev-spiral ▸ WRATH:  | Lightning · O Storm · \\ Fireball · — Tornado\n"
 		+ "wave / S ▸ SKY:  — Heal · O Birds · | Flight · \\ Portal\n"
 		+ "(locked miracles need more villages — F1 for the full list)")
@@ -236,6 +236,7 @@ Step 1: draw a MENU opener.   Step 2: draw a SELECTOR in that menu.
 The miracle drops into your hand as an orb — THROW it where you want.
 
   SPIRAL — Nature:   O Food (20) · | Forest seed, 13 trees (45)
+                     ~ STRENGTH — your creature's thews swell (35)
                      — Forage thicket (30) · \\ Bloom/Rain (25)
   REVERSE-SPIRAL — Wrath:  | Lightning (30) · O Lightning STORM (90)
                      \\ Fireball (25) · — Tornado (110)
@@ -359,11 +360,18 @@ func _update_creature_panel() -> void:
 		+ "Hunger:   %d / 100\n"
 		+ "Energy:   %d / 100\n"
 		+ "Fear:     %d / 100\n"
+		+ "Belly:    %d%% full%s\n"
+		+ "Body:     %s  (fat %d · strength %d%s)\n"
 		+ "Learned:  %s\n"
 		+ "Miracles: %s") % [
 			creature.activity_word(), creature.morality_word(), creature.mood_word(),
 			int(creature.bond), int(creature.hunger), int(creature.energy),
-			int(creature.fear), learned, magic]
+			int(creature.fear),
+			int(creature.body.fullness(creature.growth) * 100.0),
+			"  (digesting)" if creature.body.stomach > 0.05 else "",
+			creature.body.condition_word(), int(creature.body.fat),
+			int(creature.body.strength), "  BOOSTED" if creature.body.is_boosted() else "",
+			learned, magic]
 
 
 ## Village roster ------------------------------------------------------------

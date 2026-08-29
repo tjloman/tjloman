@@ -76,7 +76,7 @@ different menus.)
 
 | Menu (opener) | Selector → Miracle | Cost |
 |---|---|---|
-| **Spiral** — Nature | Circle → Food · Vertical → Forest seed (13 trees) · Horizontal → Forage thicket · Diagonal → Rain | 20 / 45 / 30 / 25 |
+| **Spiral** — Nature | Circle → Food · Vertical → Forest seed (13 trees) · Horizontal → Forage thicket · Diagonal → Rain · Wave → **Strength** | 20 / 45 / 30 / 25 / 35 |
 | **Reverse-spiral** — Wrath | Vertical → Lightning · Circle → Lightning **storm** · Diagonal → Fireball · Horizontal → **Tornado** | 30 / 90 / 25 / 110 |
 | **Wave** — Sky | Horizontal → Heal · Circle → **Bird flock** · Vertical → **Flight** (your creature soars) · Diagonal → **Portal** | 15 / 40 / 55 / 70 |
 
@@ -87,7 +87,7 @@ known, a miracle is paid for with the **pooled prayer of every town you hold**.
 | Villages | Unlocks |
 |---|---|
 | 1 | Food · Heal · Rain |
-| 2 | Forest seed · Forage thicket · Lightning |
+| 2 | Forest seed · Forage thicket · Lightning · **Strength** |
 | 3 | Fireball · Bird flock · **Flight** |
 | 4 | **Portal** · Lightning storm · Tornado |
 
@@ -150,6 +150,29 @@ flocks. Everything you conjure is a throwable you place where you choose.
   worship murmur, barks, howls, frog croaks, and the boom of a fireball.
 - **Rendering**: the Mobile renderer + MSAA. Good and plain — meant to look
   right on a phone, no advanced GPU required (yet).
+
+## Your creature's body
+
+It does not simply eat and grow. It has a **real stomach** whose size follows
+its own: a chicken half-fills a hatchling, and a hatchling **cannot finish a
+cow** — it swallows what fits and leaves the rest. Food then **digests over
+time** (about 45 seconds for a hatchling's bellyful, ~100 for a grown beast's),
+and where it goes depends on whether the body wanted it:
+
+- **hungry** → nourishment, and a little growth
+- **not hungry** → **fat**
+
+Fat makes it slow, heavy and disinclined to exert itself — and a lazy creature
+only gets fatter, because work is what burns it off. **Muscle** is the mirror
+image: it comes from *exertion* (hauling, smashing, running), decays when
+unused, and decides **what it can lift**. A hatchling wrestles saplings; only a
+grown, well-worked beast can uproot a forest giant. The **Strength** miracle
+(NATURE, `~`) lends it a giant's grip for a while, enough to carry trees far
+beyond its own muscle — a loan against strength it hasn't earned.
+
+Watch all of it in the creature dashboard (lock on with **C**): belly fullness,
+whether it's digesting, and whether it's *lean*, *sturdy*, *powerful*, *fat*
+or *obese*.
 
 ## The core loop (what's simulated)
 

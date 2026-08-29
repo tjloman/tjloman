@@ -117,19 +117,24 @@ func _drive_fit(verb: String, drive: Dictionary) -> float:
 	var low: float = (100.0 - drive.get("mood", 50.0)) / 100.0
 	var afraid: float = drive.get("fear", 0.0) / 100.0
 	var wounded: float = drive.get("wounded", 0.0)
+	var full: float = drive.get("full", 0.0)    # 0 empty .. 1 stuffed
+	var lazy: float = drive.get("lazy", 0.0)    # how fat, and so how disinclined
 	match verb:
-		"eat", "eat_kin": return hunger * 2.2
-		"gather": return hunger * 0.8 + 0.1
+		# Appetite is hunger MINUS how full the belly already is. A stuffed
+		# creature has no interest in food however long since it last ate.
+		"eat", "eat_kin": return maxf(hunger * 2.2 - full * 3.0, -1.0)
+		"gather": return maxf(hunger * 0.8 - full * 0.8, 0.0) + 0.1 - lazy * 0.4
 		"fish": return hunger * 0.7 + bored * 0.3
-		"rest": return tired * 2.6
+		# A fat creature is a lazy one: sprawling always looks inviting.
+		"rest": return tired * 2.6 + lazy * 1.1 + full * 0.6
 		# PLAY is what boredom actually wants — chasing, romping, showing off.
-		"play": return bored * 1.7
+		"play": return bored * 1.7 - lazy * 0.9   # too heavy to romp
 		"watch": return bored * 0.9
 		# Violence is what FRUSTRATION wants, not mere idleness. Left as a
 		# boredom cure it simply became every creature's favourite pastime.
-		"smash", "throw": return low * 1.0 + bored * 0.15
+		"smash", "throw": return low * 1.0 + bored * 0.15 - lazy * 0.5
 		"flee": return afraid * 2.4
-		"tend", "gift", "guard", "rescue": return 0.15
+		"tend", "gift", "guard", "rescue": return 0.15 - lazy * 0.4  # work is effort
 		"cast": return bored * 0.3 + wounded * 2.0 + 0.15
 		"wander": return 0.3
 	return 0.0

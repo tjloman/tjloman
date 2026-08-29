@@ -69,3 +69,29 @@ static func set_blend_shape(mesh: GeometryInstance3D, sh_name: String, value: fl
 	var idx := mi.find_blend_shape_by_name(sh_name)
 	if idx >= 0:
 		mi.set_blend_shape_value(idx, value)
+
+
+## Plain-word scales for the dashboard and hover. Pure presentation, kept with
+## the rest of how the creature READS rather than how it thinks.
+static func morality_word(morality: float) -> String:
+	if morality > 60.0:
+		return "angelic"
+	if morality > 20.0:
+		return "gentle"
+	if morality > -20.0:
+		return "wild"
+	if morality > -60.0:
+		return "vicious"
+	return "monstrous"
+
+
+static func mood_word(mood: float) -> String:
+	if mood > 80.0:
+		return "delighted"
+	if mood > 55.0:
+		return "cheerful"
+	if mood > 35.0:
+		return "content"
+	if mood > 15.0:
+		return "glum"
+	return "wretched"

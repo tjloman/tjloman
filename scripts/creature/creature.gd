@@ -27,7 +27,6 @@ const MIN_SCALE := 1.1
 ## At full growth the creature stands ~38m — a clear head above the tallest
 ## ~30m trees, the towering B&W silhouette over the land.
 const MAX_SCALE := 15.0
-const GROWTH_PER_MEAL := 0.015
 const STUCK_SECONDS := 30.0   # no state may hold the creature hostage
 const OBSERVE_PERIOD := 2.5
 ## How sharply a deed's moral weight colours how it FELT to do. This is what
@@ -73,6 +72,9 @@ var divine_hand: DivineHand = null  # wired by main
 ## learned, and updates those beliefs from how each deed turns out. Its
 ## `temperament` is what `morality` now reads from — character is EMERGENT.
 var mind := CreatureMind.new()
+## THE BODY: a real stomach that fills and takes time to empty, fat from
+## overeating, and muscle earned by work. See CreatureBody.
+var body := CreatureBody.new()
 ## Learned dread, raised by pain and fright. High fear makes fleeing attractive,
 ## so a creature that keeps getting hurt near people can become a recluse.
 var fear := 0.0
@@ -206,7 +208,6 @@ func _physics_process(delta: float) -> void:
 			_body.scale.y = 1.0 + sin(Time.get_ticks_msec() / 60.0) * 0.08
 			if _action_time <= 0.0:
 				_body.scale.y = 1.0
-				_grow()
 				# A meal TEACHES: it filled the belly (good), but the mind also
 				# books the moral weight of what was eaten, so devouring people
 				# actually drags the creature's heart down. Without this the
@@ -332,6 +333,13 @@ func _tick_feelings(delta: float) -> void:
 	# magnetic: the creature watches it, and stays ready to learn or catch.
 	attention = maxf(attention - 0.6 * delta, 0.0)
 	fear = maxf(fear - 1.2 * delta, 0.0)
+	# Digest: the stomach empties over time, and where the food GOES depends on
+	# whether the body wanted it. Eating when sated is what makes it fat.
+	var d := body.digest(delta, growth, hunger)
+	hunger = d["hunger"]
+	if d["growth"] > 0.0:
+		_grow_by(d["growth"])
+	body.idle(delta)
 	# Opinions it stops rehearsing fade slowly back toward neutral.
 	_decay_tick -= delta
 	if _decay_tick <= 0.0:
@@ -433,6 +441,7 @@ func _decide() -> void:
 	var drive := {
 		"hunger": hunger, "energy": energy, "boredom": boredom,
 		"mood": mood, "fear": fear, "wounded": _wounded_nearby(),
+		"full": body.fullness(growth), "lazy": body.laziness(),
 	}
 	# YOUR COMMAND FIRST: while leashed it goes where it was sent, whatever it
 	# would rather be doing.
@@ -460,11 +469,15 @@ func _perceive() -> Array:
 	if energy < 55.0:
 		_offer(opts, "rest", "none", null)
 
+	# A FULL creature does not hunt. Appetite, not just hunger, decides.
+	var can_eat := _can_eat(1.0)
 	var food := _nearest_food()
-	if food != null:
+	if food != null and can_eat:
 		_offer(opts, "eat", _type_of(food), food)
 	# Things it could carry off — to the granary, or to hurl, or to devour.
 	var carriable := _nearest_carriable(35.0)
+	if carriable != null and not can_lift(carriable):
+		carriable = null   # beyond its strength; it knows better than to try
 	if carriable != null:
 		_offer(opts, "gather", _type_of(carriable), carriable)
 		_offer(opts, "throw", _type_of(carriable), carriable)
@@ -478,9 +491,10 @@ func _perceive() -> Array:
 			if node is Villager:
 				# Eating people is only ever CONSIDERED by a creature that has not
 				# grown kind. Its conscience does the rest of the work.
-				if mind.temperament < 20.0:
+				if mind.temperament < 20.0 and can_eat:
 					_offer(opts, "eat_kin", t, node)
-			elif (node as Animal).meat_yield() > 0 and not _inedible.has((node as Animal).species):
+			elif (node as Animal).meat_yield() > 0 and can_eat \
+					and not _inedible.has((node as Animal).species):
 				_offer(opts, "eat", t, node)
 		if node is Villager:
 			_offer(opts, "watch", t, node)
@@ -488,6 +502,11 @@ func _perceive() -> Array:
 				_offer(opts, "flee", t, node)   # only a frightened beast thinks of running
 			if (node as Villager).is_dying():
 				_offer(opts, "rescue", t, node)
+		if node is WildTree and can_lift(node):
+			# Only as much tree as its muscle can manage. A hatchling wrestles
+			# saplings; a forest giant needs a grown beast — or the Strength
+			# miracle. Hauling one home is the exercise that builds the muscle.
+			_offer(opts, "gather", t, node)
 		if node is Animal:
 			_offer(opts, "play", t, node)
 			if (node as Animal).is_tamable():
@@ -500,7 +519,7 @@ func _perceive() -> Array:
 		_offer(opts, "fish", "water", null)
 	# The granary: an easy meal it can learn to raid (the villagers notice).
 	var store := _nearest_store()
-	if store != null and store.total_food() > 0:
+	if store != null and store.total_food() > 0 and can_eat:
 		_offer(opts, "eat", "store", store)
 	if GameState.is_night():
 		_offer(opts, "guard", "village", null)
@@ -813,7 +832,8 @@ func _process_catch(delta: float) -> void:
 
 ## A bigger creature is a faster creature — full-grown, it runs down wolves.
 func _run_speed() -> float:
-	return WALK_SPEED * (1.1 + growth * 0.9)
+	# A fat creature lumbers; a strong one moves well (see CreatureBody).
+	return WALK_SPEED * (1.1 + growth * 0.9) * body.speed_factor()
 
 
 func _pick_up_thing(node: Node3D, intent: String) -> void:
@@ -935,7 +955,7 @@ func _eat_from_store(store: FoodStore) -> void:
 	if got == 0:
 		got = store.take(FoodItem.FoodType.MEAT, 1)
 	if got > 0:
-		hunger = maxf(hunger - FoodItem.NUTRITION, 0.0)
+		_swallow_units(1.0)
 		mind.judge(-0.10)  # that was somebody's dinner
 		morality = mind.temperament
 		state = State.EATING
@@ -970,7 +990,7 @@ func _eat_carried() -> void:
 	if _carried is Corpse:
 		mind.judge(-0.60)
 		morality = mind.temperament
-		hunger = maxf(hunger - 50.0, 0.0)
+		_swallow_units(1.6)
 		GameState.announce("Your creature feeds on the dead. The villagers look away.")
 		_last_deed = "mischief"
 		_carried.queue_free()
@@ -1001,7 +1021,7 @@ func _eat_carried() -> void:
 	else:
 		mind.judge(-0.10)
 		morality = mind.temperament
-	hunger = maxf(hunger - (30.0 + animal.meat_yield() * 10.0), 0.0)
+	_swallow_units(1.0 + animal.meat_yield() * 0.7)
 	_last_deed = "hunt"
 	animal.die(false)
 	_carried = null
@@ -1110,6 +1130,7 @@ func _process_smash(delta: float) -> void:
 	elif victim.has_method("damage"):
 		victim.call("damage", 40.0)
 	_last_deed = "smash"
+	body.exert(3.0, 0.35)   # a real swing is real effort
 	boredom = maxf(boredom - 22.0, 0.0)
 	_finish_choice(thrill)
 
@@ -1285,10 +1306,10 @@ func _consume_food_target() -> void:
 		mind.judge(-0.60)
 		morality = mind.temperament
 		GameState.announce("Your creature feeds on the dead. The villagers pretend not to see.")
-		hunger = maxf(hunger - 50.0, 0.0)
+		_swallow_units(1.6)
 		_last_deed = "mischief"
 	else:
-		hunger = maxf(hunger - FoodItem.NUTRITION * 1.5, 0.0)
+		_swallow_units(1.5)
 		_last_deed = "eat"
 	_target_food.queue_free()
 	_target_food = null
@@ -1304,7 +1325,7 @@ func _devour_villager(victim: Villager) -> void:
 		victim.village.raise_alarm(global_position, true)
 		victim.village.grudge = minf(victim.village.grudge + 30.0, 100.0)
 	victim.queue_free()
-	hunger = maxf(hunger - 70.0, 0.0)
+	_swallow_units(3.0)
 	mind.judge(-1.00)
 	morality = mind.temperament
 	_last_deed = "hunt"
@@ -1419,36 +1440,11 @@ func _nearest_store() -> FoodStore:
 	return _nearest_in_group("stores", 80.0) as FoodStore
 
 
-func _nearest_villager() -> Villager:
-	return _nearest_in_group("villagers", 50.0) as Villager
-
-
 func _home_village() -> Village:
 	for v in get_tree().get_nodes_in_group("village"):
 		if is_instance_valid(v) and (v as Village).is_player_home:
 			return v as Village
 	return null
-
-
-## Something it might eat: any animal it hasn't learned is inedible.
-## A good creature leaves the villages' livestock alone; a fallen one
-## does not distinguish.
-func _nearest_catchable() -> Animal:
-	var best: Animal = null
-	var best_dist := 35.0
-	for a in get_tree().get_nodes_in_group("animals"):
-		var animal := a as Animal
-		if not is_instance_valid(animal) or animal.is_queued_for_deletion():
-			continue
-		if animal.state == Animal.State.HELD or _inedible.has(animal.species):
-			continue
-		if animal.tamed_by != null and morality > -10.0:
-			continue
-		var d := global_position.distance_to(animal.global_position)
-		if d < best_dist:
-			best_dist = d
-			best = animal
-	return best
 
 
 func _nearest_in_group(group: String, radius: float) -> Node3D:
@@ -1512,22 +1508,6 @@ func _nearest_ground_food(radius: float) -> FoodItem:
 	return best
 
 
-func _nearest_livestock() -> Animal:
-	var best: Animal = null
-	var best_dist := 45.0
-	for a in get_tree().get_nodes_in_group("animals"):
-		var animal := a as Animal
-		if not is_instance_valid(animal) or animal.tamed_by == null:
-			continue
-		if animal.meat_yield() <= 0:
-			continue
-		var d := global_position.distance_to(animal.global_position)
-		if d < best_dist:
-			best_dist = d
-			best = animal
-	return best
-
-
 func _nearest_wolf(radius: float) -> Animal:
 	var best: Animal = null
 	var best_dist := radius
@@ -1551,10 +1531,12 @@ func _is_working(villager: Villager) -> bool:
 
 ## Body ----------------------------------------------------------------------
 
-func _grow() -> void:
+## Growth is EARNED BY DIGESTION now, a little at a time, rather than jumping
+## whenever a meal is swallowed.
+func _grow_by(amount: float) -> void:
 	if growth < 1.0:
 		var before := int(growth * 10.0)
-		growth = minf(growth + GROWTH_PER_MEAL, 1.0)
+		growth = minf(growth + amount, 1.0)
 		scale = Vector3.ONE * lerpf(MIN_SCALE, MAX_SCALE, growth)
 		# A quiet word when it visibly grows (each 10% of its arc) — no
 		# numbers on screen; you watch it get bigger.
@@ -1601,6 +1583,8 @@ func _move_toward(target: Vector3, speed: float, delta: float) -> bool:
 	# Body faces +Z; look_at aims -Z. Look away from travel to face it.
 	look_at(global_position - Vector3(dir.x, 0, dir.z), Vector3.UP)
 	_walk_phase += delta * 9.0
+	# Moving under its own power is exercise — more so while carrying something.
+	body.exert(0.25 if _carried == null else 0.7, delta)
 	return false
 
 
@@ -1668,6 +1652,22 @@ func _process_leashed(delta: float) -> void:
 		_observe_world()
 
 
+## A miracle lends it a giant's grip for a while — enough to uproot trees far
+## beyond what its own muscle could manage.
+func grant_strength(seconds: float) -> void:
+	body.boost_time = maxf(body.boost_time, seconds)
+	express("angry", 1.5)   # a roar of borrowed power
+	GameState.announce("Your creature swells with borrowed might!")
+
+
+## Can it actually lift this? A sapling needs little; a forest giant needs real
+## muscle — earned by work, or lent by the Strength miracle.
+func can_lift(thing: Node3D) -> bool:
+	if thing is WildTree:
+		return (thing as WildTree).lumber <= body.lift_limit(growth)
+	return true
+
+
 func is_flying() -> bool:
 	return flight_time > 0.0
 
@@ -1690,6 +1690,22 @@ func _tick_flight(delta: float) -> void:
 				world.height_at(global_position.x, global_position.z), WorldGen.WATER_LEVEL)
 			global_position.y = ground + _fly_height
 			velocity.y = 0.0
+
+
+## Put a meal in the stomach. A small body simply cannot finish a big animal —
+## whatever will not fit is left, and it must digest before eating again.
+func _swallow_units(units: float) -> void:
+	var taken := body.swallow(units, growth)
+	if taken < units * 0.6:
+		GameState.announce("Your creature's belly is full — it leaves the rest.")
+	# Eating when it was not hungry is exactly how a creature gets fat, and the
+	# body books that during digestion.
+	mood = minf(mood + 4.0, 100.0)
+
+
+## Has it room (and appetite) for a meal of roughly this size?
+func _can_eat(units: float) -> bool:
+	return body.has_room_for(units, growth)
 
 
 ## Pain: the creature has no health bar, but it FEELS being hurt — fright rises,
@@ -1783,27 +1799,11 @@ func _anim_state() -> String:
 
 
 func morality_word() -> String:
-	if morality > 60.0:
-		return "angelic"
-	if morality > 20.0:
-		return "gentle"
-	if morality > -20.0:
-		return "wild"
-	if morality > -60.0:
-		return "vicious"
-	return "monstrous"
+	return CreatureLook.morality_word(morality)
 
 
 func mood_word() -> String:
-	if mood > 80.0:
-		return "delighted"
-	if mood > 55.0:
-		return "cheerful"
-	if mood > 35.0:
-		return "content"
-	if mood > 15.0:
-		return "glum"
-	return "wretched"
+	return CreatureLook.mood_word(mood)
 
 
 func favorite_deed() -> String:

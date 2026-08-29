@@ -12,10 +12,11 @@ extends Node3D
 ## MENU OPENER -> { label, selectors: {gesture -> miracle} }.
 const MENUS := {
 	"spiral": {
-		"label": "NATURE:  O food   |  forest   —  thicket   \\  bloom",
+		"label": "NATURE:  O food  |  forest  —  thicket  \\  bloom  ~  STRENGTH",
 		"selectors": {
 			"circle": "food", "vline": "forest_seed",
 			"hline": "forage_thicket", "dline": "rain",
+			"wave": "strength",
 		},
 	},
 	"rev_spiral": {
@@ -50,6 +51,7 @@ const MIRACLES := {
 	"bird_flock": {"cost": 40.0, "color": Color(0.85, 0.85, 0.9)},
 	"flight": {"cost": 55.0, "color": Color(0.7, 0.9, 1.0)},
 	"portal": {"cost": 70.0, "color": Color(0.5, 0.75, 1.0)},
+	"strength": {"cost": 35.0, "color": Color(0.9, 0.5, 0.35)},
 }
 
 ## How each resolved miracle moves the player's karma, and what the creature
@@ -63,6 +65,7 @@ const KARMA := {
 	"bird_flock": {"player": 1.0, "creature": 1.0},
 	"flight": {"player": 1.5, "creature": 2.0},
 	"portal": {"player": 1.0, "creature": 1.5},
+	"strength": {"player": 1.0, "creature": 2.0},
 	"lightning": {"player": -4.0, "creature": -3.0},
 	"lightning_storm": {"player": -7.0, "creature": -5.0},
 	"tornado": {"player": -8.0, "creature": -6.0},
@@ -75,7 +78,7 @@ const KARMA := {
 ## paid for with the devotion of every town you hold.
 const UNLOCK_TIERS := [
 	["food", "heal", "rain"],
-	["forest_seed", "forage_thicket", "lightning"],
+	["forest_seed", "forage_thicket", "lightning", "strength"],
 	["fireball", "bird_flock", "flight"],
 	["portal", "lightning_storm", "tornado"],
 ]
@@ -212,6 +215,7 @@ func resolve(miracle: String, pos: Vector3, momentum := Vector3.ZERO) -> void:
 		"bird_flock": _cast_bird_flock(pos, potency, momentum)
 		"flight": _cast_flight(pos, potency)
 		"portal": _cast_portal(pos)
+		"strength": _cast_strength(pos, potency)
 		_: return
 	_apply_karma(miracle, pos)
 	for v in get_tree().get_nodes_in_group("village"):
@@ -617,3 +621,27 @@ func _cast_portal(pos: Vector3) -> void:
 		GameState.announce("The gates are joined! Step through and cross the world.")
 	else:
 		GameState.announce("A gate hangs open, waiting for its twin. Cast portal again elsewhere.")
+
+
+## STRENGTH: the creature's thews swell with borrowed might. For a while it has
+## a giant's grip — enough to uproot forest trees far beyond its own muscle —
+## and moves like a beast in its prime. Real strength is EARNED by work; this
+## is only a loan against it.
+func _cast_strength(pos: Vector3, potency := 1.0) -> void:
+	var creature := get_tree().get_first_node_in_group("creature") as Creature
+	if creature == null or creature.global_position.distance_to(pos) > 60.0:
+		GameState.hint("Cast it nearer your creature to lend it strength.")
+		return
+	creature.grant_strength(30.0 + potency * 20.0)
+	var flare := CPUParticles3D.new()
+	flare.amount = 40
+	flare.lifetime = 1.2
+	flare.one_shot = true
+	flare.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	flare.emission_sphere_radius = 2.5
+	flare.direction = Vector3.UP
+	flare.initial_velocity_min = 3.0
+	flare.initial_velocity_max = 6.0
+	flare.position = creature.global_position
+	add_child(flare)
+	get_tree().create_timer(3.0).timeout.connect(flare.queue_free)

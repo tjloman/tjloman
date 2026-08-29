@@ -355,6 +355,22 @@ func _run_smoke_test() -> void:
 		str(creature.mind.known_miracles())])
 	print("SMOKE TEST: mind urge -> %s" % creature.mind.strongest_urge())
 
+	# THE BODY: a stomach that fills, digests, and turns surplus into fat.
+	var cap := creature.body.capacity(creature.growth)
+	creature.body.swallow(cap * 3.0, creature.growth)   # try to overstuff it
+	var stuffed := creature.body.fullness(creature.growth)
+	creature.hunger = 0.0                               # it was NOT hungry
+	for i in 40:
+		var d := creature.body.digest(0.5, creature.growth, creature.hunger)
+		creature.hunger = d["hunger"]
+	print("SMOKE TEST: body — capacity %.1f, filled to %d%%, after digesting: fat %.0f strength %.0f (%s)" % [
+		cap, int(stuffed * 100.0), creature.body.fat, creature.body.strength,
+		creature.body.condition_word()])
+	var lift_before := creature.body.lift_limit(creature.growth)
+	creature.grant_strength(20.0)
+	print("SMOKE TEST: strength miracle — lift limit %.1f -> %.1f lumber (boosted=%s)" % [
+		lift_before, creature.body.lift_limit(creature.growth), creature.body.is_boosted()])
+
 	# THE MILITIA: a wolf mauls someone, the village rouses, arms itself, and
 	# (in a band) fights back. A lone villager must NOT dare to stand.
 	village.store.add_lumber(12)
