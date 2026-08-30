@@ -32,6 +32,9 @@ const OBSERVE_PERIOD := 2.5
 ## How sharply a deed's moral weight colours how it FELT to do. This is what
 ## makes cruelty sour for a kind creature and sweet for a wicked one.
 const REMORSE := 2.0
+## The shortest a deed may take, in seconds. Actions that resolve the instant
+## they begin would otherwise re-decide every frame — see `_decide`.
+const DEED_FLOOR := 0.5
 
 var hunger := 40.0
 var energy := 90.0
@@ -88,6 +91,7 @@ var _cast_miracle := ""
 var _mood_before := 60.0   # mood when the deed began, to judge how it went
 var _deed_verb := ""       # the last FINISHED deed — what praise/scold judges
 var _deed_type := ""
+var _last_decision := 0    # ticks (ms) of the last real choice, for DEED_FLOOR
 var _decay_tick := 0.0
 var _target := Vector3.ZERO
 var _target_food: Node3D = null      # FoodItem or Corpse
@@ -220,7 +224,7 @@ func _physics_process(delta: float) -> void:
 		State.TENDING:
 			_action_time -= delta
 			_apply_gravity_only(delta)
-			var farm := _nearest_farm()
+			var farm := CreatureEyes.nearest_farm(get_tree(), global_position)
 			if farm != null:
 				farm.tend()
 			if _action_time <= 0.0:
@@ -258,7 +262,7 @@ func _physics_process(delta: float) -> void:
 					_body.rotation_degrees.x = 0
 				_land_a_fish()
 		State.GO_STORE:
-			var store := _nearest_store()
+			var store := CreatureEyes.nearest_store(get_tree(), global_position)
 			if store == null:
 				_decide()
 			elif _move_toward(store.global_position, WALK_SPEED, delta):
@@ -438,17 +442,27 @@ func _decide() -> void:
 		_release_carried(true)
 	_last_deed = ""
 	_mood_before = mood
+	# YOUR COMMAND FIRST, and instantly: a leashed creature never waits.
+	if leash_target != Vector3.INF:
+		state = State.LEASHED
+		_action_time = 2.0
+		return
+	# A DEED TAKES A MOMENT. Some actions finish the instant they begin — a
+	# smash when already in reach lands, finishes and decides again on the very
+	# next frame. Unbounded, the creature lives a hundred lifetimes a second and
+	# its habits, beliefs and character all form in a blur before you can see
+	# what it is doing. It rests a beat between deeds instead.
+	var since := float(Time.get_ticks_msec() - _last_decision) / 1000.0
+	if _last_decision > 0 and since < DEED_FLOOR:
+		state = State.IDLE
+		_action_time = DEED_FLOOR - since
+		return
+	_last_decision = Time.get_ticks_msec()
 	var drive := {
 		"hunger": hunger, "energy": energy, "boredom": boredom,
 		"mood": mood, "fear": fear, "wounded": _wounded_nearby(),
 		"full": body.fullness(growth), "lazy": body.laziness(),
 	}
-	# YOUR COMMAND FIRST: while leashed it goes where it was sent, whatever it
-	# would rather be doing.
-	if leash_target != Vector3.INF:
-		state = State.LEASHED
-		_action_time = 2.0
-		return
 	var choice := mind.choose(_perceive(), drive, _circumstances())
 	_act_verb = choice["verb"]
 	_act_type = choice.get("type", "none")
@@ -476,7 +490,7 @@ func _circumstances() -> Dictionary:
 				and beast.global_position.distance_to(global_position) < 20.0:
 			predator = 1.0
 			break
-	var home := _home_village()
+	var home := CreatureEyes.home_village(get_tree())
 	var in_village := 0.0
 	if home != null and home.global_position.distance_to(global_position) \
 			< home.influence_radius:
@@ -518,11 +532,11 @@ func _perceive() -> Array:
 
 	# A FULL creature does not hunt. Appetite, not just hunger, decides.
 	var can_eat := _can_eat(1.0)
-	var food := _nearest_food()
+	var food := CreatureEyes.nearest_food(get_tree(), global_position, morality)
 	if food != null and can_eat:
 		_offer(opts, "eat", _type_of(food), food)
 	# Things it could carry off — to the granary, or to hurl, or to devour.
-	var carriable := _nearest_carriable(35.0)
+	var carriable := CreatureEyes.nearest_carriable(get_tree(), global_position, 35.0)
 	if carriable != null and not can_lift(carriable):
 		carriable = null   # beyond its strength; it knows better than to try
 	if carriable != null:
@@ -559,13 +573,13 @@ func _perceive() -> Array:
 			if (node as Animal).is_tamable():
 				_offer(opts, "gift", t, node)
 
-	var farm := _nearest_farm()
+	var farm := CreatureEyes.nearest_farm(get_tree(), global_position)
 	if farm != null:
 		_offer(opts, "tend", "farm", farm)
 	if _find_shore() != Vector3.INF:
 		_offer(opts, "fish", "water", null)
 	# The granary: an easy meal it can learn to raid (the villagers notice).
-	var store := _nearest_store()
+	var store := CreatureEyes.nearest_store(get_tree(), global_position)
 	if store != null and store.total_food() > 0 and can_eat:
 		_offer(opts, "eat", "store", store)
 	if GameState.is_night():
@@ -683,7 +697,7 @@ func _enact(choice: Dictionary) -> void:
 			_catch_target = target
 			_carry_intent = "rescue"
 			state = State.CATCH
-			var home := _home_village()
+			var home := CreatureEyes.home_village(get_tree())
 			_target = home.global_position if home != null else global_position
 		"guard":
 			state = State.GUARD
@@ -729,7 +743,7 @@ func _finish_deed(deed: String, mood_gain: float) -> void:
 	# A creature working among a people IS divine attention — the village it
 	# labours in quickens and grows.
 	if deed in ["tend", "gather", "guard", "gift", "play", "fish"]:
-		var home := _home_village()
+		var home := CreatureEyes.home_village(get_tree())
 		if home != null and home.global_position.distance_to(global_position) < 45.0:
 			home.notice(14.0)
 	morality = mind.temperament
@@ -755,7 +769,7 @@ func _process_seek_food(delta: float) -> void:
 
 func _process_watch(delta: float) -> void:
 	if _watch_subject == null or not is_instance_valid(_watch_subject) \
-			or not _is_working(_watch_subject):
+			or not CreatureEyes.is_working(_watch_subject):
 		_watch_subject = null
 		_decide()
 		return
@@ -906,7 +920,7 @@ func _process_carrying(delta: float) -> void:
 		return
 	match _carry_intent:
 		"deliver":
-			var store := _nearest_store()
+			var store := CreatureEyes.nearest_store(get_tree(), global_position)
 			if store == null:
 				_release_carried(true)
 				_decide()
@@ -934,7 +948,7 @@ func _process_carrying(delta: float) -> void:
 			if _action_time <= 0.0:
 				_eat_carried()
 		"gift":
-			var village := _home_village()
+			var village := CreatureEyes.home_village(get_tree())
 			if village == null:
 				_release_carried(true)
 				_decide()
@@ -957,7 +971,7 @@ func _process_carrying(delta: float) -> void:
 				_decide()
 		"rescue":
 			# Carry the saved soul home and set them gently down.
-			var village := _home_village()
+			var village := CreatureEyes.home_village(get_tree())
 			var dest := village.global_position if village != null else global_position
 			if _move_toward(dest, WALK_SPEED, delta):
 				var saved_name := ""
@@ -1322,7 +1336,7 @@ func _process_guard(delta: float) -> void:
 	if not GameState.is_night() or energy < 20.0:
 		_finish_deed("guard", 3.0)
 		return
-	var wolf := _nearest_wolf(18.0)
+	var wolf := CreatureEyes.nearest_wolf(get_tree(), global_position, 18.0)
 	if wolf != null:
 		if _move_toward(wolf.global_position, WALK_SPEED * 1.2, delta):
 			wolf.scare(global_position)
@@ -1408,7 +1422,7 @@ func praise() -> void:
 		mind.teach(_deed_verb, _deed_type, 3.0)
 		# Approval endorses the deed's own moral weight, hard — but still as a
 		# pull toward the character it implies, never a free run to sainthood.
-		mind.judge(CreatureMind.VERB_VALENCE.get(_deed_verb, 0.0), 0.25)
+		mind.judge(CreatureMind.VERB_VALENCE.get(_deed_verb, 0.0), 0.25, false)
 		morality = mind.temperament
 	if _last_deed in ["hunt", "mischief", "smash"]:
 		GameState.announce("Your creature purrs. It believes cruelty pleases you.")
@@ -1430,7 +1444,7 @@ func scold() -> void:
 	if _deed_verb != "":
 		mind.teach(_deed_verb, _deed_type, -3.0)
 		# Disapproval pushes its heart the OPPOSITE way from the deed's weight.
-		mind.judge(-CreatureMind.VERB_VALENCE.get(_deed_verb, 0.0), 0.22)
+		mind.judge(-CreatureMind.VERB_VALENCE.get(_deed_verb, 0.0), 0.22, false)
 		morality = mind.temperament
 	if _last_deed in ["hunt", "mischief", "smash"]:
 		GameState.announce("Your creature cowers. It understands that was wrong.")
@@ -1467,115 +1481,6 @@ func witness(weight: float) -> void:
 	# Wrath thrills a dark heart and frightens a gentle one.
 	if weight < 0.0:
 		mood = clampf(mood + (5.0 if morality < -20.0 else -6.0), 0.0, 100.0)
-
-
-## Target finding -------------------------------------------------------------
-
-func _nearest_farm() -> Farm:
-	var best: Farm = null
-	var best_d := 60.0
-	for f in get_tree().get_nodes_in_group("farms"):
-		var farm := f as Farm
-		if not is_instance_valid(farm) or not farm.is_workable():
-			continue
-		var d := global_position.distance_to(farm.global_position)
-		if d < best_d:
-			best_d = d
-			best = farm
-	return best
-
-
-func _nearest_store() -> FoodStore:
-	return _nearest_in_group("stores", 80.0) as FoodStore
-
-
-func _home_village() -> Village:
-	for v in get_tree().get_nodes_in_group("village"):
-		if is_instance_valid(v) and (v as Village).is_player_home:
-			return v as Village
-	return null
-
-
-func _nearest_in_group(group: String, radius: float) -> Node3D:
-	var best: Node3D = null
-	var best_dist := radius
-	for n in get_tree().get_nodes_in_group(group):
-		var node := n as Node3D
-		if not is_instance_valid(node) or node.is_queued_for_deletion():
-			continue
-		var d := global_position.distance_to(node.global_position)
-		if d < best_dist:
-			best_dist = d
-			best = node
-	return best
-
-
-## Anything edible: ground food always; corpses only for a corrupted soul.
-func _nearest_food() -> Node3D:
-	var best := _nearest_ground_food(60.0) as Node3D
-	var best_dist := 60.0 if best == null \
-		else global_position.distance_to(best.global_position)
-	if morality < -10.0:
-		for c in get_tree().get_nodes_in_group("corpses"):
-			var corpse := c as Corpse
-			if not is_instance_valid(corpse) or corpse.is_queued_for_deletion():
-				continue
-			var d := global_position.distance_to(corpse.global_position)
-			if d < best_dist:
-				best_dist = d
-				best = corpse
-	return best
-
-
-## Anything worth hauling to the storehouse: stray food or building
-## materials lying about the land.
-func _nearest_carriable(radius: float) -> Node3D:
-	var best: Node3D = _nearest_ground_food(radius)
-	var best_dist := radius if best == null else global_position.distance_to(best.global_position)
-	for r in get_tree().get_nodes_in_group("resource_items"):
-		var item := r as ResourceItem
-		if not is_instance_valid(item) or item.is_queued_for_deletion() or item.freeze:
-			continue
-		var d := global_position.distance_to(item.global_position)
-		if d < best_dist:
-			best_dist = d
-			best = item
-	return best
-
-
-func _nearest_ground_food(radius: float) -> FoodItem:
-	var best: FoodItem = null
-	var best_dist := radius
-	for f in get_tree().get_nodes_in_group("food"):
-		var food := f as FoodItem
-		if not is_instance_valid(food) or food.is_queued_for_deletion():
-			continue
-		var d := global_position.distance_to(food.global_position)
-		if d < best_dist:
-			best_dist = d
-			best = food
-	return best
-
-
-func _nearest_wolf(radius: float) -> Animal:
-	var best: Animal = null
-	var best_dist := radius
-	for a in get_tree().get_nodes_in_group("animals"):
-		var animal := a as Animal
-		if not is_instance_valid(animal) or animal.species != "wolf":
-			continue
-		var d := global_position.distance_to(animal.global_position)
-		if d < best_dist:
-			best_dist = d
-			best = animal
-	return best
-
-
-func _is_working(villager: Villager) -> bool:
-	return villager.state in [
-		Villager.State.FARMING, Villager.State.BUILDING,
-		Villager.State.CHOPPING, Villager.State.QUARRYING,
-	]
 
 
 ## Body ----------------------------------------------------------------------

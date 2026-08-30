@@ -383,7 +383,22 @@ func _run_smoke_test() -> void:
 	print("SMOKE TEST: context matters — wants it in a CROWD %.2f, but ALONE %.2f" % [
 		creature.mind.beliefs.bias("eat_kin|villager", crowded),
 		creature.mind.beliefs.bias("eat_kin|villager", lonely)])
-	print("SMOKE TEST: creed -> %s" % str(creature.mind.beliefs.creed()))
+	# Every phrasing must survive being put into words — including verbs with no
+	# subject slot ("wandering") and any verb we never wrote a phrase for.
+	for rule: String in ["rest|none>fed", "wander|none>alone", "kick|door>hurt",
+			"eat_kin|villager>mobbed"]:
+		creature.mind.beliefs.rules[rule] = -0.9
+	print("SMOKE TEST: creed -> %s" % str(creature.mind.beliefs.creed(4)))
+
+	# CHARACTER IS PACED BY TIME, not by how many deeds got squeezed into a
+	# frame. A tight burst of cruelty must NOT make a monster on its own.
+	var burst := CreatureMind.new()
+	for i in 400:
+		burst.judge(-1.0)
+	var spaced := CreatureMind.new()
+	spaced.judge(-1.0, CreatureMind.DEED_ALPHA, false)
+	print("SMOKE TEST: pacing — 400 instant cruelties = %.1f, one lived deed = %.1f" % [
+		burst.temperament, spaced.temperament])
 
 	# The village has a doctrine of its own, learned the same way.
 	village.remember_battle(false)

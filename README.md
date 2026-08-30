@@ -350,8 +350,16 @@ scripts/animals/animal.gd     EVERY beast, one data table: livestock, pets,
                               predators, prey — taming, riding, guarding
 scripts/villager/villager.gd  Full villager lives: needs, age, pregnancy,
                               morality, demand-driven jobs (state machine)
-scripts/creature/creature.gd  The creature: feelings (mood/bond/boredom),
-                              learned desires, pet/scold training, observation
+scripts/creature/
+  creature.gd                 The creature itself: feelings, states, deeds,
+                              pet/scold training — it coordinates the modules
+  creature_mind.gd            The learning brain: action values, curiosity,
+                              conscience, satiation, emergent character
+  creature_beliefs.gd         Episodes, credit assignment, contextual weights —
+                              what it believes, and in WHICH circumstances
+  creature_body.gd            Stomach, digestion, fat and muscle
+  creature_eyes.gd            Perception only: what is the nearest X
+  creature_look.gd            Alignment colour, expressions, blend shapes
 scripts/miracles/
   miracle_manager.gd          Two-step menus, catalog, effects, power scaling
   miracle_orb.gd              Generic conjured-and-thrown miracle carrier

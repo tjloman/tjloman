@@ -202,7 +202,12 @@ func _phrase(rule: String, strength: float) -> String:
 	var subject: String = act[1] if act.size() > 1 else "things"
 	var tag: String = halves[1] if halves.size() > 1 else "trouble"
 	var sure := "is sure" if absf(strength) > 0.75 else "suspects"
-	var doing: String = VERB_PHRASE.get(verb, verb) % subject
+	# Some phrases name what was acted upon ("eating %s") and some do not
+	# ("wandering"), and a verb it has learned that we never wrote a phrase for
+	# falls back to the bare word. Only the ones with a slot get the subject.
+	var doing: String = VERB_PHRASE.get(verb, verb + " %s")
+	if doing.contains("%s"):
+		doing = doing % subject
 	var outcome: String = TAG_PHRASE.get(tag, "leads somewhere")
 	return "%s that %s %s" % [sure, doing, outcome]
 

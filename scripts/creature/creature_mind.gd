@@ -47,6 +47,13 @@ const TEACH_LR := 0.75
 const DEED_ALPHA := 0.05        # how much one deed moves the average (~20-deed memory)
 const WITNESS_ALPHA := 0.008    # merely WATCHING its god counts for far less
 const CHARACTER_SCALE := 90.0   # deed-average -1..+1 mapped onto the -100..100 heart
+## Character is measured in LIFE LIVED, not in deeds counted. A creature that
+## lands ten blows in a second has not become ten times the monster — it has
+## spent one second being one, and its heart should move accordingly. Each
+## judgement therefore counts for the TIME it represents, up to one full deed's
+## worth. Without this, anything that lets deeds resolve quickly rewrites the
+## creature's whole character in seconds, and the readout means nothing.
+const DEED_PERIOD := 2.0        # seconds of living that one full-weight deed is
 
 ## SATIATION — you can have too much of anything. Doing the same thing again
 ## and again palls, and the appetite for it returns only after a rest. Without
@@ -79,6 +86,7 @@ var temperament := 0.0      # -100 monstrous .. +100 angelic: emergent, follows 
 var beliefs := CreatureBeliefs.new()
 
 var _deed_avg := 0.0        # the running moral average that IS its character
+var _last_judged := 0       # ticks (ms) of the last judgement, for pacing
 var _sated := {}            # "verb|type" -> how thoroughly sick of it it is
 var _last_key := ""         # the (verb,type) the next outcome is credited to
 var _last_verb := ""
@@ -206,9 +214,20 @@ func reinforce(reward: float) -> void:
 ## Let a deed of moral weight `valence` (-1 cruel .. +1 kind) shape the heart,
 ## pulling it toward the character such a life implies. Bounded by construction:
 ## no amount of anything can push it past what its behaviour actually is.
-func judge(valence: float, strength := DEED_ALPHA) -> void:
-	_deed_avg = clampf(_deed_avg + (valence - _deed_avg) * clampf(strength, 0.0, 1.0),
-		-1.5, 1.5)
+##
+## `paced` deeds count for the TIME they occupied (see DEED_PERIOD), so a flurry
+## of quick acts weighs no more than the same conduct spread out. The god's own
+## praise and scolding are NOT paced: those are discrete acts of will, and they
+## should land with their full force the moment you press the key.
+func judge(valence: float, strength := DEED_ALPHA, paced := true) -> void:
+	var force := clampf(strength, 0.0, 1.0)
+	if paced:
+		var now := Time.get_ticks_msec()
+		var lived := DEED_PERIOD if _last_judged == 0 \
+			else float(now - _last_judged) / 1000.0
+		_last_judged = now
+		force *= clampf(lived / DEED_PERIOD, 0.0, 1.0)
+	_deed_avg = clampf(_deed_avg + (valence - _deed_avg) * force, -1.5, 1.5)
 	temperament = clampf(_deed_avg * CHARACTER_SCALE, -100.0, 100.0)
 
 
