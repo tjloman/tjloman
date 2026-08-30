@@ -80,17 +80,16 @@ func _build_miracle_panel() -> void:
 	panel.add_child(vbox)
 
 	var title := Label.new()
-	title.text = "MIRACLES  —  draw RUNES, pause between each, let go to cast  (right mouse, or CAST mode on touch)"
+	title.text = "MIRACLES  —  one stroke is one rune; draw again to add; it casts itself"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 14)
 	title.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0, 0.9))
 	vbox.add_child(title)
 
 	var ref := Label.new()
-	ref.text = ("~ water   |  force   —  earth   \\  fire   O  life\n"
-		+ "@ air (spiral)   @ calm (reverse spiral)   /\\/\\ fury (zigzag)\n"
-		+ "^ sky (caret)   ( ward (arc)\n"
-		+ "Draw one · PAUSE · draw another · let go to cast them TOGETHER\n"
+	ref.text = ("S ~ water    | force    — earth    / fire    O life\n"
+		+ "spiral: air    reverse spiral: calm    zigzag: fury\n"
+		+ "caret ^ : sky    bow ( : ward\n"
 		+ "water=rain · water+water=cloudburst · water+force=thunderstorm")
 	ref.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ref.add_theme_font_size_override("font_size", 13)
@@ -98,13 +97,18 @@ func _build_miracle_panel() -> void:
 	vbox.add_child(ref)
 
 	_cast_label = Label.new()
-	_cast_label.text = "Draw a rune. Pause to add another; let go to cast."
+	_cast_label.text = "Draw a rune. Draw another to add to it."
 	_cast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_cast_label.add_theme_font_size_override("font_size", 16)
 	_cast_label.add_theme_color_override("font_color", Color(1, 0.92, 0.5))
 	vbox.add_child(_cast_label)
 
 	add_child(panel)
+	# THE PANEL MUST NOT EAT THE DRAWING. Setting the panel itself to IGNORE is
+	# not enough: its containers keep Control's default of STOP, so the moment
+	# the guide appeared — which is the moment you finished your FIRST rune —
+	# it swallowed every further motion event and you could not draw a second.
+	_make_click_through(panel)
 
 
 ## Creature dashboard — hidden until you LOCK onto the creature (C, or the
@@ -122,6 +126,7 @@ func _build_creature_panel() -> void:
 	_creature_label.add_theme_color_override("font_color", Color.WHITE)
 	_creature_panel.add_child(_creature_label)
 	add_child(_creature_panel)
+	_make_click_through(_creature_panel)
 
 
 ## Praise / Scold — big touch buttons, top-right, only while locked on. They
@@ -158,6 +163,16 @@ func _big_button(text: String, tint: Color) -> Button:
 	return b
 
 
+## Set a whole subtree to pass the pointer through. Anything that merely
+## DISPLAYS must never be able to intercept a gesture — the world beneath it is
+## the interface, and a readout appearing must not change what a drag does.
+func _make_click_through(root: Control) -> void:
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for child in root.get_children():
+		if child is Control:
+			_make_click_through(child as Control)
+
+
 func _dim_panel_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0, 0, 0, 0.42)
@@ -174,6 +189,7 @@ func _build_hover_label() -> void:
 	_hover_label.add_theme_constant_override("shadow_offset_x", 1)
 	_hover_label.add_theme_constant_override("shadow_offset_y", 1)
 	add_child(_hover_label)
+	_make_click_through(_hover_label)
 
 
 func _build_message_label() -> void:
@@ -185,6 +201,7 @@ func _build_message_label() -> void:
 	_message_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.95))
 	_message_label.add_theme_color_override("font_shadow_color", Color.BLACK)
 	add_child(_message_label)
+	_make_click_through(_message_label)
 
 
 func _build_help_panel() -> void:
@@ -244,15 +261,22 @@ To throw on glass .......... drag and flick in one stroke; a tap just places
 Pinch ...................... zoom
 Two-finger drag ............ orbit the camera freely (yaw and tilt)
 
-MIRACLES — DRAW RUNES AND COMBINE THEM (hold right mouse)
-Draw a shape, PAUSE, draw another, and let go. What you get is what
-those runes mean TOGETHER, and the order you draw them in never matters.
+MIRACLES — DRAW RUNES AND COMBINE THEM
+Casting is ALWAYS available. There is no mode to turn on.
+  With a mouse ... hold the RIGHT button and draw.
+  On a touchscreen  press bare ground, hold still an instant, then draw.
+                    (drag straight away and you still pan; press a thing
+                     and you still pick it up — nothing else changed)
 
-  ~ or S ......... WATER     | tall line ....... FORCE
-  — flat line .... EARTH     diagonal slash ... FIRE
-  O circle ....... LIFE      @ spiral ......... AIR
-  @ reverse spiral  CALM     jagged zigzag .... FURY
-  ^ caret ........ SKY       ( arc ............ WARD
+ONE UNBROKEN STROKE IS ONE RUNE. Lift, and draw again within a moment
+to add another to the same working. When you stop drawing, it casts
+itself — there is nothing to confirm.
+
+  S or ~ ....... WATER      | tall line ....... FORCE
+  — flat line .. EARTH      / diagonal ....... FIRE
+  O circle ..... LIFE       spiral .......... AIR
+  reverse spiral  CALM      zigzag .......... FURY
+  ^ caret ...... SKY        ( bow ............ WARD
 
 One rune alone is its plainest form: water is rain, force is lightning,
 life is food, calm is a healing.
@@ -388,11 +412,12 @@ func _process(delta: float) -> void:
 ## way it lingers ~5s after (and whenever a cast hint fires) so you can read
 ## the last step, then tucks itself away to keep the screen clean.
 func _update_miracle_panel(delta: float) -> void:
-	var active := false
-	if DisplayServer.is_touchscreen_available():
-		active = divine_hand != null and divine_hand.cast_mode
-	else:
-		active = Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+	# The guide is up whenever a drawing is actually happening — there is no
+	# cast mode left to ask about.
+	var active := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+	if divine_hand != null and is_instance_valid(divine_hand):
+		active = active or divine_hand.working_text() != "" \
+			or divine_hand.state == DivineHand.HandState.GESTURING
 	if active:
 		_miracle_show = 5.0
 	else:
@@ -404,7 +429,7 @@ func _update_miracle_panel(delta: float) -> void:
 	if divine_hand != null and is_instance_valid(divine_hand):
 		var working := divine_hand.working_text()
 		if working != "":
-			_cast_label.text = working + "     (pause to add · let go to cast)"
+			_cast_label.text = working + "     (draw again to add)"
 
 
 ## Shown only while the camera is LOCKED onto the creature. Its stats live

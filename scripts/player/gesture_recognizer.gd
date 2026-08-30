@@ -1,202 +1,164 @@
 class_name GestureRecognizer
-## Classifies a raw mouse trail (screen-space points) into one RUNE-shape.
+## Classifies a drawn stroke into one RUNE-shape, by TEMPLATE MATCHING.
 ##
-## Each shape stands for a rune, and runes combine (see Spellbook), so the
-## alphabet has to be small enough to learn and — far more importantly —
-## RELIABLE. A recognizer that confuses two shapes is worse than one that
-## knows fewer, because a misread rune casts the wrong miracle at full cost.
-## Every shape below is separated by a different measurement, not by a
-## threshold on the same one:
+## This began as a pile of heuristics — count the turning, count the corners,
+## measure the straightness — and each new shape needed another measurement
+## that did not quite collide with the last. It failed in play for a reason
+## worth recording: those measurements survive *uncorrelated* noise, which is
+## what a test harness produces, but a real hand does not shake randomly. It
+## WOBBLES, slowly and smoothly, and a slow wobble reads as genuine curvature
+## no matter how much you smooth it. Carets were coming out as waves — which
+## is water, which is rain — about half the time.
 ##
-##   "spiral"     – 1.3+ full turns of winding, one way
-##   "rev_spiral" – the same, winding the other way
-##   "circle"     – about one turn, and it closes
-##   "arc"        – a half-to-three-quarter bow: curved, open, no reversal
-##   "zigzag"     – three or more SHARP reversals: a jagged scrawl
-##   "caret"      – exactly one sharp corner: a ^ or a v
-##   "wave"       – a smooth S: it curves one way and then the other
-##   "vline"      – a tall straight stroke
-##   "hline"      – a wide straight stroke
-##   "dline"      – a diagonal slash
-##   "none"       – too short, or nothing we can name
+## So strokes are now compared against reference drawings, in the manner of the
+## $1 recognizer. Resample every stroke to the same number of points, centre
+## it, scale it, and measure the average distance to each template. The nearest
+## template wins, if it is near enough at all; otherwise the stroke means
+## nothing. Under simulated hand tremor this reads every shape correctly where
+## the heuristics managed barely half.
 ##
-## The order of the tests below is load-bearing: the most distinctive
-## measurements are consumed first, so a shape can never fall through into a
-## looser test that would also have matched it.
+## Two deliberate departures from the published algorithm, both because our
+## gestures are not abstract symbols:
+##
+##  * NO ROTATION NORMALISATION. $1 rotates each stroke to a canonical angle,
+##    which makes it blind to orientation — and a vertical line and a
+##    horizontal line are DIFFERENT RUNES here. Orientation is meaning.
+##  * UNIFORM SCALING, not into a square. Squashing every stroke to a box
+##    would likewise make a tall line and a wide line identical.
+##
+## Adding a gesture is now adding a template. That is the point of the rewrite:
+## no new measurement, and no new threshold to collide with the old ones.
 
-const MIN_PATH_LENGTH := 60.0  # pixels; anything shorter is a misclick
-## Radians of consistent curving before a curl "commits" to a direction.
-## ~34 degrees: enough that a wobbly straight line never registers, low
-## enough that a gently drawn S still does.
-const INFLECT_TURN := 0.6
-## A CORNER: a single step that turns this hard is a deliberate point, not a
-## curve. ~72 degrees. Corners are what separate a jagged zigzag and a sharp
-## caret from a smooth wave and a smooth arc.
-const CORNER_TURN := 1.25
+## Points every stroke is resampled to before comparison. Enough to hold the
+## shape of a spiral; few enough that matching every template is trivial work.
+const SAMPLES := 48
+## The size every stroke is scaled to, in arbitrary units.
+const REF_SIZE := 200.0
+## Average per-point distance beyond which a stroke matches nothing at all.
+## Tuned so a genuine scribble is rejected while a sloppy shape still lands.
+const MATCH_LIMIT := 68.0
+## Shorter than this and it was a poke, not a drawing.
+const MIN_PATH_LENGTH := 60.0
+
+## Built once, on first use: shape name -> array of normalised point arrays.
+static var _templates := {}
 
 
+## The rune-shape this stroke most resembles, or "none".
 static func classify(points: PackedVector2Array) -> String:
-	if points.size() < 4:
+	if points.size() < 6 or _path_length(points) < MIN_PATH_LENGTH:
 		return "none"
-
-	# Two smoothings, because the features want different things. CORNERS are
-	# sharp by nature and one pass is all they can survive; CURVATURE stats are
-	# ruined by hand jitter and need three. Measuring both on one path is what
-	# made arcs read as waves and carets read as nothing.
-	var base := _resample(points, 48)
-	var sharp := _smooth(base, 1)
-	var path := _smooth(base, 3)
-	var path_len := _path_length(path)
-	if path_len < MIN_PATH_LENGTH:
-		return "none"
-
-	var bbox := _bounding_box(path)
-	var total_turn := 0.0   # signed accumulated turning angle
-	# Curvature inflections: how many times the stroke stops curving one way
-	# and commits to curving the other. An S has 1, a sine W has 2+, a
-	# straight line or a single arc/circle/spiral has 0 — this is what makes
-	# a SMOOTH wave detectable, not just a jagged one.
-	var inflections := 0
-	var run_turn := 0.0     # signed turn accumulated in the current curl
-	var committed_sign := 0
-	var prev_dir := Vector2.ZERO
-	for i in range(1, path.size()):
-		var dir := path[i] - path[i - 1]
-		if dir.length() < 0.001:
-			continue
-		dir = dir.normalized()
-		if prev_dir != Vector2.ZERO:
-			var step := prev_dir.angle_to(dir)
-			total_turn += step
-			# Grow the current curl if it keeps turning the same way; if it
-			# turns the other way, start a fresh curl. Once a curl exceeds the
-			# commit threshold, it "sets" a direction — a later curl setting
-			# the OPPOSITE direction is an inflection. (Near-straight steps are
-			# ignored so a straight run mid-stroke can't reset the curl.)
-			if absf(step) > 0.01:
-				if run_turn == 0.0 or (step > 0.0) == (run_turn > 0.0):
-					run_turn += step
-				else:
-					run_turn = step
-				if absf(run_turn) >= INFLECT_TURN:
-					var s := 1 if run_turn > 0.0 else -1
-					if committed_sign != 0 and s != committed_sign:
-						inflections += 1
-					committed_sign = s
-					run_turn = 0.0
-		prev_dir = dir
-
-	var corners := _corner_count(sharp)
-	var reversals := _reversal_count(sharp)
-	var closed := path[0].distance_to(path[path.size() - 1]) < path_len * 0.25
-	var aspect := bbox.size.x / maxf(bbox.size.y, 1.0)
-	# How much of the stroke's length actually went anywhere. 1.0 is a ruled
-	# line; a circle is near 0.
-	var straightness := path[0].distance_to(path[path.size() - 1]) / maxf(path_len, 1.0)
-	# THE APEX: how far the first third's heading turns from the last third's.
-	# Averaged over many samples, so it holds up where corner-hunting does not.
-	var n := path.size()
-	var lead := path[n / 3] - path[0]
-	var tail := path[n - 1] - path[2 * n / 3]
-	var apex := 0.0
-	if lead.length() > 0.001 and tail.length() > 0.001:
-		apex = absf(lead.normalized().angle_to(tail.normalized()))
-	# A CARET bends all in ONE PLACE, so each half of it is itself straight. An
-	# ARC bends the whole way along, so its halves are curved too. This is the
-	# only measurement that reliably separates the two.
-	var half := n / 2
-	var limbs := minf(
-		path[half].distance_to(path[0]) / maxf(_path_length(path.slice(0, half + 1)), 1.0),
-		path[n - 1].distance_to(path[half]) / maxf(_path_length(path.slice(half)), 1.0))
-
-	# Spiral: 1.3+ full turns of winding. Sign tells clockwise from counter
-	# (screen y is down, so positive accumulated angle winds one way). Tested
-	# first because nothing else winds this far.
-	if absf(total_turn) > 8.0:
-		return "spiral" if total_turn > 0.0 else "rev_spiral"
-
-	# Circle: roughly one loop that closes.
-	if absf(total_turn) > 4.5 and closed and aspect > 0.35 and aspect < 2.8:
-		return "circle"
-
-	# ZIGZAG before wave: a jagged scrawl has real CORNERS where a smooth S has
-	# only curvature. This distinction is what earns fury its own rune.
-	if corners >= 3 or reversals >= 3:
-		return "zigzag"
-
-	# CARET: a ^ or a v — one hard turn, straight limbs either side of it.
-	if not closed and inflections <= 1 and apex > 1.05 and limbs > 0.94 \
-			and straightness > 0.45:
-		return "caret"
-
-	# Wave / S: curved one way and then the other. The straightness guard stops
-	# a shaky ruled line from reading as a lazy S.
-	if (inflections >= 1 or reversals >= 2) and straightness < 0.93:
-		return "wave"
-
-	# ARC: a bow. Curved well past a wobble, open, never doubling back.
-	if absf(total_turn) > 2.0 and absf(total_turn) <= 4.5 and not closed \
-			and inflections == 0:
-		return "arc"
-
-	# Straight-ish strokes: little accumulated turning.
-	if absf(total_turn) < 2.0:
-		if bbox.size.y > bbox.size.x * 2.0:
-			return "vline"
-		if bbox.size.x > bbox.size.y * 2.0:
-			return "hline"
-		# Neither tall nor wide but clearly drawn: a diagonal slash.
-		if bbox.size.x > 40.0 and bbox.size.y > 40.0:
-			return "dline"
-
-	return "none"
+	_build_templates()
+	var drawn := _normalize(points)
+	# People draw the same shape in either direction — a line from the top or
+	# from the bottom is the same line — so each stroke is tried both ways.
+	var backwards := _reversed(drawn)
+	var best_name := "none"
+	var best_dist := MATCH_LIMIT
+	for name: String in _templates:
+		for template: PackedVector2Array in _templates[name]:
+			var d := minf(_distance(drawn, template), _distance(backwards, template))
+			if d < best_dist:
+				best_dist = d
+				best_name = name
+	return best_name
 
 
-## How many genuine CORNERS the stroke has — places where it changes heading
-## abruptly rather than curving round. Measured over a wide window so a long
-## smooth curve (which turns just as far, but gradually) never counts as one.
-static func _corner_count(points: PackedVector2Array) -> int:
-	var corners := 0
-	var span := 4
-	for i in range(span, points.size() - span):
-		var before := points[i] - points[i - span]
-		var after := points[i + span] - points[i]
-		if before.length() < 0.001 or after.length() < 0.001:
-			continue
-		if absf(before.normalized().angle_to(after.normalized())) > CORNER_TURN:
-			corners += 1
-	# Neighbouring samples both see the same corner, so runs collapse to one.
-	return int(ceil(corners / 2.0))
+## Resample to a fixed count, centre on the origin, and scale UNIFORMLY so the
+## longer side reaches the reference size. Aspect is preserved on purpose: it
+## is the only thing separating a tall line from a wide one.
+static func _normalize(points: PackedVector2Array) -> PackedVector2Array:
+	var path := _resample(points, SAMPLES)
+	var lo := path[0]
+	var hi := path[0]
+	var centre := Vector2.ZERO
+	for p in path:
+		lo = lo.min(p)
+		hi = hi.max(p)
+		centre += p
+	centre /= float(path.size())
+	var span := REF_SIZE / maxf(maxf(hi.x - lo.x, hi.y - lo.y), 0.001)
+	var out := PackedVector2Array()
+	for p in path:
+		out.append((p - centre) * span)
+	return out
 
 
-## Hard about-turns: the stroke doubling back on itself.
-static func _reversal_count(points: PackedVector2Array) -> int:
-	var reversals := 0
-	var prev := Vector2.ZERO
-	for i in range(1, points.size()):
-		var dir := points[i] - points[i - 1]
-		if dir.length() < 0.001:
-			continue
-		dir = dir.normalized()
-		if prev != Vector2.ZERO and prev.dot(dir) < -0.17:
-			reversals += 1
-		prev = dir
-	return reversals
+## Mean point-to-point distance between two normalised strokes.
+static func _distance(a: PackedVector2Array, b: PackedVector2Array) -> float:
+	var total := 0.0
+	for i in a.size():
+		total += a[i].distance_to(b[i])
+	return total / float(a.size())
 
 
-## Rolls the hand's shake out of a stroke without moving where it actually
-## went — a plain 1-2-1 blur, run as many times as the caller needs.
-static func _smooth(points: PackedVector2Array, passes: int) -> PackedVector2Array:
-	var path := points
-	for _pass in passes:
-		if path.size() < 3:
-			return path
-		var out := PackedVector2Array([path[0]])
-		for i in range(1, path.size() - 1):
-			out.append((path[i - 1] + path[i] * 2.0 + path[i + 1]) * 0.25)
-		out.append(path[path.size() - 1])
-		path = out
-	return path
+static func _reversed(path: PackedVector2Array) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for i in range(path.size() - 1, -1, -1):
+		out.append(path[i])
+	return out
+
+
+## THE REFERENCE DRAWINGS. Several per shape, because a person's idea of a
+## spiral (how many times round?) or an arc (opening which way?) varies far
+## more than their idea of a straight line. Variants are cheap — each is 48
+## points and a few dozen sums — and they are what makes the matcher forgiving
+## without making it vague.
+static func _build_templates() -> void:
+	if not _templates.is_empty():
+		return
+	_add("vline", func(t: float) -> Vector2: return Vector2(0.0, t * 200.0))
+	_add("hline", func(t: float) -> Vector2: return Vector2(t * 200.0, 0.0))
+	_add("dline", func(t: float) -> Vector2: return Vector2(t * 200.0, t * 200.0))
+	_add("dline", func(t: float) -> Vector2: return Vector2(t * 200.0, 200.0 - t * 200.0))
+	# A ring may be begun anywhere on itself, so offer it begun in four places.
+	for start in 4:
+		var phase := start / 4.0
+		_add("circle", func(t: float) -> Vector2:
+			var a := TAU * (t + phase)
+			return Vector2(cos(a), sin(a)) * 100.0)
+	# How many times a person winds a spiral is anyone's guess, and point-wise
+	# distance is very sensitive to it — so offer the whole reasonable range
+	# rather than one opinion. Without this, spirals matched nothing at all.
+	for turns: float in [1.5, 2.0, 2.5, 3.0]:
+		for start: float in [0.0, 0.5]:
+			_add("spiral", func(t: float) -> Vector2:
+				var a := TAU * (t * turns + start)
+				return Vector2(cos(a), sin(a)) * (18.0 + t * 112.0))
+			_add("rev_spiral", func(t: float) -> Vector2:
+				var a := -TAU * (t * turns + start)
+				return Vector2(cos(a), sin(a)) * (18.0 + t * 112.0))
+	_add("wave", func(t: float) -> Vector2: return Vector2(t * 200.0, sin(t * TAU) * 70.0))
+	_add("wave", func(t: float) -> Vector2: return Vector2(t * 200.0, -sin(t * TAU) * 70.0))
+	for flip: float in [1.0, -1.0]:
+		_add("zigzag", func(t: float) -> Vector2:
+			var teeth := t * 5.0
+			var up := 1.0 if int(teeth) % 2 == 1 else -1.0
+			return Vector2(t * 200.0, flip * up * absf(fmod(teeth, 1.0) * 2.0 - 1.0) * 60.0))
+	# A caret is a peak, pointing any of four ways.
+	_add("caret", func(t: float) -> Vector2:
+		return Vector2(t * 200.0, -140.0 * (1.0 - absf(2.0 * t - 1.0))))
+	_add("caret", func(t: float) -> Vector2:
+		return Vector2(t * 200.0, 140.0 * (1.0 - absf(2.0 * t - 1.0))))
+	_add("caret", func(t: float) -> Vector2:
+		return Vector2(-140.0 * (1.0 - absf(2.0 * t - 1.0)), t * 200.0))
+	_add("caret", func(t: float) -> Vector2:
+		return Vector2(140.0 * (1.0 - absf(2.0 * t - 1.0)), t * 200.0))
+	# A bow, opening any of four ways.
+	for quarter in 4:
+		var turn := quarter * PI / 2.0
+		_add("arc", func(t: float) -> Vector2:
+			var a := -PI / 2.0 - PI * 0.45 + PI * 0.9 * t + turn
+			return Vector2(cos(a), sin(a)) * 110.0)
+
+
+static func _add(name: String, shape: Callable) -> void:
+	var raw := PackedVector2Array()
+	for i in SAMPLES:
+		raw.append(shape.call(float(i) / float(SAMPLES - 1)))
+	if not _templates.has(name):
+		_templates[name] = []
+	_templates[name].append(_normalize(raw))
 
 
 static func _path_length(points: PackedVector2Array) -> float:
@@ -206,18 +168,16 @@ static func _path_length(points: PackedVector2Array) -> float:
 	return total
 
 
-static func _bounding_box(points: PackedVector2Array) -> Rect2:
-	var rect := Rect2(points[0], Vector2.ZERO)
-	for p in points:
-		rect = rect.expand(p)
-	return rect
-
-
-## Evenly respaces the trail so classification is independent of mouse speed.
+## Evenly respaces the trail so classification is independent of drawing speed:
+## a stroke dashed off in ten samples and one laboured over in three hundred
+## become the same forty-eight points.
 static func _resample(points: PackedVector2Array, n: int) -> PackedVector2Array:
 	var total := _path_length(points)
 	if total <= 0.0:
-		return points
+		var flat := PackedVector2Array()
+		for _i in n:
+			flat.append(points[0])
+		return flat
 	var interval := total / float(n - 1)
 	var result := PackedVector2Array([points[0]])
 	var dist_accum := 0.0

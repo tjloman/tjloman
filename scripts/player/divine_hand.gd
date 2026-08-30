@@ -37,12 +37,18 @@ const SPIN_GAIN := 1.4              # flick deviation -> projectile spin (rad/s)
 const MAX_SPIN := 11.0              # cap so a wild flick doesn't blur into a top
 const BUNDLE_TOPUP := 0.06          # seconds between pulling each extra unit (hold-to-grab)
 
-## COMPOSING A MIRACLE: how long the pointer must hold still before the shape
-## drawn so far is taken as a finished rune. Short enough not to feel like
-## waiting, long enough that the natural hitch mid-stroke never splits a shape
-## in two. And a cap, because a composition this long is surely a scribble.
-const STROKE_BREAK := 0.32
+## COMPOSING A MIRACLE. One unbroken STROKE is one rune — lifting the pointer
+## ends it, the way lifting a pen ends a letter. Draw another within the combo
+## window and it joins the same working; let the window lapse and the working
+## is cast. This replaced a scheme where a PAUSE divided the runes, which was
+## wrong twice over: a pause is also how you begin on a touchscreen, and
+## holding still in the middle of drawing is a thing hands simply do.
+const COMBO_WINDOW := 1.1
 const MAX_RUNES := 5
+## Touch, which has no second button: hold the bare land still this long and
+## you are drawing. Move further than the slop first and you are panning.
+const HOLD_TO_DRAW := 0.18
+const HOLD_SLOP := 14.0
 
 var camera_rig: CameraRig
 var miracles: MiracleManager
@@ -51,10 +57,6 @@ var trail: GestureTrail
 var state := HandState.IDLE
 var held_body: PhysicsBody3D = null
 var hover_target: Node3D = null
-
-## Touch "cast mode": one-finger drags draw miracle gestures instead of
-## grabbing. Toggled by the on-screen button; irrelevant with a mouse.
-var cast_mode := false
 
 ## The last thing this hand threw (not placed) — the creature watches
 ## for it, and may catch it out of the air.
@@ -79,14 +81,21 @@ var _steer_body: Node3D = null
 var _steer_accel := Vector3.ZERO
 var _steer_time := 0.0
 
-## COMPOSING A MIRACLE. Runes drawn so far in this one held cast, and the
-## stillness that divides one rune from the next: hold the button, draw a
-## shape, PAUSE, draw another, and let go to cast what they mean together.
-## A pause is the separator rather than a button-release because it works the
-## same under a mouse and under a thumb.
+## GESTURES ARE ALWAYS AVAILABLE — there is no cast mode to toggle, the way
+## there is none in Black & White. With a mouse the right button draws and has
+## always drawn. Under a thumb, where there is no second button, PRESSING THE
+## BARE LAND AND HOLDING STILL for a moment begins a drawing; dragging at once
+## still pans, and pressing something pick-up-able still picks it up. So every
+## old interaction survives and casting costs no mode.
+var _press_at := Vector2.ZERO
+var _press_time := 0.0
+var _press_on_land := false
+var _waiting_to_draw := false
+
+## The runes drawn so far, and how long is left to add another before what is
+## on the slate goes off by itself.
 var _runes: Array = []
-var _still_time := 0.0
-var _last_draw := Vector2.ZERO
+var _combo_time := 0.0
 
 var _hand_material: StandardMaterial3D
 var _glow: OmniLight3D
@@ -180,6 +189,10 @@ func _physics_process(delta: float) -> void:
 			_steer_time = 0.0
 			_steer_body = null
 
+	# Casting is ALWAYS live: these two run whatever else the hand is up to.
+	_tick_hold_to_draw(delta)
+	_tick_combo(delta)
+
 	match state:
 		HandState.DRAG_LAND:
 			var plane_point := _mouse_on_plane(mouse_pos, drag_anchor.y)
@@ -196,7 +209,6 @@ func _physics_process(delta: float) -> void:
 		HandState.GESTURING:
 			trail.points = gesture_points
 			trail.queue_redraw()
-			_tick_stroke_break(delta)
 
 
 func _update_hover(mouse_pos: Vector2) -> void:
@@ -266,25 +278,36 @@ func _unhandled_input(event: InputEvent) -> void:
 				# Every fresh press begins a new stroke: a poke can never
 				# inherit the momentum of the drag before it.
 				_reset_stroke(event.position)
-				if cast_mode and state == HandState.IDLE:
-					_begin_cast(event.position)
-				else:
+				_press_at = event.position
+				_press_time = 0.0
+				# ONLY WHERE THERE IS NO SECOND BUTTON. With a mouse the right
+				# button already draws, and making a hesitant left-press turn
+				# into a gesture would be a nasty surprise; under a thumb it is
+				# the only way to have casting always available without a mode.
+				_waiting_to_draw = _touch_only() and state == HandState.IDLE \
+					and not _on_something_grabbable()
+				if not _waiting_to_draw:
 					_on_grab()
-			elif state == HandState.GESTURING and cast_mode:
-				_finish_cast()
+			elif state == HandState.GESTURING:
+				_end_stroke()
+			elif _waiting_to_draw:
+				_waiting_to_draw = false   # a tap on bare land: nothing to do
 			else:
 				_on_release()
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
+			# The mouse has a spare button, so drawing needs no ceremony at all.
 			if event.pressed and state == HandState.IDLE:
-				_begin_cast(event.position)
+				_begin_stroke(event.position)
 			elif not event.pressed and state == HandState.GESTURING:
-				_finish_cast()
+				_end_stroke()
 	elif event is InputEventMouseMotion:
 		if state == HandState.GESTURING:
 			gesture_points.append(event.position)
-			if event.position.distance_to(_last_draw) > 2.0:
-				_still_time = 0.0
-				_last_draw = event.position
+		elif _waiting_to_draw:
+			# Moved before the hold matured: this was a pan, not a drawing.
+			if event.position.distance_to(_press_at) > HOLD_SLOP:
+				_waiting_to_draw = false
+				_on_grab()
 		elif state == HandState.HOLDING:
 			_stroke_pts.append(event.position)
 			_stroke_times.append(Time.get_ticks_msec() / 1000.0)
@@ -516,11 +539,7 @@ func cancel_touch_interaction() -> void:
 		HandState.DRAG_LAND:
 			state = HandState.IDLE
 		HandState.GESTURING:
-			trail.points = PackedVector2Array()
-			trail.queue_redraw()
-			gesture_points = PackedVector2Array()
-			_runes.clear()
-			state = HandState.IDLE
+			_abandon_drawing()
 
 
 ## Places a conjured object (e.g. a fireball) straight into the hand's grip.
@@ -538,71 +557,94 @@ func force_hold(body: PhysicsBody3D) -> bool:
 
 ## COMPOSING A MIRACLE ---------------------------------------------------------
 ##
-## Hold the button and draw. Each shape you draw is one RUNE; a brief PAUSE
-## commits it and starts the next; letting go casts whatever the runes you
-## drew mean together (see Spellbook). Water alone is a sprinkle; water twice
-## is a cloudburst; water and force is a thunderstorm.
+## One unbroken STROKE is one rune. Lift, draw another within the combo window,
+## and it joins the same working; let the window lapse and the working is cast.
+## Nothing about this differs between a mouse and a thumb, which is the point:
+## there is no cast mode, and there is nothing to toggle.
 
-func _begin_cast(at: Vector2) -> void:
+
+## Is the pointer over something the hand would pick up or open?
+func _on_something_grabbable() -> bool:
+	return is_instance_valid(hover_target) \
+		and (hover_target.is_in_group("pickable") or hover_target is FoodStore)
+
+
+func _touch_only() -> bool:
+	return DisplayServer.is_touchscreen_available()
+
+
+## The pointer went down on bare land and has not moved. Once it has been still
+## long enough, that is a deliberate drawing rather than a pan.
+func _tick_hold_to_draw(delta: float) -> void:
+	if not _waiting_to_draw:
+		return
+	_press_time += delta
+	if _press_time >= HOLD_TO_DRAW:
+		_waiting_to_draw = false
+		_begin_stroke(_press_at)
+
+
+func _begin_stroke(at: Vector2) -> void:
 	state = HandState.GESTURING
 	gesture_points = PackedVector2Array([at])
-	_runes.clear()
-	_still_time = 0.0
-	_last_draw = at
-	GameState.hint("Draw a rune. Pause to add another; let go to cast.")
+	if _runes.is_empty():
+		GameState.hint("Drawing... lift to finish the rune.")
 
 
-## A pause in the drawing ends the current rune and begins the next.
-func _tick_stroke_break(delta: float) -> void:
-	if gesture_points.size() < 4:
-		return
-	_still_time += delta
-	if _still_time < STROKE_BREAK:
-		return
-	_still_time = 0.0
-	_commit_rune()
-
-
-## Read the shape drawn so far, add it to the working, and clear the slate for
-## the next one. A shape we cannot name is simply dropped, with a word about it.
-func _commit_rune() -> void:
+## The stroke is finished: read it, add it to the working, and start the clock
+## on whether anything else is coming.
+func _end_stroke() -> void:
 	var gesture := GestureRecognizer.classify(gesture_points)
 	gesture_points = PackedVector2Array()
 	trail.points = gesture_points
 	trail.queue_redraw()
-	if gesture == "none":
-		GameState.hint("That shape means nothing. Try again — or let go.")
-		return
-	var rune := Spellbook.rune_for(gesture)
+	state = HandState.IDLE
+	var rune := Spellbook.rune_for(gesture) if gesture != "none" else ""
 	if rune == "":
+		# Nothing recognisable. Whatever was already on the slate survives — a
+		# botched stroke should not throw away the runes before it.
+		GameState.hint("That shape means nothing." if _runes.is_empty()
+			else "%s   (that last shape meant nothing)" % Spellbook.describe(_runes))
+		if not _runes.is_empty():
+			_combo_time = COMBO_WINDOW
 		return
 	if _runes.size() >= MAX_RUNES:
 		GameState.hint("You cannot hold more than %d runes at once." % MAX_RUNES)
+		_combo_time = 0.01     # cast what there is rather than swallow the draw
 		return
 	_runes.append(rune)
-	GameState.hint(Spellbook.describe(_runes) + "   (pause to add · let go to cast)")
+	_combo_time = COMBO_WINDOW
+	GameState.hint(Spellbook.describe(_runes) + "   (draw again to add)")
 
 
-## Let go: whatever is on the slate is cast.
-func _finish_cast() -> void:
-	if gesture_points.size() >= 4:
-		_commit_rune()
+## The combo window closing is what casts. Nothing else needs to.
+func _tick_combo(delta: float) -> void:
+	if _combo_time <= 0.0:
+		return
+	_combo_time -= delta
+	if _combo_time > 0.0:
+		return
+	var runes := _runes.duplicate()
+	_runes.clear()
+	if not runes.is_empty() and miracles != null:
+		miracles.cast_runes(runes)
+
+
+## Abandon whatever is being drawn (the camera took the screen, say).
+func _abandon_drawing() -> void:
 	gesture_points = PackedVector2Array()
 	trail.points = gesture_points
 	trail.queue_redraw()
-	state = HandState.IDLE
-	var runes := _runes.duplicate()
 	_runes.clear()
-	if runes.is_empty():
-		GameState.hint("Nothing was drawn.")
-		return
-	if miracles != null:
-		miracles.cast_runes(runes)
+	_combo_time = 0.0
+	_waiting_to_draw = false
+	if state == HandState.GESTURING:
+		state = HandState.IDLE
 
 
 ## What is on the slate right now, for the HUD to show as you draw.
 func working_text() -> String:
-	if state != HandState.GESTURING or _runes.is_empty():
+	if _runes.is_empty():
 		return ""
 	return Spellbook.describe(_runes)
 

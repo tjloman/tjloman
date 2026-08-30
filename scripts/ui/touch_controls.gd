@@ -12,7 +12,6 @@ var divine_hand: DivineHand
 var camera_rig: CameraRig
 var creature: Creature
 
-var _mode_button: Button
 var _follow_button: Button
 var _leash_button: Button
 
@@ -41,10 +40,6 @@ func _ready() -> void:
 	_leash_button.pressed.connect(_on_leash_pressed)
 	column.add_child(_leash_button)
 
-	_mode_button = _make_button("Mode: Move")
-	_mode_button.toggle_mode = true
-	_mode_button.toggled.connect(_on_mode_toggled)
-	column.add_child(_mode_button)
 
 
 func _make_button(text: String) -> Button:
@@ -67,15 +62,6 @@ func _on_follow_toggled(pressed: bool) -> void:
 		camera_rig.follow_target = creature
 	else:
 		camera_rig.follow_target = null
-
-
-func _on_mode_toggled(pressed: bool) -> void:
-	divine_hand.cast_mode = pressed
-	_mode_button.text = "Mode: Cast" if pressed else "Mode: Move"
-	if pressed:
-		GameState.announce("Casting mode: draw a miracle gesture with one finger.")
-	else:
-		GameState.announce("Movement mode: drag the land, pick up, place, throw.")
 
 
 ## Send the creature to wherever the hand is pointing — or call it off, if it

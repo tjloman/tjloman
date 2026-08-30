@@ -609,60 +609,70 @@ func _run_smoke_test() -> void:
 
 
 func _smoke_test_gestures() -> void:
-	var circle := PackedVector2Array()
-	for i in 32:
-		var a := TAU * i / 32.0
-		circle.append(Vector2(400 + cos(a) * 100, 300 + sin(a) * 100))
-	var vline := PackedVector2Array([Vector2(400, 100), Vector2(402, 200), Vector2(398, 300), Vector2(400, 400)])
-	var hline := PackedVector2Array([Vector2(100, 300), Vector2(200, 302), Vector2(300, 298), Vector2(400, 300)])
-	var zigzag := PackedVector2Array([
-		Vector2(100, 300), Vector2(150, 200), Vector2(200, 300),
-		Vector2(250, 200), Vector2(300, 300), Vector2(350, 200),
-	])
-	var dline := PackedVector2Array([
-		Vector2(100, 100), Vector2(180, 175), Vector2(260, 250), Vector2(340, 330),
-	])
-	# A spiral: two-and-a-bit widening loops (should read as "spiral").
-	var spiral := PackedVector2Array()
+	# Every rune-shape, drawn the way a HAND draws it: a slow correlated wobble
+	# on top of the ideal, which is what broke the old heuristic recognizer.
+	# Carets were coming out as waves — water — rain, about half the time.
+	var shapes := {
+		"vline": func(t: float) -> Vector2: return Vector2(400, 120 + t * 300),
+		"hline": func(t: float) -> Vector2: return Vector2(120 + t * 300, 300),
+		"dline": func(t: float) -> Vector2: return Vector2(120 + t * 260, 120 + t * 250),
+		"circle": func(t: float) -> Vector2:
+			return Vector2(400, 300) + Vector2(cos(t * TAU), sin(t * TAU)) * 100.0,
+		"spiral": func(t: float) -> Vector2:
+			return Vector2(400, 300) + Vector2(cos(t * TAU * 2.5), sin(t * TAU * 2.5)) * (20 + t * 130),
+		"rev_spiral": func(t: float) -> Vector2:
+			return Vector2(400, 300) + Vector2(cos(-t * TAU * 2.5), sin(-t * TAU * 2.5)) * (20 + t * 130),
+		"wave": func(t: float) -> Vector2: return Vector2(120 + t * 300, 300 + sin(t * TAU) * 90),
+		"zigzag": func(t: float) -> Vector2:
+			var teeth := t * 5.0
+			var up := 1.0 if int(teeth) % 2 == 1 else -1.0
+			return Vector2(120 + t * 300, 300 - up * absf(fmod(teeth, 1.0) * 2.0 - 1.0) * 80.0),
+		"caret": func(t: float) -> Vector2:
+			return Vector2(120 + t * 240, 330 - 170.0 * (1.0 - absf(2.0 * t - 1.0))),
+		"arc": func(t: float) -> Vector2:
+			var a := -PI / 2.0 - PI * 0.45 + PI * 0.9 * t
+			return Vector2(400, 300) + Vector2(cos(a), sin(a)) * 130.0,
+	}
+	var hits := 0
+	var tries := 0
+	var missed := []
+	for want: String in shapes:
+		for seed_i in 6:
+			var got := GestureRecognizer.classify(
+				_wobbly_stroke(shapes[want] as Callable, seed_i))
+			tries += 1
+			if got == want:
+				hits += 1
+			else:
+				missed.append("%s->%s" % [want, got])
+	print("SMOKE TEST: gestures under hand tremor — %d/%d read correctly %s" % [
+		hits, tries, str(missed)])
+	# And a scribble must still mean nothing at all.
+	var mess := PackedVector2Array()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4
 	for i in 40:
-		var a := TAU * i / 16.0
-		var rad := 20.0 + i * 3.0
-		spiral.append(Vector2(400 + cos(a) * rad, 300 + sin(a) * rad))
-	# A SMOOTH S / sine — no sharp corners at all (the case the old detector
-	# missed). Should now read as "wave" via curvature inflections.
-	var smooth_s := PackedVector2Array()
-	for i in 30:
-		var t := i / 29.0
-		smooth_s.append(Vector2(120 + t * 300.0, 300 + sin(t * TAU) * 90.0))
-	print("SMOKE TEST: gesture circle -> ", GestureRecognizer.classify(circle))
-	print("SMOKE TEST: gesture vline  -> ", GestureRecognizer.classify(vline))
-	print("SMOKE TEST: gesture hline  -> ", GestureRecognizer.classify(hline))
-	print("SMOKE TEST: gesture wave   -> ", GestureRecognizer.classify(zigzag))
-	print("SMOKE TEST: gesture wave/S -> ", GestureRecognizer.classify(smooth_s))
-	print("SMOKE TEST: gesture dline  -> ", GestureRecognizer.classify(dline))
-	print("SMOKE TEST: gesture spiral -> ", GestureRecognizer.classify(spiral))
+		mess.append(Vector2(400 + rng.randf_range(-90, 90), 300 + rng.randf_range(-90, 90)))
+	print("SMOKE TEST: a scribble reads as '%s'; a poke as '%s'" % [
+		GestureRecognizer.classify(mess),
+		GestureRecognizer.classify(PackedVector2Array([
+			Vector2(400, 300), Vector2(403, 301), Vector2(405, 300),
+			Vector2(404, 302), Vector2(405, 303), Vector2(404, 301)]))])
 
-	# THE NEW RUNE-SHAPES. Each must be told apart from its nearest neighbour —
-	# a misread rune casts the wrong miracle at full price, so these matter.
-	var caret := PackedVector2Array()
-	for i in 40:
-		var t := i / 39.0
-		caret.append(Vector2(120 + t * 260, 340 - 170 * (1.0 - absf(2.0 * t - 1.0))))
-	var jag := PackedVector2Array()
-	for i in 40:
-		var t := i / 39.0
-		var phase := fmod(t * 5.0, 1.0)
-		jag.append(Vector2(120 + t * 300,
-			300 - 80 * (1.0 if int(t * 5.0) % 2 == 0 else -1.0) * absf(phase * 2.0 - 1.0)))
-	var bow := PackedVector2Array()
-	for i in 40:
-		var a := -PI / 2.0 - PI * 0.45 + PI * 0.9 * (i / 39.0)
-		bow.append(Vector2(400 + cos(a) * 130, 300 + sin(a) * 130))
-	print("SMOKE TEST: gesture caret  -> ", GestureRecognizer.classify(caret))
-	print("SMOKE TEST: gesture zigzag -> ", GestureRecognizer.classify(jag))
-	print("SMOKE TEST: gesture arc    -> ", GestureRecognizer.classify(bow))
-	# And the runes they stand for.
-	print("SMOKE TEST: runes — wave=%s vline=%s zigzag=%s caret=%s arc=%s" % [
-		Spellbook.rune_for("wave"), Spellbook.rune_for("vline"),
-		Spellbook.rune_for("zigzag"), Spellbook.rune_for("caret"),
-		Spellbook.rune_for("arc")])
+
+## An ideal shape, plus the slow smooth WOBBLE a real hand adds — which is
+## quite unlike random jitter, and is exactly what the old recognizer could not
+## survive.
+func _wobbly_stroke(shape: Callable, variant: int) -> PackedVector2Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = variant
+	var ph1 := rng.randf_range(0.0, TAU)
+	var ph2 := rng.randf_range(0.0, TAU)
+	var pts := PackedVector2Array()
+	for i in 90:
+		var t := i / 89.0
+		var p: Vector2 = shape.call(t)
+		p.x += sin(t * 2.5 * TAU + ph1) * 9.0 + rng.randf_range(-1.5, 1.5)
+		p.y += cos(t * 2.5 * TAU + ph2) * 9.0 + rng.randf_range(-1.5, 1.5)
+		pts.append(p)
+	return pts

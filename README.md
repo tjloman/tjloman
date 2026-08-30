@@ -54,7 +54,7 @@ you're done. No system install required.
 | Throw **to your creature** | With attention and practice it **catches** — praise catches to train the skill |
 | Release with a **still** hand | **Place gently** — no fear, no harm. Placing a villager in another village makes them a **missionary** (yours → heathen town) or a **convert** (anyone → a faithful town) |
 | Release while moving mouse | Throw — your hand's momentum carries; flick hard to hurl far |
-| **Hold right mouse + draw** | **Cast**: draw a rune, pause, draw another, let go — see below |
+| **Hold right mouse + draw** | **Cast** — one stroke is one rune; draw again to add; it casts itself |
 | Mouse wheel | Zoom |
 | Middle mouse drag | Rotate / tilt camera (tilts above the horizon for skyward throws) |
 | WASD / arrows | Pan camera |
@@ -67,19 +67,27 @@ you're done. No system install required.
 | F1 | Help panel |
 | F3 | **Workshop** — save, load, regenerate the world, new game, and a few test cheats |
 
-### Miracles — draw runes and combine them (hold right mouse)
+### Miracles — draw runes and combine them
 
-A miracle is not picked off a menu. You draw **runes** — one shape each, several
-in a breath — and what you get is whatever those runes **mean together**. Draw a
-shape, **pause**, draw another, and let go to cast. The order never matters.
+**Casting is always available. There is no mode to turn on** — the Black &
+White lesson, and the reason the old Cast/Move toggle is gone.
+
+- **With a mouse**: hold the right button and draw.
+- **On a touchscreen**: press bare ground, hold still an instant, then draw.
+  Drag straight away and you still pan; press a thing and you still pick it up.
+  Nothing else about touch changed.
+
+**One unbroken stroke is one rune.** Lift, and draw again within a moment to add
+another to the same working. When you stop drawing, it casts itself — there is
+nothing to confirm and no button to release.
 
 | Shape | Rune | | Shape | Rune |
 |---|---|---|---|---|
-| `~` or `S` | **water** | | `\|` tall line | **force** |
-| `—` flat line | **earth** | | `\` diagonal | **fire** |
-| `O` circle | **life** | | `@` spiral | **air** |
-| `@` reverse spiral | **calm** | | `/\/\` zigzag | **fury** |
-| `^` caret | **sky** | | `(` arc | **ward** |
+| `S` or `~` | **water** | | tall line | **force** |
+| flat line | **earth** | | diagonal | **fire** |
+| `O` circle | **life** | | spiral | **air** |
+| reverse spiral | **calm** | | zigzag | **fury** |
+| `^` caret | **sky** | | bow / arc | **ward** |
 
 Three rules do all the work:
 
@@ -87,8 +95,7 @@ Three rules do all the work:
 life is food, calm is a healing.
 
 **2. The same rune again makes it BIGGER, not twice.** Water is a sprinkle;
-water-water a cloudburst; water-water-water a deluge. This is how one rune
-covers a whole range without needing a gesture for every rung of it.
+water-water a cloudburst; water-water-water a deluge.
 
 **3. Different runes make a third thing.**
 
@@ -105,17 +112,37 @@ covers a whole range without needing a gesture for every rung of it.
 | earth + ward | Strength · life + sky | Bird flock |
 
 **And anything else still works.** A combination nobody named casts every rune's
-own miracle at once, each a little weaker — so no drawing is ever a dead end.
-Of the 285 distinct drawings of three runes or fewer, **zero** mean nothing.
-This is what makes the system a language rather than a longer list.
+own miracle at once, each a little weaker — of the 285 distinct drawings of
+three runes or fewer, **zero** mean nothing.
 
-Every storm above is genuinely *built from the same pieces the rudiments cast* —
-a hurricane really is rain and wind and strikes running together, not a bespoke
-effect that merely looks like one.
+#### How the shapes are actually recognised
 
-**Your dominion is your spellbook**, and villages now teach **runes**, not
-finished miracles. Every combination of the runes you hold is yours for free, so
-learning rain and lightning apart *is* how you come to hold the storm.
+By **template matching** (the `$1` recognizer family), not by heuristics. The
+first version measured turning, corners and straightness, and it failed in play
+for a reason worth writing down: those measurements survive *uncorrelated*
+noise, which is what a test harness produces, but **a real hand does not shake
+randomly — it wobbles**, slowly and smoothly, and a slow wobble reads as genuine
+curvature no matter how much you smooth it. Carets were coming out as waves —
+water — rain, about half the time.
+
+Every stroke is now resampled to 48 points, centred, scaled, and compared to
+reference drawings; nearest wins, or nothing does. Two departures from the
+published algorithm, both because these gestures are not abstract symbols:
+**no rotation normalisation** (a vertical and a horizontal line are different
+runes — orientation is meaning) and **uniform scaling** rather than into a
+square (which would likewise make a tall line and a wide line identical).
+
+Measured against simulated hand tremor: **the heuristics read carets 3 times in
+8; the template matcher reads every shape correctly**, and holds at 100% through
+heavy tremor, ten-sample flicks, and strokes from a third to two and a half
+times normal size. Scribbles and pokes are still rejected.
+
+Adding a gesture is now adding a template, not inventing another measurement
+that must avoid colliding with all the previous ones.
+
+**Your dominion is your spellbook**, and villages teach **runes**, not finished
+miracles. Every combination of the runes you hold is yours for free, so learning
+rain and lightning apart *is* how you come to hold the storm.
 
 | Villages | Rudiments taught | Named miracles castable |
 |---|---|---|
