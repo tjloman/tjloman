@@ -128,13 +128,34 @@ static func _build_templates() -> void:
 			_add("rev_spiral", func(t: float) -> Vector2:
 				var a := -TAU * (t * turns + start)
 				return Vector2(cos(a), sin(a)) * (18.0 + t * 112.0))
-	_add("wave", func(t: float) -> Vector2: return Vector2(t * 200.0, sin(t * TAU) * 70.0))
-	_add("wave", func(t: float) -> Vector2: return Vector2(t * 200.0, -sin(t * TAU) * 70.0))
+	# WAVES AND ZIGZAGS IN EVERY BEARING. Without rotation invariance each
+	# orientation has to be offered outright, and having only the lying-down
+	# ones meant an S written the way people actually write the letter S — tall,
+	# or on the slant — read as a diagonal slash. Which is FIRE. Which is why
+	# water could not be cast at all.
 	for flip: float in [1.0, -1.0]:
+		_add("wave", func(t: float) -> Vector2:
+			return Vector2(t * 200.0, flip * sin(t * TAU) * 70.0))
+		_add("wave", func(t: float) -> Vector2:
+			return Vector2(flip * sin(t * TAU) * 70.0, t * 200.0))
+		_add("wave", func(t: float) -> Vector2:
+			return Vector2(t * 200.0, flip * sin(t * TAU) * 80.0))
+		_add("wave", func(t: float) -> Vector2:
+			return Vector2(flip * sin(t * TAU) * 80.0, t * 200.0))
 		_add("zigzag", func(t: float) -> Vector2:
 			var teeth := t * 5.0
 			var up := 1.0 if int(teeth) % 2 == 1 else -1.0
 			return Vector2(t * 200.0, flip * up * absf(fmod(teeth, 1.0) * 2.0 - 1.0) * 60.0))
+		_add("zigzag", func(t: float) -> Vector2:
+			var teeth := t * 5.0
+			var up := 1.0 if int(teeth) % 2 == 1 else -1.0
+			return Vector2(flip * up * absf(fmod(teeth, 1.0) * 2.0 - 1.0) * 60.0, t * 200.0))
+	# And on the slant, which is how a hurried S usually comes out.
+	for slant: float in [PI / 4.0, -PI / 4.0]:
+		for flip: float in [1.0, -1.0]:
+			_add("wave", func(t: float) -> Vector2:
+				var p := Vector2(t * 200.0 - 100.0, flip * sin(t * TAU) * 70.0)
+				return p.rotated(slant))
 	# A caret is a peak, pointing any of four ways.
 	_add("caret", func(t: float) -> Vector2:
 		return Vector2(t * 200.0, -140.0 * (1.0 - absf(2.0 * t - 1.0))))

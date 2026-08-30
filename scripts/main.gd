@@ -666,6 +666,46 @@ func _smoke_test_gestures() -> void:
 				missed.append("%s->%s" % [want, got])
 	print("SMOKE TEST: gestures under hand tremor — %d/%d read correctly %s" % [
 		hits, tries, str(missed)])
+	# EVERY BEARING. Without rotation invariance each orientation must be a
+	# template of its own, and the ones that were missing were not academic: an
+	# S written the way people write the letter S read as a diagonal slash,
+	# which is fire, so WATER could not be cast at all.
+	var bearings := {
+		"wave": [
+			func(t: float) -> Vector2: return Vector2(120 + t * 300, 300 + sin(t * TAU) * 90),
+			func(t: float) -> Vector2: return Vector2(400 + sin(t * TAU) * 90, 120 + t * 300),
+			func(t: float) -> Vector2:
+				return Vector2(200 + t * 220 + sin(t * TAU) * 70, 160 + t * 220 - sin(t * TAU) * 40),
+		],
+		"zigzag": [
+			func(t: float) -> Vector2:
+				var teeth := t * 5.0
+				var up := 1.0 if int(teeth) % 2 == 1 else -1.0
+				return Vector2(120 + t * 300, 300 - up * absf(fmod(teeth, 1.0) * 2.0 - 1.0) * 80.0),
+			func(t: float) -> Vector2:
+				var teeth := t * 5.0
+				var up := 1.0 if int(teeth) % 2 == 1 else -1.0
+				return Vector2(400 - up * absf(fmod(teeth, 1.0) * 2.0 - 1.0) * 80.0, 120 + t * 300),
+		],
+	}
+	var bear_ok := 0
+	var bear_all := 0
+	var bear_miss := []
+	for want: String in bearings:
+		for shape: Callable in bearings[want]:
+			for seed_j in 4:
+				var read := GestureRecognizer.classify(_wobbly_stroke(shape, seed_j))
+				bear_all += 1
+				if read == want:
+					bear_ok += 1
+				else:
+					bear_miss.append("%s->%s" % [want, read])
+	print("SMOKE TEST: every bearing — %d/%d (upright, lying down, on the slant) %s" % [
+		bear_ok, bear_all, str(bear_miss)])
+	print("SMOKE TEST: water is castable — an upright S reads as rune '%s'" % [
+		Spellbook.rune_for(GestureRecognizer.classify(_wobbly_stroke(
+			func(t: float) -> Vector2: return Vector2(400 + sin(t * TAU) * 90, 120 + t * 300), 0)))])
+
 	# And a scribble must still mean nothing at all.
 	var mess := PackedVector2Array()
 	var rng := RandomNumberGenerator.new()

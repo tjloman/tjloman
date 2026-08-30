@@ -155,6 +155,14 @@ times normal size. Scribbles and pokes are still rejected.
 Adding a gesture is now adding a template, not inventing another measurement
 that must avoid colliding with all the previous ones.
 
+The price of dropping rotation invariance is that **every bearing must be a
+template of its own**, and forgetting that is not academic: waves and zigzags
+were supplied lying down only, so an `S` written the way people actually write
+the letter — tall, or on the slant — read as a diagonal slash. Which is fire.
+Which meant **water could not be cast at all**. Each shape now carries every
+orientation it can plausibly be drawn in, and the smoke test draws each of them
+upright, lying down and slanted.
+
 **Your dominion is your spellbook**, and villages teach **runes**, not finished
 miracles. Every combination of the runes you hold is yours for free, so learning
 rain and lightning apart *is* how you come to hold the storm.
@@ -177,6 +185,13 @@ Everything you conjure is a throwable you place where you choose.
 
 ## The world
 
+- **Simulation LOD, honestly paid for**: villagers and beasts far from the
+  camera run on a slower clock, updated every few frames with the skipped time
+  folded into `delta`. The catch — and it cost two playtests — is that
+  `move_and_slide()` integrates over the **engine's** frame, not the delta you
+  hand it, so a throttled body silently walked at a quarter or a *tenth* speed
+  while its hunger ticked at full rate. Distant villages starved on the way to
+  the granary. The stride is now folded into velocity as well as into time.
 - **Endless, chunked terrain**: 48m chunks stream in around the camera.
   Elevation from layered noise, lakes below the water table, and five
   biomes — grassland, forest, savanna, rocky hills, wetland — each with

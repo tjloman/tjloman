@@ -77,6 +77,8 @@ var _water_target := Vector3.INF
 var _bush: ForageBush = null
 var _action_time := 2.0
 var _sim_skip := 0
+## Ground one throttled step must cover to match real time (see Villager).
+var _sim_scale := 1.0
 var _state_time := 0.0
 var _prev_state := State.IDLE
 var _think_time := 0.0
@@ -162,11 +164,15 @@ func _physics_process(delta: float) -> void:
 	# skipped time folded into delta. (Held/falling always simulate full-rate.)
 	if state != State.HELD and state != State.FALLING:
 		var stride := Util.sim_stride(global_position)
+		_sim_scale = 1.0
 		if stride > 1:
 			_sim_skip += 1
 			if _sim_skip < stride:
 				return
 			delta *= _sim_skip
+			# See Villager: move_and_slide() runs on the engine's frame, so a
+			# throttled beast crawls unless the stride is folded into velocity.
+			_sim_scale = float(_sim_skip)
 			_sim_skip = 0
 
 	if _animator != null:
@@ -492,8 +498,8 @@ func _move_toward(target: Vector3, speed: float, delta: float) -> bool:
 		if dir == Vector3.ZERO:
 			_apply_gravity_only(delta)
 			return false
-	velocity.x = dir.x * speed
-	velocity.z = dir.z * speed
+	velocity.x = dir.x * speed * _sim_scale
+	velocity.z = dir.z * speed * _sim_scale
 	velocity.y -= GRAVITY * delta
 	move_and_slide()
 	_stick_to_ground()

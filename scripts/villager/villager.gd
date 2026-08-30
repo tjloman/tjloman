@@ -115,6 +115,9 @@ var _ground_check_time := randf_range(1.0, 3.0)
 var _wd_pos := Vector3.ZERO       # last spot we made real headway from
 var _wd_still := 0.0             # seconds of a travel state spent going nowhere
 var _sim_skip := 0               # physics frames skipped while far from the camera
+## How much ground one throttled step must cover to match real time. See the
+## note in _physics_process — this is what keeps distant villages fed.
+var _sim_scale := 1.0
 var _target_bush: ForageBush = null
 var _target_farm: Farm = null
 var _carrying_feed := false
@@ -191,11 +194,19 @@ func _physics_process(delta: float) -> void:
 	# hand stays responsive wherever it reaches.
 	if state != State.HELD and state != State.FALLING:
 		var stride := Util.sim_stride(global_position)
+		_sim_scale = 1.0
 		if stride > 1:
 			_sim_skip += 1
 			if _sim_skip < stride:
 				return
 			delta *= _sim_skip
+			# MOVEMENT MUST BE PAID FOR TOO. move_and_slide() integrates over
+			# the ENGINE's frame, not the delta we were handed — so running on
+			# a slower clock silently moved them at a tenth speed while hunger
+			# ticked at full rate. Villages the player wasn't near starved on
+			# the way to the granary. The stride is folded into velocity so
+			# they cover the same ground either way.
+			_sim_scale = float(_sim_skip)
 			_sim_skip = 0
 	# Dying suspends the whole normal life — they lie there, out of the fight,
 	# until healed/lifted back or the window closes.
@@ -1551,8 +1562,8 @@ func _move_toward(target: Vector3, speed: float, delta: float, arrive := ARRIVE_
 	if dir == Vector3.ZERO:
 		_apply_gravity_only(delta)
 		return false
-	velocity.x = dir.x * speed
-	velocity.z = dir.z * speed
+	velocity.x = dir.x * speed * _sim_scale
+	velocity.z = dir.z * speed * _sim_scale
 	velocity.y -= GRAVITY * delta
 	move_and_slide()
 	# Bodies are modeled facing +Z, and look_at aims -Z — so look away
