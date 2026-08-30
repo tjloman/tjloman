@@ -70,6 +70,9 @@ var boredom := 20.0
 ## its own heart has grown kinder than yours — walks away to live by its own
 ## lights somewhere you are not.
 var trust := 55.0
+## How many times you have praised or scolded it. Only the tutorial reads this,
+## to know that a lesson was actually given rather than merely explained.
+var lessons := 0
 
 ## EXILE. Not a one-off flight but a CONDITION: it lives out there, keeping its
 ## distance, refusing the leash, and getting on with its own life. It is always
@@ -1531,6 +1534,7 @@ func _devour_villager(victim: Villager) -> void:
 ## P while the hand is near: reinforce the last deed. Praising cruelty is
 ## how monsters are made — the creature learns what YOU reward.
 func praise() -> void:
+	lessons += 1
 	bond = minf(bond + 4.0, 100.0)
 	mood = minf(mood + 12.0, 100.0)
 	# Kindness is what buys the right to be listened to.
@@ -1558,6 +1562,7 @@ func praise() -> void:
 
 ## L while the hand is near: discourage the last deed.
 func scold() -> void:
+	lessons += 1
 	bond = maxf(bond - 2.0, 0.0)
 	mood = maxf(mood - 14.0, 0.0)
 	if _last_deed == "catch":

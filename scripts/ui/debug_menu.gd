@@ -13,6 +13,7 @@ const ARM_SECONDS := 4.0
 
 var world_gen: WorldGen
 var creature: Creature
+var tutorial: Tutorial
 
 var _panel: PanelContainer
 var _armed: Button = null
@@ -67,6 +68,8 @@ func _build() -> void:
 		"Make the closest town believe — the quick way to test unlocks."))
 	box.add_child(_button("What does it believe?", _on_creed,
 		"Print the creature's mind and creed to the announcement line."))
+	box.add_child(_button("Replay the lessons", _on_tutorial,
+		"Run the opening tutorial again from the top, without touching your save."))
 
 	_panel.add_child(box)
 	add_child(_panel)
@@ -186,6 +189,15 @@ func _on_convert() -> void:
 		GameState.announce("Every village in sight already believes in you.")
 		return
 	best.change_belief(100.0)
+
+
+## Run the opening lessons again — for testing a change to them, or for anyone
+## who skipped them and wishes they had not.
+func _on_tutorial() -> void:
+	if tutorial != null and is_instance_valid(tutorial):
+		tutorial.restart()
+		_panel.visible = false
+		GameState.announce("The lessons begin again.")
 
 
 func _on_creed() -> void:

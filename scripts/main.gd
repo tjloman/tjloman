@@ -70,9 +70,20 @@ func _ready() -> void:
 	touch.creature = creature
 	add_child(touch)
 
+	# THE OPENING LESSONS. Last of the UI so its card sits above the rest, and
+	# fed the four things it watches: the hand, the camera, the creature and
+	# the miracles. It teaches itself out of existence after the first run.
+	var tutorial := Tutorial.new()
+	tutorial.divine_hand = divine_hand
+	tutorial.camera_rig = camera_rig
+	tutorial.creature = creature
+	tutorial.miracles = miracles
+	add_child(tutorial)
+
 	var debug_menu := DebugMenu.new()
 	debug_menu.world_gen = world_gen
 	debug_menu.creature = creature
+	debug_menu.tutorial = tutorial
 	add_child(debug_menu)
 
 	# Whatever a reload was carrying — a whole saved game, or just a creature
@@ -168,6 +179,7 @@ func _setup_input() -> void:
 		"find_creature": [KEY_C],
 		"leash_creature": [KEY_G],
 		"toggle_debug": [KEY_F3],
+		"skip_tutorial": [KEY_F4],
 	}
 	for action: String in actions:
 		if InputMap.has_action(action):
@@ -311,6 +323,30 @@ func _run_smoke_test() -> void:
 		held, drawing_holds, survived])
 	print("SMOKE TEST: casting — rune read as '%s', session closed=%s, world free=%s" % [
 		got_rune, not divine_hand.casting, not divine_hand.casting])
+
+	# THE OPENING LESSONS. Every step must be well formed and every condition
+	# must be safe to ASK — a step that throws would strand a new player on it
+	# with no way forward but F4.
+	var lessons := Tutorial.new()
+	lessons.divine_hand = divine_hand
+	lessons.camera_rig = camera_rig
+	lessons.creature = creature
+	lessons.miracles = miracles
+	lessons._build_steps()
+	var well_formed := 0
+	var asked := 0
+	for step: Dictionary in lessons._steps:
+		if step.has("say") and step.has("hint") and step.has("done") \
+			and String(step["say"]) != "" and (step["done"] is Callable):
+			well_formed += 1
+		if (step["done"] as Callable).call() != null:
+			asked += 1
+	print("SMOKE TEST: tutorial — %d steps, %d well formed, %d conditions answered safely" % [
+		lessons._steps.size(), well_formed, asked])
+	# And the very first lesson must not already be satisfied at spawn.
+	print("SMOKE TEST: tutorial — first lesson starts unfinished: %s" % [
+		not (lessons._steps[0]["done"] as Callable).call()])
+	lessons.free()
 
 	# THE GRAMMAR. Runes combine: the same rune twice is the same miracle writ
 	# larger, a named pairing is its own thing, and anything else BLENDS.

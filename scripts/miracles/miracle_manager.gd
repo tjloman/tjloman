@@ -75,6 +75,11 @@ const LIGHTNING_BURN_RADIUS := 8.0
 const CREATURE_SIGHT_RANGE := 45.0
 
 var divine_hand: DivineHand = null  # wired by main; orbs land in the grip
+## What the PLAYER has cast, and how many runes went into the last one. Only
+## `cast_runes` touches these, so the creature's own casting never counts —
+## the tutorial watches them to know a lesson actually landed.
+var casts_made := 0
+var last_rune_count := 0
 
 
 ## Your reach: 1.0 alone, rising with converted villages and their belief.
@@ -118,6 +123,8 @@ func cast_runes(runes: Array) -> bool:
 	if not GameState.try_spend(cost):
 		GameState.hint("Not enough prayer power — your followers must worship more.")
 		return false
+	casts_made += 1
+	last_rune_count = runes.size()
 	return _conjure_reading(reading)
 
 

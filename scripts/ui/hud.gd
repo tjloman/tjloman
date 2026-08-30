@@ -248,6 +248,14 @@ V .......................... open the VILLAGES roster — snap the camera to any
 F1 ......................... toggle this help
 F2 ......................... cycle graphics quality: Low / Medium / High
 F3 ......................... the WORKSHOP: save, load, and start again
+F4 ......................... skip the opening lessons
+
+THE OPENING LESSONS
+A short course runs the first time you play: drag the land, lift a thing,
+summon a casting, draw a rune, combine two, find your creature, teach it.
+Every lesson is finished by DOING it — there is nothing to click past —
+and a hint appears only once you have been stuck a while. F4 sets them
+aside; the workshop (F3) can run them again whenever you like.
 
 SAVING (F3)
 The land itself is never written down — every hill, shore and town site

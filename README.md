@@ -75,7 +75,8 @@ you're done. No system install required.
 | C | **Lock** the camera onto your creature — centered, orbitable; C again (or pan) releases |
 | V | **Villages roster** — list your faithful villages (population, distance) and **snap the camera** to any of them |
 | F1 | Help panel |
-| F3 | **Workshop** — save, load, regenerate the world, new game, and a few test cheats |
+| F3 | **Workshop** — save, load, regenerate the world, new game, replay the lessons, and a few test cheats |
+| F4 | Skip the opening lessons |
 
 ### Miracles — open the casting, then draw runes
 
@@ -413,6 +414,33 @@ Both ask twice before they fire, and the arming lapses after a few seconds.
 The workshop also holds test cheats: prayer, instant growth, instant
 conversion, and a printout of what the creature currently believes.
 
+## The opening lessons
+
+A short course runs the first time you play, and only the first time: drag the
+land, lift a thing, **summon a casting**, draw a rune, combine two of them, find
+your creature, teach it. Then it gets out of the way for good.
+
+Two rules keep it from being a nuisance:
+
+- **Every step is completed by DOING it**, never by pressing OK. Each one
+  watches the game for the thing actually happening, so you cannot click past a
+  lesson without having learned it — and a step that is already satisfied when
+  it comes up simply ticks itself.
+- **It never blocks.** Nothing is disabled, nothing is modal, the world runs on
+  underneath. Wander off mid-lesson and it waits.
+
+The hint is held back until you have been stuck about nine seconds, so a player
+who needs no help is never talked down to. `F4` sets the lessons aside; the
+workshop replays them without touching your save.
+
+The steps are **data** — a prompt, a hint, and a condition — which is the seed
+of the scripted island to come: a mission is one of these with a place attached.
+
+The reason this exists at all is worth recording. The author of the game forgot
+how to open the casting session during his own phone playtest and asked for the
+mode toggle back. If the person who wrote it cannot find the gesture, nobody
+picking up a phone cold ever will.
+
 ## Demographics — why villages live or die
 
 A villager's whole life is about **3.6 real hours**, so a run left going
@@ -556,6 +584,7 @@ scripts/miracles/
 scripts/ui/hud.gd             Bars, legend, tooltips, help
 scripts/ui/debug_menu.gd      The F3 workshop: save/load/regenerate + cheats
 scripts/ui/cast_overlay.gd    The casting ring and countdown — what the mode looks like
+scripts/ui/tutorial.gd        The opening lessons: data-driven, completed by doing
 scripts/ui/touch_controls.gd  Touchscreen-only buttons: Cast/Move mode,
                               follow-the-creature camera lock
 ```
