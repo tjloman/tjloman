@@ -202,8 +202,9 @@ func _phrase(rule: String, strength: float) -> String:
 	var subject: String = act[1] if act.size() > 1 else "things"
 	var tag: String = halves[1] if halves.size() > 1 else "trouble"
 	var sure := "is sure" if absf(strength) > 0.75 else "suspects"
-	var doing := VERB_PHRASE.get(verb, verb) % subject
-	return "%s that %s %s" % [sure, doing, TAG_PHRASE.get(tag, "leads somewhere")]
+	var doing: String = VERB_PHRASE.get(verb, verb) % subject
+	var outcome: String = TAG_PHRASE.get(tag, "leads somewhere")
+	return "%s that %s %s" % [sure, doing, outcome]
 
 
 ## Persistence -----------------------------------------------------------------
