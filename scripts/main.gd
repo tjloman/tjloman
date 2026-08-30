@@ -22,6 +22,11 @@ func _ready() -> void:
 	_build_environment()
 
 	world_gen = WorldGen.new()
+	# A reload may be carrying a world seed over from a save, a "new game", or
+	# a regenerate — the land must be raised from THAT before anything is built
+	# on it, since every hill and town site derives from the seed.
+	if SaveGame.pending_seed != 0:
+		world_gen.world_seed = SaveGame.pending_seed
 	add_child(world_gen)
 
 	# The player's home village sits at the origin, in the flattened cradle.
@@ -64,6 +69,15 @@ func _ready() -> void:
 	touch.camera_rig = camera_rig
 	touch.creature = creature
 	add_child(touch)
+
+	var debug_menu := DebugMenu.new()
+	debug_menu.world_gen = world_gen
+	debug_menu.creature = creature
+	add_child(debug_menu)
+
+	# Whatever a reload was carrying — a whole saved game, or just a creature
+	# being moved into a new land — is unpacked now that the world stands.
+	SaveGame.apply_pending(world_gen, creature)
 
 	# F2 (or the settings cycle) re-tunes what can change live; the world's
 	# stream radius and water rebuild on the next reload.
@@ -153,6 +167,7 @@ func _setup_input() -> void:
 		"scold_creature": [KEY_L],
 		"find_creature": [KEY_C],
 		"leash_creature": [KEY_G],
+		"toggle_debug": [KEY_F3],
 	}
 	for action: String in actions:
 		if InputMap.has_action(action):
@@ -420,6 +435,26 @@ func _run_smoke_test() -> void:
 		if is_instance_valid(wolf):
 			village.mark_for_death(wolf)
 			print("SMOKE TEST: vendetta size=%d" % village.vendetta.size())
+
+	# PERSISTENCE: a mind written down and read back must be the same mind.
+	creature.body.fat = 44.0
+	creature.mind.q["smash|tree"] = 1.75
+	var wrote := SaveGame.save_to_disk(world_gen, creature)
+	var parcel := SaveGame.read_from_disk()
+	var twin := CreatureMind.new()
+	twin.from_dict((parcel.get("creature", {}) as Dictionary).get("mind", {}))
+	var body_twin := CreatureBody.new()
+	body_twin.from_dict((parcel.get("creature", {}) as Dictionary).get("body", {}))
+	print("SMOKE TEST: save — wrote=%s seed=%d villages=%d | mind smash|tree %.2f temperament %.1f, fat %.0f" % [
+		wrote, int(parcel.get("seed", 0)), (parcel.get("villages", []) as Array).size(),
+		float(twin.q.get("smash|tree", 0.0)), twin.temperament, body_twin.fat])
+	# And a village must be able to take its own life story back.
+	var saved_town: Dictionary = village.to_dict()
+	village.belief = 3.0
+	village.store.add_lumber(1)
+	village.from_dict(saved_town)
+	print("SMOKE TEST: village restored — %s belief=%.0f pop=%d lumber=%d" % [
+		village.village_name, village.belief, village.population(), village.store.lumber])
 
 	await get_tree().create_timer(2.0).timeout
 	print("SMOKE TEST: villagers=%d animals=%d houses=%d villages=%d creature=%s day=%.2f night=%s" % [

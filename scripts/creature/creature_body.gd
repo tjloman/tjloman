@@ -142,3 +142,17 @@ func condition_word() -> String:
 	if strength > 40.0:
 		return "sturdy"
 	return "lean"
+
+
+## Persistence -----------------------------------------------------------------
+
+func to_dict() -> Dictionary:
+	return {"stomach": stomach, "fat": fat, "strength": strength, "boost": boost_time}
+
+
+func from_dict(data: Dictionary) -> void:
+	stomach = float(data.get("stomach", 0.0))
+	fat = float(data.get("fat", 0.0))
+	strength = float(data.get("strength", 15.0))
+	boost_time = float(data.get("boost", 0.0))
+

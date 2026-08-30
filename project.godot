@@ -19,6 +19,7 @@ SoundBank="*res://scripts/audio/sound_bank.gd"
 NavField="*res://scripts/nav_field.gd"
 Quality="*res://scripts/quality.gd"
 ModelBank="*res://scripts/model_bank.gd"
+SaveGame="*res://scripts/save_game.gd"
 
 [display]
 

@@ -220,6 +220,18 @@ G .......................... LEAD your creature to where your hand points
 V .......................... open the VILLAGES roster — snap the camera to any of yours
 F1 ......................... toggle this help
 F2 ......................... cycle graphics quality: Low / Medium / High
+F3 ......................... the WORKSHOP: save, load, and start again
+
+SAVING (F3)
+The land itself is never written down — every hill, shore and town site
+grows back exactly from the world's seed. What is saved is what PLAY
+changed: your standing, each village's faith, stocks, doctrine and
+people, and your creature's whole mind, beliefs and body.
+  New land, SAME creature — roll a fresh world and bring your creature
+    into it with every habit and belief it earned. The land and its
+    people are strangers; the beast at your side is not.
+  New game — everything begins again, and it remembers nothing.
+Both ask twice before they fire.
 
 ON TOUCHSCREENS
 One finger ................. everything the left mouse does (per the Mode button)

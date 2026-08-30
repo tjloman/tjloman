@@ -204,3 +204,24 @@ func _phrase(rule: String, strength: float) -> String:
 	var sure := "is sure" if absf(strength) > 0.75 else "suspects"
 	var doing := VERB_PHRASE.get(verb, verb) % subject
 	return "%s that %s %s" % [sure, doing, TAG_PHRASE.get(tag, "leads somewhere")]
+
+
+## Persistence -----------------------------------------------------------------
+
+## Everything it has concluded about the world. The distilled knowledge
+## (weights and rules) is the valuable part; the raw episode log rides along so
+## a reloaded creature still "remembers" its recent life.
+func to_dict() -> Dictionary:
+	return {
+		"weights": weights.duplicate(true),
+		"rules": rules.duplicate(true),
+		"episodes": episodes.slice(maxi(episodes.size() - 12, 0)),
+	}
+
+
+func from_dict(data: Dictionary) -> void:
+	weights = (data.get("weights", {}) as Dictionary).duplicate(true)
+	rules = (data.get("rules", {}) as Dictionary).duplicate(true)
+	episodes = (data.get("episodes", []) as Array).duplicate(true)
+	_trace.clear()
+

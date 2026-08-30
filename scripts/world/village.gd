@@ -116,6 +116,9 @@ func _ready() -> void:
 	_spawn_villagers(12 if is_player_home else 8)
 	_update_influence()
 	GameState.alignment_changed.connect(_on_alignment_changed)
+	# If a saved game remembers a town that stood here, this IS that town —
+	# take back its name, its faith, its stocks and its people.
+	SaveGame.recall(self)
 
 
 func _build_totem() -> void:
@@ -975,3 +978,74 @@ func refuge(from: Vector3) -> Vector3:
 			best_dist = d
 			best = h.global_position
 	return best
+
+
+## Persistence -----------------------------------------------------------------
+
+## A village's LIVED state. The terrain and where towns sit regenerate from the
+## world seed, so only what play has changed needs storing: faith, stocks, the
+## people, and the doctrine they have learned.
+func to_dict() -> Dictionary:
+	var folk := []
+	for v in my_villagers():
+		folk.append({
+			"name": v.villager_name, "female": v.is_female, "age": v.age,
+			"morality": v.morality, "health": v.health, "weapon": v.weapon,
+			"hunger": v.hunger, "energy": v.energy,
+		})
+	return {
+		"name": village_name, "home": is_player_home,
+		"pos": [global_position.x, global_position.z],
+		"converted": converted, "belief": belief, "diet": int(diet),
+		"resolve": resolve, "grudge": grudge, "attention": attention,
+		"store": {
+			"plant": store.plant_food, "meat": store.meat_food,
+			"lumber": store.lumber, "stone": store.stone,
+		},
+		"folk": folk,
+	}
+
+
+## Restore a village's lived state onto a freshly generated one. Its people are
+## replaced wholesale by the saved roster.
+func from_dict(data: Dictionary) -> void:
+	village_name = String(data.get("name", village_name))
+	converted = bool(data.get("converted", converted))
+	belief = float(data.get("belief", belief))
+	diet = data.get("diet", diet) as Diet
+	resolve = float(data.get("resolve", RESOLVE_START))
+	grudge = float(data.get("grudge", 0.0))
+	attention = float(data.get("attention", 0.0))
+	var st: Dictionary = data.get("store", {})
+	if not st.is_empty() and is_instance_valid(store):
+		store.plant_food = int(st.get("plant", store.plant_food))
+		store.meat_food = int(st.get("meat", store.meat_food))
+		store.lumber = int(st.get("lumber", store.lumber))
+		store.stone = int(st.get("stone", store.stone))
+	var folk: Array = data.get("folk", [])
+	if not folk.is_empty():
+		for v in my_villagers():
+			v.queue_free()
+		for entry: Dictionary in folk:
+			_restore_villager(entry)
+	if converted:
+		_totem_orb.material_override = Util.mat(Color(1.0, 0.85, 0.3), true)
+	_update_influence()
+
+
+func _restore_villager(entry: Dictionary) -> void:
+	var v := Villager.new()
+	v.village = self
+	v.age = float(entry.get("age", 25.0))
+	add_child(v)
+	# Name and sex are set in _ready, so overwrite them once it is in the tree.
+	v.is_female = bool(entry.get("female", true))
+	v.villager_name = String(entry.get("name", v.villager_name))
+	v.morality = float(entry.get("morality", 20.0))
+	v.health = float(entry.get("health", 100.0))
+	v.weapon = String(entry.get("weapon", ""))
+	v.hunger = float(entry.get("hunger", 30.0))
+	v.energy = float(entry.get("energy", 80.0))
+	v.position = _grounded(Vector3(randf_range(-6, 6), 0, randf_range(-6, 6)), 0.5) \
+		+ Vector3(0, 0.6, 0)
+

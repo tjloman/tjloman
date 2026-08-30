@@ -65,6 +65,7 @@ you're done. No system install required.
 | C | **Lock** the camera onto your creature — centered, orbitable; C again (or pan) releases |
 | V | **Villages roster** — list your faithful villages (population, distance) and **snap the camera** to any of them |
 | F1 | Help panel |
+| F3 | **Workshop** — save, load, regenerate the world, new game, and a few test cheats |
 
 ### Miracles — two gestures, then throw (hold right mouse)
 
@@ -290,12 +291,41 @@ or *obese*.
 - **Lightning is lethal** at the point of impact. The evil path is real.
 - **Sheep** wander, breed slowly, get hunted, and are 100% throwable.
 
+## Saving, and the workshop (F3)
+
+The land is **never written down**. Every hill, shore, forest and town site
+grows back exactly from the world's **seed**, so a save holds only what *play*
+has changed: your standing with the heavens and the clock, each village's
+name, faith, diet, stocks, hard-won doctrine and full roster of people, and —
+the part no seed could ever reproduce — your creature's whole **mind, beliefs
+and body**.
+
+Loading works by handing the next scene a parcel and rebuilding around it,
+so there is never a half-torn-down world. Because the world **streams**, a
+town forty chunks away does not exist at load time; its saved life waits in
+memory and is handed back **the moment that village is born**, whenever you
+wander into it. A town you never revisit keeps its memory — and is written
+out again on the next save, unchanged.
+
+That parcel is what makes the workshop's two levers possible:
+
+- **New land, same creature** — a fresh seed, a stranger's world, but your
+  creature walks into it carrying every habit, belief, appetite, pound of fat
+  and lesson it ever earned. The perfect way to see what a mind you have
+  actually raised.
+- **New game** — a new seed and a newborn creature, remembering nothing.
+
+Both ask twice before they fire, and the arming lapses after a few seconds.
+The workshop also holds test cheats: prayer, instant growth, instant
+conversion, and a printout of what the creature currently believes.
+
 ## Code map
 
 ```
 scenes/main.tscn              Entry point (one node; world is built in code)
 scripts/main.gd               Orchestrator: sky, day/night clock, wiring
 scripts/game_state.gd         Autoload: prayer, alignment, game time
+scripts/save_game.gd          Autoload: seed-based saves, and the F3 levers
 scripts/audio/sound_bank.gd   Autoload: all sounds, synthesized in code
 scripts/util.gd               Primitive-shape building helpers
 scripts/nav_field.gd          Autoload: periodic obstacle field for steering
@@ -327,6 +357,7 @@ scripts/miracles/
   miracle_orb.gd              Generic conjured-and-thrown miracle carrier
   fireball.gd                 The throwable fire miracle: ballistic, explosive
 scripts/ui/hud.gd             Bars, legend, tooltips, help
+scripts/ui/debug_menu.gd      The F3 workshop: save/load/regenerate + cheats
 scripts/ui/touch_controls.gd  Touchscreen-only buttons: Cast/Move mode,
                               follow-the-creature camera lock
 ```

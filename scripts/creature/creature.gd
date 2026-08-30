@@ -1941,3 +1941,50 @@ func _status_text() -> String:
 		State.CAST: return "***"
 		State.LEASHED: return "yes?"
 	return ""
+
+
+## Persistence -----------------------------------------------------------------
+
+## The whole creature: its body, its mind, its beliefs, and where it stands.
+## Deliberately independent of the world, so a creature can be carried intact
+## into a freshly generated world (see the debug menu's "regenerate world").
+func to_dict() -> Dictionary:
+	return {
+		"pos": [global_position.x, global_position.y, global_position.z],
+		"growth": growth,
+		"hunger": hunger,
+		"energy": energy,
+		"mood": mood,
+		"bond": bond,
+		"boredom": boredom,
+		"fear": fear,
+		"attention": attention,
+		"walks_on_water": walks_on_water,
+		"flight": flight_time,
+		"inedible": _inedible.duplicate(),
+		"mind": mind.to_dict(),
+		"body": body.to_dict(),
+	}
+
+
+func from_dict(data: Dictionary) -> void:
+	var p: Array = data.get("pos", [])
+	if p.size() == 3:
+		global_position = Vector3(float(p[0]), float(p[1]), float(p[2]))
+	growth = float(data.get("growth", 0.01))
+	hunger = float(data.get("hunger", 40.0))
+	energy = float(data.get("energy", 90.0))
+	mood = float(data.get("mood", 60.0))
+	bond = float(data.get("bond", 20.0))
+	boredom = float(data.get("boredom", 20.0))
+	fear = float(data.get("fear", 0.0))
+	attention = float(data.get("attention", 20.0))
+	walks_on_water = bool(data.get("walks_on_water", false))
+	flight_time = float(data.get("flight", 0.0))
+	_inedible = (data.get("inedible", {}) as Dictionary).duplicate()
+	mind.from_dict(data.get("mind", {}))
+	body.from_dict(data.get("body", {}))
+	morality = mind.temperament
+	scale = Vector3.ONE * lerpf(MIN_SCALE, MAX_SCALE, growth)
+	_shown_align = 999.0   # force the hide/eyes to re-colour for the restored soul
+

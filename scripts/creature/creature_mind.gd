@@ -268,3 +268,30 @@ func strongest_urge() -> String:
 		return "still figuring the world out"
 	var parts := best_k.split("|")
 	return "has learned to love %s %s" % [parts[0], parts[1]]
+
+
+## Persistence -----------------------------------------------------------------
+
+## THE WHOLE PERSONALITY. This dictionary is what makes a creature that one
+## particular creature — no two playthroughs grow the same one, so it is the
+## thing most worth carrying across a save.
+func to_dict() -> Dictionary:
+	return {
+		"q": q.duplicate(true),
+		"seen": seen.duplicate(true),
+		"familiarity": familiarity.duplicate(true),
+		"temperament": temperament,
+		"deed_avg": _deed_avg,
+		"beliefs": beliefs.to_dict(),
+	}
+
+
+func from_dict(data: Dictionary) -> void:
+	q = (data.get("q", {}) as Dictionary).duplicate(true)
+	seen = (data.get("seen", {}) as Dictionary).duplicate(true)
+	familiarity = (data.get("familiarity", {}) as Dictionary).duplicate(true)
+	temperament = float(data.get("temperament", 0.0))
+	_deed_avg = float(data.get("deed_avg", temperament / CHARACTER_SCALE))
+	_sated.clear()
+	beliefs.from_dict(data.get("beliefs", {}))
+
