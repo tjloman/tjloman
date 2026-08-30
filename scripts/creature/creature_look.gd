@@ -22,6 +22,65 @@ const EXPR_CODE := {
 }
 
 
+
+## WORDS FOR A STATE ------------------------------------------------------------
+##
+## Keyed by the STATE'S NAME rather than the enum, so this file never has to
+## name Creature and the two can stay independent of one another.
+
+## The semantic clip a rigged model plays. Missing clips are ignored, so a model
+## with only walk/idle still animates sensibly.
+const ANIM := {
+	"SLEEPING": "sleep", "EATING": "eat",
+	"GO_TEND": "work", "TENDING": "work", "FISHING": "work", "CAST": "work",
+	"WATCH": "idle", "SULK": "idle", "LOUNGE": "idle", "PRAY": "idle",
+	"CARRYING": "carry", "PLAY": "play", "DANCE": "play",
+	"GUARD": "guard", "COMMUNE": "guard",
+	"CATCH": "run", "FLEE": "run", "RUN": "run", "SHUN": "run", "DEPART": "run",
+	"SMASH": "attack", "LEASHED": "walk", "MIMIC": "walk",
+}
+
+## A plain-language phrase for the creature dashboard.
+const DOING := {
+	"IDLE": "pondering",
+	"WANDER": "exploring",
+	"SEEK_FOOD": "hunting for a snack",
+	"EATING": "eating happily",
+	"GO_TEND": "helping on the farm",
+	"TENDING": "helping on the farm",
+	"SLEEPING": "sleeping",
+	"WATCH": "watching the villagers, learning",
+	"CATCH": "chasing something down",
+	"GO_FISH": "fishing",
+	"FISHING": "fishing",
+	"GO_STORE": "raiding the granary",
+	"SMASH": "smashing something",
+	"FLEE": "fleeing, frightened",
+	"CAST": "working a miracle",
+	"LEASHED": "going where you sent it",
+	"PLAY": "playing",
+	"GUARD": "standing guard",
+	"SULK": "sulking",
+	"LOUNGE": "lounging, watching the world",
+	"DANCE": "dancing for the village",
+	"PRAY": "leading the prayers",
+	"COMMUNE": "holding court before the people",
+	"MIMIC": "shadowing your hand, copying you",
+	"SHUN": "keeping away from you",
+	"DEPART": "walking away from you, for good",
+}
+
+## The little word that floats over its head.
+const SAYS := {
+	"SLEEPING": "zzz", "EATING": "nom nom", "SEEK_FOOD": "food?",
+	"TENDING": "help!", "WATCH": "hmm...", "CATCH": "!!", "FISHING": "...",
+	"GO_GATHER": "for you!", "PLAY": "wheee!", "GUARD": "grrr", "SULK": ":(",
+	"SMASH": "RAAWR", "FLEE": "!!!", "CAST": "***", "LEASHED": "yes?",
+	"LOUNGE": "~", "DANCE": "la la", "PRAY": "ommm", "COMMUNE": "behold",
+	"RUN": "whoosh", "MIMIC": "like this?", "SHUN": "...", "DEPART": "goodbye",
+}
+
+
 ## Recolour hide, pupils and shader params for a soul at `align` (-1..+1).
 static func apply_alignment(align: float, fur_mat: StandardMaterial3D,
 		pupils: Array, model_meshes: Array) -> void:
@@ -95,3 +154,35 @@ static func mood_word(mood: float) -> String:
 	if mood > 15.0:
 		return "glum"
 	return "wretched"
+
+
+## What it is doing, in words. The few states whose phrasing depends on WHAT it
+## is carrying take that as `cargo`; everything else ignores it.
+static func doing_word(state_name: String, carry_intent: String, cargo: String) -> String:
+	match state_name:
+		"GO_GATHER":
+			return "fetching %s for the store" % cargo
+		"RUN":
+			return "running with %s on its back" % cargo if cargo != "" \
+				else "running, just to run"
+		"CARRYING":
+			match carry_intent:
+				"deliver": return "carrying %s to the store" % cargo
+				"eat": return "about to eat what it caught"
+				"gift": return "bringing a gift to the pen"
+				"snatch": return "making off with someone"
+				"hurl": return "winding up to throw something"
+			return "carrying something"
+	return DOING.get(state_name, "?")
+
+
+static func says_word(state_name: String, carry_intent: String) -> String:
+	if state_name == "CARRYING":
+		return "nom?" if carry_intent == "eat" else "for you!"
+	return SAYS.get(state_name, "")
+
+
+static func anim_for(state_name: String, moving: bool) -> String:
+	if ANIM.has(state_name):
+		return ANIM[state_name]
+	return "walk" if moving else "idle"

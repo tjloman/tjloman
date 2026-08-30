@@ -194,6 +194,8 @@ func _on_creed() -> void:
 	var creed := PackedStringArray()
 	for line: String in creature.mind.beliefs.creed():
 		creed.append(line)
+	for rite: String in creature.mind.rites():
+		creed.append(rite)
 	var said := "  ·  ".join(creed) if not creed.is_empty() \
 		else "It has learned nothing it can put into words yet."
 	GameState.announce("%s (%s, %s) — %s" % [

@@ -63,6 +63,12 @@ const WEIGHT_LR := 0.22     # how fast circumstances reshape a belief
 const WEIGHT_CLAMP := 2.5
 const BELIEF_LR := 0.25     # how fast an action->consequence rule firms up
 const CONFIDENT := 0.45     # a rule this strong is worth acting on / reporting
+## RITUAL. How fast "doing this AFTER that went well" firms up, and how strong
+## a habit of sequence can get. Kept modest: a ritual should tilt a choice, not
+## railroad one, or the creature ends up locked in a loop it cannot break.
+const RITUAL_LR := 0.2
+const RITUAL_CLAMP := 1.0
+const RITUAL_HELD := 0.35   # strong enough to steer, and to be worth reporting
 
 ## "verb|type" -> {feature -> weight}. The contextual half of its wants.
 var weights := {}
@@ -70,8 +76,16 @@ var weights := {}
 var rules := {}
 ## Its recent life, newest last: {key, ctx, at}
 var episodes: Array = []
+## RITUALS. "did this>then this" -> -1..1: how well that ORDER has gone. This
+## is the whole of how habit and superstition form. Nothing decides which
+## sequences are meaningful; the creature simply notices that when it fishes
+## and THEN works a miracle, things tend to go well, and starts fishing first.
+## It is very often wrong about why, which is exactly what a ritual is.
+var sequences := {}
 
 var _trace: Array = []      # recent keys awaiting a consequence, newest first
+var _previous := ""         # the deed before this one, for learning sequences
+var _last_step := ""        # the "prev>next" pair the next outcome will judge
 
 
 ## What this action is worth GIVEN the circumstances — the contextual opinion
@@ -94,6 +108,10 @@ func remember(key: String, ctx: Dictionary) -> void:
 	_trace.push_front({"key": key, "ctx": ctx.duplicate()})
 	if _trace.size() > 8:
 		_trace.pop_back()
+	# Note the ORDER, not just the deed. Whatever happens next will judge the
+	# pairing, and a pairing that keeps going well becomes a ritual.
+	_last_step = (_previous + ">" + key) if _previous != "" else ""
+	_previous = key
 
 
 ## An outcome landed. Spread it back over the deeds that led here — the most
@@ -106,6 +124,49 @@ func credit(reward: float) -> void:
 			break
 		_learn(step["key"], step["ctx"], reward * share)
 		share *= TRACE_DECAY
+	# And the ORDER gets its share of the credit too.
+	if _last_step != "":
+		var held: float = float(sequences.get(_last_step, 0.0))
+		sequences[_last_step] = clampf(
+			held + RITUAL_LR * (clampf(reward, -1.0, 1.0) - held),
+			-RITUAL_CLAMP, RITUAL_CLAMP)
+
+
+## HOW RIGHT THIS FEELS RIGHT NOW, given what it just did. A creature that has
+## found fishing-then-miracles rewarding will reach for a miracle after fishing
+## and not otherwise — and it will never be able to tell you why. Ritual is
+## also what keeps a life from flattening into whichever single deed scores
+## best: the order matters, so the order gives the days a shape.
+func ritual_bias(previous: String, key: String) -> float:
+	if previous == "" or sequences.is_empty():
+		return 0.0
+	return float(sequences.get(previous + ">" + key, 0.0))
+
+
+## The habits of order it has actually formed, in plain words.
+func rites(limit := 2) -> Array:
+	var held := []
+	for step: String in sequences:
+		if float(sequences[step]) < RITUAL_HELD:
+			continue
+		held.append({"step": step, "strength": float(sequences[step])})
+	held.sort_custom(func(a, b): return a["strength"] > b["strength"])
+	var said := []
+	for entry: Dictionary in held.slice(0, limit):
+		var pair: PackedStringArray = String(entry["step"]).split(">")
+		if pair.size() == 2:
+			said.append("likes to %s before it %s" % [_plain(pair[0]), _plain(pair[1])])
+	return said
+
+
+## "cast|heal" -> "works a heal". Just enough grammar to read as a sentence.
+func _plain(key: String) -> String:
+	var act := key.split("|")
+	var verb: String = act[0]
+	var subject: String = act[1] if act.size() > 1 else ""
+	if subject == "" or subject == "none":
+		return verb + "s"
+	return "%ss %s" % [verb, subject]
 
 
 ## Something notable happened TO the creature (a mob drove it off, its god
@@ -172,6 +233,8 @@ func foreboding(key: String) -> float:
 
 ## Slow forgetting, so old convictions loosen if life stops confirming them.
 func fade() -> void:
+	for step: String in sequences:
+		sequences[step] = move_toward(float(sequences[step]), 0.0, 0.0012)
 	for key: String in weights:
 		var w: Dictionary = weights[key]
 		for f: String in w:
@@ -221,6 +284,7 @@ func to_dict() -> Dictionary:
 	return {
 		"weights": weights.duplicate(true),
 		"rules": rules.duplicate(true),
+		"sequences": sequences.duplicate(true),
 		"episodes": episodes.slice(maxi(episodes.size() - 12, 0)),
 	}
 
@@ -228,6 +292,7 @@ func to_dict() -> Dictionary:
 func from_dict(data: Dictionary) -> void:
 	weights = (data.get("weights", {}) as Dictionary).duplicate(true)
 	rules = (data.get("rules", {}) as Dictionary).duplicate(true)
+	sequences = (data.get("sequences", {}) as Dictionary).duplicate(true)
 	episodes = (data.get("episodes", []) as Array).duplicate(true)
 	_trace.clear()
 

@@ -375,10 +375,10 @@ func _run_smoke_test() -> void:
 		creature.mind._drive_fit("smash", restless),
 		creature.mind._drive_fit("dance", restless),
 		creature.mind._drive_fit("run", restless)])
-	var lonely := {"energy": 90.0, "mood": 60.0, "lonely": 1.0}
+	var friendless := {"energy": 90.0, "mood": 60.0, "lonely": 1.0}
 	print("SMOKE TEST: loneliness wants company — commune %.2f vs smash %.2f" % [
-		creature.mind._drive_fit("commune", lonely),
-		creature.mind._drive_fit("smash", lonely)])
+		creature.mind._drive_fit("commune", friendless),
+		creature.mind._drive_fit("smash", friendless)])
 
 	# YOUR EXAMPLE. What the hand does is copied in proportion to trust — and a
 	# creature that has stopped trusting you stops copying entirely.
@@ -436,6 +436,19 @@ func _run_smoke_test() -> void:
 	for rule: String in ["rest|none>fed", "wander|none>alone", "kick|door>hurt",
 			"eat_kin|villager>mobbed"]:
 		creature.mind.beliefs.rules[rule] = -0.9
+	# RITUAL. A pairing that keeps paying off becomes a habit of ORDER, and the
+	# creature will start reaching for the second thing after the first.
+	var rite := CreatureBeliefs.new()
+	for i in 12:
+		rite.remember("fish|water", {})
+		rite.credit(0.3)
+		rite.remember("cast|bird_flock", {})
+		rite.credit(1.0)
+	print("SMOKE TEST: ritual — casting AFTER fishing %+.2f, cold %+.2f | %s" % [
+		rite.ritual_bias("fish|water", "cast|bird_flock"),
+		rite.ritual_bias("smash|tree", "cast|bird_flock"),
+		str(rite.rites())])
+
 	print("SMOKE TEST: creed -> %s" % str(creature.mind.beliefs.creed(4)))
 
 	# CHARACTER IS PACED BY TIME, not by how many deeds got squeezed into a
@@ -473,6 +486,31 @@ func _run_smoke_test() -> void:
 	creature.grant_strength(20.0)
 	print("SMOKE TEST: strength miracle — lift limit %.1f -> %.1f lumber (boosted=%s)" % [
 		lift_before, creature.body.lift_limit(creature.growth), creature.body.is_boosted()])
+
+	# EXILE IS RECOVERABLE, BUT NOT PURCHASABLE. Coming home needs BOTH: trust
+	# regained AND a long stretch with no repeat of what it left over. Kindness
+	# alone will not do it, and neither will time alone.
+	var wronged := Creature.new()
+	wronged.mind.judge(0.8, 1.0, false)      # a good heart...
+	wronged.trust = 10.0                     # ...and a god it cannot abide
+	wronged._begin_departure()
+
+	wronged.trust = 90.0                     # petted lavishly...
+	wronged._tick_exile(Creature.AMENDS_SECONDS * 0.9)
+	wronged.earn_trust(-20.0, "struck")      # ...and struck again anyway
+	wronged.trust = 90.0
+	wronged._tick_exile(Creature.AMENDS_SECONDS * 0.9)
+	var relapsed := wronged.exiled           # the clock went back to zero
+
+	wronged.trust = 10.0                     # left alone, but never made up with
+	wronged._tick_exile(Creature.AMENDS_SECONDS * 2.0)
+	var unloved := wronged.exiled
+
+	wronged.trust = 90.0                     # both, at last
+	wronged._tick_exile(1.0)
+	print("SMOKE TEST: exile — survives a relapse=%s, survives mere time=%s, ends when you stop=%s" % [
+		relapsed, unloved, not wronged.exiled])
+	wronged.free()
 
 	# THE MILITIA: a wolf mauls someone, the village rouses, arms itself, and
 	# (in a band) fights back. A lone villager must NOT dare to stand.

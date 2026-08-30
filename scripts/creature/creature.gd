@@ -36,6 +36,10 @@ const REMORSE := 2.0
 ## The shortest a deed may take, in seconds. Actions that resolve the instant
 ## they begin would otherwise re-decide every frame — see `_decide`.
 const DEED_FLOOR := 0.5
+## AMENDS. What it takes to end an exile: this much trust regained AND this
+## many seconds without a repeat of what it left over. Both, or it stays away.
+const AMENDS_SECONDS := 120.0
+const AMENDS_TRUST := 45.0
 
 var hunger := 40.0
 var energy := 90.0
@@ -66,6 +70,17 @@ var boredom := 20.0
 ## its own heart has grown kinder than yours — walks away to live by its own
 ## lights somewhere you are not.
 var trust := 55.0
+
+## EXILE. Not a one-off flight but a CONDITION: it lives out there, keeping its
+## distance, refusing the leash, and getting on with its own life. It is always
+## recoverable — but not by simply patting it until the number climbs. It comes
+## home only once the thing it walked away from HAS ACTUALLY STOPPED.
+var exiled := false
+## What it holds against you, and how long since you last did it. Every fresh
+## offence resets the clock, so a god who apologises and carries on offending
+## never runs it down.
+var grievance := ""
+var grievance_time := 0.0
 
 ## Independent karma: -100 monstrous .. +100 angelic.
 var morality := 0.0
@@ -347,6 +362,7 @@ func _physics_process(delta: float) -> void:
 
 ## Feelings drift every frame: hunger gnaws, idleness bores, mood follows.
 func _tick_feelings(delta: float) -> void:
+	_tick_exile(delta)
 	hunger = minf(hunger + 1.0 * delta, 100.0)
 	if state != State.SLEEPING:
 		energy = maxf(energy - 0.4 * delta, 0.0)
@@ -650,22 +666,23 @@ func _offer_quiet_life(opts: Dictionary) -> void:
 
 	# COPYING YOU. Only ever on the table while it still thinks you are worth
 	# copying, and only once it has watched you do enough to have a habit of it.
-	if trust > 35.0 and mind.knows("mimic") and divine_hand != null \
+	if trust > 35.0 and not exiled and mind.knows("mimic") and divine_hand != null \
 			and is_instance_valid(divine_hand):
 		_offer(opts, "mimic", "god", divine_hand)
 
 	# What a mistreated creature has instead of obedience. These are options,
 	# not fates: a creature can be badly used and still choose to stay.
-	if trust < 40.0:
+	if trust < 40.0 or exiled:
 		_offer(opts, "sulk", "none", null)
 		if divine_hand != null and is_instance_valid(divine_hand) \
-				and divine_hand.global_position.distance_to(global_position) < 30.0:
+				and (exiled or divine_hand.global_position
+					.distance_to(global_position) < 30.0):
 			_offer(opts, "shun", "god", divine_hand)
 	# LEAVING. Offered only when it has stopped trusting you AND its own heart
 	# has outgrown yours — a good creature with a cruel god. It is still only an
 	# option among many, and a creature that has learned to love you anyway
 	# (bond) will rarely take it.
-	if trust < 20.0 and mind.temperament > 15.0:
+	if trust < 20.0 and mind.temperament > 15.0 and not exiled:
 		_offer(opts, "depart", "none", null)
 
 
@@ -1563,7 +1580,7 @@ func scold() -> void:
 	if deserved < -0.3:
 		earn_trust(-0.5)   # it knows what it did
 	else:
-		earn_trust(-7.0 + deserved * 4.0)
+		earn_trust(-7.0 + deserved * 4.0, "blamed")
 	if _last_deed in ["hunt", "mischief", "smash"]:
 		GameState.announce("Your creature cowers. It understands that was wrong.")
 	elif trust < 30.0:
@@ -1676,6 +1693,12 @@ func grant_flight(seconds: float) -> void:
 
 ## Order it to a spot (the hand's ground point). It drops what it is doing.
 func leash_to(pos: Vector3) -> void:
+	# A creature that has walked away from you does not come when called. This
+	# is the one command it will refuse, and it refuses it until amends are made.
+	if exiled:
+		GameState.announce("Your creature looks at your hand, and does not come.")
+		express("sad", 2.0)
+		return
 	leash_target = pos
 	if _carried != null:
 		_release_carried(true)
@@ -1879,7 +1902,9 @@ func _process_shun(delta: float) -> void:
 ## the world — it is out there, and sustained kindness can still win it back.
 func _begin_departure() -> void:
 	state = State.DEPART
-	_action_time = 60.0
+	_action_time = 45.0
+	exiled = true
+	grievance_time = 0.0
 	var angle := randf() * TAU
 	_target = global_position + Vector3(cos(angle), 0, sin(angle)) * 220.0
 	release_leash()
@@ -1888,17 +1913,31 @@ func _begin_departure() -> void:
 	express("sad", 6.0)
 
 
+## The walk out. After this it simply LIVES out there — see `_tick_exile`.
 func _process_depart(delta: float) -> void:
 	_action_time -= delta
 	body.exert(1.0, delta)
-	# Only kindness brings it back, and only slowly.
-	if trust > 45.0:
-		GameState.announce("Your creature stops, looks back, and waits for you.")
-		_finish_choice(1.2)
-		return
 	if _move_toward(_target, _run_speed(), delta) or _action_time <= 0.0:
 		_last_deed = "depart"
 		_finish_choice(0.6)
+
+
+## AMENDS. Exile ends only when BOTH are true: it has come to trust you again,
+## and the thing it left over has not happened for a good long while. Kindness
+## alone will not do it — a god who pets the creature between beatings never
+## gets it back, because every beating puts the clock to zero.
+func _tick_exile(delta: float) -> void:
+	if not exiled:
+		return
+	grievance_time += delta
+	if trust < AMENDS_TRUST or grievance_time < AMENDS_SECONDS:
+		return
+	exiled = false
+	grievance = ""
+	mind.experience("forgiven", 1.6)
+	express("love", 4.0)
+	GameState.announce(
+		"Your creature comes back to you of its own accord. You have not done it again.")
 
 
 ## How many people are actually watching it right now. Half the quiet life is
@@ -1924,9 +1963,18 @@ func _face(point: Vector3) -> void:
 
 ## Move what it thinks of you. Announced only at the thresholds that actually
 ## change how it behaves, so the player learns the mechanic by living it.
-func earn_trust(amount: float) -> void:
+func earn_trust(amount: float, cause := "") -> void:
 	var before := trust
 	trust = clampf(trust + amount, 0.0, 100.0)
+	# A real injury names itself and restarts the clock. This is what makes
+	# exile recoverable only by STOPPING, not by apologising: every repeat of
+	# the same treatment puts the reckoning back to the beginning.
+	if amount <= -3.0 and cause != "":
+		if exiled and cause == grievance:
+			GameState.announce(
+				"Your creature sees you do it again, and goes further off.")
+		grievance = cause
+		grievance_time = 0.0
 	if before >= 35.0 and trust < 35.0:
 		GameState.announce("Your creature has stopped copying you.")
 	elif before >= 20.0 and trust < 20.0:
@@ -2026,7 +2074,7 @@ func take_damage(amount: float, _by_god := false, _instant := false) -> void:
 	# Being hurt BY YOUR OWN GOD is a different wound entirely. Nothing else in
 	# the game costs trust this fast, and nothing should.
 	if _by_god:
-		earn_trust(-clampf(amount * 0.5, 4.0, 30.0))
+		earn_trust(-clampf(amount * 0.5, 4.0, 30.0), "struck")
 	fear = minf(fear + amount * 0.8, 100.0)
 	mood = maxf(mood - amount * 0.4, 0.0)
 	express("hurt", 2.0)
@@ -2097,26 +2145,28 @@ func activity_word() -> String:
 
 ## The semantic clip a rigged model plays for the current state. Missing clips
 ## are ignored, so a model with only walk/idle still animates sensibly.
+## The semantic clip a rigged model plays for the current state.
 func _anim_state() -> String:
-	match state:
-		State.SLEEPING: return "sleep"
-		State.EATING: return "eat"
-		State.GO_TEND, State.TENDING, State.FISHING: return "work"
-		State.WATCH, State.SULK: return "idle"
-		State.CARRYING: return "carry"
-		State.PLAY: return "play"
-		State.GUARD: return "guard"
-		State.CATCH: return "run"
-		State.SMASH: return "attack"
-		State.FLEE: return "run"
-		State.CAST: return "work"
-		State.LEASHED: return "walk"
-		State.LOUNGE, State.PRAY: return "idle"
-		State.DANCE: return "play"
-		State.COMMUNE: return "guard"
-		State.RUN, State.SHUN, State.DEPART: return "run"
-		State.MIMIC: return "walk"
-	return "walk" if Vector2(velocity.x, velocity.z).length() > 0.3 else "idle"
+	return CreatureLook.anim_for(
+		state_name(), Vector2(velocity.x, velocity.z).length() > 0.3)
+
+
+func _status_word() -> String:
+	return CreatureLook.doing_word(state_name(), _carry_intent, _cargo_word())
+
+
+func _status_text() -> String:
+	return CreatureLook.says_word(state_name(), _carry_intent)
+
+
+## Whatever it is holding or heading for, named honestly — lumber and stone,
+## not "food" for everything. Empty when its hands are free.
+func _cargo_word() -> String:
+	if state == State.GO_GATHER:
+		return _carriable_word(_target_food)
+	if _carried != null and is_instance_valid(_carried):
+		return _carriable_word(_carried)
+	return ""
 
 
 func morality_word() -> String:
@@ -2158,80 +2208,6 @@ func _carriable_word(item: Variant) -> String:
 	return "food"
 
 
-func _status_word() -> String:
-	match state:
-		State.IDLE: return "pondering"
-		State.WANDER: return "exploring"
-		State.SEEK_FOOD: return "hunting for a snack"
-		State.EATING: return "eating happily"
-		State.GO_TEND, State.TENDING: return "helping on the farm"
-		State.SLEEPING: return "sleeping"
-		State.WATCH: return "watching the villagers, learning"
-		State.GO_GATHER: return "fetching %s for the store" % _carriable_word(_target_food)
-		State.CARRYING:
-			match _carry_intent:
-				"deliver": return "carrying %s to the store" % _carriable_word(_carried)
-				"eat": return "about to eat what it caught"
-				"gift": return "bringing a gift to the pen"
-				"snatch": return "making off with someone"
-				"hurl": return "winding up to throw something"
-			return "carrying something"
-		State.CATCH: return "chasing something down"
-		State.GO_FISH, State.FISHING: return "fishing"
-		State.GO_STORE: return "raiding the granary"
-		State.SMASH: return "smashing something"
-		State.FLEE: return "fleeing, frightened"
-		State.CAST: return "working a miracle"
-		State.LEASHED: return "going where you sent it"
-		State.PLAY: return "playing"
-		State.GUARD: return "standing guard"
-		State.SULK: return "sulking"
-		State.LOUNGE: return "lounging, watching the world"
-		State.DANCE: return "dancing for the village"
-		State.PRAY: return "leading the prayers"
-		State.COMMUNE: return "holding court before the people"
-		State.RUN: return "running, just to run" if _carried == null \
-			else "running with %s on its back" % _carriable_word(_carried)
-		State.MIMIC: return "shadowing your hand, copying you"
-		State.SHUN: return "keeping away from you"
-		State.DEPART: return "walking away from you, for good"
-	return "?"
-
-
-func _status_text() -> String:
-	match state:
-		State.SLEEPING: return "zzz"
-		State.EATING: return "nom nom"
-		State.SEEK_FOOD: return "food?"
-		State.TENDING: return "help!"
-		State.WATCH: return "hmm..."
-		State.CATCH: return "!!"
-		State.FISHING: return "..."
-		State.GO_GATHER: return "for you!"
-		State.CARRYING: return "nom?" if _carry_intent == "eat" else "for you!"
-		State.PLAY: return "wheee!"
-		State.GUARD: return "grrr"
-		State.SULK: return ":("
-		State.SMASH: return "RAAWR"
-		State.FLEE: return "!!!"
-		State.CAST: return "***"
-		State.LEASHED: return "yes?"
-		State.LOUNGE: return "~"
-		State.DANCE: return "la la"
-		State.PRAY: return "ommm"
-		State.COMMUNE: return "behold"
-		State.RUN: return "whoosh"
-		State.MIMIC: return "like this?"
-		State.SHUN: return "..."
-		State.DEPART: return "goodbye"
-	return ""
-
-
-## Persistence -----------------------------------------------------------------
-
-## The whole creature: its body, its mind, its beliefs, and where it stands.
-## Deliberately independent of the world, so a creature can be carried intact
-## into a freshly generated world (see the debug menu's "regenerate world").
 func to_dict() -> Dictionary:
 	return {
 		"pos": [global_position.x, global_position.y, global_position.z],
@@ -2241,6 +2217,9 @@ func to_dict() -> Dictionary:
 		"mood": mood,
 		"bond": bond,
 		"trust": trust,
+		"exiled": exiled,
+		"grievance": grievance,
+		"grievance_time": grievance_time,
 		"catch_skill": catch_skill,
 		"boredom": boredom,
 		"fear": fear,
@@ -2263,6 +2242,9 @@ func from_dict(data: Dictionary) -> void:
 	mood = float(data.get("mood", 60.0))
 	bond = float(data.get("bond", 20.0))
 	trust = float(data.get("trust", 55.0))
+	exiled = bool(data.get("exiled", false))
+	grievance = String(data.get("grievance", ""))
+	grievance_time = float(data.get("grievance_time", 0.0))
 	catch_skill = float(data.get("catch_skill", 0.3))
 	boredom = float(data.get("boredom", 20.0))
 	fear = float(data.get("fear", 0.0))

@@ -342,6 +342,26 @@ not writing a rule about when to do it. The single most important consequence:
 nothing in the design gives violence a head start, and a creature with an
 appetite for people learned it from a tie.
 
+### Ritual
+
+The belief engine remembers **order**, not just deeds. Every time one act
+follows another and things go well, that *pairing* firms up a little — so a
+creature that has found fishing-then-miracles rewarding will start fishing
+first, and reach for a miracle after fishing rather than cold.
+
+Nothing decides which sequences are meaningful. The creature simply notices
+that when it does these two things in this order the day tends to go well, and
+it is very often wrong about why — which is exactly what a ritual is. A habit
+of order reaches the point of steering a choice after two or three repeats and
+firms up to about +0.9 by a dozen; that is enough to tilt a decision and never
+enough to railroad one. Rituals also fade if life stops confirming them, so a
+creature can outgrow one.
+
+This is also what keeps a life from flattening into whichever single deed
+scores highest. The order matters, so the days take on a shape the creature
+invented for itself — and it is a shape you can read in the workshop panel:
+*"likes to fish before it casts bird_flock"*.
+
 ### Trust, and being watched
 
 **Trust** is kept apart from bond on purpose — bond is attachment, trust is
@@ -363,8 +383,14 @@ Trust is the valve on your whole influence:
 - **Below ~20 it keeps its distance**, sulking and shunning your hand.
 - **A creature that has grown kinder than you may leave.** Low trust plus a
   temperament better than your own puts *walking away* on the ballot: it turns
-  its back and goes to live by its own lights somewhere you are not. It is not
-  gone from the world, and sustained kindness still brings it home.
+  its back and goes to live by its own lights somewhere you are not.
+
+**Exile is a condition, not an ending.** It lives out there, keeps its
+distance, and will not come when called — the one command it refuses. It is
+always recoverable, but it cannot be bought: coming home needs **both** trust
+regained **and** a long stretch with no repeat of the thing it left over. It
+remembers what you did, and every fresh offence puts the reckoning back to the
+beginning. A god who pets the creature between beatings never gets it back.
 
 ## Code map
 

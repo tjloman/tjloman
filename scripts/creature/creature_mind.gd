@@ -167,6 +167,10 @@ func value(verb: String, type: String, drive: Dictionary, ctx := {}) -> float:
 	# that was once mobbed for it will hunt a lone shepherd but not a crowd.
 	v += beliefs.bias(k, ctx)
 	v += beliefs.foreboding(k)
+	# RITUAL: how right this feels AFTER whatever it just did. Once a pairing
+	# has paid off a few times the order itself starts to matter, and the
+	# creature's days take on a shape it invented and cannot explain.
+	v += beliefs.ritual_bias(_last_key, k)
 	# Its conscience: a deed that runs against its character repels it, and one
 	# that suits it appeals. An angelic creature simply does not want to eat
 	# people; a monstrous one is drawn to it.
@@ -376,6 +380,11 @@ func known_miracles() -> Array:
 		if float(familiarity[m]) >= MIRACLE_READY:
 			ready.append(m)
 	return ready
+
+
+## Its habits of ORDER, in plain words — "likes to fish before it casts heal".
+func rites() -> Array:
+	return beliefs.rites()
 
 
 ## A short, human-readable peek at the strongest thing it has learned — for the

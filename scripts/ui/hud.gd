@@ -328,7 +328,16 @@ fast. So does scolding it for something that was not cruel — it knows
 the difference between a correction and a god being unfair. Let trust
 fall and it stops copying you, then keeps its distance, and a creature
 that has grown KINDER THAN YOU may simply walk away to live by its own
-lights. Sustained kindness can still bring it home.
+lights. It will not come when called. It comes home only once you have
+BOTH won its trust back AND stopped doing the thing it left over — it
+remembers, and every repeat starts the reckoning again.
+
+RITUAL
+It remembers the ORDER of things, not just the deeds. When one act keeps
+following another and the day goes well, that pairing firms up, and it
+will start doing them in that order — fishing before it works a miracle,
+say. It is usually wrong about why, which is what a ritual is. Read what
+it has decided in the workshop panel (F3).
 
 Pet (P) what you like, scold (L) what you don't. Hover it to read its
 mood, bond, trust and what it has learned to love. Press C if you lose

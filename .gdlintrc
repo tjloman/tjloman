@@ -2,4 +2,4 @@
 max-line-length: 120
 max-returns: 40
 max-public-methods: 56
-max-file-lines: 2300
+max-file-lines: 2300  # creature.gd is the state machine; its modules are split out
