@@ -74,6 +74,10 @@ var seen := {}              # "verb|type" -> times tried (drives curiosity)
 var familiarity := {}       # miracle name -> 0..1, learned by witnessing casts
 var temperament := 0.0      # -100 monstrous .. +100 angelic: emergent, follows deeds
 
+## WHAT IT BELIEVES about the world, and in what circumstances (see
+## CreatureBeliefs). This is the half of its personality that says "not now".
+var beliefs := CreatureBeliefs.new()
+
 var _deed_avg := 0.0        # the running moral average that IS its character
 var _sated := {}            # "verb|type" -> how thoroughly sick of it it is
 var _last_key := ""         # the (verb,type) the next outcome is credited to
@@ -86,10 +90,15 @@ func _key(verb: String, type: String) -> String:
 
 ## The predicted worth of an opportunity RIGHT NOW: what it has learned this
 ## deed is worth, plus how well it serves a pressing drive, plus curiosity.
-func value(verb: String, type: String, drive: Dictionary) -> float:
+func value(verb: String, type: String, drive: Dictionary, ctx := {}) -> float:
 	var k := _key(verb, type)
 	var v: float = q.get(k, 0.0)
 	v += _drive_fit(verb, drive)
+	# What it has learned about doing this IN THESE CIRCUMSTANCES, plus the
+	# dread carried by anything it expects to end badly. This is why a creature
+	# that was once mobbed for it will hunt a lone shepherd but not a crowd.
+	v += beliefs.bias(k, ctx)
+	v += beliefs.foreboding(k)
 	# Its conscience: a deed that runs against its character repels it, and one
 	# that suits it appeals. An angelic creature simply does not want to eat
 	# people; a monstrous one is drawn to it.
@@ -144,7 +153,7 @@ func _drive_fit(verb: String, drive: Dictionary) -> float:
 ## the best option is usually taken but a curious mind keeps trying others —
 ## which is how new behaviours (and quirks) are ever discovered. `options` is an
 ## Array of Dictionaries: {verb, type, target, pos}. Returns the chosen one.
-func choose(options: Array, drive: Dictionary) -> Dictionary:
+func choose(options: Array, drive: Dictionary, ctx := {}) -> Dictionary:
 	if options.is_empty():
 		_last_key = ""
 		_last_verb = ""
@@ -155,7 +164,7 @@ func choose(options: Array, drive: Dictionary) -> Dictionary:
 	var best_v := -INF
 	var scored := []
 	for opt: Dictionary in options:
-		var v := value(opt["verb"], opt.get("type", "none"), drive)
+		var v := value(opt["verb"], opt.get("type", "none"), drive, ctx)
 		scored.append(v)
 		best_v = maxf(best_v, v)
 	# Softmax sample (temperature EXPLORE), numerically stabilised by best_v.
@@ -175,6 +184,9 @@ func choose(options: Array, drive: Dictionary) -> Dictionary:
 	var chosen: Dictionary = options[pick]
 	_last_verb = chosen["verb"]
 	_last_key = _key(chosen["verb"], chosen.get("type", "none"))
+	# Remember the deed AND the circumstances, so a later consequence can be
+	# traced back to it.
+	beliefs.remember(_last_key, ctx)
 	return chosen
 
 
@@ -187,6 +199,7 @@ func reinforce(reward: float) -> void:
 	q[_last_key] = clampf(cur + LR * (reward - cur), -Q_CLAMP, Q_CLAMP)
 	seen[_last_key] = int(seen.get(_last_key, 0)) + 1
 	_sated[_last_key] = minf(float(_sated.get(_last_key, 0.0)) + SATIATION, 2.5)
+	beliefs.credit(reward)   # the circumstances get their share of the lesson
 	judge(VERB_VALENCE.get(_last_verb, 0.0))
 
 
@@ -219,6 +232,13 @@ func teach(verb: String, type: String, reward: float, strength := TEACH_LR) -> v
 func decay() -> void:
 	for k: String in q:
 		q[k] = move_toward(q[k], 0.0, FORGET)
+	beliefs.fade()
+
+
+## Something happened TO the creature. Let it work out for itself which of its
+## recent deeds brought this about.
+func experience(tag: String, reward: float) -> void:
+	beliefs.consequence(tag, reward)
 
 
 ## Watching the god cast a miracle teaches it, a little, how the power feels.

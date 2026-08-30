@@ -355,6 +355,31 @@ func _run_smoke_test() -> void:
 		str(creature.mind.known_miracles())])
 	print("SMOKE TEST: mind urge -> %s" % creature.mind.strongest_urge())
 
+	# BELIEFS: it must learn not just WHAT but WHEN — and work out for itself
+	# which of its deeds brought a consequence about.
+	var crowded := {"hungry": 0.9, "crowd": 1.0, "armed": 0.7, "in_village": 1.0}
+	var lonely := {"hungry": 0.9, "alone": 1.0, "night": 1.0}
+	for i in 3:
+		creature.mind.beliefs.remember("eat_kin|villager", crowded)
+		creature.mind.experience("mobbed", -1.4)
+	print("SMOKE TEST: beliefs — 'eating people -> mobbed' %.2f, dread %.2f" % [
+		creature.mind.beliefs.expects("eat_kin|villager", "mobbed"),
+		creature.mind.beliefs.foreboding("eat_kin|villager")])
+	print("SMOKE TEST: context matters — wants it in a CROWD %.2f, but ALONE %.2f" % [
+		creature.mind.beliefs.bias("eat_kin|villager", crowded),
+		creature.mind.beliefs.bias("eat_kin|villager", lonely)])
+	print("SMOKE TEST: creed -> %s" % str(creature.mind.beliefs.creed()))
+
+	# The village has a doctrine of its own, learned the same way.
+	village.remember_battle(false)
+	village.remember_battle(false)
+	var cowed := not village.will_fight(1, false)
+	village.remember_battle(true)
+	village.remember_battle(true)
+	village.remember_battle(true)
+	print("SMOKE TEST: village doctrine — after losses hides=%s; after wins resolve=%.0f fights=%s" % [
+		cowed, village.resolve, village.will_fight(1, true)])
+
 	# THE BODY: a stomach that fills, digests, and turns surplus into fat.
 	var cap := creature.body.capacity(creature.growth)
 	creature.body.swallow(cap * 3.0, creature.growth)   # try to overstuff it

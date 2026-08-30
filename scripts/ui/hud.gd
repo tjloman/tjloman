@@ -350,6 +350,9 @@ func _update_creature_panel() -> void:
 	# Its inner life, in plain words — including what it has LEARNED to love and
 	# any miracles it has picked up by watching you.
 	var learned: String = creature.mind.strongest_urge()
+	# WHAT IT BELIEVES — the convictions it has drawn from its own life.
+	var creed: Array = creature.mind.beliefs.creed(2)
+	var believes := "nothing firmly yet" if creed.is_empty() else "\n          ".join(creed)
 	var spells: Array = creature.mind.known_miracles()
 	var magic: String = ", ".join(spells) if not spells.is_empty() else "none yet"
 	_creature_label.text = ("YOUR CREATURE\n"
@@ -363,6 +366,7 @@ func _update_creature_panel() -> void:
 		+ "Belly:    %d%% full%s\n"
 		+ "Body:     %s  (fat %d · strength %d%s)\n"
 		+ "Learned:  %s\n"
+		+ "Believes: %s\n"
 		+ "Miracles: %s") % [
 			creature.activity_word(), creature.morality_word(), creature.mood_word(),
 			int(creature.bond), int(creature.hunger), int(creature.energy),
@@ -371,7 +375,7 @@ func _update_creature_panel() -> void:
 			"  (digesting)" if creature.body.stomach > 0.05 else "",
 			creature.body.condition_word(), int(creature.body.fat),
 			int(creature.body.strength), "  BOOSTED" if creature.body.is_boosted() else "",
-			learned, magic]
+			learned, believes, magic]
 
 
 ## Village roster ------------------------------------------------------------

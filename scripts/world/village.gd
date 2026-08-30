@@ -27,6 +27,15 @@ const ALARM_SECONDS := 45.0
 const GRUDGE_HOSTILE := 35.0
 const GRUDGE_DECAY := 0.4          # per second: fear of the beast fades slowly
 
+## RESOLVE — what this village has LEARNED about facing danger. Standing and
+## winning stiffens them; burying their dead teaches them to hide instead. So
+## one village becomes a militia and another a people who bar their doors, out
+## of their own history rather than a rule.
+const RESOLVE_START := 50.0
+const RESOLVE_WIN := 14.0     # a beast killed, a monster driven off
+const RESOLVE_LOSS := 22.0    # one of ours died fighting
+const RESOLVE_FIGHT := 35.0   # below this they hide rather than fight
+
 ## A village LEFT ALONE barely grows. Divine attention — your miracles, your
 ## hand, your creature's work among them — is what quickens a people: it lifts
 ## their spirits, and children follow. Attention fades if you wander off, so a
@@ -67,6 +76,8 @@ var grudge := 0.0
 var vendetta: Array[Animal] = []
 ## 0..100 — how much divine notice this village has had lately.
 var attention := 0.0
+## 0..100 — hard-won nerve. See RESOLVE_* above.
+var resolve := RESOLVE_START
 
 var _totem_orb: MeshInstance3D
 var _influence_ring: MeshInstance3D
@@ -929,3 +940,38 @@ func notice(amount: float) -> void:
 ## along at BREED_BASE; divine attention multiplies it up to about fivefold.
 func conception_chance() -> float:
 	return BREED_BASE * (1.0 + attention / BREED_ATTENTION_GAIN)
+
+
+## How a fight went. Winning teaches them to stand; losing their own teaches
+## them to hide. This is the village's whole military doctrine, learned.
+func remember_battle(won: bool) -> void:
+	var before := resolve
+	if won:
+		resolve = minf(resolve + RESOLVE_WIN, 100.0)
+		if is_player_home and before < RESOLVE_FIGHT and resolve >= RESOLVE_FIGHT:
+			GameState.announce("%s has found its courage." % village_name)
+	else:
+		resolve = maxf(resolve - RESOLVE_LOSS, 0.0)
+		if is_player_home and before >= RESOLVE_FIGHT and resolve < RESOLVE_FIGHT:
+			GameState.announce("%s has lost its nerve. They will hide now." % village_name)
+
+
+## Do these people stand and fight, or bar their doors? Numbers and arms embolden
+## them on top of whatever their history taught.
+func will_fight(allies: int, armed: bool) -> bool:
+	var nerve := resolve + allies * 6.0 + (18.0 if armed else 0.0)
+	return nerve >= RESOLVE_FIGHT + 15.0
+
+
+## Somewhere to cower: the nearest home, or failing that the totem.
+func refuge(from: Vector3) -> Vector3:
+	var best := totem.global_position
+	var best_dist := INF
+	for h in houses:
+		if not is_instance_valid(h) or h.under_construction:
+			continue
+		var d := from.distance_to(h.global_position)
+		if d < best_dist:
+			best_dist = d
+			best = h.global_position
+	return best

@@ -16,7 +16,7 @@ enum State {
 	GO_PREACH, PREACHING, GO_FEED, GO_BUILD_FARM, BUILDING_FARM,
 	GO_FISH, FISHING, COURT, FOLLOW_MOM, AT_SCHOOL, TEACH,
 	GO_BUILD_EDUBBA, BUILDING_EDUBBA,
-	HAULING, GO_ARM, FIGHT,
+	HAULING, GO_ARM, FIGHT, HIDE,
 	FLEE, HELD, FALLING, DYING,
 }
 
@@ -347,6 +347,15 @@ func _physics_process(delta: float) -> void:
 				_decide()
 		State.FIGHT:
 			_process_fight(delta)
+		State.HIDE:
+			# Not every people answers terror with steel. Run for the nearest
+			# home and cower there until the danger passes.
+			_action_time -= delta
+			if _move_toward(_target, FLEE_SPEED, delta, 1.5):
+				_apply_gravity_only(delta)
+				happiness = maxf(happiness - 2.0 * delta, 0.0)
+			if _action_time <= 0.0:
+				_decide()
 		State.HAULING:
 			# Carry the gathered load home on foot — nothing teleports to the
 			# store; if the store is gone, the load is simply dropped.
@@ -872,15 +881,24 @@ func _decide() -> void:
 	if village != null and village.is_roused() and is_adult():
 		var foe := _find_foe()
 		if foe != null:
-			if weapon == "" and Weapon.affordable(village.store) != "" and _allies_near() >= 1:
-				state = State.GO_ARM
-				return
-			if _dares_fight():
-				_fight_target = foe
-				state = State.FIGHT
-				_attack_cd = 0.3
-				return
-			scare(foe.global_position)   # outnumbered: run for it
+			# WHETHER THEY FIGHT AT ALL is their own hard-won doctrine: a village
+			# that has stood and won reaches for weapons, one that has buried its
+			# dead bars its doors instead (see Village.resolve).
+			var allies := _allies_near()
+			if village.will_fight(allies, weapon != ""):
+				if weapon == "" and Weapon.affordable(village.store) != "" and allies >= 1:
+					state = State.GO_ARM
+					return
+				if _dares_fight():
+					_fight_target = foe
+					state = State.FIGHT
+					_attack_cd = 0.3
+					return
+			# No stomach for it: hide, and let the beast have the run of the place.
+			state = State.HIDE
+			_action_time = randf_range(8.0, 16.0)
+			_target = village.refuge(global_position)
+			_report_terror(foe)
 			return
 	if _pick_job():
 		return
@@ -1290,6 +1308,7 @@ func _strike(foe: Node3D) -> void:
 	var killed := Weapon.strike(self, foe, weapon)
 	if killed and foe is Animal:
 		if village != null:
+			village.remember_battle(true)   # standing together WORKED
 			village.vendetta.erase(foe)
 			if village.is_player_home:
 				GameState.announce("%s and their neighbours have killed the beast."
@@ -1297,9 +1316,20 @@ func _strike(foe: Node3D) -> void:
 		_fight_target = null
 		happiness = minf(happiness + 12.0, 100.0)
 		_decide()
-	elif foe is Creature and village != null and village.is_player_home:
-		GameState.announce("%s strikes at your creature with %s!"
-			% [villager_name, Weapon.label(weapon)])
+	elif foe is Creature:
+		# A mob is a lesson. The creature is left to work out for ITSELF which
+		# of its recent deeds brought this on — perhaps eating one of them.
+		(foe as Creature).mind.experience("mobbed", -1.4)
+		if village != null and village.is_player_home:
+			GameState.announce("%s strikes at your creature with %s!"
+				% [villager_name, Weapon.label(weapon)])
+
+
+## Fleeing from the creature TEACHES IT that terror works — the mirror of the
+## lesson a mob teaches. Which one it learns depends on what the people do.
+func _report_terror(foe: Node3D) -> void:
+	if foe is Creature:
+		(foe as Creature).mind.experience("feared", 0.8)
 
 
 ## What this villager should be fighting right now, if anything: a marked beast
@@ -1660,6 +1690,9 @@ func die(of_old_age: bool) -> void:
 	if not of_old_age and village != null and _last_attacker is Animal \
 			and is_instance_valid(_last_attacker):
 		village.mark_for_death(_last_attacker as Animal)
+	# Dying while the village was up in arms teaches them the cost of standing.
+	if not of_old_age and village != null and village.is_roused():
+		village.remember_battle(false)
 	# The creature learns cruelty from the deaths it witnesses its god allow —
 	# a violent end nearby drags its heart toward the dark. (Old age teaches
 	# nothing; the creature is only reading its god's hand in the world.)

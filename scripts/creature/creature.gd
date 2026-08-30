@@ -449,10 +449,57 @@ func _decide() -> void:
 		state = State.LEASHED
 		_action_time = 2.0
 		return
-	var choice := mind.choose(_perceive(), drive)
+	var choice := mind.choose(_perceive(), drive, _circumstances())
 	_act_verb = choice["verb"]
 	_act_type = choice.get("type", "none")
 	_enact(choice)
+
+
+## THE CIRCUMSTANCES it notices right now — the situation its beliefs are
+## learned against. "I was starving, in their village, at night, with armed men
+## about, and my god was nowhere near." Every value is 0..1.
+func _circumstances() -> Dictionary:
+	var crowd := 0
+	var armed := 0
+	var predator := 0.0
+	for v in get_tree().get_nodes_in_group("villagers"):
+		var villager := v as Villager
+		if not is_instance_valid(villager):
+			continue
+		if villager.global_position.distance_to(global_position) < 22.0:
+			crowd += 1
+			if villager.weapon != "":
+				armed += 1
+	for a in get_tree().get_nodes_in_group("animals"):
+		var beast := a as Animal
+		if is_instance_valid(beast) and beast.spec.get("predator", false) \
+				and beast.global_position.distance_to(global_position) < 20.0:
+			predator = 1.0
+			break
+	var home := _home_village()
+	var in_village := 0.0
+	if home != null and home.global_position.distance_to(global_position) \
+			< home.influence_radius:
+		in_village = 1.0
+	var god_near := 0.0
+	if divine_hand != null and is_instance_valid(divine_hand) \
+			and divine_hand.global_position.distance_to(global_position) < 18.0:
+		god_near = 1.0
+	return {
+		"hungry": clampf(hunger / 100.0, 0.0, 1.0),
+		"stuffed": body.fullness(growth),
+		"tired": clampf((100.0 - energy) / 100.0, 0.0, 1.0),
+		"afraid": clampf(fear / 100.0, 0.0, 1.0),
+		"hurt": clampf((100.0 - mood) / 100.0, 0.0, 1.0),
+		"bored": clampf(boredom / 100.0, 0.0, 1.0),
+		"crowd": clampf(crowd / 5.0, 0.0, 1.0),
+		"armed": clampf(armed / 3.0, 0.0, 1.0),
+		"predator": predator,
+		"god_near": god_near,
+		"in_village": in_village,
+		"night": 1.0 if GameState.is_night() else 0.0,
+		"alone": 1.0 if crowd == 0 else 0.0,
+	}
 
 
 ## Everything the creature can see worth doing right now, as (verb, type,
@@ -1352,6 +1399,7 @@ func praise() -> void:
 	if key != "":
 		_bump_desire(key, 0.25)
 	express("love")
+	mind.experience("praised", 2.0)
 	# THE STRONGEST LESSON: your approval teaches the mind that whatever it just
 	# did is worth doing. Praise cruelty and it learns to be cruel.
 	# Judge the deed it actually FINISHED, not whatever it has wandered off to
@@ -1376,6 +1424,7 @@ func scold() -> void:
 	if key != "":
 		desires[key] = clampf(desires[key] - 0.3, 0.1, 2.5)
 	# Your disapproval teaches the mind that deed is not worth repeating.
+	mind.experience("scolded", -2.0)
 	# Likewise: scolding must land on the deed it just did. A scolding is
 	# emphatic — one telling-off genuinely shifts what it believes.
 	if _deed_verb != "":
@@ -1712,6 +1761,9 @@ func _can_eat(units: float) -> bool:
 ## mood drops, and the mind learns that whatever it was just doing hurt. Enough
 ## of that near people and it may become a nervous recluse.
 func take_damage(amount: float, _by_god := false, _instant := false) -> void:
+	# It works out for ITSELF what brought this on — no rule tells it that
+	# being beaten follows from eating people.
+	mind.experience("hurt", -clampf(amount / 25.0, 0.3, 2.0))
 	fear = minf(fear + amount * 0.8, 100.0)
 	mood = maxf(mood - amount * 0.4, 0.0)
 	express("hurt", 2.0)

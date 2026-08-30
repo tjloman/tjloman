@@ -151,6 +151,41 @@ flocks. Everything you conjure is a throwable you place where you choose.
 - **Rendering**: the Mobile renderer + MSAA. Good and plain — meant to look
   right on a phone, no advanced GPU required (yet).
 
+## What your creature BELIEVES
+
+Its learned action-values answer *"is this worth doing?"*. Its **beliefs**
+answer the far more interesting question — ***"worth doing when?"*** — and this
+is what makes one creature genuinely a different person from another.
+
+- **Episodes.** Every deed is remembered with the **circumstances** around it.
+  Not "I ate a villager" but "I was starving, in their village, at night, with
+  armed men about, and my god was nowhere near."
+- **Credit.** Consequences arrive *late*. When a mob drives it off, or its god
+  praises it, or it is wounded, the blame is spread back over the deeds that
+  led up to it. **Nothing tells it that being chased comes from eating people**
+  — it works that out because being chased keeps following having eaten one.
+- **Contextual weights.** Each action carries a small learned model over the
+  circumstances, so the lesson attaches to the *situation*, not the deed alone.
+
+The result is that the **same act teaches opposite lessons** depending on what
+actually follows it:
+
+| What happens after it eats a villager | What it comes to believe |
+|---|---|
+| The village mobs it | Recoils from crowds — but will still take a **lone** shepherd |
+| You kill the mob and praise it | **Unrepentant.** It learns to stand its ground |
+| The villagers flee and hide | Terror **works**. A tyrant is born |
+
+**Villages learn too.** They do not only fight back. A village that stands and
+wins grows **resolve**; one that buries its dead **loses its nerve and hides
+indoors instead** — so one settlement becomes a militia and its neighbour a
+people who bar their doors, out of their own history rather than any rule. And
+a village that hides is the very thing that teaches your creature that terror
+pays.
+
+Lock onto your creature (**C**) and the dashboard tells you what it currently
+believes, in plain words.
+
 ## Your creature's body
 
 It does not simply eat and grow. It has a **real stomach** whose size follows
