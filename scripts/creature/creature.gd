@@ -17,6 +17,7 @@ enum State {
 	IDLE, WANDER, SEEK_FOOD, EATING, SLEEPING, GO_TEND, TENDING,
 	WATCH, GO_GATHER, CARRYING, PLAY, GUARD, SULK, CATCH,
 	GO_FISH, FISHING, GO_STORE, SMASH, FLEE, CAST, LEASHED,
+	LOUNGE, DANCE, PRAY, COMMUNE, RUN, MIMIC, SHUN, DEPART,
 }
 
 const WALK_SPEED := 3.5
@@ -49,21 +50,29 @@ var flight_time := 0.0
 ## happens on the way, so leading it somewhere is itself a way of teaching.
 var leash_target := Vector3.INF
 
-## Feelings. Mood is the weather of its heart; bond is trust in your hand;
-## boredom is the itch that play and curiosity scratch.
+## Feelings. Mood is the weather of its heart; bond is how attached it is to
+## you; boredom is the itch that play and curiosity scratch.
 var mood := 60.0     # 0 wretched .. 100 delighted
 var bond := 20.0     # 0 stranger .. 100 devoted
 var boredom := 20.0
 
+## TRUST — what it thinks of YOU, kept apart from bond on purpose. Bond is
+## attachment; trust is whether your judgement is worth anything. A creature can
+## be desperately attached to a god it has learned to flinch from.
+##
+## Trust is the valve on your whole influence: it decides how hard your example
+## lands (see `witness_god_deed`), and when it falls far enough the creature
+## stops taking your corrections, keeps its distance from your hand, and — if
+## its own heart has grown kinder than yours — walks away to live by its own
+## lights somewhere you are not.
+var trust := 55.0
+
 ## Independent karma: -100 monstrous .. +100 angelic.
 var morality := 0.0
 
-## What the creature WANTS, learned by watching and by your praise/scolding.
-## These weights multiply into every decision it makes.
-var desires := {
-	"tend": 0.6, "gather": 0.6, "play": 0.9, "watch": 1.1,
-	"guard": 0.5, "mischief": 0.35, "fish": 0.7, "catch": 0.3, "rampage": 0.4,
-}
+## How good it is at catching what you throw — the one hand-eye SKILL it has,
+## and the only thing praise trains directly rather than through the mind.
+var catch_skill := 0.3
 
 ## ATTENTION: how closely it is watching your hand right now. Handing it
 ## things raises it (innate); it decays with neglect. Catching a thrown
@@ -112,6 +121,7 @@ var _observe_time := 0.0
 var _state_time := 0.0
 var _prev_state := State.IDLE
 var _cheer_time := 0.0
+var _look_time := 0.0      # when it next turns its head, while lounging
 var _body: Node3D
 var _label: Label3D
 var _animator: ModelAnimator = null   # non-null only for a rigged custom model
@@ -284,6 +294,22 @@ func _physics_process(delta: float) -> void:
 			_process_cast(delta)
 		State.LEASHED:
 			_process_leashed(delta)
+		State.LOUNGE:
+			_process_lounge(delta)
+		State.DANCE:
+			_process_dance(delta)
+		State.PRAY:
+			_process_pray(delta)
+		State.COMMUNE:
+			_process_commune(delta)
+		State.RUN:
+			_process_run(delta)
+		State.MIMIC:
+			_process_mimic(delta)
+		State.SHUN:
+			_process_shun(delta)
+		State.DEPART:
+			_process_depart(delta)
 
 	_observe_time -= delta
 	if _observe_time <= 0.0:
@@ -395,17 +421,26 @@ func _observe_world() -> void:
 			continue
 		match villager.state:
 			Villager.State.FARMING:
-				_bump_desire("tend", 0.02)
+				mind.teach("tend", "farm", 1.0, 0.02)
 				watched_work = true
 			Villager.State.FISHING:
-				_bump_desire("fish", 0.02)
+				mind.teach("fish", "water", 1.0, 0.02)
 				watched_work = true
 			Villager.State.BUILDING, Villager.State.CHOPPING, Villager.State.QUARRYING:
-				_bump_desire("gather", 0.015)
+				mind.teach("gather", "goods", 1.0, 0.015)
 				watched_work = true
 			Villager.State.GO_FEED, Villager.State.TAMING:
-				_bump_desire("gather", 0.01)
+				mind.teach("gift", "sheep", 1.0, 0.01)
 				watched_work = true
+			# THE PRACTICES. A creature cannot dance until it has seen dancing,
+			# and cannot lead a prayer it has never watched anyone say. This is
+			# the whole of how its repertoire widens: villages that celebrate
+			# and worship raise creatures that celebrate and worship, and a
+			# grim, joyless village raises a creature that knows neither.
+			Villager.State.PLAY:
+				mind.witness_practice("dance")
+			Villager.State.WORSHIPPING, Villager.State.PREACHING:
+				mind.witness_practice("pray")
 	if watched_work:
 		# Curiosity about the villagers' work keeps it engaged and alert.
 		attention = minf(attention + 5.0, 100.0)
@@ -415,18 +450,7 @@ func _observe_world() -> void:
 			var animal := a as Animal
 			if is_instance_valid(animal) and animal.species == "wolf" \
 					and animal.global_position.distance_to(global_position) < 25.0:
-				_bump_desire("guard", 0.05)
-
-
-func _bump_desire(key: String, amount: float) -> void:
-	desires[key] = clampf(desires[key] + amount, 0.1, 2.5)
-	# What it watches, it also comes to VALUE: observation feeds the learning
-	# mind directly, so a creature raised among farmers grows fond of farming.
-	match key:
-		"tend": mind.teach("tend", "farm", amount * 8.0)
-		"fish": mind.teach("fish", "water", amount * 8.0)
-		"gather": mind.teach("gather", "food", amount * 8.0)
-		"guard": mind.teach("smash", "predator", amount * 8.0)
+				mind.teach("guard", "village", 1.0, 0.05)
 
 
 ## Decision-making — THE MIND DECIDES ------------------------------------------
@@ -462,6 +486,11 @@ func _decide() -> void:
 		"hunger": hunger, "energy": energy, "boredom": boredom,
 		"mood": mood, "fear": fear, "wounded": _wounded_nearby(),
 		"full": body.fullness(growth), "lazy": body.laziness(),
+		# Being alone is a need like any other. A creature with nobody about
+		# leans toward whatever brings it near people — which for one creature
+		# means holding court and for another means going and finding someone
+		# to torment. The drive does not care which.
+		"lonely": 1.0 if _audience(24.0) == 0 else 0.0,
 	}
 	var choice := mind.choose(_perceive(), drive, _circumstances())
 	_act_verb = choice["verb"]
@@ -587,7 +616,57 @@ func _perceive() -> Array:
 	# Miracles it has watched often enough to try itself.
 	for m: String in mind.known_miracles():
 		_offer(opts, "cast", m, null)
+	_offer_quiet_life(opts)
 	return opts.values()
+
+
+## THE HOURS IN BETWEEN. Most of a life is not spent killing or saving anyone,
+## and a creature offered only those two things will pick one and become it.
+## These are always on the ballot; none of them is ever forced, and none is
+## worth anything until the creature finds out for itself whether it likes them.
+func _offer_quiet_life(opts: Dictionary) -> void:
+	# Doing nothing much, with its eyes open. Not sleep — this is the creature
+	# sprawled in the grass watching the world go by, and it is a real choice.
+	_offer(opts, "lounge", "none", null)
+	_offer(opts, "run", "none", null)
+	# Running with something heavy is how muscle is actually earned.
+	var load_bearing := CreatureEyes.nearest_carriable(get_tree(), global_position, 30.0)
+	if load_bearing != null and can_lift(load_bearing):
+		_offer(opts, "run", _type_of(load_bearing), load_bearing)
+
+	# Practices are LEARNED, not innate: it can only dance if it has seen
+	# dancing. A creature raised beside a joyless village never picks them up.
+	var village := CreatureEyes.home_village(get_tree())
+	var near_home := village != null \
+		and global_position.distance_to(village.global_position) < village.influence_radius * 1.6
+	if mind.knows("dance"):
+		_offer(opts, "dance", "village" if near_home else "none", null)
+	if near_home:
+		if mind.knows("pray"):
+			_offer(opts, "pray", "village", null)
+		# Standing before the people and being attended to. It costs them
+		# nothing and wins you belief — the whole non-violent road.
+		_offer(opts, "commune", "village", null)
+
+	# COPYING YOU. Only ever on the table while it still thinks you are worth
+	# copying, and only once it has watched you do enough to have a habit of it.
+	if trust > 35.0 and mind.knows("mimic") and divine_hand != null \
+			and is_instance_valid(divine_hand):
+		_offer(opts, "mimic", "god", divine_hand)
+
+	# What a mistreated creature has instead of obedience. These are options,
+	# not fates: a creature can be badly used and still choose to stay.
+	if trust < 40.0:
+		_offer(opts, "sulk", "none", null)
+		if divine_hand != null and is_instance_valid(divine_hand) \
+				and divine_hand.global_position.distance_to(global_position) < 30.0:
+			_offer(opts, "shun", "god", divine_hand)
+	# LEAVING. Offered only when it has stopped trusting you AND its own heart
+	# has outgrown yours — a good creature with a cruel god. It is still only an
+	# option among many, and a creature that has learned to love you anyway
+	# (bond) will rarely take it.
+	if trust < 20.0 and mind.temperament > 15.0:
+		_offer(opts, "depart", "none", null)
 
 
 ## Put an opportunity on the ballot, keeping the NEAREST target for each
@@ -622,26 +701,7 @@ func _things_around(radius: float) -> Array:
 ## The KIND of a thing — the creature learns about categories, not individuals,
 ## so one bad sheep teaches it about sheep.
 func _type_of(node: Node) -> String:
-	if node is Villager:
-		return "villager"
-	if node is Animal:
-		var a := node as Animal
-		if a.spec.get("predator", false):
-			return "predator"
-		return a.species
-	if node is House:
-		return "house"
-	if node is WildTree:
-		return "tree"
-	if node is RockDeposit:
-		return "rock"
-	if node is Corpse:
-		return "corpse"
-	if node is FoodItem:
-		return "food"
-	if node is ResourceItem:
-		return "goods"
-	return "thing"
+	return CreatureEyes.kind_of(node)
 
 
 ## Carry out the mind's choice by driving the body's existing motor states.
@@ -720,6 +780,47 @@ func _enact(choice: Dictionary) -> void:
 			_cast_miracle = choice.get("type", "")
 			state = State.CAST
 			_action_time = 2.0
+		"lounge":
+			# A long, unhurried stretch of nothing. The creature is not idle
+			# between deeds here — being at ease IS the deed, and it lasts long
+			# enough for you to sit and watch it.
+			state = State.LOUNGE
+			_action_time = randf_range(9.0, 20.0)
+			express("happy", 3.0)
+		"dance":
+			state = State.DANCE
+			_action_time = randf_range(6.0, 11.0)
+		"pray":
+			state = State.PRAY
+			_action_time = randf_range(8.0, 15.0)
+		"commune":
+			state = State.COMMUNE
+			_action_time = randf_range(7.0, 13.0)
+			var home := CreatureEyes.home_village(get_tree())
+			_target = home.global_position if home != null else global_position
+		"run":
+			# For the joy of it, and for the muscle. Somewhere far, at speed.
+			if target != null:
+				_catch_target = target
+				_carry_intent = "run"
+				state = State.CATCH
+			else:
+				_begin_run()
+		"mimic":
+			state = State.MIMIC
+			_action_time = randf_range(5.0, 9.0)
+		"sulk":
+			state = State.SULK
+			_action_time = randf_range(6.0, 12.0)
+			express("sad", 4.0)
+		"shun":
+			state = State.SHUN
+			_action_time = randf_range(4.0, 8.0)
+			var off := global_position - target.global_position
+			off.y = 0.0
+			_target = global_position + off.normalized() * 22.0
+		"depart":
+			_begin_departure()
 		_:
 			_wander()
 
@@ -785,15 +886,18 @@ func _process_watch(delta: float) -> void:
 		_finish_deed("watch", 3.0)
 
 
-## Watching a job long enough plants the desire to help with it.
+## Watching a job through to the end is the strongest version of the same
+## lesson — straight onto the value it will weigh when it next chooses.
 func _learn_from(watched_state: Villager.State) -> void:
 	match watched_state:
 		Villager.State.FARMING:
-			_bump_desire("tend", 0.15)
+			mind.teach("tend", "farm", 1.5, 0.15)
 		Villager.State.BUILDING, Villager.State.CHOPPING, Villager.State.QUARRYING:
-			_bump_desire("gather", 0.1)
-		_:
-			_bump_desire("watch", 0.05)
+			mind.teach("gather", "goods", 1.5, 0.1)
+		Villager.State.PLAY:
+			mind.witness_practice("dance", CreatureMind.PRACTICE_STEP * 2.0)
+		Villager.State.WORSHIPPING, Villager.State.PREACHING:
+			mind.witness_practice("pray", CreatureMind.PRACTICE_STEP * 2.0)
 
 
 func _process_go_gather(delta: float) -> void:
@@ -824,7 +928,7 @@ func _try_catch_throw() -> void:
 	_catch_checked_id = thrown.get_instance_id()  # one attempt per throw
 	if attention < 35.0:
 		return  # not watching your hand; it sails past
-	var skill := clampf(desires["catch"] * 0.55, 0.12, 0.95)
+	var skill := clampf(catch_skill * 0.55, 0.12, 0.95)
 	if randf() > skill:
 		GameState.announce("Your creature lunged... and fumbled the catch. Practice.")
 		mood = maxf(mood - 2.0, 0.0)
@@ -846,6 +950,7 @@ func receive_gift(item: Node3D) -> void:
 	attention = minf(attention + 15.0, 100.0)
 	bond = minf(bond + 2.0, 100.0)
 	mood = minf(mood + 6.0, 100.0)
+	earn_trust(2.5)   # a hand that gives is a hand worth watching
 	express("curious")
 	_pick_up_thing(item, _intent_for(item))
 	_last_deed = "receive"
@@ -919,6 +1024,9 @@ func _process_carrying(delta: float) -> void:
 		_decide()
 		return
 	match _carry_intent:
+		"run":
+			# It has what it wanted to carry; now go and run with it.
+			_begin_run()
 		"deliver":
 			var store := CreatureEyes.nearest_store(get_tree(), global_position)
 			if store == null:
@@ -1408,10 +1516,11 @@ func _devour_villager(victim: Villager) -> void:
 func praise() -> void:
 	bond = minf(bond + 4.0, 100.0)
 	mood = minf(mood + 12.0, 100.0)
+	# Kindness is what buys the right to be listened to.
+	earn_trust(5.0)
 	attention = minf(attention + 8.0, 100.0)
-	var key := _deed_desire_key(_last_deed)
-	if key != "":
-		_bump_desire(key, 0.25)
+	if _last_deed == "catch":
+		catch_skill = clampf(catch_skill + 0.25, 0.1, 2.5)
 	express("love")
 	mind.experience("praised", 2.0)
 	# THE STRONGEST LESSON: your approval teaches the mind that whatever it just
@@ -1434,9 +1543,8 @@ func praise() -> void:
 func scold() -> void:
 	bond = maxf(bond - 2.0, 0.0)
 	mood = maxf(mood - 14.0, 0.0)
-	var key := _deed_desire_key(_last_deed)
-	if key != "":
-		desires[key] = clampf(desires[key] - 0.3, 0.1, 2.5)
+	if _last_deed == "catch":
+		catch_skill = clampf(catch_skill - 0.3, 0.1, 2.5)
 	# Your disapproval teaches the mind that deed is not worth repeating.
 	mind.experience("scolded", -2.0)
 	# Likewise: scolding must land on the deed it just did. A scolding is
@@ -1446,8 +1554,21 @@ func scold() -> void:
 		# Disapproval pushes its heart the OPPOSITE way from the deed's weight.
 		mind.judge(-CreatureMind.VERB_VALENCE.get(_deed_verb, 0.0), 0.22, false)
 		morality = mind.temperament
+	# WAS IT FAIR? A telling-off for something genuinely cruel is a correction,
+	# and the creature takes it. A telling-off for lounging in the sun, dancing
+	# for the village or hauling grain home is simply a god being cruel, and it
+	# costs you exactly what cruelty should. This is the whole of how a player
+	# becomes someone their creature stops believing.
+	var deserved: float = CreatureMind.VERB_VALENCE.get(_deed_verb, 0.0)
+	if deserved < -0.3:
+		earn_trust(-0.5)   # it knows what it did
+	else:
+		earn_trust(-7.0 + deserved * 4.0)
 	if _last_deed in ["hunt", "mischief", "smash"]:
 		GameState.announce("Your creature cowers. It understands that was wrong.")
+	elif trust < 30.0:
+		GameState.announce(
+			"Your creature flinches from your hand. It no longer believes you are fair.")
 	else:
 		GameState.announce("Your creature whimpers, confused. It was only trying to help.")
 	express("hurt", 2.4)
@@ -1455,20 +1576,6 @@ func scold() -> void:
 	_action_time = 8.0
 
 
-func _deed_desire_key(deed: String) -> String:
-	match deed:
-		"tend", "gather", "play", "watch", "guard", "mischief", "fish", "catch", "rampage":
-			return deed
-		"gift":
-			return "gather"
-		"receive":
-			return "catch"  # praised for accepting = learns to watch the hand
-		"hunt":
-			return "mischief"
-	return ""
-
-
-## The creature learns right and wrong from watching its god at work.
 func witness(weight: float) -> void:
 	# Seeing its god act shifts the creature's own heart, and colours what it
 	# believes violence is worth — the lesson generalises to its own choices.
@@ -1606,6 +1713,253 @@ func _process_leashed(delta: float) -> void:
 		_observe_world()
 
 
+## The quiet life ---------------------------------------------------------------
+##
+## None of what follows advances anything. That is the point: a world where
+## every act is a move in a game leaves the player managing a creature instead
+## of keeping one. These are the things it does when nothing is wrong.
+
+
+## LOUNGING. Sprawled out, taking the world in. It genuinely rests here — less
+## than sleep, but it is awake, it is looking around, and it is very slowly
+## working out what it thinks of the place. A creature that has learned to like
+## this is a creature you can just sit and watch.
+func _process_lounge(delta: float) -> void:
+	_apply_gravity_only(delta)
+	_action_time -= delta
+	energy = minf(energy + 1.4 * delta, 100.0)
+	body.idle(delta)
+	# It turns its head to whatever is nearby. This is where its opinions of
+	# ordinary things quietly form.
+	_look_time -= delta
+	if _look_time <= 0.0:
+		_look_time = randf_range(2.0, 4.0)
+		_observe_world()
+		var about := _things_around(20.0)
+		if not about.is_empty():
+			_face(about[randi() % about.size()].global_position)
+	if _action_time <= 0.0:
+		_last_deed = "lounge"
+		_finish_choice(0.5 + boredom / 300.0)
+
+
+## DANCING — learned by watching villagers dance, and performed AT them. It is
+## a spectacle, and a village that stops to watch its god's creature caper is a
+## village warming to you.
+func _process_dance(delta: float) -> void:
+	_apply_gravity_only(delta)
+	_action_time -= delta
+	rotation.y += delta * 2.4
+	_body.scale.y = 1.0 + sin(Time.get_ticks_msec() / 120.0) * 0.12
+	_cheer_time -= delta
+	if _cheer_time <= 0.0:
+		_cheer_time = 1.0
+		_cheer_nearby(18.0, 1.2)
+		var village := CreatureEyes.home_village(get_tree())
+		if village != null and _audience(18.0) > 0:
+			village.change_belief(0.35)
+	if _action_time <= 0.0:
+		_body.scale.y = 1.0
+		body.exert(0.8, 0.4)
+		boredom = maxf(boredom - 30.0, 0.0)
+		_last_deed = "dance"
+		# The bigger the crowd, the better it felt. Nobody watching is a
+		# lesson too — it may well decide dancing is not worth the effort.
+		_finish_choice(0.4 + _audience(18.0) * 0.35)
+
+
+## LEADING PRAYER. Sat still, eyes shut, arms out. The villagers at their totem
+## pray harder with it there, and the prayer flows to you.
+func _process_pray(delta: float) -> void:
+	_apply_gravity_only(delta)
+	_action_time -= delta
+	express("love", 0.6)
+	var faithful := 0
+	for v in get_tree().get_nodes_in_group("villagers"):
+		var villager := v as Villager
+		if not is_instance_valid(villager) or villager.global_position \
+				.distance_to(global_position) > 22.0:
+			continue
+		if villager.is_worshipping():
+			faithful += 1
+	if faithful > 0:
+		GameState.add_prayer_power(faithful * 1.6 * delta)
+		var village := CreatureEyes.home_village(get_tree())
+		if village != null:
+			village.change_belief(0.22 * delta * faithful)
+	if _action_time <= 0.0:
+		mood = minf(mood + 6.0, 100.0)
+		_last_deed = "pray"
+		_finish_choice(0.5 + faithful * 0.4)
+
+
+## HOLDING COURT. It walks into the middle of the village and simply stands
+## there being enormous, and the people turn and look. No violence, no miracle,
+## no gift — just presence, and belief grows from it.
+func _process_commune(delta: float) -> void:
+	var village := CreatureEyes.home_village(get_tree())
+	if village == null:
+		_decide()
+		return
+	if global_position.distance_to(_target) > village.influence_radius * 0.45:
+		_move_toward(_target, WALK_SPEED * 0.8, delta)
+		return
+	_apply_gravity_only(delta)
+	_action_time -= delta
+	var audience := _audience(20.0)
+	if audience > 0:
+		village.change_belief(0.3 * delta * minf(audience, 6))
+		village.notice(0.4 * delta)
+		_cheer_time -= delta
+		if _cheer_time <= 0.0:
+			_cheer_time = 2.0
+			for v in get_tree().get_nodes_in_group("villagers"):
+				var villager := v as Villager
+				if is_instance_valid(villager) and villager.global_position \
+						.distance_to(global_position) < 20.0:
+					villager.attend(global_position)
+	if _action_time <= 0.0:
+		_last_deed = "commune"
+		_finish_choice(0.4 + audience * 0.3)
+
+
+func _begin_run() -> void:
+	state = State.RUN
+	_action_time = randf_range(7.0, 14.0)
+	var angle := randf() * TAU
+	_target = global_position + Vector3(cos(angle), 0, sin(angle)) * randf_range(30.0, 60.0)
+
+
+## RUNNING, for no reason at all — or with something heavy on its back, which
+## is how a creature actually builds the muscle to carry bigger things later.
+func _process_run(delta: float) -> void:
+	_action_time -= delta
+	var burden := 1.0 if _carried == null else 2.6
+	body.exert(burden, delta)
+	energy = maxf(energy - 1.6 * delta * burden, 0.0)
+	if _move_toward(_target, _run_speed(), delta) or _action_time <= 0.0:
+		if _carried != null:
+			_release_carried(true)
+		boredom = maxf(boredom - 22.0, 0.0)
+		_last_deed = "run"
+		_finish_choice(0.45 + (0.3 if burden > 1.5 else 0.0))
+
+
+## MIMICRY. It follows your hand about and copies what it sees you do. The
+## copying itself happens wherever you act (see `witness_god_deed`); this is
+## the creature CHOOSING to shadow you so that it sees more of it.
+func _process_mimic(delta: float) -> void:
+	_action_time -= delta
+	if divine_hand == null or not is_instance_valid(divine_hand):
+		_decide()
+		return
+	var hand := divine_hand.global_position
+	if global_position.distance_to(hand) > 6.0 + scale.x * 1.5:
+		_move_toward(hand, WALK_SPEED * 1.15, delta)
+	else:
+		_apply_gravity_only(delta)
+		_face(hand)
+		attention = minf(attention + 9.0 * delta, 100.0)
+	if _action_time <= 0.0:
+		_last_deed = "mimic"
+		# Shadowing a god who is doing nothing is dull; one who is busy is not.
+		_finish_choice(0.3 + attention / 160.0)
+
+
+## KEEPING ITS DISTANCE. Not fear of the world — wariness of YOU.
+func _process_shun(delta: float) -> void:
+	_action_time -= delta
+	if _move_toward(_target, _run_speed() * 0.8, delta) or _action_time <= 0.0:
+		_last_deed = "shun"
+		_finish_choice(0.35)
+
+
+## LEAVING. A creature that has stopped trusting you, but has NOT stopped being
+## good, walks out of your reach to live by its own lights. It is not gone from
+## the world — it is out there, and sustained kindness can still win it back.
+func _begin_departure() -> void:
+	state = State.DEPART
+	_action_time = 60.0
+	var angle := randf() * TAU
+	_target = global_position + Vector3(cos(angle), 0, sin(angle)) * 220.0
+	release_leash()
+	GameState.announce(
+		"Your creature turns away from you and walks. It has decided it is better than you.")
+	express("sad", 6.0)
+
+
+func _process_depart(delta: float) -> void:
+	_action_time -= delta
+	body.exert(1.0, delta)
+	# Only kindness brings it back, and only slowly.
+	if trust > 45.0:
+		GameState.announce("Your creature stops, looks back, and waits for you.")
+		_finish_choice(1.2)
+		return
+	if _move_toward(_target, _run_speed(), delta) or _action_time <= 0.0:
+		_last_deed = "depart"
+		_finish_choice(0.6)
+
+
+## How many people are actually watching it right now. Half the quiet life is
+## worth nothing without an audience, and the creature learns that itself.
+func _audience(radius: float) -> int:
+	var count := 0
+	for v in get_tree().get_nodes_in_group("villagers"):
+		var villager := v as Villager
+		if is_instance_valid(villager) and not villager.is_afraid() \
+				and villager.global_position.distance_to(global_position) < radius:
+			count += 1
+	return count
+
+
+func _face(point: Vector3) -> void:
+	var flat := point - global_position
+	flat.y = 0.0
+	if flat.length_squared() > 0.01:
+		rotation.y = lerp_angle(rotation.y, atan2(flat.x, flat.z), 0.08)
+
+
+## Trust and your example -------------------------------------------------------
+
+## Move what it thinks of you. Announced only at the thresholds that actually
+## change how it behaves, so the player learns the mechanic by living it.
+func earn_trust(amount: float) -> void:
+	var before := trust
+	trust = clampf(trust + amount, 0.0, 100.0)
+	if before >= 35.0 and trust < 35.0:
+		GameState.announce("Your creature has stopped copying you.")
+	elif before >= 20.0 and trust < 20.0:
+		GameState.announce("Your creature will barely look at you now.")
+	elif before < 55.0 and trust >= 55.0 and amount > 0.0:
+		GameState.announce("Your creature watches your hand again, and trusts it.")
+
+
+## YOU DID SOMETHING, AND IT SAW. Every act of your hand in the world is an
+## example the creature may take up — what you lift, what you set down kindly,
+## what you fling, who you mend. It only learns from what it can actually see,
+## and only in proportion to what it thinks of you.
+##
+## There is deliberately no list here of deeds worth copying. Whatever you do
+## with your hands is what you are teaching, and a player who never notices
+## that is a player raising a creature in their own image without meaning to.
+func witness_god(verb: String, type: String, valence := 0.0) -> void:
+	if divine_hand == null or not is_instance_valid(divine_hand):
+		return
+	# Out of sight, out of mind: it copies what it WATCHES, not what you do
+	# across the map. Attention widens how far that reaches.
+	var reach := 24.0 + attention * 0.3 + scale.x * 1.5
+	if divine_hand.global_position.distance_to(global_position) > reach:
+		return
+	mind.witness_god_deed(verb, type, trust)
+	attention = minf(attention + 4.0, 100.0)
+	# It also reads your character off your conduct, faintly — this is the same
+	# slow channel that watching your miracles uses.
+	if valence != 0.0:
+		mind.observe_god(valence * clampf(trust / 100.0, 0.0, 1.0))
+		morality = mind.temperament
+
+
 ## A miracle lends it a giant's grip for a while — enough to uproot trees far
 ## beyond what its own muscle could manage.
 func grant_strength(seconds: float) -> void:
@@ -1669,6 +2023,10 @@ func take_damage(amount: float, _by_god := false, _instant := false) -> void:
 	# It works out for ITSELF what brought this on — no rule tells it that
 	# being beaten follows from eating people.
 	mind.experience("hurt", -clampf(amount / 25.0, 0.3, 2.0))
+	# Being hurt BY YOUR OWN GOD is a different wound entirely. Nothing else in
+	# the game costs trust this fast, and nothing should.
+	if _by_god:
+		earn_trust(-clampf(amount * 0.5, 4.0, 30.0))
 	fear = minf(fear + amount * 0.8, 100.0)
 	mood = maxf(mood - amount * 0.4, 0.0)
 	express("hurt", 2.0)
@@ -1681,6 +2039,7 @@ func take_damage(amount: float, _by_god := false, _instant := false) -> void:
 func receive_heal() -> void:
 	energy = minf(energy + 40.0, 100.0)
 	mood = minf(mood + 10.0, 100.0)
+	earn_trust(6.0)
 	express("love")
 
 
@@ -1752,6 +2111,11 @@ func _anim_state() -> String:
 		State.FLEE: return "run"
 		State.CAST: return "work"
 		State.LEASHED: return "walk"
+		State.LOUNGE, State.PRAY: return "idle"
+		State.DANCE: return "play"
+		State.COMMUNE: return "guard"
+		State.RUN, State.SHUN, State.DEPART: return "run"
+		State.MIMIC: return "walk"
 	return "walk" if Vector2(velocity.x, velocity.z).length() > 0.3 else "idle"
 
 
@@ -1763,21 +2127,19 @@ func mood_word() -> String:
 	return CreatureLook.mood_word(mood)
 
 
+## What it most wants to do, straight from what it has actually learned —
+## there is no second table of wants any more.
 func favorite_deed() -> String:
-	var best := ""
-	var best_weight := 0.0
-	for key: String in desires:
-		if desires[key] > best_weight:
-			best_weight = desires[key]
-			best = key
-	return best
+	return mind.strongest_urge()
 
 
 func hover_text() -> String:
-	return ("Your creature — %s (%s, %s) · bond %d · attention %d\n" +
-		"hunger %d · energy %d · loves to %s\n" +
+	return ("Your creature — %s (%s, %s)\n" +
+		"bond %d · trusts you %d · attention %d\n" +
+		"hunger %d · energy %d · %s\n" +
 		"[P — pet   ·   L — scold   ·   C — lock camera]") % [
-		_status_word(), morality_word(), mood_word(), int(bond), int(attention),
+		_status_word(), morality_word(), mood_word(),
+		int(bond), int(trust), int(attention),
 		int(hunger), int(energy), favorite_deed()]
 
 
@@ -1824,6 +2186,15 @@ func _status_word() -> String:
 		State.PLAY: return "playing"
 		State.GUARD: return "standing guard"
 		State.SULK: return "sulking"
+		State.LOUNGE: return "lounging, watching the world"
+		State.DANCE: return "dancing for the village"
+		State.PRAY: return "leading the prayers"
+		State.COMMUNE: return "holding court before the people"
+		State.RUN: return "running, just to run" if _carried == null \
+			else "running with %s on its back" % _carriable_word(_carried)
+		State.MIMIC: return "shadowing your hand, copying you"
+		State.SHUN: return "keeping away from you"
+		State.DEPART: return "walking away from you, for good"
 	return "?"
 
 
@@ -1845,6 +2216,14 @@ func _status_text() -> String:
 		State.FLEE: return "!!!"
 		State.CAST: return "***"
 		State.LEASHED: return "yes?"
+		State.LOUNGE: return "~"
+		State.DANCE: return "la la"
+		State.PRAY: return "ommm"
+		State.COMMUNE: return "behold"
+		State.RUN: return "whoosh"
+		State.MIMIC: return "like this?"
+		State.SHUN: return "..."
+		State.DEPART: return "goodbye"
 	return ""
 
 
@@ -1861,6 +2240,8 @@ func to_dict() -> Dictionary:
 		"energy": energy,
 		"mood": mood,
 		"bond": bond,
+		"trust": trust,
+		"catch_skill": catch_skill,
 		"boredom": boredom,
 		"fear": fear,
 		"attention": attention,
@@ -1881,6 +2262,8 @@ func from_dict(data: Dictionary) -> void:
 	energy = float(data.get("energy", 90.0))
 	mood = float(data.get("mood", 60.0))
 	bond = float(data.get("bond", 20.0))
+	trust = float(data.get("trust", 55.0))
+	catch_skill = float(data.get("catch_skill", 0.3))
 	boredom = float(data.get("boredom", 20.0))
 	fear = float(data.get("fear", 0.0))
 	attention = float(data.get("attention", 20.0))

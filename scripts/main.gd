@@ -345,14 +345,62 @@ func _run_smoke_test() -> void:
 	print("SMOKE TEST: construction site=%s homeless=%d capacity=%d" % [
 		site != null, village.homeless_count(), village.housing_capacity()])
 
-	# Exercise creature training: praise and scold must move bond/mood/desires.
+	# Exercise creature training: praise and scold must move bond, mood and trust.
 	creature._last_deed = "play"
-	var desire_before: float = creature.desires["play"]
 	creature.praise()
+	var trusted := creature.trust
 	creature.scold()
-	print("SMOKE TEST: creature trained — bond=%.0f mood=%.0f (%s) play desire %.2f->%.2f, loves %s" % [
+	print("SMOKE TEST: creature trained — bond=%.0f mood=%.0f (%s) trust %.0f->%.0f, %s" % [
 		creature.bond, creature.mood, creature.mood_word(),
-		desire_before, creature.desires["play"], creature.favorite_deed()])
+		trusted, creature.trust, creature.favorite_deed()])
+
+	# THE QUIET LIFE. Most of what it can do is neither kind nor cruel, and the
+	# neutral half of the repertoire must actually reach the ballot.
+	creature.mind.witness_practice("dance", 1.0)
+	creature.mind.witness_practice("pray", 1.0)
+	creature.mind.witness_practice("mimic", 1.0)
+	var quiet := 0
+	var verbs := {}
+	for opt: Dictionary in creature._perceive():
+		verbs[opt["verb"]] = true
+		if CreatureMind.VERB_VALENCE.get(opt["verb"], 0.0) == 0.0:
+			quiet += 1
+	print("SMOKE TEST: repertoire — %d options, %d of them morally neutral, verbs=%s" % [
+		verbs.size(), quiet, str(verbs.keys())])
+
+	# DRIVES PULL ON TRAITS, NOT ON VERB NAMES: a bored creature must find
+	# smashing and dancing equally plausible until experience separates them.
+	var restless := {"hunger": 10.0, "energy": 90.0, "boredom": 95.0, "mood": 60.0, "fear": 0.0}
+	print("SMOKE TEST: boredom wants stimulation, not violence — smash %.2f vs dance %.2f vs run %.2f" % [
+		creature.mind._drive_fit("smash", restless),
+		creature.mind._drive_fit("dance", restless),
+		creature.mind._drive_fit("run", restless)])
+	var lonely := {"energy": 90.0, "mood": 60.0, "lonely": 1.0}
+	print("SMOKE TEST: loneliness wants company — commune %.2f vs smash %.2f" % [
+		creature.mind._drive_fit("commune", lonely),
+		creature.mind._drive_fit("smash", lonely)])
+
+	# YOUR EXAMPLE. What the hand does is copied in proportion to trust — and a
+	# creature that has stopped trusting you stops copying entirely.
+	creature.trust = 90.0
+	creature.witness_god("gather", "tree", 0.4)
+	var copied: float = creature.mind.q.get("gather|tree", 0.0)
+	creature.trust = 5.0
+	creature.witness_god("smash", "house", -0.6)
+	print("SMOKE TEST: mimicry — trusted lesson gather|tree=%.2f, distrusted smash|house=%.2f" % [
+		copied, float(creature.mind.q.get("smash|house", 0.0))])
+
+	# AN UNJUST SCOLDING COSTS TRUST; a deserved one barely does.
+	var fair := Creature.new()
+	fair._deed_verb = "smash"
+	fair.scold()
+	var unfair := Creature.new()
+	unfair._deed_verb = "tend"
+	unfair.scold()
+	print("SMOKE TEST: fairness — scolded for smashing trust=%.0f, for farming trust=%.0f" % [
+		fair.trust, unfair.trust])
+	fair.free()
+	unfair.free()
 
 	# The LEARNING MIND: perceive options, choose, and be reinforced. Praising a
 	# smash must actually raise its learned value for smashing that thing.

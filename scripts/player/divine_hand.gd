@@ -452,6 +452,20 @@ func _release_body(body: Node3D, vel: Vector3, gentle: bool) -> void:
 		rb.linear_velocity = vel
 	elif body.has_method("drop"):
 		body.call("drop", vel, gentle)
+	# YOUR CREATURE IS WATCHING. Setting a thing down carefully and hurling it
+	# are different lessons, and it takes whichever one you just gave.
+	_show_creature("gather" if gentle else "throw", body, 0.4 if gentle else -0.6)
+
+
+## Tell the creature what your hand just did, if it is near enough to see. It
+## decides for itself what to make of it — see `Creature.witness_god`.
+func _show_creature(verb: String, subject: Node3D, valence: float) -> void:
+	var creature := get_tree().get_first_node_in_group("creature") as Creature
+	if creature == null or not is_instance_valid(creature) or subject == creature:
+		return
+	creature.witness_god(verb, CreatureEyes.kind_of(subject), valence)
+
+
 
 
 ## Arm the aftertouch: remember the projectile, set its spin now, and store

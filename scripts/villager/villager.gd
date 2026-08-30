@@ -1817,6 +1817,24 @@ func is_worshipping() -> bool:
 	return state == State.WORSHIPPING
 
 
+func is_afraid() -> bool:
+	return state in [State.FLEE, State.HIDE]
+
+
+## Something enormous is standing there being peaceful. The villager stops what
+## they are doing, turns, and looks at it — the ordinary human reaction to an
+## awesome thing that is not, right now, hurting anybody. Being ATTENDED to is
+## what the creature's quieter deeds are actually for.
+func attend(point: Vector3) -> void:
+	if is_afraid() or state in [State.HELD, State.FALLING, State.DYING, State.FIGHT]:
+		return
+	var flat := point - global_position
+	flat.y = 0.0
+	if flat.length_squared() > 0.01:
+		rotation.y = atan2(flat.x, flat.z)
+	happiness = minf(happiness + 0.5, 100.0)
+
+
 ## Divine hand interface -----------------------------------------------------
 
 func pick_up() -> void:

@@ -319,6 +319,53 @@ Both ask twice before they fire, and the arming lapses after a few seconds.
 The workshop also holds test cheats: prayer, instant growth, instant
 conversion, and a printout of what the creature currently believes.
 
+## The quiet life, and how you shape it
+
+Most of what a creature does is neither kind nor cruel, and a creature offered
+only saintly and monstrous options will pick one and become it. So the ballot
+is mostly ordinary: it can **lounge** in the grass watching the world go by,
+**run** for the joy of running (with a tree on its back, which is how muscle is
+actually earned), **dance**, **lead the village's prayers**, or simply **stand
+among the people and be looked at** — which wins belief without a drop of blood,
+and is a complete non-violent road to unlocking miracles.
+
+It cannot dance or pray until it has **watched someone** dance or pray. A
+village that celebrates and worships raises a creature with a wider life than a
+grim one does.
+
+**Drives pull on traits, never on verbs.** The body knows only broad needs —
+hunger, tiredness, boredom, loneliness, fear — and boredom asks for
+*stimulation* without any opinion on whether that turns out to be dancing,
+sprinting, showing off or flattening a house; those score identically until
+experience separates them. Adding a verb means describing what it is *like*,
+not writing a rule about when to do it. The single most important consequence:
+nothing in the design gives violence a head start, and a creature with an
+appetite for people learned it from a tie.
+
+### Trust, and being watched
+
+**Trust** is kept apart from bond on purpose — bond is attachment, trust is
+whether your judgement is worth anything. A creature can be desperately
+attached to a god it has learned to flinch from.
+
+Praise, gifts and healing earn trust. Hurting it with your own miracles spends
+it fast. So does **scolding it for something that was not cruel** — it knows
+the difference between a correction and a god being unfair, and an unjust
+telling-off costs you roughly fourteen times what a deserved one does.
+
+Trust is the valve on your whole influence:
+
+- **It copies you.** Every act of your hand near it is a lesson — what you lift,
+  what you set down gently, what you hurl, who you mend — landing on the very
+  same learned values it uses to choose its own deeds. There is deliberately no
+  list of deeds worth copying; whatever you do is what you are teaching.
+- **Below ~35 trust it stops copying you** and takes its cues elsewhere.
+- **Below ~20 it keeps its distance**, sulking and shunning your hand.
+- **A creature that has grown kinder than you may leave.** Low trust plus a
+  temperament better than your own puts *walking away* on the ballot: it turns
+  its back and goes to live by its own lights somewhere you are not. It is not
+  gone from the world, and sustained kindness still brings it home.
+
 ## Code map
 
 ```

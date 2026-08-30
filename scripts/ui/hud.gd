@@ -302,12 +302,37 @@ dogs (to guard). Monstrous villages abandon the plough and pen what
 they catch. Listen: the world bleats, saws, hammers, croaks, and howls.
 
 YOUR CREATURE
-It watches, learns, and feels. It observes villagers working and grows
-curious about their jobs; it plays when bored, guards the village at
-night when good, sulks when scolded, and makes mischief when idle and
-mean. Pet (P) what you like, scold (L) what you don't — it learns what
-YOU reward, so praising cruelty raises a monster. Hover it to read its
-mood, bond, and what it currently loves doing. Press C if you lose it."""
+It watches, learns, and feels. Nothing it does is scripted: its body
+knows only broad needs — hunger, tiredness, boredom, loneliness, fear —
+and boredom asks for STIMULATION without caring whether that turns out
+to be dancing, running, showing off or smashing a house. Which one this
+creature reaches for is settled by what it has learned, what it has come
+to believe, and what it has watched YOU do.
+
+Most of a life is neither kind nor cruel. It can lounge in the grass and
+watch the world go by, run for the joy of running (with a tree on its
+back, which is how it builds muscle), dance, lead the village's prayers,
+or simply stand among the people and be looked at — which wins belief
+without a drop of blood. It cannot dance or pray until it has WATCHED
+someone dance or pray, so a joyful village raises a creature with a
+wider life than a grim one does.
+
+IT COPIES YOU. Everything your hand does near it is a lesson: what you
+pick up, what you set down kindly, what you hurl, who you mend. There is
+no list of deeds worth copying — whatever you do is what you are
+teaching.
+
+TRUST is separate from bond, and it is the valve on all of that. Praise,
+gifts and healing earn it; hurting it with your own miracles spends it
+fast. So does scolding it for something that was not cruel — it knows
+the difference between a correction and a god being unfair. Let trust
+fall and it stops copying you, then keeps its distance, and a creature
+that has grown KINDER THAN YOU may simply walk away to live by its own
+lights. Sustained kindness can still bring it home.
+
+Pet (P) what you like, scold (L) what you don't. Hover it to read its
+mood, bond, trust and what it has learned to love. Press C if you lose
+it."""
 	help.add_theme_font_size_override("font_size", 15)
 	var margin := MarginContainer.new()
 	for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:

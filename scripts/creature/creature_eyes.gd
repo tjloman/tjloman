@@ -116,3 +116,30 @@ static func is_working(villager: Villager) -> bool:
 		Villager.State.FARMING, Villager.State.BUILDING,
 		Villager.State.CHOPPING, Villager.State.QUARRYING,
 	]
+
+
+## THE BUCKETS the creature thinks in. Not "that particular sheep" but "a
+## sheep" — coarse enough that a lesson about one wolf is a lesson about
+## wolves. The divine hand uses the very same buckets, so watching YOU hurl a
+## villager lands on the identical learned value as hurling one itself.
+static func kind_of(node: Node) -> String:
+	if node is Villager:
+		return "villager"
+	if node is Animal:
+		var a := node as Animal
+		if a.spec.get("predator", false):
+			return "predator"
+		return a.species
+	if node is House:
+		return "house"
+	if node is WildTree:
+		return "tree"
+	if node is RockDeposit:
+		return "rock"
+	if node is Corpse:
+		return "corpse"
+	if node is FoodItem:
+		return "food"
+	if node is ResourceItem:
+		return "goods"
+	return "thing"

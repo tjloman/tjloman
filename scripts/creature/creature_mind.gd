@@ -19,6 +19,15 @@ const Q_CLAMP := 4.0
 const FORGET := 0.004       # values drift gently back toward zero (slow forgetting)
 const MIRACLE_STEP := 0.05  # familiarity gained per witnessed cast
 const MIRACLE_READY := 0.6  # familiarity needed before it can cast on its own
+## Learning a PRACTICE (dancing, praying, holding court) by watching others.
+## Slower than watching a miracle: you have to see a thing done a good few times
+## before you can join in.
+const PRACTICE_STEP := 0.06
+const PRACTICE_READY := 0.5
+## Copying YOU. How hard one observed deed of yours pulls, and how much of that
+## survives — both scaled by trust at the call site.
+const MIMIC_REWARD := 1.6
+const MIMIC_LR := 0.3
 ## CONSCIENCE: how strongly the creature's own character colours what it WANTS
 ## to do. A saintly beast finds cruelty repellent; a monstrous one finds it
 ## delicious. This is what makes an angelic creature refuse to eat people
@@ -71,6 +80,54 @@ const VERB_VALENCE := {
 	"watch": 0.1, "play": 0.2, "fish": 0.1, "cast": 0.25,
 	"smash": -1.0, "throw": -0.7, "eat_kin": -1.2, "eat": -0.1,
 	"flee": 0.0, "wander": 0.0, "rest": 0.0,
+	# A LIFE IS MOSTLY NEITHER. Most of what anything does is morally weightless,
+	# and a creature with only saintly and monstrous options on the table is
+	# forced to be one or the other. These are the hours in between.
+	"lounge": 0.0, "run": 0.0, "mimic": 0.0, "sulk": 0.0, "shun": 0.0,
+	"depart": 0.0, "dance": 0.15, "commune": 0.3, "pray": 0.4,
+}
+
+## WHAT EACH VERB IS LIKE. Drives read these, never verb names (see `_drive_fit`).
+##   effort — how physical, the cost a tired or fat body flinches from
+##   social — wants people about
+##   feeds  — answers hunger
+##   calms  — soothes, restores, costs nothing
+##   thrill — stimulation: excitement, spectacle, destruction, showing off
+##   escape — puts distance between itself and what it fears
+##   heals  — mends its own hurts
+## Verbs with similar traits are interchangeable to the BODY; only learning,
+## belief, character and your example ever tell them apart.
+const VERB_TRAITS := {
+	"eat": {"feeds": 1.0, "effort": 0.2, "thrill": 0.1},
+	# To a BODY, a person and a sheep are both meat: identical but for the work
+	# of running one down. There is deliberately no appetite for people written
+	# in here — everything that makes a man-eater is learned on top of a tie.
+	"eat_kin": {"feeds": 1.0, "effort": 0.55, "thrill": 0.1},
+	"gather": {"feeds": 0.35, "effort": 0.6, "social": 0.1},
+	"fish": {"feeds": 0.6, "effort": 0.3, "calms": 0.3},
+	"rest": {"calms": 1.0},
+	"play": {"thrill": 0.9, "effort": 0.6, "social": 0.3},
+	"watch": {"social": 0.6, "calms": 0.3, "thrill": 0.2},
+	"smash": {"thrill": 0.7, "effort": 0.8},
+	"throw": {"thrill": 0.7, "effort": 0.7},
+	"flee": {"escape": 1.0, "effort": 0.8},
+	"tend": {"effort": 0.5, "social": 0.25},
+	"gift": {"social": 0.6, "effort": 0.4},
+	"guard": {"social": 0.4, "effort": 0.3, "calms": 0.2},
+	"rescue": {"social": 0.7, "effort": 0.7},
+	"cast": {"thrill": 0.5, "heals": 1.0, "effort": 0.2},
+	"wander": {"thrill": 0.25, "calms": 0.2, "effort": 0.3},
+	# The quiet life.
+	"lounge": {"calms": 0.85, "social": 0.15},
+	"dance": {"thrill": 0.75, "social": 0.6, "effort": 0.5},
+	"pray": {"calms": 0.6, "social": 0.7},
+	"commune": {"social": 1.0, "calms": 0.25, "effort": 0.2},
+	"run": {"effort": 1.0, "thrill": 0.7, "calms": 0.1},
+	"mimic": {"thrill": 0.4, "social": 0.5, "effort": 0.4},
+	# What a creature does when it has stopped trusting you.
+	"sulk": {"calms": 0.4, "escape": 0.35},
+	"shun": {"escape": 0.6, "effort": 0.35},
+	"depart": {"escape": 1.0, "effort": 0.9},
 }
 
 ## The learned value of doing a VERB to a TYPE of thing. Starts near zero; every
@@ -78,7 +135,10 @@ const VERB_VALENCE := {
 ## THE CREATURE'S PERSONALITY — two creatures never learn the same one.
 var q := {}                 # "verb|type" -> float, roughly -Q_CLAMP..+Q_CLAMP
 var seen := {}              # "verb|type" -> times tried (drives curiosity)
-var familiarity := {}       # miracle name -> 0..1, learned by witnessing casts
+var familiarity := {}       # miracle name -> 0..1, learned by witnessing
+## Practices it has picked up by WATCHING — dancing, praying, holding court.
+## An empty repertoire is a creature that has never seen anyone enjoy anything.
+var repertoire := {}        # verb -> 0..1 casts
 var temperament := 0.0      # -100 monstrous .. +100 angelic: emergent, follows deeds
 
 ## WHAT IT BELIEVES about the world, and in what circumstances (see
@@ -124,37 +184,47 @@ func conscience_of(verb: String) -> float:
 	return c * RELISH if c > 0.0 else c
 
 
-## How much a verb answers the body's current needs. Keeps a starving or
-## exhausted creature sensible without scripting the choice — the pull is just
-## one more term the learned values compete with.
+## How much a verb answers the body's current needs.
+##
+## Drives pull on TRAITS, never on named verbs. This matters more than anything
+## else in this file: the moment a drive says "boredom wants smashing", every
+## creature ever raised is a vandal by construction, and the player is left
+## nudging a thing that already knows what it wants to be. Here boredom simply
+## wants STIMULATION, and smashing a house, dancing for the villagers, sprinting
+## across a hill with a tree on its back and casting a miracle are all equally
+## valid answers as far as the body is concerned. Which one this particular
+## creature reaches for is settled entirely by what it has learned, what it
+## believes, what its character makes palatable, and what YOU have shown it.
+##
+## Adding a verb therefore means describing what it is LIKE, not writing a new
+## rule about when to do it — and two verbs that feel alike are genuinely
+## interchangeable until experience separates them.
 func _drive_fit(verb: String, drive: Dictionary) -> float:
+	var traits: Dictionary = VERB_TRAITS.get(verb, {})
+	if traits.is_empty():
+		return 0.0
 	var hunger: float = drive.get("hunger", 0.0) / 100.0
 	var tired: float = (100.0 - drive.get("energy", 100.0)) / 100.0
 	var bored: float = drive.get("boredom", 0.0) / 100.0
 	var low: float = (100.0 - drive.get("mood", 50.0)) / 100.0
 	var afraid: float = drive.get("fear", 0.0) / 100.0
 	var wounded: float = drive.get("wounded", 0.0)
-	var full: float = drive.get("full", 0.0)    # 0 empty .. 1 stuffed
-	var lazy: float = drive.get("lazy", 0.0)    # how fat, and so how disinclined
-	match verb:
-		# Appetite is hunger MINUS how full the belly already is. A stuffed
-		# creature has no interest in food however long since it last ate.
-		"eat", "eat_kin": return maxf(hunger * 2.2 - full * 3.0, -1.0)
-		"gather": return maxf(hunger * 0.8 - full * 0.8, 0.0) + 0.1 - lazy * 0.4
-		"fish": return hunger * 0.7 + bored * 0.3
-		# A fat creature is a lazy one: sprawling always looks inviting.
-		"rest": return tired * 2.6 + lazy * 1.1 + full * 0.6
-		# PLAY is what boredom actually wants — chasing, romping, showing off.
-		"play": return bored * 1.7 - lazy * 0.9   # too heavy to romp
-		"watch": return bored * 0.9
-		# Violence is what FRUSTRATION wants, not mere idleness. Left as a
-		# boredom cure it simply became every creature's favourite pastime.
-		"smash", "throw": return low * 1.0 + bored * 0.15 - lazy * 0.5
-		"flee": return afraid * 2.4
-		"tend", "gift", "guard", "rescue": return 0.15 - lazy * 0.4  # work is effort
-		"cast": return bored * 0.3 + wounded * 2.0 + 0.15
-		"wander": return 0.3
-	return 0.0
+	var full: float = drive.get("full", 0.0)      # 0 empty .. 1 stuffed
+	var lazy: float = drive.get("lazy", 0.0)      # how fat, and so how disinclined
+	var lonely: float = drive.get("lonely", 0.0)  # nobody about
+	# Appetite is hunger MINUS how full the belly already is: a stuffed creature
+	# has no interest in food however long since it last ate.
+	var appetite := maxf(hunger - full * 1.4, -0.45)
+	var fit := 0.0
+	fit += float(traits.get("feeds", 0.0)) * appetite * 2.2
+	fit += float(traits.get("calms", 0.0)) * (tired * 2.4 + lazy * 1.0 + full * 0.4)
+	fit += float(traits.get("thrill", 0.0)) * (bored * 1.5 + low * 0.6)
+	fit += float(traits.get("social", 0.0)) * (0.2 + lonely * 1.1)
+	fit += float(traits.get("escape", 0.0)) * afraid * 2.4
+	fit += float(traits.get("heals", 0.0)) * wounded * 2.0
+	# Effort is what a tired or heavy body flinches from — the one universal cost.
+	fit -= float(traits.get("effort", 0.0)) * (lazy * 0.9 + tired * 0.6)
+	return fit
 
 
 ## Choose among the perceived opportunities. Softmax over predicted value, so
@@ -265,6 +335,40 @@ func witness_miracle(miracle: String) -> void:
 	familiarity[miracle] = minf(float(familiarity.get(miracle, 0.0)) + MIRACLE_STEP, 1.0)
 
 
+## A creature can only do what it has SEEN DONE. Dancing, praying, standing
+## before a village and being attended to — none of these are innate. It picks
+## them up by watching, which is why a creature raised beside a joyful village
+## grows up with a wider life than one raised beside a grim one.
+func witness_practice(verb: String, step := PRACTICE_STEP) -> void:
+	repertoire[verb] = minf(float(repertoire.get(verb, 0.0)) + step, 1.0)
+
+
+## Does it know how to do this at all? Verbs absent from the repertoire are
+## innate and always available; the ones in it must be learned first.
+func knows(verb: String) -> bool:
+	return float(repertoire.get(verb, 0.0)) >= PRACTICE_READY
+
+
+## YOUR EXAMPLE. Everything you do with your own hand is a lesson the creature
+## may take: what you pick up, what you set down gently, what you hurl, who you
+## heal. It copies you in proportion to how far it TRUSTS you — a beloved god is
+## imitated closely, a feared one is watched and quietly disregarded.
+##
+## Nothing here says which deeds are worth copying. Plant trees and it learns to
+## plant trees; hurl shepherds into the sea and it learns that too. This is the
+## widest channel you have into what your creature becomes, and it is entirely
+## made of what you actually do.
+func witness_god_deed(verb: String, type: String, trust: float) -> void:
+	var faith := clampf(trust / 100.0, 0.0, 1.0)
+	if faith < 0.15:
+		return          # it is no longer taking its cues from you
+	teach(verb, type, MIMIC_REWARD * faith, MIMIC_LR * faith)
+	witness_practice("mimic", PRACTICE_STEP * 0.5)
+	# Copying is itself a habit: the more it watches a god worth watching, the
+	# more it thinks to look in the first place.
+	familiarity["_watching"] = minf(float(familiarity.get("_watching", 0.0)) + 0.02, 1.0)
+
+
 ## The miracles it has watched enough to attempt itself.
 func known_miracles() -> Array:
 	var ready := []
@@ -299,6 +403,7 @@ func to_dict() -> Dictionary:
 		"q": q.duplicate(true),
 		"seen": seen.duplicate(true),
 		"familiarity": familiarity.duplicate(true),
+		"repertoire": repertoire.duplicate(true),
 		"temperament": temperament,
 		"deed_avg": _deed_avg,
 		"beliefs": beliefs.to_dict(),
@@ -309,6 +414,7 @@ func from_dict(data: Dictionary) -> void:
 	q = (data.get("q", {}) as Dictionary).duplicate(true)
 	seen = (data.get("seen", {}) as Dictionary).duplicate(true)
 	familiarity = (data.get("familiarity", {}) as Dictionary).duplicate(true)
+	repertoire = (data.get("repertoire", {}) as Dictionary).duplicate(true)
 	temperament = float(data.get("temperament", 0.0))
 	_deed_avg = float(data.get("deed_avg", temperament / CHARACTER_SCALE))
 	_sated.clear()
