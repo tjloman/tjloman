@@ -1,44 +1,57 @@
 class_name GestureRecognizer
-## Classifies a raw mouse trail (screen-space points) into a miracle gesture.
+## Classifies a raw mouse trail (screen-space points) into one RUNE-shape.
 ##
-## Deliberately simple heuristics — enough shapes to drive the two-step
-## casting system (a MENU-OPENING gesture, then a SELECTOR gesture):
-##   MENU OPENERS
-##     "spiral"     – 1.5+ clockwise loops, open (not closed)
-##     "rev_spiral" – 1.5+ counter-clockwise loops
-##     "wave"       – an S / sine: the stroke curves one way, then back the
-##                    other (one or more curvature inflections). Smooth OR
-##                    sharp — a lazy S counts, not just a jagged W.
-##   SELECTORS (meaning depends on the open menu)
-##     "circle"     – one closed loop
-##     "vline"      – tall straight stroke
-##     "hline"      – wide straight stroke
-##     "dline"      – diagonal slash
-##   "none"         – unrecognized
+## Each shape stands for a rune, and runes combine (see Spellbook), so the
+## alphabet has to be small enough to learn and — far more importantly —
+## RELIABLE. A recognizer that confuses two shapes is worse than one that
+## knows fewer, because a misread rune casts the wrong miracle at full cost.
+## Every shape below is separated by a different measurement, not by a
+## threshold on the same one:
 ##
-## Because selectors are namespaced inside a menu, the same simple shape can
-## mean different miracles in different menus — which sidesteps the recognizer
-## confusing them.
+##   "spiral"     – 1.3+ full turns of winding, one way
+##   "rev_spiral" – the same, winding the other way
+##   "circle"     – about one turn, and it closes
+##   "arc"        – a half-to-three-quarter bow: curved, open, no reversal
+##   "zigzag"     – three or more SHARP reversals: a jagged scrawl
+##   "caret"      – exactly one sharp corner: a ^ or a v
+##   "wave"       – a smooth S: it curves one way and then the other
+##   "vline"      – a tall straight stroke
+##   "hline"      – a wide straight stroke
+##   "dline"      – a diagonal slash
+##   "none"       – too short, or nothing we can name
+##
+## The order of the tests below is load-bearing: the most distinctive
+## measurements are consumed first, so a shape can never fall through into a
+## looser test that would also have matched it.
 
 const MIN_PATH_LENGTH := 60.0  # pixels; anything shorter is a misclick
 ## Radians of consistent curving before a curl "commits" to a direction.
 ## ~34 degrees: enough that a wobbly straight line never registers, low
 ## enough that a gently drawn S still does.
 const INFLECT_TURN := 0.6
+## A CORNER: a single step that turns this hard is a deliberate point, not a
+## curve. ~72 degrees. Corners are what separate a jagged zigzag and a sharp
+## caret from a smooth wave and a smooth arc.
+const CORNER_TURN := 1.25
 
 
 static func classify(points: PackedVector2Array) -> String:
 	if points.size() < 4:
 		return "none"
 
-	var resampled := _resample(points, 32)
-	var path_len := _path_length(resampled)
+	# Two smoothings, because the features want different things. CORNERS are
+	# sharp by nature and one pass is all they can survive; CURVATURE stats are
+	# ruined by hand jitter and need three. Measuring both on one path is what
+	# made arcs read as waves and carets read as nothing.
+	var base := _resample(points, 48)
+	var sharp := _smooth(base, 1)
+	var path := _smooth(base, 3)
+	var path_len := _path_length(path)
 	if path_len < MIN_PATH_LENGTH:
 		return "none"
 
-	var bbox := _bounding_box(resampled)
+	var bbox := _bounding_box(path)
 	var total_turn := 0.0   # signed accumulated turning angle
-	var reversals := 0      # sharp (>100 deg) direction changes
 	# Curvature inflections: how many times the stroke stops curving one way
 	# and commits to curving the other. An S has 1, a sine W has 2+, a
 	# straight line or a single arc/circle/spiral has 0 — this is what makes
@@ -47,16 +60,14 @@ static func classify(points: PackedVector2Array) -> String:
 	var run_turn := 0.0     # signed turn accumulated in the current curl
 	var committed_sign := 0
 	var prev_dir := Vector2.ZERO
-	for i in range(1, resampled.size()):
-		var dir := resampled[i] - resampled[i - 1]
+	for i in range(1, path.size()):
+		var dir := path[i] - path[i - 1]
 		if dir.length() < 0.001:
 			continue
 		dir = dir.normalized()
 		if prev_dir != Vector2.ZERO:
 			var step := prev_dir.angle_to(dir)
 			total_turn += step
-			if step != 0.0 and prev_dir.dot(dir) < -0.17:
-				reversals += 1
 			# Grow the current curl if it keeps turning the same way; if it
 			# turns the other way, start a fresh curl. Once a curl exceeds the
 			# commit threshold, it "sets" a direction — a later curl setting
@@ -75,11 +86,32 @@ static func classify(points: PackedVector2Array) -> String:
 					run_turn = 0.0
 		prev_dir = dir
 
-	var closed := resampled[0].distance_to(resampled[resampled.size() - 1]) < path_len * 0.25
+	var corners := _corner_count(sharp)
+	var reversals := _reversal_count(sharp)
+	var closed := path[0].distance_to(path[path.size() - 1]) < path_len * 0.25
 	var aspect := bbox.size.x / maxf(bbox.size.y, 1.0)
+	# How much of the stroke's length actually went anywhere. 1.0 is a ruled
+	# line; a circle is near 0.
+	var straightness := path[0].distance_to(path[path.size() - 1]) / maxf(path_len, 1.0)
+	# THE APEX: how far the first third's heading turns from the last third's.
+	# Averaged over many samples, so it holds up where corner-hunting does not.
+	var n := path.size()
+	var lead := path[n / 3] - path[0]
+	var tail := path[n - 1] - path[2 * n / 3]
+	var apex := 0.0
+	if lead.length() > 0.001 and tail.length() > 0.001:
+		apex = absf(lead.normalized().angle_to(tail.normalized()))
+	# A CARET bends all in ONE PLACE, so each half of it is itself straight. An
+	# ARC bends the whole way along, so its halves are curved too. This is the
+	# only measurement that reliably separates the two.
+	var half := n / 2
+	var limbs := minf(
+		path[half].distance_to(path[0]) / maxf(_path_length(path.slice(0, half + 1)), 1.0),
+		path[n - 1].distance_to(path[half]) / maxf(_path_length(path.slice(half)), 1.0))
 
 	# Spiral: 1.3+ full turns of winding. Sign tells clockwise from counter
-	# (screen y is down, so positive accumulated angle winds one way).
+	# (screen y is down, so positive accumulated angle winds one way). Tested
+	# first because nothing else winds this far.
 	if absf(total_turn) > 8.0:
 		return "spiral" if total_turn > 0.0 else "rev_spiral"
 
@@ -87,10 +119,25 @@ static func classify(points: PackedVector2Array) -> String:
 	if absf(total_turn) > 4.5 and closed and aspect > 0.35 and aspect < 2.8:
 		return "circle"
 
-	# Wave / S: the stroke curved one way then back (an inflection), or was
-	# scribbled with hard reversals. Forgiving — a lazy S is enough.
-	if inflections >= 1 or reversals >= 2:
+	# ZIGZAG before wave: a jagged scrawl has real CORNERS where a smooth S has
+	# only curvature. This distinction is what earns fury its own rune.
+	if corners >= 3 or reversals >= 3:
+		return "zigzag"
+
+	# CARET: a ^ or a v — one hard turn, straight limbs either side of it.
+	if not closed and inflections <= 1 and apex > 1.05 and limbs > 0.94 \
+			and straightness > 0.45:
+		return "caret"
+
+	# Wave / S: curved one way and then the other. The straightness guard stops
+	# a shaky ruled line from reading as a lazy S.
+	if (inflections >= 1 or reversals >= 2) and straightness < 0.93:
 		return "wave"
+
+	# ARC: a bow. Curved well past a wobble, open, never doubling back.
+	if absf(total_turn) > 2.0 and absf(total_turn) <= 4.5 and not closed \
+			and inflections == 0:
+		return "arc"
 
 	# Straight-ish strokes: little accumulated turning.
 	if absf(total_turn) < 2.0:
@@ -103,6 +150,53 @@ static func classify(points: PackedVector2Array) -> String:
 			return "dline"
 
 	return "none"
+
+
+## How many genuine CORNERS the stroke has — places where it changes heading
+## abruptly rather than curving round. Measured over a wide window so a long
+## smooth curve (which turns just as far, but gradually) never counts as one.
+static func _corner_count(points: PackedVector2Array) -> int:
+	var corners := 0
+	var span := 4
+	for i in range(span, points.size() - span):
+		var before := points[i] - points[i - span]
+		var after := points[i + span] - points[i]
+		if before.length() < 0.001 or after.length() < 0.001:
+			continue
+		if absf(before.normalized().angle_to(after.normalized())) > CORNER_TURN:
+			corners += 1
+	# Neighbouring samples both see the same corner, so runs collapse to one.
+	return int(ceil(corners / 2.0))
+
+
+## Hard about-turns: the stroke doubling back on itself.
+static func _reversal_count(points: PackedVector2Array) -> int:
+	var reversals := 0
+	var prev := Vector2.ZERO
+	for i in range(1, points.size()):
+		var dir := points[i] - points[i - 1]
+		if dir.length() < 0.001:
+			continue
+		dir = dir.normalized()
+		if prev != Vector2.ZERO and prev.dot(dir) < -0.17:
+			reversals += 1
+		prev = dir
+	return reversals
+
+
+## Rolls the hand's shake out of a stroke without moving where it actually
+## went — a plain 1-2-1 blur, run as many times as the caller needs.
+static func _smooth(points: PackedVector2Array, passes: int) -> PackedVector2Array:
+	var path := points
+	for _pass in passes:
+		if path.size() < 3:
+			return path
+		var out := PackedVector2Array([path[0]])
+		for i in range(1, path.size() - 1):
+			out.append((path[i - 1] + path[i] * 2.0 + path[i + 1]) * 0.25)
+		out.append(path[path.size() - 1])
+		path = out
+	return path
 
 
 static func _path_length(points: PackedVector2Array) -> float:

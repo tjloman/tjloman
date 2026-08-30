@@ -10,31 +10,6 @@ extends Node3D
 ## converted villages and higher belief make storms wider and flocks larger.
 
 ## MENU OPENER -> { label, selectors: {gesture -> miracle} }.
-const MENUS := {
-	"spiral": {
-		"label": "NATURE:  O food  |  forest  —  thicket  \\  bloom  ~  STRENGTH",
-		"selectors": {
-			"circle": "food", "vline": "forest_seed",
-			"hline": "forage_thicket", "dline": "rain",
-			"wave": "strength",
-		},
-	},
-	"rev_spiral": {
-		"label": "WRATH:  |  lightning   O  storm   \\  fireball   —  tornado",
-		"selectors": {
-			"vline": "lightning", "circle": "lightning_storm",
-			"dline": "fireball", "hline": "tornado",
-		},
-	},
-	"wave": {
-		"label": "SKY:  —  heal   O  birds   |  flight   \\  portal",
-		"selectors": {
-			"hline": "heal", "circle": "bird_flock",
-			"vline": "flight", "dline": "portal",
-		},
-	},
-}
-
 ## name -> { cost, color }. Cost is gated by your prayer-power cap, which
 ## grows with every converted village — the mightiest miracles need a wide
 ## flock behind you.
@@ -52,6 +27,16 @@ const MIRACLES := {
 	"flight": {"cost": 55.0, "color": Color(0.7, 0.9, 1.0)},
 	"portal": {"cost": 70.0, "color": Color(0.5, 0.75, 1.0)},
 	"strength": {"cost": 35.0, "color": Color(0.9, 0.5, 0.35)},
+	# The weather, by degrees. One rune of water is a sprinkle; three is a
+	# deluge; water and force together bring the sky down.
+	"gust": {"cost": 12.0, "color": Color(0.75, 0.8, 0.85)},
+	"thunderclap": {"cost": 15.0, "color": Color(0.9, 0.9, 0.75)},
+	"cloudburst": {"cost": 45.0, "color": Color(0.4, 0.6, 0.95)},
+	"deluge": {"cost": 80.0, "color": Color(0.3, 0.5, 0.9)},
+	"thunderstorm": {"cost": 60.0, "color": Color(0.6, 0.7, 0.95)},
+	"tempest": {"cost": 150.0, "color": Color(0.7, 0.75, 1.0)},
+	"firestorm": {"cost": 130.0, "color": Color(1.0, 0.45, 0.2)},
+	"hurricane": {"cost": 190.0, "color": Color(0.55, 0.65, 0.8)},
 }
 
 ## How each resolved miracle moves the player's karma, and what the creature
@@ -70,18 +55,20 @@ const KARMA := {
 	"lightning_storm": {"player": -7.0, "creature": -5.0},
 	"tornado": {"player": -8.0, "creature": -6.0},
 	"fireball": {"player": -2.5, "creature": -2.0},
+	"gust": {"player": 0.0, "creature": 0.5},
+	"thunderclap": {"player": -1.0, "creature": -0.5},
+	"cloudburst": {"player": 1.5, "creature": 1.5},
+	"deluge": {"player": -1.0, "creature": 0.5},
+	"thunderstorm": {"player": -5.0, "creature": -3.5},
+	"tempest": {"player": -9.0, "creature": -7.0},
+	"firestorm": {"player": -9.0, "creature": -7.0},
+	"hurricane": {"player": -11.0, "creature": -8.0},
 }
 
-## THE UNLOCK LADDER: your dominion is your spellbook. Every village that comes
-## to believe teaches you the next set of wonders — so expanding the faith is
-## how the game opens up. Prayer itself is POOLED: once known, a miracle can be
-## paid for with the devotion of every town you hold.
-const UNLOCK_TIERS := [
-	["food", "heal", "rain"],
-	["forest_seed", "forage_thicket", "lightning", "strength"],
-	["fireball", "bird_flock", "flight"],
-	["portal", "lightning_storm", "tornado"],
-]
+## THE UNLOCK LADDER now runs on RUNES, not on finished miracles — see
+## Spellbook.RUNE_TIERS. Learning a rudiment opens every combination it takes
+## part in at once, so a village teaches you far more than one wonder, and the
+## spellbook grows combinatorially instead of a fixed dozen at a time.
 
 const LIGHTNING_KILL_RADIUS := 3.0
 const LIGHTNING_BURN_RADIUS := 8.0
@@ -106,25 +93,55 @@ func power() -> float:
 	return 1.0 + believers * 0.35 + belief_sum / 300.0
 
 
-## Step one of casting: a menu opener was drawn. Returns its label to show,
-## or "" if this gesture opens no menu.
-func menu_label(opener: String) -> String:
-	return MENUS.get(opener, {}).get("label", "")
-
-
-func is_menu_opener(gesture: String) -> bool:
-	return MENUS.has(gesture)
-
-
-## Step two: a selector was drawn inside an open menu. Conjures the chosen
-## miracle into the hand. Returns false (with a reason) if it can't.
-func select(opener: String, selector: String) -> bool:
-	var menu: Dictionary = MENUS.get(opener, {})
-	var selectors: Dictionary = menu.get("selectors", {})
-	if not selectors.has(selector):
-		GameState.hint("That gesture means nothing in this menu.")
+## CAST WHAT WAS DRAWN. The hand hands over the runes; the spellbook says what
+## they mean; we check you know every rudiment involved, take the prayer, and
+## put the result in your grip.
+func cast_runes(runes: Array) -> bool:
+	var reading := Spellbook.interpret(runes)
+	if reading.is_empty():
+		GameState.hint("Those runes mean nothing together.")
 		return false
-	return conjure(selectors[selector])
+	# RUDIMENTS FIRST. You cannot hold a storm before you hold rain and
+	# lightning apart — and the moment you hold both, the storm is yours with
+	# nothing further to learn.
+	var known := known_runes()
+	for rune: String in Spellbook.runes_needed(runes):
+		if not known.has(rune):
+			GameState.hint("You do not know the rune of %s yet — bring another village to the faith."
+				% rune)
+			return false
+	var cost := _cost_of(reading)
+	if cost > GameState.max_prayer_power:
+		GameState.hint("%s needs more devoted villages before you can hold it."
+			% String(reading.get("label", "that")).capitalize().replace("_", " "))
+		return false
+	if not GameState.try_spend(cost):
+		GameState.hint("Not enough prayer power — your followers must worship more.")
+		return false
+	return _conjure_reading(reading)
+
+
+## What a drawing costs: the sum of what it is made of, eased a little so that
+## combining is always worth doing rather than a tax on ambition.
+func _cost_of(reading: Dictionary) -> float:
+	if reading.has("miracle"):
+		var base: float = MIRACLES.get(reading["miracle"], {}).get("cost", 25.0)
+		return base * (1.0 + (float(reading.get("potency", 1.0)) - 1.0) * 0.7)
+	var total := 0.0
+	for part: Dictionary in reading.get("blend", []):
+		total += float(MIRACLES.get(part["miracle"], {}).get("cost", 25.0)) * float(part["potency"])
+	return total * Spellbook.COMBO_MULTIPLIER
+
+
+## The runes your dominion has taught you. Villages teach RUDIMENTS; every
+## combination of what you hold follows for free.
+func known_runes() -> Array:
+	var known := []
+	var tiers := mini(maxi(faithful_villages(), 1), Spellbook.RUNE_TIERS.size())
+	for i in tiers:
+		for rune: String in Spellbook.RUNE_TIERS[i]:
+			known.append(rune)
+	return known
 
 
 ## How many villages hold your faith (the home village counts once converted).
@@ -136,38 +153,65 @@ func faithful_villages() -> int:
 	return n
 
 
-## Every miracle your dominion has taught you so far.
+## Every miracle you could actually cast right now — every named recipe whose
+## runes you hold, plus the rudiments themselves. This is what the creature
+## watches, and what the roster brags about.
 func unlocked_miracles() -> Array:
-	var known := []
-	var tiers := mini(maxi(faithful_villages(), 1), UNLOCK_TIERS.size())
-	for i in tiers:
-		for m: String in UNLOCK_TIERS[i]:
-			known.append(m)
-	return known
+	var known := known_runes()
+	var castable := []
+	for rune: String in known:
+		var base: String = Spellbook.BASE.get(rune, "")
+		if base != "" and not castable.has(base):
+			castable.append(base)
+	for key: String in Spellbook.RECIPES:
+		var needed: PackedStringArray = key.split("+")
+		var holds := true
+		for rune in needed:
+			if not known.has(rune):
+				holds = false
+				break
+		if holds and not castable.has(Spellbook.RECIPES[key]):
+			castable.append(Spellbook.RECIPES[key])
+	return castable
 
 
 func is_unlocked(miracle: String) -> bool:
 	return unlocked_miracles().has(miracle)
 
 
-## The tier just opened by the newest convert — announced on conversion.
+## The runes just taught by the newest convert — announced on conversion.
 func newly_taught() -> Array:
 	var tier := faithful_villages() - 1
-	if tier > 0 and tier < UNLOCK_TIERS.size():
-		return UNLOCK_TIERS[tier]
+	if tier > 0 and tier < Spellbook.RUNE_TIERS.size():
+		return Spellbook.RUNE_TIERS[tier]
 	return []
 
 
-## The wonders the NEXT convert would teach you — shown to tempt the player on.
+## The rudiments the NEXT convert would teach — shown to tempt the player on.
 func next_tier_preview() -> Array:
 	var tier := faithful_villages()
-	if tier < UNLOCK_TIERS.size():
-		return UNLOCK_TIERS[tier]
+	if tier < Spellbook.RUNE_TIERS.size():
+		return Spellbook.RUNE_TIERS[tier]
 	return []
 
 
-## Conjures a named miracle as an orb into the divine hand (or drops it
-## in the air if the hand is full). Spends prayer power up front.
+## Put a reading in the hand. A named miracle becomes one orb; a BLEND becomes
+## one orb per part, so an invented combination lands as several effects at
+## once wherever you throw them.
+func _conjure_reading(reading: Dictionary) -> bool:
+	if reading.has("miracle"):
+		return _make_orb(reading["miracle"], float(reading.get("potency", 1.0)))
+	var made := false
+	for part: Dictionary in reading.get("blend", []):
+		made = _make_orb(part["miracle"], float(part["potency"])) or made
+	if made:
+		GameState.hint("A working of your own making, conjured — THROW it.")
+	return made
+
+
+## Conjures a named miracle as an orb into the divine hand (or drops it in the
+## air if the hand is full). Spends prayer power up front. Used by the creature
+## and by tests; the player's own casting goes through `cast_runes`.
 func conjure(miracle: String) -> bool:
 	if not MIRACLES.has(miracle):
 		return false
@@ -182,27 +226,38 @@ func conjure(miracle: String) -> bool:
 	if not GameState.try_spend(cost):
 		GameState.hint("Not enough prayer power — your followers must worship more.")
 		return false
+	return _make_orb(miracle, 1.0)
+
+
+## The orb itself. `potency` rides along so that the same miracle can arrive
+## as a sprinkle or as a downpour without needing a separate name for each.
+func _make_orb(miracle: String, potency: float) -> bool:
+	if not MIRACLES.has(miracle):
+		return false
 	var body: RigidBody3D
 	if miracle == "fireball":
 		body = Fireball.new()
 	else:
 		var orb := MiracleOrb.new()
 		orb.miracle_name = miracle
+		orb.potency = potency
 		orb.color = MIRACLES[miracle]["color"]
 		orb.manager = self
 		body = orb
 	add_child(body)
 	if divine_hand == null or not divine_hand.force_hold(body):
 		body.global_position = global_position + Vector3(0, 4.0, 0)
-	GameState.hint("%s conjured — now THROW it where you want it." % miracle.capitalize())
+	GameState.hint("%s conjured — now THROW it where you want it."
+		% miracle.capitalize().replace("_", " "))
 	return true
 
 
 ## Called by a thrown orb when it lands: unleash the effect at that spot,
 ## apply karma, and let the villages witness it.
-func resolve(miracle: String, pos: Vector3, momentum := Vector3.ZERO) -> void:
+func resolve(miracle: String, pos: Vector3, momentum := Vector3.ZERO,
+		scale_up := 1.0) -> void:
 	pos.y = 0
-	var potency := power()
+	var potency := power() * scale_up
 	match miracle:
 		"food": _cast_food(pos)
 		"rain": _cast_rain(pos, potency)
@@ -216,6 +271,15 @@ func resolve(miracle: String, pos: Vector3, momentum := Vector3.ZERO) -> void:
 		"flight": _cast_flight(pos, potency)
 		"portal": _cast_portal(pos)
 		"strength": _cast_strength(pos, potency)
+		# The weather, by degrees — all of it built from the pieces above.
+		"gust": _cast_gust(pos, potency, momentum)
+		"thunderclap": _cast_thunderclap(pos, potency)
+		"cloudburst": _cast_rain(pos, potency * 2.2)
+		"deluge": _cast_rain(pos, potency * 3.6)
+		"thunderstorm": _cast_thunderstorm(pos, potency)
+		"tempest": _cast_tempest(pos, potency, momentum)
+		"firestorm": _cast_firestorm(pos, potency, momentum)
+		"hurricane": _cast_hurricane(pos, potency, momentum)
 		_: return
 	_apply_karma(miracle, pos)
 	for v in get_tree().get_nodes_in_group("village"):
@@ -645,3 +709,97 @@ func _cast_strength(pos: Vector3, potency := 1.0) -> void:
 	flare.position = creature.global_position
 	add_child(flare)
 	get_tree().create_timer(3.0).timeout.connect(flare.queue_free)
+
+
+## THE WEATHER, BUILT FROM PIECES ------------------------------------------------
+##
+## Every storm below is made of the same handful of effects the rudiments
+## already cast — rain, strikes, wind, fire — stacked and timed. That is the
+## point of the whole system: the player composes runes, and the code composes
+## the very same parts, so a hurricane is honestly "rain and wind and strikes
+## together" rather than a separate bespoke thing that merely looks like one.
+
+
+## A shove of wind: no harm in it, but everything loose goes tumbling and
+## everyone nearby is startled. The gentlest thing air can do.
+func _cast_gust(pos: Vector3, potency: float, momentum: Vector3) -> void:
+	var push := momentum
+	push.y = 0.0
+	if push.length() < 1.0:
+		push = Vector3(randf_range(-1, 1), 0, randf_range(-1, 1))
+	push = push.normalized() * (7.0 + potency * 4.0)
+	var radius := 10.0 + potency * 4.0
+	SoundBank.play_at("saw", pos, -6.0, 0.4)
+	for group in ["pickable", "animals", "villagers"]:
+		for n in get_tree().get_nodes_in_group(group):
+			var node := n as Node3D
+			if not is_instance_valid(node) or node.global_position.distance_to(pos) > radius:
+				continue
+			if node is RigidBody3D:
+				(node as RigidBody3D).apply_central_impulse(push + Vector3.UP * 2.0)
+			elif node is Animal:
+				(node as Animal).scare(pos)
+	for t in get_tree().get_nodes_in_group("trees"):
+		var tree := t as WildTree
+		if is_instance_valid(tree) and tree.global_position.distance_to(pos) < radius:
+			tree.sway(pos, 0.8)
+
+
+## All the noise of the storm and none of its violence: a crack of thunder that
+## empties a field. Useful, and it costs you almost nothing but a fright.
+func _cast_thunderclap(pos: Vector3, potency: float) -> void:
+	SoundBank.play_at("boom", pos, 4.0, 0.5)
+	var radius := 16.0 + potency * 6.0
+	for v in get_tree().get_nodes_in_group("villagers"):
+		var villager := v as Villager
+		if is_instance_valid(villager) and villager.global_position.distance_to(pos) < radius:
+			villager.scare(pos)
+			villager.witness_horror(1.0)
+	for a in get_tree().get_nodes_in_group("animals"):
+		var beast := a as Animal
+		if is_instance_valid(beast) and beast.global_position.distance_to(pos) < radius:
+			beast.scare(pos)
+
+
+## RAIN AND LIGHTNING TOGETHER — the first real storm, and the one the player
+## reaches by learning its two halves separately.
+func _cast_thunderstorm(pos: Vector3, potency: float) -> void:
+	_cast_rain(pos, potency * 1.3)
+	_strike_repeatedly(pos, 3, 18.0 + potency * 5.0, 0.55)
+
+
+## Everything at once, and the sky torn open with it.
+func _cast_tempest(pos: Vector3, potency: float, momentum: Vector3) -> void:
+	_cast_rain(pos, potency * 2.6)
+	_strike_repeatedly(pos, 9, 26.0 + potency * 8.0, 0.32)
+	_cast_gust(pos, potency * 1.5, momentum)
+
+
+## Wind and fire: the wind spreads the burning, which is the whole horror of it.
+func _cast_firestorm(pos: Vector3, potency: float, momentum: Vector3) -> void:
+	_cast_gust(pos, potency * 1.4, momentum)
+	var radius := 14.0 + potency * 6.0
+	ignite_trees_near(pos, radius)
+	for i in 5:
+		var spot := pos + Vector3(randf_range(-radius, radius), 0, randf_range(-radius, radius))
+		ignite_trees_near(spot, 7.0)
+	SoundBank.play_at("boom", pos, 2.0, 0.7)
+
+
+## THE WHOLE SKY: a walking funnel, torrential rain, and strikes all round it.
+## Nothing here is new — it is the tornado, the deluge and the storm at once,
+## which is exactly what the runes said.
+func _cast_hurricane(pos: Vector3, potency: float, momentum: Vector3) -> void:
+	_cast_rain(pos, potency * 3.0)
+	_cast_tornado(pos, potency * 1.4, momentum)
+	_strike_repeatedly(pos, 12, 34.0 + potency * 10.0, 0.4)
+	GameState.announce("The sky itself comes apart. Nothing in its path will stand.")
+
+
+## Strikes scattered around a point over time — the shared spine of every storm.
+func _strike_repeatedly(pos: Vector3, count: int, radius: float, gap: float) -> void:
+	for i in count:
+		var spot := pos + Vector3(
+			randf_range(-radius, radius), 0, randf_range(-radius, radius))
+		get_tree().create_timer(gap * i).timeout.connect(
+			_cast_lightning.bind(spot))

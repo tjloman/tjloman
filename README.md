@@ -54,7 +54,7 @@ you're done. No system install required.
 | Throw **to your creature** | With attention and practice it **catches** — praise catches to train the skill |
 | Release with a **still** hand | **Place gently** — no fear, no harm. Placing a villager in another village makes them a **missionary** (yours → heathen town) or a **convert** (anyone → a faithful town) |
 | Release while moving mouse | Throw — your hand's momentum carries; flick hard to hurl far |
-| **Hold right mouse + draw** | **Cast a miracle gesture** |
+| **Hold right mouse + draw** | **Cast**: draw a rune, pause, draw another, let go — see below |
 | Mouse wheel | Zoom |
 | Middle mouse drag | Rotate / tilt camera (tilts above the horizon for skyward throws) |
 | WASD / arrows | Pan camera |
@@ -67,41 +67,71 @@ you're done. No system install required.
 | F1 | Help panel |
 | F3 | **Workshop** — save, load, regenerate the world, new game, and a few test cheats |
 
-### Miracles — two gestures, then throw (hold right mouse)
+### Miracles — draw runes and combine them (hold right mouse)
 
-Casting is two steps. First draw a **menu opener**; then draw a **selector**
-inside it. The miracle is conjured as a glowing **orb into your hand** —
-**throw or place it**, and it unleashes wherever it lands. (Selectors are
-namespaced per menu, so the same simple shape means different things in
-different menus.)
+A miracle is not picked off a menu. You draw **runes** — one shape each, several
+in a breath — and what you get is whatever those runes **mean together**. Draw a
+shape, **pause**, draw another, and let go to cast. The order never matters.
 
-| Menu (opener) | Selector → Miracle | Cost |
-|---|---|---|
-| **Spiral** — Nature | Circle → Food · Vertical → Forest seed (13 trees) · Horizontal → Forage thicket · Diagonal → Rain · Wave → **Strength** | 20 / 45 / 30 / 25 / 35 |
-| **Reverse-spiral** — Wrath | Vertical → Lightning · Circle → Lightning **storm** · Diagonal → Fireball · Horizontal → **Tornado** | 30 / 90 / 25 / 110 |
-| **Wave** — Sky | Horizontal → Heal · Circle → **Bird flock** · Vertical → **Flight** (your creature soars) · Diagonal → **Portal** | 15 / 40 / 55 / 70 |
+| Shape | Rune | | Shape | Rune |
+|---|---|---|---|---|
+| `~` or `S` | **water** | | `\|` tall line | **force** |
+| `—` flat line | **earth** | | `\` diagonal | **fire** |
+| `O` circle | **life** | | `@` spiral | **air** |
+| `@` reverse spiral | **calm** | | `/\/\` zigzag | **fury** |
+| `^` caret | **sky** | | `(` arc | **ward** |
 
-**Your dominion is your spellbook.** Miracles are **unlocked by villages** —
-each village that comes to believe teaches you the next set of wonders. Once
-known, a miracle is paid for with the **pooled prayer of every town you hold**.
+Three rules do all the work:
 
-| Villages | Unlocks |
+**1. One rune alone is its plainest form.** Water is rain, force is lightning,
+life is food, calm is a healing.
+
+**2. The same rune again makes it BIGGER, not twice.** Water is a sprinkle;
+water-water a cloudburst; water-water-water a deluge. This is how one rune
+covers a whole range without needing a gesture for every rung of it.
+
+**3. Different runes make a third thing.**
+
+| Drawing | Miracle |
 |---|---|
-| 1 | Food · Heal · Rain |
-| 2 | Forest seed · Forage thicket · Lightning · **Strength** |
-| 3 | Fireball · Bird flock · **Flight** |
-| 4 | **Portal** · Lightning storm · Tornado |
+| water + force | **Thunderstorm** — rain, and strikes falling through it |
+| water + force + force | **Lightning storm** |
+| water + force + force + fury | **Tempest** |
+| air + air | **Tornado** |
+| air + air + water | **Hurricane** — the whole sky at once |
+| air + fire | **Firestorm** — the wind spreads the burning |
+| earth + life | Forest · life + water | Forage thicket |
+| air + calm | Flight · air + earth | Portal |
+| earth + ward | Strength · life + sky | Bird flock |
+
+**And anything else still works.** A combination nobody named casts every rune's
+own miracle at once, each a little weaker — so no drawing is ever a dead end.
+Of the 285 distinct drawings of three runes or fewer, **zero** mean nothing.
+This is what makes the system a language rather than a longer list.
+
+Every storm above is genuinely *built from the same pieces the rudiments cast* —
+a hurricane really is rain and wind and strikes running together, not a bespoke
+effect that merely looks like one.
+
+**Your dominion is your spellbook**, and villages now teach **runes**, not
+finished miracles. Every combination of the runes you hold is yours for free, so
+learning rain and lightning apart *is* how you come to hold the storm.
+
+| Villages | Rudiments taught | Named miracles castable |
+|---|---|---|
+| 1 | water · life · calm | 6 |
+| 2 | earth · force · ward | 11 |
+| 3 | fire · sky | 13 |
+| 4 | air · fury | 21 |
 
 **Portals** are cast in **pairs**: the first gate hangs open and waiting, the
 second links to it — and from then on villagers, livestock, your creature and
-anything you throw can step through and cross the world. Casting a third
-begins a fresh pair. **Flight** lifts your creature into the air, where it
-soars over water, wood and hill alike — the sane way to keep it beside you on
-a map this size.
+anything you throw can step through and cross the world. **Flight** lifts your
+creature into the air, where it soars over water, wood and hill alike.
 
-The mightiest miracles also need a **wide reservoir of prayer** — each
-converted village raises your cap (+120) and widens the fury of storms and
-flocks. Everything you conjure is a throwable you place where you choose.
+The mightiest workings also need a **wide reservoir of prayer** — each converted
+village raises your cap (+120) and widens the fury of storms and flocks.
+Everything you conjure is a throwable you place where you choose.
 
 ## The world
 
@@ -434,7 +464,8 @@ scripts/creature/
   creature_eyes.gd            Perception only: what is the nearest X
   creature_look.gd            Alignment colour, expressions, blend shapes
 scripts/miracles/
-  miracle_manager.gd          Two-step menus, catalog, effects, power scaling
+  spellbook.gd                The GRAMMAR: runes, recipes, and the blend fallback
+  miracle_manager.gd          Catalog, effects, unlock ladder, power scaling
   miracle_orb.gd              Generic conjured-and-thrown miracle carrier
   fireball.gd                 The throwable fire miracle: ballistic, explosive
 scripts/ui/hud.gd             Bars, legend, tooltips, help

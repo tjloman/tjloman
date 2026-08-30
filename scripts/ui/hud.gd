@@ -80,24 +80,25 @@ func _build_miracle_panel() -> void:
 	panel.add_child(vbox)
 
 	var title := Label.new()
-	title.text = "MIRACLES  —  draw a MENU, then a SELECTOR  (right mouse, or CAST mode on touch)"
+	title.text = "MIRACLES  —  draw RUNES, pause between each, let go to cast  (right mouse, or CAST mode on touch)"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 14)
 	title.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0, 0.9))
 	vbox.add_child(title)
 
 	var ref := Label.new()
-	ref.text = ("spiral ▸ NATURE:  O Food · | Forest · — Thicket · \\ Rain · ~ Strength\n"
-		+ "rev-spiral ▸ WRATH:  | Lightning · O Storm · \\ Fireball · — Tornado\n"
-		+ "wave / S ▸ SKY:  — Heal · O Birds · | Flight · \\ Portal\n"
-		+ "(locked miracles need more villages — F1 for the full list)")
+	ref.text = ("~ water   |  force   —  earth   \\  fire   O  life\n"
+		+ "@ air (spiral)   @ calm (reverse spiral)   /\\/\\ fury (zigzag)\n"
+		+ "^ sky (caret)   ( ward (arc)\n"
+		+ "Draw one · PAUSE · draw another · let go to cast them TOGETHER\n"
+		+ "water=rain · water+water=cloudburst · water+force=thunderstorm")
 	ref.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ref.add_theme_font_size_override("font_size", 13)
 	ref.add_theme_color_override("font_color", Color(1, 1, 0.85, 0.85))
 	vbox.add_child(ref)
 
 	_cast_label = Label.new()
-	_cast_label.text = "Draw a spiral, reverse-spiral, or wave/S to begin a miracle."
+	_cast_label.text = "Draw a rune. Pause to add another; let go to cast."
 	_cast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_cast_label.add_theme_font_size_override("font_size", 16)
 	_cast_label.add_theme_color_override("font_color", Color(1, 0.92, 0.5))
@@ -243,31 +244,47 @@ To throw on glass .......... drag and flick in one stroke; a tap just places
 Pinch ...................... zoom
 Two-finger drag ............ orbit the camera freely (yaw and tilt)
 
-MIRACLES — two gestures, held right mouse
-Step 1: draw a MENU opener.   Step 2: draw a SELECTOR in that menu.
-The miracle drops into your hand as an orb — THROW it where you want.
+MIRACLES — DRAW RUNES AND COMBINE THEM (hold right mouse)
+Draw a shape, PAUSE, draw another, and let go. What you get is what
+those runes mean TOGETHER, and the order you draw them in never matters.
 
-  SPIRAL — Nature:   O Food (20) · | Forest seed, 13 trees (45)
-                     ~ STRENGTH — your creature's thews swell (35)
-                     — Forage thicket (30) · \\ Bloom/Rain (25)
-  REVERSE-SPIRAL — Wrath:  | Lightning (30) · O Lightning STORM (90)
-                     \\ Fireball (25) · — Tornado (110)
-  WAVE or S — Sky:  — Heal (15) · O Bird flock (40)
-                     | FLIGHT — your creature soars (55)
-                     \\ PORTAL — cast twice to join two gates (70)
+  ~ or S ....... WATER      | tall line .... FORCE
+  — flat line .. EARTH      \ diagonal ..... FIRE
+  O circle ..... LIFE       @ spiral ....... AIR
+  @ reverse spiral . CALM   /\/\ zigzag .... FURY
+  ^ caret ...... SKY        ( arc .......... WARD
+
+One rune alone is its plainest form: water is rain, force is lightning,
+life is food, calm is a healing.
+
+THE SAME RUNE AGAIN MAKES IT BIGGER, not twice:
+  water ............... a sprinkle of rain
+  water water ......... a cloudburst
+  water water water ... a deluge
+
+TWO DIFFERENT RUNES MAKE A THIRD THING:
+  water + force ............ THUNDERSTORM (rain, and strikes with it)
+  water + force + force .... LIGHTNING STORM
+  water + force + force + fury ... TEMPEST
+  air + air ................ TORNADO
+  air + air + water ........ HURRICANE (the whole sky at once)
+  air + fire ............... FIRESTORM (wind spreads the burning)
+  earth + life ............. forest    life + water ... thicket
+  air + calm ............... flight    air + earth .... portal
+  earth + ward ............. strength  life + sky ..... bird flock
+
+AND ANYTHING ELSE STILL WORKS. A combination nobody named casts every
+rune's own miracle at once, each a little weaker — so nothing you invent
+is ever wasted, and some of it is worth keeping.
 
 YOUR DOMINION IS YOUR SPELLBOOK
-Miracles are UNLOCKED BY VILLAGES. Each village that comes to believe
-teaches you the next set of wonders — and once known, a miracle can be
-paid for with the pooled prayer of EVERY town you hold.
-  1 village .... Food · Heal · Rain
-  2 villages ... Forest seed · Forage thicket · Lightning
-  3 villages ... Fireball · Bird flock · Flight
-  4 villages ... Portal · Lightning storm · Tornado
-
-The grandest miracles (storm, tornado) need a wide reservoir of prayer —
-convert more villages to hold and wield them, and your reach (belief +
-villages) widens their fury.
+Villages teach you RUNES, not finished miracles — and every combination
+of the runes you hold is yours for free. Learning rain and lightning
+apart IS how you come to hold the storm.
+  1 village .... water · life · calm
+  2 villages ... earth · force · ward
+  3 villages ... fire · sky
+  4 villages ... air · fury
 
 THROWING & AFTERTOUCH
 Anything you hold carries your hand's momentum when released — flick
@@ -381,6 +398,13 @@ func _update_miracle_panel(delta: float) -> void:
 	else:
 		_miracle_show = maxf(_miracle_show - delta, 0.0)
 	_miracle_panel.visible = _miracle_show > 0.0
+	# THE WORKING, live: the runes on the slate and what they would become if
+	# you let go now. Without this the composition system is unlearnable — you
+	# would be guessing at what your own drawing meant.
+	if divine_hand != null and is_instance_valid(divine_hand):
+		var working := divine_hand.working_text()
+		if working != "":
+			_cast_label.text = working + "     (pause to add · let go to cast)"
 
 
 ## Shown only while the camera is LOCKED onto the creature. Its stats live

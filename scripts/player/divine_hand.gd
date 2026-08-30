@@ -37,6 +37,13 @@ const SPIN_GAIN := 1.4              # flick deviation -> projectile spin (rad/s)
 const MAX_SPIN := 11.0              # cap so a wild flick doesn't blur into a top
 const BUNDLE_TOPUP := 0.06          # seconds between pulling each extra unit (hold-to-grab)
 
+## COMPOSING A MIRACLE: how long the pointer must hold still before the shape
+## drawn so far is taken as a finished rune. Short enough not to feel like
+## waiting, long enough that the natural hitch mid-stroke never splits a shape
+## in two. And a cap, because a composition this long is surely a scribble.
+const STROKE_BREAK := 0.32
+const MAX_RUNES := 5
+
 var camera_rig: CameraRig
 var miracles: MiracleManager
 var trail: GestureTrail
@@ -72,10 +79,14 @@ var _steer_body: Node3D = null
 var _steer_accel := Vector3.ZERO
 var _steer_time := 0.0
 
-## Two-step casting: the menu opened by the first gesture, and how long it
-## stays open awaiting the selector gesture.
-var _armed_menu := ""
-var _menu_timer := 0.0
+## COMPOSING A MIRACLE. Runes drawn so far in this one held cast, and the
+## stillness that divides one rune from the next: hold the button, draw a
+## shape, PAUSE, draw another, and let go to cast what they mean together.
+## A pause is the separator rather than a button-release because it works the
+## same under a mouse and under a thumb.
+var _runes: Array = []
+var _still_time := 0.0
+var _last_draw := Vector2.ZERO
 
 var _hand_material: StandardMaterial3D
 var _glow: OmniLight3D
@@ -142,13 +153,6 @@ func _physics_process(delta: float) -> void:
 	var mouse_pos := get_viewport().get_mouse_position()
 	_update_hover(mouse_pos)
 
-	# An armed miracle menu forgotten too long simply closes.
-	if _armed_menu != "":
-		_menu_timer -= delta
-		if _menu_timer <= 0.0:
-			_armed_menu = ""
-			GameState.hint("The miracle faded, uncast.")
-
 	# The hand rests on whatever the mouse is over; fall back to the y=0 plane.
 	var target := ground_point + Vector3(0, HOVER_HEIGHT, 0)
 	target.y += sin(Time.get_ticks_msec() / 400.0) * 0.08  # idle bob
@@ -192,6 +196,7 @@ func _physics_process(delta: float) -> void:
 		HandState.GESTURING:
 			trail.points = gesture_points
 			trail.queue_redraw()
+			_tick_stroke_break(delta)
 
 
 func _update_hover(mouse_pos: Vector2) -> void:
@@ -262,23 +267,24 @@ func _unhandled_input(event: InputEvent) -> void:
 				# inherit the momentum of the drag before it.
 				_reset_stroke(event.position)
 				if cast_mode and state == HandState.IDLE:
-					state = HandState.GESTURING
-					gesture_points = PackedVector2Array([event.position])
+					_begin_cast(event.position)
 				else:
 					_on_grab()
 			elif state == HandState.GESTURING and cast_mode:
-				_finish_gesture()
+				_finish_cast()
 			else:
 				_on_release()
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
 			if event.pressed and state == HandState.IDLE:
-				state = HandState.GESTURING
-				gesture_points = PackedVector2Array([event.position])
+				_begin_cast(event.position)
 			elif not event.pressed and state == HandState.GESTURING:
-				_finish_gesture()
+				_finish_cast()
 	elif event is InputEventMouseMotion:
 		if state == HandState.GESTURING:
 			gesture_points.append(event.position)
+			if event.position.distance_to(_last_draw) > 2.0:
+				_still_time = 0.0
+				_last_draw = event.position
 		elif state == HandState.HOLDING:
 			_stroke_pts.append(event.position)
 			_stroke_times.append(Time.get_ticks_msec() / 1000.0)
@@ -513,6 +519,7 @@ func cancel_touch_interaction() -> void:
 			trail.points = PackedVector2Array()
 			trail.queue_redraw()
 			gesture_points = PackedVector2Array()
+			_runes.clear()
 			state = HandState.IDLE
 
 
@@ -529,26 +536,75 @@ func force_hold(body: PhysicsBody3D) -> bool:
 	return true
 
 
-func _finish_gesture() -> void:
-	var gesture := GestureRecognizer.classify(gesture_points)
-	trail.points = PackedVector2Array()
-	trail.queue_redraw()
-	gesture_points = PackedVector2Array()
-	state = HandState.IDLE
-	if gesture == "none" or miracles == null:
+## COMPOSING A MIRACLE ---------------------------------------------------------
+##
+## Hold the button and draw. Each shape you draw is one RUNE; a brief PAUSE
+## commits it and starts the next; letting go casts whatever the runes you
+## drew mean together (see Spellbook). Water alone is a sprinkle; water twice
+## is a cloudburst; water and force is a thunderstorm.
+
+func _begin_cast(at: Vector2) -> void:
+	state = HandState.GESTURING
+	gesture_points = PackedVector2Array([at])
+	_runes.clear()
+	_still_time = 0.0
+	_last_draw = at
+	GameState.hint("Draw a rune. Pause to add another; let go to cast.")
+
+
+## A pause in the drawing ends the current rune and begins the next.
+func _tick_stroke_break(delta: float) -> void:
+	if gesture_points.size() < 4:
 		return
-	# Two-step casting. First a MENU opener, then a SELECTOR within it.
-	if _armed_menu == "":
-		if miracles.is_menu_opener(gesture):
-			_armed_menu = gesture
-			_menu_timer = 5.0
-			GameState.hint(miracles.menu_label(gesture) + "   (draw a selector to choose)")
-		else:
-			GameState.hint("Draw a spiral, reverse-spiral, or wave/S to open a miracle menu.")
-	else:
-		miracles.select(_armed_menu, gesture)
-		_armed_menu = ""
-		_menu_timer = 0.0
+	_still_time += delta
+	if _still_time < STROKE_BREAK:
+		return
+	_still_time = 0.0
+	_commit_rune()
+
+
+## Read the shape drawn so far, add it to the working, and clear the slate for
+## the next one. A shape we cannot name is simply dropped, with a word about it.
+func _commit_rune() -> void:
+	var gesture := GestureRecognizer.classify(gesture_points)
+	gesture_points = PackedVector2Array()
+	trail.points = gesture_points
+	trail.queue_redraw()
+	if gesture == "none":
+		GameState.hint("That shape means nothing. Try again — or let go.")
+		return
+	var rune := Spellbook.rune_for(gesture)
+	if rune == "":
+		return
+	if _runes.size() >= MAX_RUNES:
+		GameState.hint("You cannot hold more than %d runes at once." % MAX_RUNES)
+		return
+	_runes.append(rune)
+	GameState.hint(Spellbook.describe(_runes) + "   (pause to add · let go to cast)")
+
+
+## Let go: whatever is on the slate is cast.
+func _finish_cast() -> void:
+	if gesture_points.size() >= 4:
+		_commit_rune()
+	gesture_points = PackedVector2Array()
+	trail.points = gesture_points
+	trail.queue_redraw()
+	state = HandState.IDLE
+	var runes := _runes.duplicate()
+	_runes.clear()
+	if runes.is_empty():
+		GameState.hint("Nothing was drawn.")
+		return
+	if miracles != null:
+		miracles.cast_runes(runes)
+
+
+## What is on the slate right now, for the HUD to show as you draw.
+func working_text() -> String:
+	if state != HandState.GESTURING or _runes.is_empty():
+		return ""
+	return Spellbook.describe(_runes)
 
 
 ## The clip a rigged hand model plays for what the hand is doing now.

@@ -289,21 +289,38 @@ func _run_smoke_test() -> void:
 	])
 	# Two-step casting: open each menu, conjure a selection, and resolve it.
 	GameState.set_max_prayer_power(400.0)
-	print("SMOKE TEST: unlocks — villages=%d known=%s next=%s" % [
-		miracles.faithful_villages(), str(miracles.unlocked_miracles()),
-		str(miracles.next_tier_preview())])
-	for entry: Array in [["spiral", "circle"], ["rev_spiral", "vline"],
-			["wave", "hline"], ["rev_spiral", "circle"], ["spiral", "vline"],
-			["wave", "circle"], ["rev_spiral", "hline"]]:
-		GameState.add_prayer_power(200.0)
-		var opened := miracles.is_menu_opener(entry[0])
-		var conjured := miracles.select(entry[0], entry[1])
-		print("SMOKE TEST: menu %s + %s -> opener=%s conjured=%s" % [
-			entry[0], entry[1], opened, conjured])
+	# RUDIMENTS OPEN COMBINATIONS: a handful of runes is a whole spellbook.
+	print("SMOKE TEST: unlocks — villages=%d runes=%s castable=%d next=%s" % [
+		miracles.faithful_villages(), str(miracles.known_runes()),
+		miracles.unlocked_miracles().size(), str(miracles.next_tier_preview())])
+	# THE GRAMMAR. Runes combine: the same rune twice is the same miracle writ
+	# larger, a named pairing is its own thing, and anything else BLENDS.
+	for runes: Array in [["water"], ["water", "water"], ["water", "water", "water"],
+			["force", "water"], ["force", "force", "water"], ["air", "air"],
+			["air", "air", "water"], ["fire", "air"], ["life", "earth"],
+			["fire", "life"], ["calm", "life"]]:
+		var reading := Spellbook.interpret(runes)
+		print("SMOKE TEST: %s -> %s" % [str(runes), Spellbook.describe(runes)])
+		assert(not reading.is_empty(), "every drawing must mean something")
+	# ORDER MUST NOT MATTER: the same runes drawn backwards is the same miracle.
+	print("SMOKE TEST: order-free — %s vs %s" % [
+		Spellbook.interpret(["force", "water"]).get("label", "?"),
+		Spellbook.interpret(["water", "force"]).get("label", "?")])
+	# An unnamed combination is never a dead end; it blends.
+	var invented := Spellbook.interpret(["fire", "life", "sky"])
+	print("SMOKE TEST: invented combination -> %d effects at once" % [
+		(invented.get("blend", []) as Array).size()])
+
+	for runes: Array in [["life"], ["water"], ["calm"], ["force", "water"],
+			["air", "air"], ["water", "water"]]:
+		GameState.add_prayer_power(300.0)
+		print("SMOKE TEST: cast %s -> %s" % [str(runes), miracles.cast_runes(runes)])
 		await get_tree().create_timer(0.2).timeout
 	# Directly resolve one of each new miracle to exercise every effect.
 	for miracle: String in ["food", "rain", "heal", "lightning", "forest_seed",
-			"forage_thicket", "lightning_storm", "tornado", "bird_flock", "flight"]:
+			"forage_thicket", "lightning_storm", "tornado", "bird_flock", "flight",
+			"gust", "thunderclap", "cloudburst", "deluge", "thunderstorm",
+			"tempest", "firestorm", "hurricane"]:
 		miracles.resolve(miracle, Vector3(6, 0, 6))
 		print("SMOKE TEST: resolve %s" % miracle)
 		await get_tree().create_timer(0.3).timeout
@@ -604,3 +621,28 @@ func _smoke_test_gestures() -> void:
 	print("SMOKE TEST: gesture wave/S -> ", GestureRecognizer.classify(smooth_s))
 	print("SMOKE TEST: gesture dline  -> ", GestureRecognizer.classify(dline))
 	print("SMOKE TEST: gesture spiral -> ", GestureRecognizer.classify(spiral))
+
+	# THE NEW RUNE-SHAPES. Each must be told apart from its nearest neighbour —
+	# a misread rune casts the wrong miracle at full price, so these matter.
+	var caret := PackedVector2Array()
+	for i in 40:
+		var t := i / 39.0
+		caret.append(Vector2(120 + t * 260, 340 - 170 * (1.0 - absf(2.0 * t - 1.0))))
+	var jag := PackedVector2Array()
+	for i in 40:
+		var t := i / 39.0
+		var phase := fmod(t * 5.0, 1.0)
+		jag.append(Vector2(120 + t * 300,
+			300 - 80 * (1.0 if int(t * 5.0) % 2 == 0 else -1.0) * absf(phase * 2.0 - 1.0)))
+	var bow := PackedVector2Array()
+	for i in 40:
+		var a := -PI / 2.0 - PI * 0.45 + PI * 0.9 * (i / 39.0)
+		bow.append(Vector2(400 + cos(a) * 130, 300 + sin(a) * 130))
+	print("SMOKE TEST: gesture caret  -> ", GestureRecognizer.classify(caret))
+	print("SMOKE TEST: gesture zigzag -> ", GestureRecognizer.classify(jag))
+	print("SMOKE TEST: gesture arc    -> ", GestureRecognizer.classify(bow))
+	# And the runes they stand for.
+	print("SMOKE TEST: runes — wave=%s vline=%s zigzag=%s caret=%s arc=%s" % [
+		Spellbook.rune_for("wave"), Spellbook.rune_for("vline"),
+		Spellbook.rune_for("zigzag"), Spellbook.rune_for("caret"),
+		Spellbook.rune_for("arc")])

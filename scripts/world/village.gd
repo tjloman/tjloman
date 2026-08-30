@@ -821,12 +821,34 @@ func witness_miracle(type: String, pos: Vector3) -> void:
 		"bird_flock":
 			change_belief(4.0)
 			GameState.announce("An omen of birds passes over %s." % village_name)
-		"lightning_storm", "tornado":
+		"cloudburst", "deluge":
+			change_belief(6.0)
+			GameState.announce("The heavens open over %s. Every cistern brims." % village_name)
+		"gust":
+			change_belief(2.0)
+		"thunderclap":
+			change_belief(5.0)
+			GameState.announce("Thunder splits the air over %s, and no one is harmed." % village_name)
+			for v in my_villagers():
+				if v.global_position.distance_to(pos) < 18.0:
+					v.scare(pos)
+		"lightning_storm", "tornado", "thunderstorm":
 			change_belief(10.0)
 			GameState.announce("%s trembles beneath a wrath from the heavens." % village_name)
 			for v in my_villagers():
 				if v.global_position.distance_to(pos) < 20.0:
 					v.witness_horror(4.0)
+					v.scare(pos)
+		# The great storms. Belief through sheer terror — and they will
+		# remember it as long as anyone in the village is alive to.
+		"tempest", "firestorm", "hurricane":
+			change_belief(14.0)
+			remember_battle(false)   # nothing can be fought; the doctrine learns fear
+			GameState.announce("The sky comes apart over %s. They will speak of this for generations."
+				% village_name)
+			for v in my_villagers():
+				if v.global_position.distance_to(pos) < 34.0:
+					v.witness_horror(7.0)
 					v.scare(pos)
 		_:
 			change_belief(3.0)

@@ -9,6 +9,10 @@ extends RigidBody3D
 const FUSE_SECONDS := 30.0
 
 var miracle_name := "food"
+## How MUCH of it. One rune of water is a sprinkle and three is a deluge, and
+## the difference rides here rather than needing a separate miracle for every
+## rung of the ladder.
+var potency := 1.0
 var color := Color(1.0, 0.85, 0.3)
 var manager: MiracleManager = null
 
@@ -74,9 +78,13 @@ func _resolve() -> void:
 		return
 	_spent = true
 	if manager != null and is_instance_valid(manager):
-		manager.resolve(miracle_name, global_position, _momentum)
+		manager.resolve(miracle_name, global_position, _momentum, potency)
 	queue_free()
 
 
 func hover_text() -> String:
-	return "%s (cast it where you will)" % miracle_name.capitalize().replace("_", " ")
+	var strength := ""
+	if potency > 1.4:
+		strength = "  ·  %s" % ("overwhelming" if potency > 2.4 else "strong")
+	return "%s%s (cast it where you will)" % [
+		miracle_name.capitalize().replace("_", " "), strength]
