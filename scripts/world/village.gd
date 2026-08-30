@@ -995,7 +995,7 @@ func conception_chance() -> float:
 func trend() -> String:
 	if _pop_samples.size() < 6:
 		return ""
-	var half := _pop_samples.size() / 2
+	var half := int(_pop_samples.size() / 2.0)
 	var older := 0.0
 	var recent := 0.0
 	for i in _pop_samples.size():

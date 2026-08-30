@@ -37,18 +37,23 @@ const SPIN_GAIN := 1.4              # flick deviation -> projectile spin (rad/s)
 const MAX_SPIN := 11.0              # cap so a wild flick doesn't blur into a top
 const BUNDLE_TOPUP := 0.06          # seconds between pulling each extra unit (hold-to-grab)
 
-## COMPOSING A MIRACLE. One unbroken STROKE is one rune — lifting the pointer
-## ends it, the way lifting a pen ends a letter. Draw another within the combo
-## window and it joins the same working; let the window lapse and the working
-## is cast. This replaced a scheme where a PAUSE divided the runes, which was
-## wrong twice over: a pause is also how you begin on a touchscreen, and
-## holding still in the middle of drawing is a thing hands simply do.
-const COMBO_WINDOW := 1.1
+## THE CASTING SESSION.
+##
+## Trying to tell drawing from dragging moment by moment does not work on a
+## touchscreen — every scheme for it either steals your pans or misses your
+## strokes, and the last one cast a half-finished working out from under the
+## player mid-stroke. So casting is now something you deliberately ENTER.
+##
+## One unmistakable gesture opens it: the right button on a mouse, or a firm
+## press-and-hold on bare ground under a thumb. While it is open THE WORLD IS
+## LOCKED — nothing pans, nothing is picked up, and every stroke is a rune, so
+## there is nothing left to disambiguate. Stop drawing for a few seconds and
+## what you have drawn is cast; stop having drawn nothing, and it simply lets
+## you go again.
+const OPEN_HOLD := 0.45      # seconds of firm press to open casting, on touch
+const OPEN_SLOP := 16.0      # move further than this first and you meant to pan
+const IDLE_TO_CAST := 2.6    # quiet seconds that end the session
 const MAX_RUNES := 5
-## Touch, which has no second button: hold the bare land still this long and
-## you are drawing. Move further than the slop first and you are panning.
-const HOLD_TO_DRAW := 0.18
-const HOLD_SLOP := 14.0
 
 var camera_rig: CameraRig
 var miracles: MiracleManager
@@ -57,6 +62,9 @@ var trail: GestureTrail
 var state := HandState.IDLE
 var held_body: PhysicsBody3D = null
 var hover_target: Node3D = null
+
+## THE CASTING SESSION is open: the world is locked and every stroke is a rune.
+var casting := false
 
 ## The last thing this hand threw (not placed) — the creature watches
 ## for it, and may catch it out of the air.
@@ -81,21 +89,16 @@ var _steer_body: Node3D = null
 var _steer_accel := Vector3.ZERO
 var _steer_time := 0.0
 
-## GESTURES ARE ALWAYS AVAILABLE — there is no cast mode to toggle, the way
-## there is none in Black & White. With a mouse the right button draws and has
-## always drawn. Under a thumb, where there is no second button, PRESSING THE
-## BARE LAND AND HOLDING STILL for a moment begins a drawing; dragging at once
-## still pans, and pressing something pick-up-able still picks it up. So every
-## old interaction survives and casting costs no mode.
+## Charging the opening press (touch only): where it began and for how long.
 var _press_at := Vector2.ZERO
 var _press_time := 0.0
-var _press_on_land := false
-var _waiting_to_draw := false
+var _charging := false
 
-## The runes drawn so far, and how long is left to add another before what is
-## on the slate goes off by itself.
+## The runes drawn so far this session, and the quiet since the last stroke —
+## which counts ONLY while nothing is being drawn. Letting it run mid-stroke is
+## what cast a half-made miracle out of the player's hand.
 var _runes: Array = []
-var _combo_time := 0.0
+var _idle_time := 0.0
 
 var _hand_material: StandardMaterial3D
 var _glow: OmniLight3D
@@ -189,9 +192,8 @@ func _physics_process(delta: float) -> void:
 			_steer_time = 0.0
 			_steer_body = null
 
-	# Casting is ALWAYS live: these two run whatever else the hand is up to.
-	_tick_hold_to_draw(delta)
-	_tick_combo(delta)
+	_tick_press_charge(delta)
+	_tick_casting(delta)
 
 	match state:
 		HandState.DRAG_LAND:
@@ -272,49 +274,74 @@ func _unhandled_input(event: InputEvent) -> void:
 	if camera_rig != null and camera_rig.is_multitouching():
 		return
 	if event is InputEventMouseButton:
-		if event.button_index == MOUSE_BUTTON_LEFT:
-			_pointer_down = event.pressed
-			if event.pressed:
-				# Every fresh press begins a new stroke: a poke can never
-				# inherit the momentum of the drag before it.
-				_reset_stroke(event.position)
-				_press_at = event.position
-				_press_time = 0.0
-				# ONLY WHERE THERE IS NO SECOND BUTTON. With a mouse the right
-				# button already draws, and making a hesitant left-press turn
-				# into a gesture would be a nasty surprise; under a thumb it is
-				# the only way to have casting always available without a mode.
-				_waiting_to_draw = _touch_only() and state == HandState.IDLE \
-					and not _on_something_grabbable()
-				if not _waiting_to_draw:
-					_on_grab()
-			elif state == HandState.GESTURING:
-				_end_stroke()
-			elif _waiting_to_draw:
-				_waiting_to_draw = false   # a tap on bare land: nothing to do
-			else:
-				_on_release()
-		elif event.button_index == MOUSE_BUTTON_RIGHT:
-			# The mouse has a spare button, so drawing needs no ceremony at all.
-			if event.pressed and state == HandState.IDLE:
-				_begin_stroke(event.position)
-			elif not event.pressed and state == HandState.GESTURING:
-				_end_stroke()
+		_on_pointer_button(event as InputEventMouseButton)
 	elif event is InputEventMouseMotion:
-		if state == HandState.GESTURING:
-			gesture_points.append(event.position)
-		elif _waiting_to_draw:
-			# Moved before the hold matured: this was a pan, not a drawing.
-			if event.position.distance_to(_press_at) > HOLD_SLOP:
-				_waiting_to_draw = false
-				_on_grab()
-		elif state == HandState.HOLDING:
-			_stroke_pts.append(event.position)
-			_stroke_times.append(Time.get_ticks_msec() / 1000.0)
+		_on_pointer_motion(event as InputEventMouseMotion)
+	elif casting and event is InputEventKey and event.is_pressed() \
+			and (event as InputEventKey).keycode == KEY_ESCAPE:
+		_close_casting(false)   # never trapped: escape always lets you out
+
+
+func _on_pointer_button(event: InputEventMouseButton) -> void:
+	if event.button_index == MOUSE_BUTTON_RIGHT:
+		# The spare button both OPENS the session and draws in it, so the old
+		# habit — hold the right button and draw — still works exactly as it
+		# did, and now each drag is simply one more rune.
+		if event.pressed:
+			if not casting:
+				_open_casting()
+			if casting:
+				_begin_stroke(event.position)
+		elif state == HandState.GESTURING:
+			_end_stroke()
+		return
+	if event.button_index != MOUSE_BUTTON_LEFT:
+		return
+	_pointer_down = event.pressed
+	if event.pressed:
+		# Every fresh press begins a new stroke: a poke can never inherit the
+		# momentum of the drag before it.
+		_reset_stroke(event.position)
+		_press_at = event.position
+		_press_time = 0.0
+		# Inside the session there is no such thing as a grab or a pan, so this
+		# is unambiguously the start of a rune.
+		if casting:
+			_begin_stroke(event.position)
+			return
+		# Bare ground, pressed and held, is what opens the session under a
+		# thumb — the one place there is no second button to spare.
+		_charging = _touch_only() and state == HandState.IDLE \
+			and not _on_something_grabbable()
+		if not _charging:
+			_on_grab()
+		return
+	# Released.
+	_charging = false
+	if state == HandState.GESTURING:
+		_end_stroke()
+	elif not casting:
+		_on_release()
+
+
+func _on_pointer_motion(event: InputEventMouseMotion) -> void:
+	if state == HandState.GESTURING:
+		gesture_points.append(event.position)
+	elif _charging:
+		# Moved before the press matured: that was a pan, not a summons.
+		if event.position.distance_to(_press_at) > OPEN_SLOP:
+			_charging = false
+			_on_grab()
+	elif state == HandState.HOLDING:
+		_stroke_pts.append(event.position)
+		_stroke_times.append(Time.get_ticks_msec() / 1000.0)
 
 
 func _on_grab() -> void:
-	if state != HandState.IDLE:
+	# THE WORLD IS HELD while casting: no panning, no picking anything up. This
+	# is what makes every stroke unambiguously a rune, and it is the whole
+	# reason the session exists.
+	if state != HandState.IDLE or casting:
 		return
 	# Grabbing a QUARTER of the storehouse platform withdraws that
 	# resource as a physical item, straight into the grip.
@@ -535,11 +562,14 @@ func _apply_in_flight(body: Node3D, dv: Vector3) -> void:
 ## land-drag or gesture (a held object stays held — pinching while
 ## carrying is fine).
 func cancel_touch_interaction() -> void:
-	match state:
-		HandState.DRAG_LAND:
-			state = HandState.IDLE
-		HandState.GESTURING:
-			_abandon_drawing()
+	# A second finger means the camera, so the session goes too — otherwise a
+	# pinch mid-cast leaves you trapped in a mode you did not mean to be in.
+	if casting:
+		_close_casting(false)
+		return
+	if state == HandState.DRAG_LAND:
+		state = HandState.IDLE
+	_charging = false
 
 
 ## Places a conjured object (e.g. a fireball) straight into the hand's grip.
@@ -555,91 +585,112 @@ func force_hold(body: PhysicsBody3D) -> bool:
 	return true
 
 
-## COMPOSING A MIRACLE ---------------------------------------------------------
+## THE CASTING SESSION ----------------------------------------------------------
 ##
-## One unbroken STROKE is one rune. Lift, draw another within the combo window,
-## and it joins the same working; let the window lapse and the working is cast.
-## Nothing about this differs between a mouse and a thumb, which is the point:
-## there is no cast mode, and there is nothing to toggle.
+## Open it, draw runes, and stop. Nothing has to be held down, nothing has to be
+## released at the right moment, and while it is open there is no such thing as
+## a pan or a grab to be confused with — which is the only way this was ever
+## going to be reliable under a thumb.
 
 
-## Is the pointer over something the hand would pick up or open?
-func _on_something_grabbable() -> bool:
-	return is_instance_valid(hover_target) \
-		and (hover_target.is_in_group("pickable") or hover_target is FoodStore)
-
-
-func _touch_only() -> bool:
-	return DisplayServer.is_touchscreen_available()
-
-
-## The pointer went down on bare land and has not moved. Once it has been still
-## long enough, that is a deliberate drawing rather than a pan.
-func _tick_hold_to_draw(delta: float) -> void:
-	if not _waiting_to_draw:
+## Charging the opening press. Touch only; a mouse has a button for this.
+func _tick_press_charge(delta: float) -> void:
+	if not _charging:
 		return
 	_press_time += delta
-	if _press_time >= HOLD_TO_DRAW:
-		_waiting_to_draw = false
-		_begin_stroke(_press_at)
+	if _press_time >= OPEN_HOLD:
+		_charging = false
+		_open_casting()
+
+
+## How far through the opening press we are, 0..1 — for the ring the HUD draws
+## under the finger, so the player can see the summons coming.
+func charge_fraction() -> float:
+	return clampf(_press_time / OPEN_HOLD, 0.0, 1.0) if _charging else 0.0
+
+
+func _open_casting() -> void:
+	if is_instance_valid(held_body):
+		return                       # not while your hand is full
+	casting = true
+	_runes.clear()
+	_idle_time = 0.0
+	state = HandState.IDLE
+	gesture_points = PackedVector2Array()
+	_clear_trail()
+	SoundBank.play_at("coo", global_position, -6.0, 0.2)
+	GameState.hint("CASTING — draw a rune. The world is held while you do.")
+
+
+## End the session. `cast` means "and use what was drawn"; the idle timeout
+## passes true, an explicit dismissal passes false.
+func _close_casting(cast: bool) -> void:
+	var runes := _runes.duplicate()
+	casting = false
+	_runes.clear()
+	_idle_time = 0.0
+	_charging = false
+	gesture_points = PackedVector2Array()
+	_clear_trail()
+	if state == HandState.GESTURING:
+		state = HandState.IDLE
+	if cast and not runes.is_empty() and miracles != null:
+		miracles.cast_runes(runes)
+	elif runes.is_empty():
+		GameState.hint("")
+
+
+func _clear_trail() -> void:
+	if trail != null:
+		trail.points = PackedVector2Array()
+		trail.queue_redraw()
 
 
 func _begin_stroke(at: Vector2) -> void:
 	state = HandState.GESTURING
 	gesture_points = PackedVector2Array([at])
-	if _runes.is_empty():
-		GameState.hint("Drawing... lift to finish the rune.")
+	_idle_time = 0.0
 
 
-## The stroke is finished: read it, add it to the working, and start the clock
-## on whether anything else is coming.
+## The stroke is finished: read it and add it to the working. The quiet clock
+## starts again from here — and, crucially, does NOT run while a stroke is in
+## progress, which is what used to cast a half-drawn working out of your hand.
 func _end_stroke() -> void:
 	var gesture := GestureRecognizer.classify(gesture_points)
 	gesture_points = PackedVector2Array()
-	trail.points = gesture_points
-	trail.queue_redraw()
+	_clear_trail()
 	state = HandState.IDLE
+	_idle_time = 0.0
 	var rune := Spellbook.rune_for(gesture) if gesture != "none" else ""
 	if rune == "":
-		# Nothing recognisable. Whatever was already on the slate survives — a
-		# botched stroke should not throw away the runes before it.
-		GameState.hint("That shape means nothing." if _runes.is_empty()
-			else "%s   (that last shape meant nothing)" % Spellbook.describe(_runes))
-		if not _runes.is_empty():
-			_combo_time = COMBO_WINDOW
+		# A botched stroke must never throw away the runes before it.
+		GameState.hint("That shape means nothing — try it again." if _runes.is_empty()
+			else "%s   (that shape meant nothing)" % Spellbook.describe(_runes))
 		return
 	if _runes.size() >= MAX_RUNES:
-		GameState.hint("You cannot hold more than %d runes at once." % MAX_RUNES)
-		_combo_time = 0.01     # cast what there is rather than swallow the draw
+		GameState.hint("Your hands are full at %d runes." % MAX_RUNES)
 		return
 	_runes.append(rune)
-	_combo_time = COMBO_WINDOW
-	GameState.hint(Spellbook.describe(_runes) + "   (draw again to add)")
+	GameState.hint(Spellbook.describe(_runes))
 
 
-## The combo window closing is what casts. Nothing else needs to.
-func _tick_combo(delta: float) -> void:
-	if _combo_time <= 0.0:
+## Quiet for long enough: cast what is on the slate, or simply let the player
+## go if they drew nothing.
+func _tick_casting(delta: float) -> void:
+	if not casting or state == HandState.GESTURING:
 		return
-	_combo_time -= delta
-	if _combo_time > 0.0:
-		return
-	var runes := _runes.duplicate()
-	_runes.clear()
-	if not runes.is_empty() and miracles != null:
-		miracles.cast_runes(runes)
+	_idle_time += delta
+	if _idle_time >= IDLE_TO_CAST:
+		_close_casting(true)
 
 
-## Abandon whatever is being drawn (the camera took the screen, say).
-func _abandon_drawing() -> void:
-	gesture_points = PackedVector2Array()
-	trail.points = gesture_points
-	trail.queue_redraw()
-	_runes.clear()
-	_combo_time = 0.0
-	_waiting_to_draw = false
+## Seconds left before the session resolves itself, 0..1 — for the HUD's bar.
+func casting_fraction() -> float:
+	if not casting:
+		return 0.0
 	if state == HandState.GESTURING:
-		state = HandState.IDLE
+		return 1.0
+	return clampf(1.0 - _idle_time / IDLE_TO_CAST, 0.0, 1.0)
 
 
 ## What is on the slate right now, for the HUD to show as you draw.

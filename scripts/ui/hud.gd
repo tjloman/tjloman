@@ -26,6 +26,10 @@ var _roster_panel: PanelContainer
 var _roster_list: VBoxContainer
 var _roster_button: Button
 var _roster_refresh := 0.0
+## The casting session's own readout: a ring that fills as you press to open
+## it, and a bar that drains once you stop drawing. Without these the session
+## is invisible, and an invisible mode is a worse mode than a button.
+var _cast_overlay: CastOverlay
 
 
 func _ready() -> void:
@@ -38,6 +42,11 @@ func _ready() -> void:
 	_build_message_label()
 	_build_help_panel()
 	_build_roster()
+	_cast_overlay = CastOverlay.new()
+	_cast_overlay.divine_hand = divine_hand
+	_cast_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_cast_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_cast_overlay)
 
 	GameState.announcement.connect(_on_announcement)
 	GameState.cast_hint.connect(_on_cast_hint)
@@ -80,7 +89,7 @@ func _build_miracle_panel() -> void:
 	panel.add_child(vbox)
 
 	var title := Label.new()
-	title.text = "MIRACLES  —  one stroke is one rune; draw again to add; it casts itself"
+	title.text = "CASTING  —  the world is held. One stroke is one rune. Stop, and it casts."
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 14)
 	title.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0, 0.9))
@@ -97,7 +106,7 @@ func _build_miracle_panel() -> void:
 	vbox.add_child(ref)
 
 	_cast_label = Label.new()
-	_cast_label.text = "Draw a rune. Draw another to add to it."
+	_cast_label.text = "CASTING — draw a rune"
 	_cast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_cast_label.add_theme_font_size_override("font_size", 16)
 	_cast_label.add_theme_color_override("font_color", Color(1, 0.92, 0.5))
@@ -261,16 +270,22 @@ To throw on glass .......... drag and flick in one stroke; a tap just places
 Pinch ...................... zoom
 Two-finger drag ............ orbit the camera freely (yaw and tilt)
 
-MIRACLES — DRAW RUNES AND COMBINE THEM
-Casting is ALWAYS available. There is no mode to turn on.
-  With a mouse ... hold the RIGHT button and draw.
-  On a touchscreen  press bare ground, hold still an instant, then draw.
-                    (drag straight away and you still pan; press a thing
-                     and you still pick it up — nothing else changed)
+MIRACLES — OPEN THE CASTING, THEN DRAW RUNES
+Casting is a thing you ENTER, so that while you are in it nothing you
+draw can be mistaken for panning or picking something up.
 
-ONE UNBROKEN STROKE IS ONE RUNE. Lift, and draw again within a moment
-to add another to the same working. When you stop drawing, it casts
-itself — there is nothing to confirm.
+  OPEN IT ...... hold the RIGHT mouse button (mouse)
+                 press bare ground and HOLD (touch) — a ring fills
+  WHILE OPEN ... the world is HELD. Every stroke is a rune.
+  CLOSE IT ..... just stop. After a couple of quiet seconds what you
+                 drew is cast; if you drew nothing, you are simply let
+                 go. Escape leaves at once.
+
+The bar at the bottom is the time left, and it only runs down while you
+are NOT drawing — so you may take as long as you like over a rune.
+
+ONE UNBROKEN STROKE IS ONE RUNE. Lift and draw again to add another to
+the same working.
 
   S or ~ ....... WATER      | tall line ....... FORCE
   — flat line .. EARTH      / diagonal ....... FIRE
@@ -412,12 +427,9 @@ func _process(delta: float) -> void:
 ## way it lingers ~5s after (and whenever a cast hint fires) so you can read
 ## the last step, then tucks itself away to keep the screen clean.
 func _update_miracle_panel(delta: float) -> void:
-	# The guide is up whenever a drawing is actually happening — there is no
-	# cast mode left to ask about.
-	var active := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
-	if divine_hand != null and is_instance_valid(divine_hand):
-		active = active or divine_hand.working_text() != "" \
-			or divine_hand.state == DivineHand.HandState.GESTURING
+	# The guide is up for exactly as long as the casting session is.
+	var active := divine_hand != null and is_instance_valid(divine_hand) \
+		and divine_hand.casting
 	if active:
 		_miracle_show = 5.0
 	else:
@@ -429,7 +441,9 @@ func _update_miracle_panel(delta: float) -> void:
 	if divine_hand != null and is_instance_valid(divine_hand):
 		var working := divine_hand.working_text()
 		if working != "":
-			_cast_label.text = working + "     (draw again to add)"
+			_cast_label.text = working + "     (draw again, or wait to cast)"
+		elif divine_hand.casting:
+			_cast_label.text = "CASTING — draw a rune"
 
 
 ## Shown only while the camera is LOCKED onto the creature. Its stats live

@@ -54,7 +54,7 @@ you're done. No system install required.
 | Throw **to your creature** | With attention and practice it **catches** — praise catches to train the skill |
 | Release with a **still** hand | **Place gently** — no fear, no harm. Placing a villager in another village makes them a **missionary** (yours → heathen town) or a **convert** (anyone → a faithful town) |
 | Release while moving mouse | Throw — your hand's momentum carries; flick hard to hurl far |
-| **Hold right mouse + draw** | **Cast** — one stroke is one rune; draw again to add; it casts itself |
+| **Hold right mouse + draw** | **Cast** — opens the casting session; one stroke is one rune; stop and it casts |
 | Mouse wheel | Zoom |
 | Middle mouse drag | Rotate / tilt camera (tilts above the horizon for skyward throws) |
 | WASD / arrows | Pan camera |
@@ -67,19 +67,24 @@ you're done. No system install required.
 | F1 | Help panel |
 | F3 | **Workshop** — save, load, regenerate the world, new game, and a few test cheats |
 
-### Miracles — draw runes and combine them
+### Miracles — open the casting, then draw runes
 
-**Casting is always available. There is no mode to turn on** — the Black &
-White lesson, and the reason the old Cast/Move toggle is gone.
+Casting is a thing you deliberately **enter**. Trying to tell a drawing from a
+drag moment by moment does not work on a touchscreen: every scheme for it either
+steals your pans or misses your strokes, and one of them cast a half-finished
+working out of the player's hand mid-stroke. So:
 
-- **With a mouse**: hold the right button and draw.
-- **On a touchscreen**: press bare ground, hold still an instant, then draw.
-  Drag straight away and you still pan; press a thing and you still pick it up.
-  Nothing else about touch changed.
+| | |
+|---|---|
+| **Open it** | Hold the **right mouse button** · or on touch, press bare ground and **hold** — a ring fills under your finger |
+| **While open** | **The world is held.** Nothing pans, nothing is picked up, and *every stroke is a rune* — there is nothing left to disambiguate |
+| **Close it** | Just **stop**. After a couple of quiet seconds what you drew is cast; if you drew nothing, you are simply let go. Escape leaves at once |
 
-**One unbroken stroke is one rune.** Lift, and draw again within a moment to add
-another to the same working. When you stop drawing, it casts itself — there is
-nothing to confirm and no button to release.
+The bar along the bottom is the time remaining, and it **only runs down while
+you are not drawing** — so you may take as long as you like over a single rune.
+
+**One unbroken stroke is one rune.** Lift and draw again to add another to the
+same working.
 
 | Shape | Rune | | Shape | Rune |
 |---|---|---|---|---|
@@ -518,6 +523,7 @@ scripts/miracles/
   fireball.gd                 The throwable fire miracle: ballistic, explosive
 scripts/ui/hud.gd             Bars, legend, tooltips, help
 scripts/ui/debug_menu.gd      The F3 workshop: save/load/regenerate + cheats
+scripts/ui/cast_overlay.gd    The casting ring and countdown — what the mode looks like
 scripts/ui/touch_controls.gd  Touchscreen-only buttons: Cast/Move mode,
                               follow-the-creature camera lock
 ```
