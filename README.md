@@ -101,7 +101,7 @@ same working.
 | `S` or `~` | **water** | | tall line | **force** |
 | flat line | **earth** | | diagonal | **fire** |
 | `O` circle | **life** | | spiral | **air** |
-| reverse spiral | **calm** | | zigzag | **fury** |
+| reverse spiral | **calm** | | zigzag (3–7 teeth) | **fury** |
 | `^` caret | **sky** | | bow / arc | **ward** |
 
 Three rules do all the work:
@@ -154,6 +154,13 @@ times normal size. Scribbles and pokes are still rejected.
 
 Adding a gesture is now adding a template, not inventing another measurement
 that must avoid colliding with all the previous ones.
+
+Where a shape has a free PARAMETER, every plausible value of it needs a
+template too, and this has bitten three times now. Spirals matched nothing
+until the turn count was offered as a range (1½ to 3). Zigzags worked at
+*exactly five teeth* and read as a straight line at three, four, six or seven —
+which is force, or earth — so **fury was very nearly uncastable**. Point-wise
+distance is merciless about parameters nobody consciously chooses.
 
 The price of dropping rotation invariance is that **every bearing must be a
 template of its own**, and forgetting that is not academic: waves and zigzags

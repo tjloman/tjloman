@@ -142,14 +142,24 @@ static func _build_templates() -> void:
 			return Vector2(t * 200.0, flip * sin(t * TAU) * 80.0))
 		_add("wave", func(t: float) -> Vector2:
 			return Vector2(flip * sin(t * TAU) * 80.0, t * 200.0))
-		_add("zigzag", func(t: float) -> Vector2:
-			var teeth := t * 5.0
-			var up := 1.0 if int(teeth) % 2 == 1 else -1.0
-			return Vector2(t * 200.0, flip * up * absf(fmod(teeth, 1.0) * 2.0 - 1.0) * 60.0))
-		_add("zigzag", func(t: float) -> Vector2:
-			var teeth := t * 5.0
-			var up := 1.0 if int(teeth) % 2 == 1 else -1.0
-			return Vector2(flip * up * absf(fmod(teeth, 1.0) * 2.0 - 1.0) * 60.0, t * 200.0))
+	# ZIGZAGS BY TOOTH COUNT. Nobody counts the teeth in their own scrawl, and
+	# point-wise distance is merciless about it: with only a five-tooth
+	# reference, a three- or six-toothed zigzag read as a plain straight line
+	# -- which is force, or earth. Fury was very nearly uncastable. Two
+	# depths as well, since a lazy zigzag is shallower than a furious one.
+	for teeth: float in [3.0, 4.0, 5.0, 6.0, 7.0]:
+		for depth: float in [60.0, 95.0]:
+			for flip: float in [1.0, -1.0]:
+				_add("zigzag", func(t: float) -> Vector2:
+					var n := t * teeth
+					var up := 1.0 if int(n) % 2 == 1 else -1.0
+					return Vector2(t * 200.0,
+						flip * up * absf(fmod(n, 1.0) * 2.0 - 1.0) * depth))
+				_add("zigzag", func(t: float) -> Vector2:
+					var n := t * teeth
+					var up := 1.0 if int(n) % 2 == 1 else -1.0
+					return Vector2(flip * up * absf(fmod(n, 1.0) * 2.0 - 1.0) * depth,
+						t * 200.0))
 	# And on the slant, which is how a hurried S usually comes out.
 	for slant: float in [PI / 4.0, -PI / 4.0]:
 		for flip: float in [1.0, -1.0]:

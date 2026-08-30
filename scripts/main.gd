@@ -706,6 +706,30 @@ func _smoke_test_gestures() -> void:
 		Spellbook.rune_for(GestureRecognizer.classify(_wobbly_stroke(
 			func(t: float) -> Vector2: return Vector2(400 + sin(t * TAU) * 90, 120 + t * 300), 0)))])
 
+	# FURY, BY TOOTH COUNT. Nobody counts the teeth in their own scrawl, so
+	# every plausible count has to read. With one five-tooth reference, three
+	# and six came out as a straight line and fury was nearly uncastable.
+	var teeth_ok := 0
+	var teeth_all := 0
+	var teeth_miss := []
+	for teeth: int in [3, 4, 5, 6, 7]:
+		for upright: bool in [false, true]:
+			for seed_k in 3:
+				var jag2 := _wobbly_stroke(func(t: float) -> Vector2:
+					var n := t * teeth
+					var up := 1.0 if int(n) % 2 == 1 else -1.0
+					var off := up * absf(fmod(n, 1.0) * 2.0 - 1.0) * 80.0
+					return Vector2(400 + off, 120 + t * 300) if upright \
+						else Vector2(120 + t * 300, 300 - off), seed_k)
+				var read2 := GestureRecognizer.classify(jag2)
+				teeth_all += 1
+				if read2 == "zigzag":
+					teeth_ok += 1
+				else:
+					teeth_miss.append("%d teeth->%s" % [teeth, read2])
+	print("SMOKE TEST: fury — %d/%d zigzags read (3-7 teeth, both bearings) %s" % [
+		teeth_ok, teeth_all, str(teeth_miss)])
+
 	# And a scribble must still mean nothing at all.
 	var mess := PackedVector2Array()
 	var rng := RandomNumberGenerator.new()

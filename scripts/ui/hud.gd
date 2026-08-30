@@ -98,7 +98,7 @@ func _build_miracle_panel() -> void:
 	var ref := Label.new()
 	ref.text = ("S ~ water    | force    — earth    / fire    O life\n"
 		+ "spiral: air    reverse spiral: calm    zigzag: fury\n"
-		+ "caret ^ : sky    bow ( : ward\n"
+		+ "caret ^ : sky    bow ( : ward    (zigzag: 3-7 clear teeth)\n"
 		+ "water=rain · water+water=cloudburst · water+force=thunderstorm")
 	ref.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ref.add_theme_font_size_override("font_size", 13)
@@ -290,7 +290,7 @@ the same working.
   S or ~ ....... WATER      | tall line ....... FORCE
   — flat line .. EARTH      / diagonal ....... FIRE
   O circle ..... LIFE       spiral .......... AIR
-  reverse spiral  CALM      zigzag .......... FURY
+  reverse spiral  CALM      zigzag (3-7 teeth) FURY
   ^ caret ...... SKY        ( bow ............ WARD
 
 One rune alone is its plainest form: water is rain, force is lightning,
