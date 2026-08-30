@@ -593,6 +593,20 @@ func force_hold(body: PhysicsBody3D) -> bool:
 ## going to be reliable under a thumb.
 
 
+## Is the pointer over something the hand would pick up or open? Pressing one
+## of those still grabs it — the session is only ever summoned off bare ground.
+func _on_something_grabbable() -> bool:
+	return is_instance_valid(hover_target) \
+		and (hover_target.is_in_group("pickable") or hover_target is FoodStore)
+
+
+## Only a touchscreen needs the press-and-hold summons; a mouse has a button
+## to spare, and turning a hesitant left-press into a gesture there would be a
+## nasty surprise.
+func _touch_only() -> bool:
+	return DisplayServer.is_touchscreen_available()
+
+
 ## Charging the opening press. Touch only; a mouse has a button for this.
 func _tick_press_charge(delta: float) -> void:
 	if not _charging:

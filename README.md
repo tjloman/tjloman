@@ -27,11 +27,21 @@ python3 tools/check_calls.py     # calls to methods that DON'T EXIST
 ```
 
 That last one matters: `gdparse` only checks syntax and `gdlint` only checks
-style, so a call like `(v as Villager).hurt_by(...)` to a method that was never
-written passes both and then crashes the moment that code path runs.
-`check_calls.py` resolves `ClassName.foo()` and `(x as ClassName).foo()` against
-what each `class_name` script actually declares (following `extends`), and fails
-the build if a member is missing.
+style, so a call to a method that was never written passes both and then
+crashes the moment that code path runs. `check_calls.py` catches the three ways
+that has actually happened here:
+
+- **`ClassName.foo()` and `(x as ClassName).foo()`** — resolved against what
+  each `class_name` script really declares, following `extends`.
+- **`_helper()` on self** — delete or rename a private helper and every call to
+  it still parses and still lints. Restricted to underscore names, which are
+  ours by convention; an unprefixed bare call could be any of hundreds of
+  engine methods.
+- **Invalid string escapes** — a stray `\` in help text is a *parse* error that
+  gdparse accepts and Godot does not, and it takes the whole class down at load
+  time with an error naming only the line.
+
+Each of those three shipped a broken build at least once before it was added.
 
 ## Getting started
 

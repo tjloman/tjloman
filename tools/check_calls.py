@@ -50,6 +50,16 @@ extends_re = re.compile(r"^extends\s+(\w+)", re.M)
 # `(x as Villager).foo(` and `Weapon.foo(`
 cast_call_re = re.compile(r"\bas\s+(\w+)\s*\)\s*\.\s*(\w+)\s*\(")
 static_call_re = re.compile(r"(?<![\w.])([A-Z]\w+)\s*\.\s*(\w+)\s*\(")
+# A bare `_helper(` — a call on self, with nothing in front of it to say so.
+own_call_re = re.compile(r"(?<![\w.$\"])(_\w+)\s*\(")
+
+# Godot calls these on us; we never declare all of them.
+ENGINE_VIRTUALS = {
+    "_ready", "_init", "_process", "_physics_process", "_input", "_draw",
+    "_unhandled_input", "_unhandled_key_input", "_gui_input", "_notification",
+    "_enter_tree", "_exit_tree", "_to_string", "_get", "_set",
+    "_get_property_list", "_integrate_forces", "_get_configuration_warnings",
+}
 
 
 def collect(root):
@@ -82,10 +92,23 @@ def members_of(cls, classes, seen=None):
     return members | members_of(base, classes, seen)
 
 
+def own_members(path, src, classes):
+    """Everything a script may call on itself: what it declares, plus whatever
+    it inherits from a project class it extends."""
+    members = set()
+    for rx in (func_re, var_re, const_re, signal_re, enum_re):
+        members |= set(rx.findall(src))
+    base = extends_re.search(src)
+    if base:
+        members |= members_of(base.group(1), classes)
+    return members
+
+
 def check(paths, classes):
     problems = []
     for path in paths:
         src = open(path, encoding="utf-8").read()
+        mine = own_members(path, src, classes)
         for lineno, line in enumerate(src.split("\n"), 1):
             if line.lstrip().startswith("#"):
                 continue
@@ -95,6 +118,18 @@ def check(paths, classes):
                         continue
                     if method not in members_of(cls, classes):
                         problems.append((path, lineno, cls, method, line.strip()))
+            # A call on SELF to a private helper that is not there. This is the
+            # bug that keeps reaching the player: delete or rename a `_helper`
+            # and every call to it still parses, still lints, and still fails
+            # the moment the line runs. Restricted to underscore names because
+            # those are ours by convention -- an unprefixed bare call could be
+            # any of hundreds of engine methods we do not enumerate.
+            for method in own_call_re.findall(line):
+                if method in ENGINE_VIRTUALS or method in mine or method in BUILTIN:
+                    continue
+                if ("func " + method) in src:
+                    continue
+                problems.append((path, lineno, "self", method, line.strip()))
     return problems
 
 
