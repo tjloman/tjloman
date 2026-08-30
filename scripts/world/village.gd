@@ -41,8 +41,17 @@ const RESOLVE_FIGHT := 35.0   # below this they hide rather than fight
 ## their spirits, and children follow. Attention fades if you wander off, so a
 ## kingdom expands where you actually tend it rather than everywhere at once.
 const ATTENTION_DECAY := 0.5       # per second (a miracle's notice lasts ~a minute)
-const BREED_BASE := 0.008          # conception chance per second, untended
-const BREED_ATTENTION_GAIN := 25.0  # attention needed to double that
+## CONCEPTION, given that a couple have actually MET at the totem. This used to
+## be a per-second lottery that ran whether or not anyone was there, at odds so
+## long that a couple courting for a full eight seconds conceived about six
+## times in a hundred. Simulated over a night, that killed every village in
+## twenty-four runs out of twenty-four: a lifetime here is ~3.6 real hours, so
+## an unattended run turns over two whole generations, and the flock could not
+## replace itself even once. What limits growth is now how often they COURT
+## (see Villager._breed_cooldown) — which is what divine attention speeds up —
+## rather than a coin that almost never lands.
+const BREED_BASE := 0.45           # per second WHILE a partner is present
+const BREED_ATTENTION_GAIN := 50.0  # attention needed to double that
 
 ## Hand-placed founding homes, clear of the farm (E), store (NW), and pen (S).
 const STARTER_HOUSE_SPOTS: Array[Vector3] = [
@@ -86,6 +95,11 @@ var _pen_center := Vector3(0, 0, -11)
 var _housing_timer := 0.0
 var _sim_skip := 0                  # frames skipped while far from the camera
 var _breed_timer := 30.0
+## Population, sampled now and then. A village dying of demographics dies
+## SILENTLY — the flock thins over hours and nothing announces it — so the
+## roster reads the trend out loud instead of leaving you to find the bodies.
+var _pop_samples: Array = []
+var _pop_timer := 20.0
 
 
 func _ready() -> void:
@@ -447,6 +461,13 @@ func _process(delta: float) -> void:
 	if _breed_timer <= 0.0:
 		_breed_timer = 50.0
 		_breed_livestock()
+
+	_pop_timer -= delta
+	if _pop_timer <= 0.0:
+		_pop_timer = 20.0
+		_pop_samples.append(population())
+		if _pop_samples.size() > 12:      # about four minutes of history
+			_pop_samples.pop_front()
 
 
 func my_villagers() -> Array[Villager]:
@@ -961,10 +982,34 @@ func notice(amount: float) -> void:
 	attention = minf(attention + amount, 100.0)
 
 
-## The per-second chance a courting pair conceives. An untended village crawls
-## along at BREED_BASE; divine attention multiplies it up to about fivefold.
+## The per-second chance a courting pair conceives, once they are TOGETHER.
+## Divine attention roughly triples it — so a tended village fills its houses
+## quickly and a neglected one still plods along instead of dying out.
 func conception_chance() -> float:
 	return BREED_BASE * (1.0 + attention / BREED_ATTENTION_GAIN)
+
+
+## Which way the population is going, in one word. Compares the recent half of
+## the record against the older half, so a single birth or death does not swing
+## it. Returns "" until there is enough history to be worth saying.
+func trend() -> String:
+	if _pop_samples.size() < 6:
+		return ""
+	var half := _pop_samples.size() / 2
+	var older := 0.0
+	var recent := 0.0
+	for i in _pop_samples.size():
+		if i < half:
+			older += float(_pop_samples[i])
+		else:
+			recent += float(_pop_samples[i])
+	older /= float(half)
+	recent /= float(_pop_samples.size() - half)
+	if recent > older + 0.5:
+		return "growing"
+	if recent < older - 0.5:
+		return "DWINDLING"
+	return "steady"
 
 
 ## How a fight went. Winning teaches them to stand; losing their own teaches

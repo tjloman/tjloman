@@ -36,6 +36,12 @@ const GRAVITY := 20.0
 const ARRIVE_DIST := 0.9
 
 const ADULT_AGE := 16.0
+## WEANED. A mother will not start another child while one still needs her —
+## but "needs her" used to mean until the child was a grown ADULT of sixteen,
+## which is more than half a woman's fertile life and, on its own, most of why
+## villages could not replace their dead. Six years is a child who can be left
+## with the village.
+const WEANED_AGE := 6.0
 const ELDER_AGE := 60.0
 const PREGNANCY_YEARS := 0.75  # nine months
 const STARVING_HUNGER := 90.0
@@ -752,12 +758,12 @@ func wants_to_breed() -> bool:
 	return not _has_dependent_child()
 
 
-## A child of mine still trailing me (young, and no school to mind it).
+## A child of mine still at the breast (and no school to mind it).
 func _has_dependent_child() -> bool:
 	if village.has_edubba():
 		return false
 	for v in village.my_villagers():
-		if v.mother == self and not v.is_adult():
+		if v.mother == self and v.age < WEANED_AGE:
 			return true
 	return false
 
@@ -772,12 +778,17 @@ func _try_conceive(delta: float) -> void:
 	# Untended villages barely grow; tended ones quicken (see conception_chance).
 	if randf() > village.conception_chance() * delta:
 		return
+	# A partner who came to the totem for the same reason. Courting AND
+	# worshipping both count: insisting the man be mid-worship at the exact
+	# instant of the roll was a coincidence the pair could rarely manage.
 	for other in village.my_villagers():
 		if other == self or other.is_female or not other.is_adult():
 			continue
-		if other.state != State.WORSHIPPING or other.happiness < 45.0:
+		if other.state != State.WORSHIPPING and other.state != State.COURT:
 			continue
-		if global_position.distance_to(other.global_position) < 5.0:
+		if other.happiness < 40.0 or other.age > 55.0:
+			continue
+		if global_position.distance_to(other.global_position) < 7.0:
 			pregnant = true
 			pregnancy_progress = 0.0
 			_breed_cooldown = 30.0
@@ -868,7 +879,9 @@ func _decide() -> void:
 	# Breeding is a high drive once of age, when body and larder allow.
 	if wants_to_breed():
 		state = State.COURT
-		_breed_cooldown = randf_range(20.0, 40.0)
+		# How OFTEN they court is what paces a village's growth now, so this is
+		# the number to turn if towns grow too fast or too slowly.
+		_breed_cooldown = randf_range(12.0, 25.0)
 		_target = village.totem.global_position + Vector3(randf_range(-3, 3), 0, randf_range(-3, 3))
 		return
 	if social < 30.0:

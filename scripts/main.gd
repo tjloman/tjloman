@@ -478,6 +478,26 @@ func _run_smoke_test() -> void:
 	print("SMOKE TEST: pacing — 400 instant cruelties = %.1f, one lived deed = %.1f" % [
 		burst.temperament, spaced.temperament])
 
+	# DEMOGRAPHICS. A lifetime here is ~3.6 real hours, so an overnight run turns
+	# over two whole generations — a village that cannot replace its dead dies
+	# quietly while nobody is watching. Conception must actually FIRE when a
+	# couple meet, and a mother must be free again long before her child is grown.
+	print("SMOKE TEST: breeding — %.2f/s with a partner present (%.2f when tended), weaned at %.0f" % [
+		village.conception_chance(), village.conception_chance() * 3.0,
+		Villager.WEANED_AGE])
+	var mother := village.my_villagers()[0]
+	mother.is_female = true
+	mother.age = 25.0
+	mother.happiness = 80.0
+	mother.hunger = 10.0
+	mother.energy = 90.0
+	mother._breed_cooldown = 0.0
+	village.store.plant_food += 20
+	print("SMOKE TEST: fertility — wants to breed=%s, dependent child blocks=%s" % [
+		mother.wants_to_breed(), mother._has_dependent_child()])
+	village.notice(100.0)
+	print("SMOKE TEST: trend readout -> '%s' (blank until there is history)" % village.trend())
+
 	# The village has a doctrine of its own, learned the same way.
 	village.remember_battle(false)
 	village.remember_battle(false)

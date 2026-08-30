@@ -98,6 +98,37 @@ def check(paths, classes):
     return problems
 
 
+# Escapes GDScript actually understands. Anything else after a backslash in a
+# string literal is a parse error in Godot -- and gdparse does NOT catch it, so
+# a stray "\" in help text takes the whole class down at load time with an
+# error that names only the line, not the character.
+VALID_ESCAPES = set('abfnrtv"\'\\uUxU0123456789\n')
+
+
+def check_escapes(files):
+    """Find invalid string escapes: the one class of syntax error gdparse misses."""
+    problems = []
+    for path in files:
+        with open(path, encoding="utf-8") as fh:
+            for lineno, line in enumerate(fh, 1):
+                stripped = line.lstrip()
+                # Comments and doc comments are not string literals.
+                if stripped.startswith("#"):
+                    continue
+                # A backslash at end of line is GDScript's line continuation.
+                body = line.rstrip("\n")
+                i = 0
+                while True:
+                    i = body.find("\\", i)
+                    if i < 0 or i == len(body) - 1:
+                        break
+                    nxt = body[i + 1]
+                    if nxt not in VALID_ESCAPES:
+                        problems.append((path, lineno, "\\" + nxt, line.strip()))
+                    i += 2
+    return problems
+
+
 def main():
     root = "scripts"
     targets = sys.argv[1:] or [root]
@@ -112,9 +143,14 @@ def main():
     problems = check(files, classes)
     for path, lineno, cls, method, line in problems:
         print("%s:%d: %s has no member '%s'\n    %s" % (path, lineno, cls, method, line))
+    escapes = check_escapes(files)
+    for path, lineno, seq, line in escapes:
+        print("%s:%d: invalid string escape '%s' (Godot rejects it; gdparse does not)"
+              "\n    %s" % (path, lineno, seq, line))
+    total = len(problems) + len(escapes)
     print("checked %d classes across %d files — %d problem(s)"
-          % (len(classes), len(files), len(problems)))
-    return 1 if problems else 0
+          % (len(classes), len(files), total))
+    return 1 if total else 0
 
 
 if __name__ == "__main__":

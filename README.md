@@ -349,6 +349,27 @@ Both ask twice before they fire, and the arming lapses after a few seconds.
 The workshop also holds test cheats: prayer, instant growth, instant
 conversion, and a printout of what the creature currently believes.
 
+## Demographics — why villages live or die
+
+A villager's whole life is about **3.6 real hours**, so a run left going
+overnight turns over **two complete generations**. That makes the birth rate the
+single most load-bearing number in the game: a flock that cannot quite replace
+its dead does not limp, it vanishes, quietly, while nobody is watching.
+
+Two rules keep it stable, both found by simulating the population rather than
+guessing at it:
+
+- **Conception happens when a couple actually MEET.** It is not a per-second
+  lottery running whether or not anyone is there. What paces a village's growth
+  is how often its people go *courting* — which is what divine attention speeds
+  up — rather than a coin that almost never lands.
+- **A mother is free again once her child is weaned at six**, not when it
+  reaches adulthood at sixteen. Sixteen years is more than half a fertile life.
+
+Villages also read their own trend aloud. The roster shows **growing**,
+**steady** or **DWINDLING** (in red), because a town dying of demographics has
+no other symptom until the last funeral.
+
 ## The quiet life, and how you shape it
 
 Most of what a creature does is neither kind nor cruel, and a creature offered

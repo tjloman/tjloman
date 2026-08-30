@@ -248,11 +248,11 @@ MIRACLES — DRAW RUNES AND COMBINE THEM (hold right mouse)
 Draw a shape, PAUSE, draw another, and let go. What you get is what
 those runes mean TOGETHER, and the order you draw them in never matters.
 
-  ~ or S ....... WATER      | tall line .... FORCE
-  — flat line .. EARTH      \ diagonal ..... FIRE
-  O circle ..... LIFE       @ spiral ....... AIR
-  @ reverse spiral . CALM   /\/\ zigzag .... FURY
-  ^ caret ...... SKY        ( arc .......... WARD
+  ~ or S ......... WATER     | tall line ....... FORCE
+  — flat line .... EARTH     diagonal slash ... FIRE
+  O circle ....... LIFE      @ spiral ......... AIR
+  @ reverse spiral  CALM     jagged zigzag .... FURY
+  ^ caret ........ SKY       ( arc ............ WARD
 
 One rune alone is its plainest form: water is rain, force is lightning,
 life is food, calm is a healing.
@@ -550,11 +550,16 @@ func _roster_row(vil: Village, cam: Vector3) -> Control:
 	var militia: int = vil.armed_count()
 	var arms := "  ·  %d armed" % militia if militia > 0 else ""
 	var roused := "  ·  ROUSED" if vil.is_roused() else ""
-	label.text = "%s%s\nPop %d  ·  %d m away%s%s\n " % [
-		vil.village_name, home, vil.population(),
+	var way := vil.trend()
+	var drift := "  ·  %s" % way if way != "" else ""
+	label.text = "%s%s\nPop %d%s  ·  %d m away%s%s\n " % [
+		vil.village_name, home, vil.population(), drift,
 		int(round(flat.length())), arms, roused]
 	label.add_theme_font_size_override("font_size", 15)
-	label.add_theme_color_override("font_color", Color.WHITE)
+	# A town losing people goes red, so a village dying of demographics cannot
+	# do it quietly while you are looking somewhere else.
+	label.add_theme_color_override("font_color",
+		Color(1.0, 0.6, 0.55) if way == "DWINDLING" else Color.WHITE)
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(label)
