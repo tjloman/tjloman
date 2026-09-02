@@ -38,6 +38,9 @@ var player_village: Village
 ## below for how a miracle actually moves the earth.
 var scars := TerrainScars.new()
 
+## Standing water that is not the sea — rain caught in a hollow. See `flood`.
+var _ponds: Array[Dictionary] = []
+
 var _height_noise := FastNoiseLite.new()
 var _detail_noise := FastNoiseLite.new()
 var _temp_noise := FastNoiseLite.new()
@@ -108,7 +111,97 @@ func biome_at(x: float, z: float) -> String:
 
 
 func is_underwater(x: float, z: float) -> bool:
-	return height_at(x, z) < WATER_LEVEL + 0.25
+	return height_at(x, z) < water_level_at(x, z) + 0.25
+
+
+## THE SURFACE OF THE WATER HERE — the sea, or a pond caught in a hollow.
+##
+## The sea is a single global plane, which is all an unbroken world needs. Once
+## the land can be cratered, it needs more: rain falling into a hole should
+## stand in it, and a flooded crater has a surface of its own, well above sea
+## level. So every pond is a disc with its own height, and this returns the
+## highest surface covering the point.
+##
+## Costs one `is_empty()` on a world nobody has flooded, which is the same
+## bargain the scars make — and this is called by `is_underwater`, which is on
+## every routing and placement path in the game.
+func water_level_at(x: float, z: float) -> float:
+	if _ponds.is_empty():
+		return WATER_LEVEL
+	var top := WATER_LEVEL
+	for pond in _ponds:
+		var dx: float = x - float(pond["x"])
+		var dz: float = z - float(pond["z"])
+		var r: float = pond["r"]
+		if dx * dx + dz * dz < r * r:
+			top = maxf(top, float(pond["level"]))
+	return top
+
+
+## IS THIS A HOLLOW, and how deep? Returns the height of the lowest point of
+## the rim around `at`, or -INF if the ground runs away downhill somewhere —
+## in which case water would simply drain off rather than stand.
+##
+## The same question the creature asks when it finds itself unable to climb out
+## of something (see CreatureSteering.watch_for_pit): one of them is why you
+## need a miracle, the other is why the rain stays.
+func basin_rim(at: Vector2, reach: float) -> float:
+	var floor_y := height_at(at.x, at.y)
+	var lowest := INF
+	for i in 12:
+		var a := TAU * i / 12.0
+		var h := height_at(at.x + cos(a) * reach, at.y + sin(a) * reach)
+		if h <= floor_y + 0.3:
+			return -INF        # open on one side: it drains
+		lowest = minf(lowest, h)
+	return lowest
+
+
+## FILL A HOLLOW. Water stands to `level`, out to `radius`. Everything that
+## asks whether a point is underwater agrees immediately.
+func flood(at: Vector2, radius: float, level: float) -> void:
+	# Merge with a pond already standing here rather than stacking discs.
+	for pond in _ponds:
+		if Vector2(float(pond["x"]), float(pond["z"])).distance_to(at) < radius * 0.5:
+			pond["level"] = maxf(float(pond["level"]), level)
+			pond["r"] = maxf(float(pond["r"]), radius)
+			_show_pond(pond)
+			return
+	var pond := {"x": at.x, "z": at.y, "r": radius, "level": level}
+	_ponds.append(pond)
+	_show_pond(pond)
+
+
+## The water itself: one thin disc, flat, at the pond's surface.
+func _show_pond(pond: Dictionary) -> void:
+	var old = pond.get("node")
+	if old != null and is_instance_valid(old):
+		(old as Node3D).queue_free()
+	var disc := Util.cylinder(float(pond["r"]), 0.08, Color(0.24, 0.45, 0.62),
+		Vector3(float(pond["x"]), float(pond["level"]), float(pond["z"])))
+	if Quality.water_alpha():
+		var skin := StandardMaterial3D.new()
+		skin.albedo_color = Color(0.2, 0.42, 0.65, 0.78)
+		skin.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		skin.roughness = 0.1
+		skin.metallic = 0.3
+		disc.material_override = skin
+	add_child(disc)
+	pond["node"] = disc
+
+
+func ponds_to_save() -> Array:
+	var out := []
+	for pond in _ponds:
+		out.append({"x": pond["x"], "z": pond["z"], "r": pond["r"], "level": pond["level"]})
+	return out
+
+
+func ponds_from_save(data: Array) -> void:
+	for entry in data:
+		var pond: Dictionary = (entry as Dictionary).duplicate()
+		_ponds.append(pond)
+		_show_pond(pond)
 
 
 ## True only if the WHOLE footprint (a grid, not just corners) is dry —

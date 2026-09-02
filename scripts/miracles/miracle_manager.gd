@@ -42,6 +42,7 @@ const MIRACLES := {
 	# be cast twice and never understood. They will be priced properly once it
 	# is clear what they are actually worth.
 	"earthquake": {"cost": 30.0, "color": Color(0.62, 0.5, 0.36)},
+	"lavaball": {"cost": 38.0, "color": Color(1.0, 0.42, 0.1)},
 	"volcano": {"cost": 45.0, "color": Color(0.95, 0.35, 0.12)},
 	"water_walk": {"cost": 20.0, "color": Color(0.55, 0.85, 0.95)},
 	"healing_shower": {"cost": 25.0, "color": Color(0.55, 1.0, 0.7)},
@@ -74,6 +75,9 @@ const KARMA := {
 	# Shaking the ground under people terrifies them even when nobody is hurt;
 	# opening a volcano under them is among the worst things a god can do.
 	"earthquake": {"player": -4.0, "creature": -3.0},
+	# It burns like a fireball, but it BUILDS — a god who fills in his own
+	# craters is doing something less purely destructive than one who digs them.
+	"lavaball": {"player": -1.5, "creature": -1.0},
 	"volcano": {"player": -10.0, "creature": -7.5},
 	"water_walk": {"player": 1.5, "creature": 2.5},
 	"healing_shower": {"player": 4.5, "creature": 3.5},
@@ -317,6 +321,7 @@ func resolve(miracle: String, pos: Vector3, momentum := Vector3.ZERO,
 		"hurricane": _cast_hurricane(pos, potency, momentum)
 		# The earth-movers, and two mercies.
 		"earthquake": _cast_earthquake(pos, potency)
+		"lavaball": _cast_lavaball(pos, potency)
 		"volcano": _cast_volcano(pos, potency)
 		"water_walk": _cast_water_walk(pos, potency)
 		"healing_shower": _cast_healing_shower(pos, potency)
@@ -346,6 +351,9 @@ func _cast_food(pos: Vector3) -> void:
 
 func _cast_rain(pos: Vector3, potency := 1.0) -> void:
 	var reach := 14.0 * potency
+	# Heavy rain into a hollow stands in it (see `_maybe_flood`). A sprinkle
+	# never does, and rain on open ground never does whatever its weight.
+	_maybe_flood(pos, potency)
 	# THE CLOUD ITSELF. A swirl of soft streaked layers that turn, breathe, and
 	# come and go — the fiercer the working, the more of them, the darker and
 	# the faster they churn. See StormCloud; it is one draw call either way.
@@ -498,6 +506,33 @@ func _cast_heal(pos: Vector3, potency := 1.0) -> void:
 			creature.receive_heal()
 
 
+## RAIN THAT STANDS. A heavy enough downpour over a hollow does not run off it
+## — it fills it. This is what turns a fireball crater from a scar into a pond,
+## and it is the only way water is ever added to the world.
+##
+## The test is whether the ground actually holds water: the rim is checked all
+## the way round, and if it is open on any side the rain drains away and
+## nothing is left behind. So a deluge on a hillside does nothing, and a deluge
+## in a crater makes a pool — which is exactly the intuition.
+func _maybe_flood(pos: Vector3, potency: float) -> void:
+	if potency < 2.0:
+		return                       # a shower does not fill anything
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world == null:
+		return
+	var reach := 6.0 + potency * 2.0
+	var rim := world.basin_rim(Vector2(pos.x, pos.z), reach)
+	if rim == -INF:
+		return                       # open ground: it runs off
+	var floor_y := world.height_at(pos.x, pos.z)
+	if rim - floor_y < 0.8:
+		return                       # barely a dip; not worth a pond
+	# It fills toward the rim, not over it — heavier rain fills it fuller.
+	var level := lerpf(floor_y, rim, clampf(potency / 3.6, 0.35, 0.92))
+	world.flood(Vector2(pos.x, pos.z), reach, level)
+	GameState.announce("The water has nowhere to run. A pool stands where the ground was broken.")
+
+
 ## Moving the earth -----------------------------------------------------------
 ##
 ## The first miracles that change the SHAPE of the world rather than what is
@@ -560,6 +595,80 @@ func _quake_everything(pos: Vector3, reach: float, potency: float) -> void:
 	var creature := get_tree().get_first_node_in_group("creature") as Creature
 	if creature != null and creature.global_position.distance_to(pos) < reach:
 		creature.feel("fear", 0.7, 2.5)
+
+
+## MOLTEN ROCK, THROWN. A fireball's opposite number: where a fireball digs a
+## bowl out of the ground, this pours a dome of lava onto it, which cools into
+## a hill. It burns what it lands on either way — it is still fire — but what
+## it leaves behind is MORE ground rather than less.
+##
+## AND SO IT FILLS CRATERS, with no special case anywhere. Scars simply add up,
+## so a dome laid into a bowl of the same depth cancels it and the land is
+## level again. A god who has cratered a field can smooth it back out, and a god
+## who overdoes it builds a hill instead — which is the right kind of mistake to
+## be able to make.
+func _cast_lavaball(pos: Vector3, potency := 1.0) -> void:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	var reach := minf(5.0 + 3.0 * potency, TerrainScars.BUCKET)
+	SoundBank.play_at("boom", pos, 2.0)
+	if world != null and not world.is_underwater(pos.x, pos.z):
+		var hollow := world.scars.hollow_near(Vector2(pos.x, pos.z))
+		if hollow.is_empty():
+			# OPEN GROUND: a smooth dome of cooled lava. A new hill.
+			world.deform(TerrainScars.Kind.BASIN, Vector2(pos.x, pos.z),
+				reach, 1.4 + 0.9 * potency, 3.0, 0.55)
+		else:
+			# INTO A HOLE: lay that hole's OWN profile back with the sign
+			# flipped, at its own centre and its own radius, so the two cancel
+			# to nothing everywhere rather than only in the middle.
+			#
+			# A wide dome over a narrow crater fills the centre and leaves a
+			# ring of spoil standing around it — measurably a 1.3m donut on a
+			# 1.7m hole, which is a worse landscape than the hole was.
+			world.deform(int(hollow["kind"]), Vector2(float(hollow["x"]), float(hollow["z"])),
+				float(hollow["radius"]), -float(hollow["amount"]),
+				float(hollow.get("rings", 3.0)), 0.5)
+			GameState.announce("Molten rock pours into the crater, and the ground is whole again.")
+
+	var glow := OmniLight3D.new()
+	glow.light_color = Color(1.0, 0.4, 0.1)
+	glow.light_energy = 5.0
+	glow.omni_range = reach * 2.5
+	glow.shadow_enabled = false
+	glow.position = pos + Vector3(0, 2.0, 0)
+	add_child(glow)
+	var splash := CPUParticles3D.new()
+	splash.amount = Quality.particles(90)
+	splash.lifetime = 1.8
+	splash.one_shot = true
+	splash.mesh = Util.speck_mesh(0.35, 0.35, Color(1.0, 0.6, 0.15, 0.95), true)
+	splash.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	splash.emission_sphere_radius = reach * 0.4
+	splash.direction = Vector3.UP
+	splash.spread = 45.0
+	splash.initial_velocity_min = 6.0
+	splash.initial_velocity_max = 13.0
+	splash.gravity = Vector3(0, -16.0, 0)
+	splash.position = pos
+	add_child(splash)
+
+	# Molten rock sets alight whatever it touches, but only where it lands.
+	for t in get_tree().get_nodes_in_group("trees"):
+		var tree := t as WildTree
+		if is_instance_valid(tree) and tree.global_position.distance_to(pos) < reach:
+			tree.ignite()
+	for grp in ["villagers", "animals"]:
+		for n in get_tree().get_nodes_in_group(grp):
+			var body := n as Node3D
+			if is_instance_valid(body) \
+					and body.global_position.distance_to(pos) < reach \
+					and body.has_method("ignite"):
+				body.call("ignite")
+
+	var cool := create_tween()
+	cool.tween_property(glow, "light_energy", 0.0, 6.0)
+	cool.tween_callback(glow.queue_free)
+	cool.tween_callback(splash.queue_free)
 
 
 ## THE EARTH SPLITS OPEN. A mountain is raised where the miracle lands, with a

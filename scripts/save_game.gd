@@ -292,6 +292,8 @@ func snapshot(world: WorldGen, creature: Creature) -> Dictionary:
 		# back from the seed; craters, ripples and volcanoes do not, so they are
 		# the one part of the ground that has to be written down.
 		"scars": world.scars.to_save(),
+		# And the water standing in them, which no seed knows about either.
+		"ponds": world.ponds_to_save(),
 	}
 
 
@@ -450,6 +452,7 @@ func apply_pending(world: WorldGen, creature: Creature) -> void:
 		if not scars.is_empty():
 			world.scars.from_save(scars)
 			world.rebuild_all()
+		world.ponds_from_save(pending_world.get("ponds", []) as Array)
 		GameState.announce("The world returns as you left it.")
 	# A brand-new profile names its creature the moment it draws breath.
 	var named := String(active_profile().get("name", ""))

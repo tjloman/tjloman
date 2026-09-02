@@ -497,9 +497,10 @@ func _tick_watchdogs(delta: float) -> void:
 	if _state_time > STUCK_SECONDS and state != State.SLEEPING:
 		_state_time = 0.0
 		_decide()
+	# Down a hole it cannot climb? Say so, and name the way out (CreatureSteering).
+	steering.watch_for_pit(self, delta)
 	# Wedged against a grove for more than a beat: give up this target now
-	# rather than grinding a huge collider into the trunks (jank AND physics
-	# lag) until STUCK_SECONDS finally trips.
+	# rather than grinding a collider into the trunks until STUCK_SECONDS trips.
 	if steering.wedge_time > 1.4 and state != State.SLEEPING:
 		steering.wedge_time = 0.0
 		_decide()

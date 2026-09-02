@@ -42,6 +42,24 @@ const STUCK_CEILING := 90.0
 const STUCK_FADE := 0.35       # per second
 const STUCK_MEMORY := 48       # cells remembered; the cheapest are forgotten first
 
+## STUCK IN A HOLE.
+##
+## A fireball gouges a crater with walls a creature genuinely cannot walk up.
+## That is not a bug — it is the terrain being real, and a world you can wreck
+## is a world you can wreck yourself into. But a player who has not realised
+## that the way out is a MIRACLE will simply watch the beast mill about down
+## there, and blame the pathfinding.
+##
+## So the ground itself is asked. If the creature sits below every direction
+## around it for long enough that it plainly cannot climb out, the heavens say
+## so once and name the working that lifts it. The rune tiers guarantee the
+## advice is always actionable: flight is learned no later than fireball, so
+## anyone who can dig a pit can already fly out of one (see Spellbook, and
+## tools/rune_sheet.py --check).
+const PIT_DEPTH := 1.5         # this far below the rim, in every direction
+const PIT_PATIENCE := 7.0      # seconds down there before anything is said
+const PIT_QUIET := 60.0        # and never again within this many
+
 var wedge_time := 0.0          # seconds spent shoving without advancing
 var walk_phase := 0.0          # the waddle
 
@@ -52,6 +70,8 @@ var _age := 0.0
 var _cooldown := 0.0
 ## Route cell -> how much trouble it has been. NavField costs routes with this.
 var _shun := {}
+var _pit_time := 0.0           # seconds spent at the bottom of a hole
+var _pit_quiet := 0.0          # seconds until we may mention it again
 
 
 ## Walk toward `target`, returning true once it is there. This is the only way
@@ -229,3 +249,41 @@ func from_dict(data: Dictionary) -> void:
 		var pair := key.split(",")
 		if pair.size() == 2:
 			_shun[Vector2i(int(pair[0]), int(pair[1]))] = float(data[key])
+
+
+## Is the creature at the bottom of something it cannot climb out of, and has
+## it been there long enough to be worth mentioning? Called every tick; the
+## ring of ground samples only happens once it has been still for a while, so
+## the ordinary cost of this is two floats and a comparison.
+func watch_for_pit(who: Creature, delta: float) -> void:
+	_pit_quiet = maxf(_pit_quiet - delta, 0.0)
+	# Flying, or lifted some other way, is the answer rather than the problem.
+	if who.is_flying():
+		_pit_time = 0.0
+		return
+	var world := who.get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world == null:
+		return
+	var here := who.global_position
+	var floor_y := world.height_at(here.x, here.z)
+	# A ring a little wider than the beast is: a big creature in a small dip is
+	# not trapped, and should not be told it is.
+	var reach := 5.0 + who.scale.x * 1.5
+	var walled := true
+	for i in 8:
+		var a := TAU * i / 8.0
+		if world.height_at(here.x + cos(a) * reach, here.z + sin(a) * reach) \
+				< floor_y + PIT_DEPTH:
+			walled = false
+			break
+	if not walled:
+		_pit_time = 0.0
+		return
+	_pit_time += delta
+	if _pit_time < PIT_PATIENCE or _pit_quiet > 0.0:
+		return
+	_pit_time = 0.0
+	_pit_quiet = PIT_QUIET
+	GameState.announce(
+		"%s is at the bottom of a pit and cannot climb out. Draw CALM and SKY to lift it."
+		% who.called())

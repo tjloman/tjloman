@@ -167,6 +167,26 @@ func _contribution(scar: Dictionary, x: float, z: float) -> float:
 			return amount * pow(cos(t * PI * 0.5), 2.0)
 
 
+## THE HOLE NEAREST THIS POINT, if there is one — the scar that dug it, whole.
+##
+## What a lavaball needs in order to FILL a crater rather than bury it. Laying a
+## wide smooth dome over a narrow crater cancels the middle and leaves a ring of
+## spoil around it, which is a worse landscape than the hole was. Handed the
+## original scar, the filler can lay down that exact profile with the sign
+## flipped, and the two cancel to nothing everywhere at once.
+func hollow_near(at: Vector2, within := 7.0) -> Dictionary:
+	var best := {}
+	var closest := within
+	for scar in _scars:
+		if float(scar["amount"]) >= 0.0:
+			continue                      # this one raised ground, not dug it
+		var d := Vector2(float(scar["x"]), float(scar["z"])).distance_to(at)
+		if d < closest:
+			closest = d
+			best = scar
+	return best
+
+
 ## The square of world a scar can possibly touch — what chunks must be rebuilt.
 static func reach_of(scar: Dictionary) -> Rect2:
 	var r: float = scar["radius"]

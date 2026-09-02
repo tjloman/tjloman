@@ -85,9 +85,29 @@ const RECIPES := {
 	# ground splitting open. These are the first miracles that change the SHAPE
 	# of the world rather than what is standing on it.
 	"earth+fury": "earthquake",
+	# MOLTEN ROCK. Earth and fire together is lava, and it is the answer to a
+	# cratered landscape: where a fireball digs a bowl, a lavaball raises a
+	# dome, and because scars simply add up, one thrown into the other FILLS
+	# IT IN. It is also the volcano's parent — add fury and the same molten
+	# rock stops being a thing you throw and becomes a mountain that erupts.
+	"earth+fire": "lavaball",
 	"earth+fire+fury": "volcano",
 	# The kindly and the useful.
 	"calm+life": "heal",
+	# FLIGHT, TWICE OVER, and the second one is not decoration.
+	#
+	# Fireballs gouge craters, and a crater is a hole a creature can genuinely
+	# be standing in and unable to walk out of. That is fine — it is the terrain
+	# being real — but only if the way out exists by then. Fire is a tier-3
+	# rune, so a fireball is castable at three villages; flight through
+	# `air+calm` needs AIR, which is tier 4. For one whole tier of the game you
+	# could dig a pit you could not lift your creature out of.
+	#
+	# `sky` is tier 3, the same as fire, and it is already the rune of a wing.
+	# So calm and a rune of the heavens — either of them — means flight, and the
+	# way out is never learned later than the way in. tools/rune_sheet.py
+	# asserts that invariant so it cannot quietly break again.
+	"calm+sky": "flight",
 	# Ward is shelter held over something; over water it is footing. Rain that
 	# is also calm and life is not weather at all, it is a mercy.
 	"ward+water": "water_walk",

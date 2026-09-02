@@ -273,6 +273,47 @@ def summarize(data):
         print("    " + "+".join(r["r"]) + " -> " + r["o"])
 
 
+## INVARIANTS the grammar has to keep, whatever else is added to it.
+##
+## Each is (a thing you can do, a thing you must be able to undo, why). The
+## rule is that the ANSWER may never be learned later than the PROBLEM: a god
+## who can dig a pit at three villages and only lift the creature out at four
+## has a trap in the shape of a miracle.
+ESCAPES = [
+    ("fireball", "flight",
+     "a fireball gouges a crater the creature can be standing in"),
+    ("firestorm", "flight", "the same, in bulk"),
+    ("volcano", "flight", "a volcano raises ground the creature may be under"),
+]
+
+
+def check_invariants(data):
+    """The earliest village at which each outcome becomes castable."""
+    earliest = {}
+    for row in data["rows"] + data["long"]:
+        seen = earliest.get(row["o"])
+        if seen is None or row["t"] < seen:
+            earliest[row["o"]] = row["t"]
+    problems = 0
+    print("Escape invariants (the way out may never be learned after the way in):")
+    for problem, answer, why in ESCAPES:
+        at = earliest.get(problem)
+        out = earliest.get(answer)
+        if at is None or out is None:
+            print("  ?  %s / %s — one of them is not castable at all" % (problem, answer))
+            problems += 1
+            continue
+        ok = out <= at
+        print("  %s  %-10s at village %d, %-8s at village %d — %s" % (
+            "OK" if ok else "!!", problem, at, answer, out, why))
+        if not ok:
+            problems += 1
+    if problems:
+        print("\n%d broken invariant(s): a player can reach the problem before the answer."
+              % problems)
+    return problems
+
+
 def splice(data, path):
     """Replace the __RUNES__ blob in a built page, leaving everything else."""
     page = read(path)
@@ -289,10 +330,15 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--into", help="a built page to splice the data into")
     ap.add_argument("--summary", action="store_true", help="describe the grammar")
+    ap.add_argument("--check", action="store_true",
+                    help="assert the grammar's escape invariants")
     args = ap.parse_args()
     data = build()
+    if args.check:
+        return 1 if check_invariants(data) else 0
     if args.summary:
         summarize(data)
+        check_invariants(data)
         return 0
     if args.into:
         splice(data, args.into)
