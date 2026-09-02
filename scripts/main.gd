@@ -575,6 +575,31 @@ func _run_smoke_test() -> void:
 		print("SMOKE TEST: compass — %-28s -> %-30s (good/evil %+.0f) %s" % [
 			life, soul.character(), soul.temperament, str(soul.character_account(2))])
 
+	# THE CROWD MIND. The town has to work out once, for everybody, what it has
+	# seen and what it is minded to do — and the same event must read completely
+	# differently depending on which end of it the village was on.
+	var crowd := VillageHive.new()
+	for scene: Array in [
+			["a blessing overhead", "wonder", 1.0],
+			["fire from the sky", "horror", 1.4],
+			["the creature in the granary", "outrage", 1.6],
+			["a funeral", "death", 1.4],
+			["the creature sitting with the frightened", "kindness", 1.0]]:
+		var mind := VillageHive.new()
+		for i in 3:
+			mind.witness(String(scene[1]), village.global_position, float(scene[2]))
+		mind.tick(VillageHive.PERIOD, village)
+		print("SMOKE TEST: hive — after %-38s the town is %s" % [scene[0], mind.report()])
+	# An invitation is not a summons: a frightened town declines it.
+	crowd.invite("dance", creature, creature.global_position, 1.0)
+	crowd.tick(VillageHive.PERIOD, village)
+	var welcoming := crowd.stance
+	crowd.witness("horror", village.global_position, 2.0)
+	crowd.invite("dance", creature, creature.global_position, 1.0)
+	crowd.tick(VillageHive.PERIOD, village)
+	print("SMOKE TEST: hive — the same dance: a calm town %s, a terrified one %s" % [
+		welcoming, crowd.stance])
+
 	# PATHFINDING. Local steering alone walks into a bay and stays there. A route
 	# is planned over the shape of the land first — and must actually come back
 	# with something for a walk across the island, cost almost nothing the second

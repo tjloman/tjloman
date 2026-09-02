@@ -34,6 +34,71 @@ static func home_village(tree: SceneTree) -> Village:
 	return null
 
 
+## THE CIRCUMSTANCES a creature is in right now — the situation its beliefs are
+## learned against. "I was starving, in their village, at night, with armed men
+## about, and my god was nowhere near." Every value is 0..1, and the vocabulary
+## is deliberately the same one `plight_of` describes other people in, because
+## that shared vocabulary is what its empathy runs on.
+static func circumstances(who: Creature) -> Dictionary:
+	var crowd := 0
+	var armed := 0
+	var predator := 0.0
+	# HOW EVERYONE ELSE IS DOING is part of the situation too. Beliefs learned
+	# against these read like "smashing the store goes badly when the people are
+	# already frightened" — the creature can be contextual about other people's
+	# states, not merely about its own hunger and the hour.
+	var kin_afraid := 0.0
+	var kin_hurting := 0.0
+	var kin_glad := 0.0
+	for v in who.get_tree().get_nodes_in_group("villagers"):
+		var villager := v as Villager
+		if not is_instance_valid(villager):
+			continue
+		if villager.global_position.distance_to(who.global_position) < 22.0:
+			crowd += 1
+			if villager.weapon != "":
+				armed += 1
+			if villager.is_afraid() or villager.burning:
+				kin_afraid += 1.0
+			if villager.is_dying() or villager.health < 55.0 or villager.hunger > 80.0:
+				kin_hurting += 1.0
+			if villager.happiness > 70.0:
+				kin_glad += 1.0
+	for a in who.get_tree().get_nodes_in_group("animals"):
+		var beast := a as Animal
+		if is_instance_valid(beast) and beast.spec.get("predator", false) \
+				and beast.global_position.distance_to(who.global_position) < 20.0:
+			predator = 1.0
+			break
+	var home := home_village(who.get_tree())
+	var in_village := 0.0
+	if home != null and home.global_position.distance_to(who.global_position) \
+			< home.influence_radius:
+		in_village = 1.0
+	var god_near := 0.0
+	if who.divine_hand != null and is_instance_valid(who.divine_hand) \
+			and who.divine_hand.global_position.distance_to(who.global_position) < 18.0:
+		god_near = 1.0
+	return {
+		"hungry": clampf(who.hunger / 100.0, 0.0, 1.0),
+		"stuffed": who.body.fullness(who.growth),
+		"tired": clampf((100.0 - who.energy) / 100.0, 0.0, 1.0),
+		"afraid": clampf(who.fear / 100.0, 0.0, 1.0),
+		"hurt": clampf((100.0 - who.mood) / 100.0, 0.0, 1.0),
+		"bored": clampf(who.boredom / 100.0, 0.0, 1.0),
+		"crowd": clampf(crowd / 5.0, 0.0, 1.0),
+		"armed": clampf(armed / 3.0, 0.0, 1.0),
+		"predator": predator,
+		"god_near": god_near,
+		"in_village": in_village,
+		"night": 1.0 if GameState.is_night() else 0.0,
+		"alone": 1.0 if crowd == 0 else 0.0,
+		"kin_afraid": clampf(kin_afraid / 3.0, 0.0, 1.0),
+		"kin_hurting": clampf(kin_hurting / 3.0, 0.0, 1.0),
+		"kin_glad": clampf(kin_glad / 3.0, 0.0, 1.0),
+	}
+
+
 ## SOMEBODY ELSE'S SITUATION, described in exactly the same vocabulary the
 ## creature uses for its own (see CreatureBeliefs.FEATURES). That shared
 ## vocabulary is what makes empathy possible at all: the creature has no window

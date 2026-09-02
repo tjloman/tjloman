@@ -556,66 +556,10 @@ func _decide() -> void:
 
 
 ## THE CIRCUMSTANCES it notices right now — the situation its beliefs are
-## learned against. "I was starving, in their village, at night, with armed men
-## about, and my god was nowhere near." Every value is 0..1.
+## learned against, and the same vocabulary it reads other people's plights in.
+## Gathered by its eyes; see CreatureEyes.circumstances.
 func _circumstances() -> Dictionary:
-	var crowd := 0
-	var armed := 0
-	var predator := 0.0
-	# HOW EVERYONE ELSE IS DOING is part of the situation too. Beliefs learned
-	# against these read like "smashing the store goes badly when the people are
-	# already frightened" — the creature can be contextual about other people's
-	# states, not merely about its own hunger and the hour.
-	var kin_afraid := 0.0
-	var kin_hurting := 0.0
-	var kin_glad := 0.0
-	for v in get_tree().get_nodes_in_group("villagers"):
-		var villager := v as Villager
-		if not is_instance_valid(villager):
-			continue
-		if villager.global_position.distance_to(global_position) < 22.0:
-			crowd += 1
-			if villager.weapon != "":
-				armed += 1
-			if villager.is_afraid() or villager.burning:
-				kin_afraid += 1.0
-			if villager.is_dying() or villager.health < 55.0 or villager.hunger > 80.0:
-				kin_hurting += 1.0
-			if villager.happiness > 70.0:
-				kin_glad += 1.0
-	for a in get_tree().get_nodes_in_group("animals"):
-		var beast := a as Animal
-		if is_instance_valid(beast) and beast.spec.get("predator", false) \
-				and beast.global_position.distance_to(global_position) < 20.0:
-			predator = 1.0
-			break
-	var home := CreatureEyes.home_village(get_tree())
-	var in_village := 0.0
-	if home != null and home.global_position.distance_to(global_position) \
-			< home.influence_radius:
-		in_village = 1.0
-	var god_near := 0.0
-	if divine_hand != null and is_instance_valid(divine_hand) \
-			and divine_hand.global_position.distance_to(global_position) < 18.0:
-		god_near = 1.0
-	return {
-		"hungry": clampf(hunger / 100.0, 0.0, 1.0),
-		"stuffed": body.fullness(growth),
-		"tired": clampf((100.0 - energy) / 100.0, 0.0, 1.0),
-		"afraid": clampf(fear / 100.0, 0.0, 1.0),
-		"hurt": clampf((100.0 - mood) / 100.0, 0.0, 1.0),
-		"bored": clampf(boredom / 100.0, 0.0, 1.0),
-		"crowd": clampf(crowd / 5.0, 0.0, 1.0),
-		"armed": clampf(armed / 3.0, 0.0, 1.0),
-		"predator": predator,
-		"god_near": god_near,
-		"in_village": in_village,
-		"night": 1.0 if GameState.is_night() else 0.0,
-		"alone": 1.0 if crowd == 0 else 0.0,
-		"kin_afraid": clampf(kin_afraid / 3.0, 0.0, 1.0),
-		"kin_hurting": clampf(kin_hurting / 3.0, 0.0, 1.0),
-		"kin_glad": clampf(kin_glad / 3.0, 0.0, 1.0),
-	}
+	return CreatureEyes.circumstances(self)
 
 
 ## Everything the creature can see worth doing right now, as (verb, type,
@@ -1848,8 +1792,13 @@ func _process_dance(delta: float) -> void:
 		_cheer_time = 1.0
 		_cheer_nearby(18.0, 1.2)
 		var village := CreatureEyes.home_village(get_tree())
-		if village != null and _audience(18.0) > 0:
-			village.change_belief(0.35)
+		if village != null:
+			# AN INVITATION, not a summons. The crowd mind decides whether the
+			# town takes it up, and a village that is frightened of the beast
+			# will not — see VillageHive.invite.
+			village.hive.invite("dance", self, global_position, 1.0)
+			if _audience(18.0) > 0:
+				village.change_belief(0.35)
 	if _action_time <= 0.0:
 		_body.scale.y = 1.0
 		body.exert(0.8, 0.4)
@@ -1874,9 +1823,11 @@ func _process_pray(delta: float) -> void:
 			continue
 		if villager.is_worshipping():
 			faithful += 1
+	var village := CreatureEyes.home_village(get_tree())
+	if village != null:
+		village.hive.invite("pray", self, global_position, 0.9)
 	if faithful > 0:
 		GameState.add_prayer_power(faithful * 1.6 * delta)
-		var village := CreatureEyes.home_village(get_tree())
 		if village != null:
 			village.change_belief(0.22 * delta * faithful)
 	if _action_time <= 0.0:
@@ -1898,6 +1849,7 @@ func _process_commune(delta: float) -> void:
 		return
 	_apply_gravity_only(delta)
 	_action_time -= delta
+	village.hive.invite("commune", self, global_position, 0.8)
 	var audience := _audience(20.0)
 	if audience > 0:
 		village.change_belief(0.3 * delta * minf(audience, 6))
@@ -1948,6 +1900,9 @@ func _process_soothe(delta: float) -> void:
 	heart.stir("relief", 0.08 * delta)
 	if _action_time <= 0.0:
 		var eased := _watch_subject.happiness > 45.0
+		var town := CreatureEyes.home_village(get_tree())
+		if town != null and eased:
+			town.hive.witness("kindness", global_position, 0.8)
 		_last_deed = "soothe"
 		if eased:
 			GameState.announce("Your creature sits with the frightened until they are calm.")

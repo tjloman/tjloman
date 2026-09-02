@@ -899,6 +899,13 @@ func _decide() -> void:
 		state = State.GO_WORSHIP
 		_target = village.totem.global_position + Vector3(randf_range(-3, 3), 0, randf_range(-3, 3))
 		return
+	# WHAT THE TOWN IS DOING. The village has already worked out, once, what it
+	# has lately seen and what it is minded to do about it; this reads the answer
+	# rather than looking at the world again. The roll against `grip` is what
+	# keeps a crowd from ever being unanimous — there is always somebody who
+	# carries on hoeing while everyone else gapes at the sky.
+	if _swept_along():
+		return
 	# THE ALARM outranks ordinary work: while the village is roused, the able
 	# arm themselves and go for the threat — but only if they dare. Caught alone
 	# and bare-handed, a villager runs instead (and is often run down).
@@ -930,6 +937,62 @@ func _decide() -> void:
 	_action_time = randf_range(4.0, 9.0)
 	_target = village.global_position \
 		+ Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)) * village.influence_radius * 0.6
+
+
+## CARRIED ALONG BY THE CROWD. Returns true if the town's mood has taken this
+## villager over and set them doing something. Costs a dictionary read and a
+## dice roll — no scanning, no distance checks over the whole world — which is
+## the entire reason a village of hundreds can respond to the creature at all.
+##
+## The mobbing and fleeing cases are deliberately left to the existing alarm
+## machinery below, which already knows about weapons, allies and nerve; the
+## crowd mind only supplies the postures that machinery had no way to express.
+func _swept_along() -> bool:
+	if village == null:
+		return false
+	var hive := village.hive
+	if hive.stance in ["calm", "mobbing", "fleeing"]:
+		return false
+	if randf() > hive.grip():
+		return false                      # this one is not having any of it
+	var where := hive.looking_at()
+	if where == Vector3.INF:
+		return false
+	var spot := where + Vector3(randf_range(-4.0, 4.0), 0.0, randf_range(-4.0, 4.0))
+	match hive.stance:
+		# JOINING IN. The creature is dancing, or leading the prayers, or simply
+		# standing in the middle of town being enormous — and the people come and
+		# take part. This is the other half of a creature that learns to dance by
+		# WATCHING them: once it can, they dance back, and neither side was told
+		# to. A village that is frightened of the beast never gets here at all.
+		"joining":
+			if hive.invitation == "dance":
+				state = State.PLAY
+				_action_time = randf_range(5.0, 11.0)
+			else:
+				state = State.GO_WORSHIP
+			_target = spot
+			happiness = minf(happiness + 6.0, 100.0)
+			social = minf(social + 25.0, 100.0)
+			return true
+		"adoring":
+			state = State.GO_WORSHIP
+			_target = spot
+			return true
+		"mourning":
+			state = State.GO_WORSHIP
+			_target = spot
+			happiness = maxf(happiness - 3.0, 0.0)
+			return true
+		"watching":
+			# Not dropping the day's work — just turning to look, and drifting
+			# a little that way.
+			attend(where)
+			state = State.WANDER
+			_action_time = randf_range(2.0, 4.0)
+			_target = global_position.lerp(spot, 0.4)
+			return true
+	return false
 
 
 func _go_sleep() -> void:
@@ -1724,6 +1787,10 @@ func die(of_old_age: bool) -> void:
 		var creature := get_tree().get_first_node_in_group("creature") as Creature
 		if creature != null and creature.global_position.distance_to(global_position) < 40.0:
 			creature.witness(-2.0)
+	# The town grieves together. One death is one event to the crowd mind, not a
+	# hundred separate people each noticing a body.
+	if village != null:
+		village.hive.witness("death", global_position, 1.0 if of_old_age else 1.4)
 	var corpse := Corpse.new()
 	corpse.villager_name = villager_name
 	var parent := get_parent() as Node3D

@@ -23,6 +23,11 @@ const FARM_HALF := 3.9              # a field's clearance radius (no overlaps)
 ## THE ALARM: when one of them is attacked, the whole village drops its work
 ## and takes up arms for a while. Grudge is how much they blame the CREATURE
 ## for their blood — once it passes GRUDGE_HOSTILE they will fight it too.
+## The miracles the crowd mind reads as a terror rather than a blessing.
+const TERRORS := [
+	"lightning", "fireball", "thunderclap", "lightning_storm", "tornado",
+	"thunderstorm", "tempest", "firestorm", "hurricane",
+]
 const ALARM_SECONDS := 45.0
 const GRUDGE_HOSTILE := 35.0
 const GRUDGE_DECAY := 0.4          # per second: fear of the beast fades slowly
@@ -84,6 +89,10 @@ var grudge := 0.0
 ## list and the whole village hunts THAT animal until it is dead.
 var vendetta: Array[Animal] = []
 ## 0..100 — how much divine notice this village has had lately.
+## THE CROWD MIND. The town thinks once, a couple of times a second, and every
+## villager reads the result instead of working it out for themselves — which
+## is what makes a settlement of hundreds affordable. See VillageHive.
+var hive := VillageHive.new()
 var attention := 0.0
 ## 0..100 — hard-won nerve. See RESOLVE_* above.
 var resolve := RESOLVE_START
@@ -450,6 +459,8 @@ func _process(delta: float) -> void:
 		grudge = maxf(grudge - GRUDGE_DECAY * delta, 0.0)
 	if attention > 0.0:
 		attention = maxf(attention - ATTENTION_DECAY * delta, 0.0)
+	# The town takes stock — once, for everybody.
+	hive.tick(delta, self)
 
 	_housing_timer -= delta
 	if _housing_timer <= 0.0:
@@ -809,6 +820,10 @@ func witness_miracle(type: String, pos: Vector3) -> void:
 	here.y = 0
 	if flat.distance_to(here) > maxf(influence_radius * 1.3, 25.0):
 		return
+	# The CROWD MIND takes it as one event, whatever the particular miracle was:
+	# a wonder if it blessed them, a horror if it broke over their heads. Each
+	# villager then reads the town's mood rather than judging the sky themselves.
+	hive.witness("horror" if type in TERRORS else "wonder", pos, 1.0)
 	match type:
 		"food":
 			change_belief(6.0)
@@ -887,7 +902,8 @@ func hover_text() -> String:
 	var extra := ""
 	if is_roused():
 		extra = "\nROUSED — %d under arms" % armed_count()
-	return "%s — %s\n%s (pop %d)%s" % [village_name, faith, mood, population(), extra]
+	return "%s — %s\n%s (pop %d)\nThe town is %s%s" % [
+		village_name, faith, mood, population(), hive.report(), extra]
 
 
 ## Militia ---------------------------------------------------------------------
@@ -899,6 +915,9 @@ func raise_alarm(where: Vector3, from_creature := false) -> void:
 	var was_calm := alarm <= 0.0
 	alarm = ALARM_SECONDS
 	threat_pos = where
+	# An animal in the fold frightens them; the god's own beast turning on them
+	# is an OUTRAGE, which is the feeling that eventually makes a mob.
+	hive.witness("outrage" if from_creature else "horror", where, 1.0)
 	if from_creature:
 		grudge = minf(grudge + 18.0, 100.0)
 	if was_calm and is_player_home:
@@ -1065,6 +1084,7 @@ func to_dict() -> Dictionary:
 		"pos": [global_position.x, global_position.z],
 		"converted": converted, "belief": belief, "diet": int(diet),
 		"resolve": resolve, "grudge": grudge, "attention": attention,
+		"hive": hive.to_dict(),
 		"store": {
 			"plant": store.plant_food, "meat": store.meat_food,
 			"lumber": store.lumber, "stone": store.stone,
@@ -1077,6 +1097,7 @@ func to_dict() -> Dictionary:
 ## replaced wholesale by the saved roster.
 func from_dict(data: Dictionary) -> void:
 	village_name = String(data.get("name", village_name))
+	hive.from_dict(data.get("hive", {}))
 	converted = bool(data.get("converted", converted))
 	belief = float(data.get("belief", belief))
 	diet = data.get("diet", diet) as Diet
