@@ -115,7 +115,11 @@ const VERB_TRAITS := {
 	"gift": {"social": 0.6, "effort": 0.4},
 	"guard": {"social": 0.4, "effort": 0.3, "calms": 0.2},
 	"rescue": {"social": 0.7, "effort": 0.7},
-	"cast": {"thrill": 0.5, "heals": 1.0, "effort": 0.2},
+	# Working a miracle IS work, and a tired body flinches from it like any
+	# other effort — that much is physiology and may be innate. What is NOT
+	# innate is knowing what happens when it overreaches: that it learns by
+	# reaching, failing, and remembering the circumstances (see _process_cast).
+	"cast": {"thrill": 0.5, "heals": 1.0, "effort": 0.5},
 	"wander": {"thrill": 0.25, "calms": 0.2, "effort": 0.3},
 	# The quiet life.
 	"lounge": {"calms": 0.85, "social": 0.15},

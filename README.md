@@ -414,6 +414,56 @@ Both ask twice before they fire, and the arming lapses after a few seconds.
 The workshop also holds test cheats: prayer, instant growth, instant
 conversion, and a printout of what the creature currently believes.
 
+## Miracles cost the creature
+
+A miracle worked by a beast comes out of the beast. The prayer a miracle costs
+*you* is a fair measure of how grand it is, so the creature is charged in the
+same coin from its own reserves.
+
+**The pool grows with the creature.** `energy` stays a 0–100 bar that everything
+reads the same way; what grows is the pool that bar stands for — a hatchling's
+whole reserve is 100 units, a full-grown one's is 380. So the same working
+empties a small creature and barely dents a large one, and not one existing
+tuning number had to change.
+
+| Miracle | Hatchling | Half grown | Full grown |
+|---|---|---|---|
+| Heal | 9% of its bar | 4% | 3% |
+| Rain | 15% | 7% | 4% |
+| Lightning storm | 53% | 25% | 16% |
+| Tornado | **65%** | 31% | 19% |
+
+**Familiarity makes it cheaper** — a miracle watched a hundred times comes
+easily, one barely understood is a wrench. Mastery takes about a third off.
+
+**It does not know its own limit, and must not.** Nothing checks the number
+before offering the deed and nothing warns it — that would hand the creature a
+readout it has no business having. It tries, and if the reserves are not there
+the working **fizzles**: the effort is spent, nothing happens, and the failure
+is real. Since `tired` is already one of the thirteen circumstances its beliefs
+are learned against, what it takes away is not *"I have 12 energy"* but
+*"working miracles when weary comes to nothing"* — an idea of its own limits,
+arrived at the way it arrives at everything else.
+
+The split is deliberate: **physiology may be innate, consequences are learned.**
+A tired body flinches from effort, so `cast` carries a real effort trait. But
+what happens when it overreaches is discovered by overreaching.
+
+### How big is the creature's mind?
+
+Small enough to stop worrying about, which is worth knowing before making it
+more complicated:
+
+| | q-table | belief rules | JSON on disk | in RAM |
+|---|---|---|---|---|
+| A well-played creature | ~100 | ~1,000 | **53 KB** | **~190 KB** |
+| Absolute ceiling (every verb tried on every kind of thing) | 500 | 5,000 | 253 KB | ~900 KB |
+
+The ceiling is 25 verbs × 20 kinds of thing, every consequence rule formed, and
+it still lands under a megabyte. The episodic memory is capped at 40 and only
+the last 12 are saved. There is a great deal of room to make this creature
+cleverer before its mind costs anything a phone would notice.
+
 ## The opening lessons
 
 A short course runs the first time you play, and only the first time: drag the

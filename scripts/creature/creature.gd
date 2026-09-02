@@ -1351,13 +1351,40 @@ func _process_cast(delta: float) -> void:
 	if manager == null:
 		_decide()
 		return
+	# WHAT IT COSTS. The prayer a miracle takes from you is how grand it is, so
+	# the beast is charged the same in its own reserves — divided by the pool it
+	# has grown, and eased by how well it knows the working. A miracle it has
+	# watched a hundred times comes easily; one it barely understands is a
+	# wrench.
+	var practised: float = mind.familiarity.get(miracle, 0.0)
+	var effort := MiracleManager.effort_of(miracle) * (1.0 - practised * 0.55)
+	var toll := body.toll(effort, growth)
+
+	# IT DOES NOT KNOW ITS OWN LIMIT. Nothing checks the number before offering
+	# the deed, and nothing warns it — that would be handing it a readout it has
+	# no business having. It tries, and if the reserves are not there the
+	# working FIZZLES: the effort is spent, nothing happens, and the failure is
+	# a real one. The mind's `tired` circumstance is already among the thirteen
+	# it learns against, so what it takes from this is not "I have 12 energy"
+	# but "working miracles when weary comes to nothing" — an idea of its own
+	# limits, arrived at the same way it arrives at everything else.
+	if energy < toll:
+		energy = 0.0
+		express("hurt", 2.0)
+		mind.experience("spent", -1.3)
+		mind.teach("cast", miracle, -1.0, 0.35)
+		GameState.announce("Your creature reaches for a miracle it has not the strength for.")
+		_last_deed = "fizzle"
+		_finish_choice(-1.4)
+		return
+	energy = maxf(energy - toll, 0.0)
 	# Aim where the miracle is WANTED — over the hurt, if any — rather than at a
 	# random patch of grass. A miracle that helps somebody teaches it far more.
 	var need := _neediest_villager()
 	var spot := global_position + Vector3(randf_range(-6, 6), 0, randf_range(-6, 6))
 	if need != null:
 		spot = need.global_position
-	manager.creature_cast(miracle, spot, float(mind.familiarity.get(miracle, 0.0)))
+	manager.creature_cast(miracle, spot, practised)
 	express("curious")
 	GameState.announce("Your creature works a miracle of its own: %s!" % miracle.replace("_", " "))
 	_last_deed = "cast"

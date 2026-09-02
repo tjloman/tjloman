@@ -324,6 +324,30 @@ func _run_smoke_test() -> void:
 	print("SMOKE TEST: casting — rune read as '%s', session closed=%s, world free=%s" % [
 		got_rune, not divine_hand.casting, not divine_hand.casting])
 
+	# MIRACLES COST THE BEAST. The pool grows with the creature, so the same
+	# working empties a hatchling and barely dents a giant — and familiarity
+	# makes a practised miracle cheaper than a half-understood one.
+	print("SMOKE TEST: energy pool — hatchling %.0f, half grown %.0f, full grown %.0f" % [
+		creature.body.energy_pool(0.01), creature.body.energy_pool(0.5),
+		creature.body.energy_pool(1.0)])
+	var tornado := MiracleManager.effort_of("tornado")
+	print("SMOKE TEST: one tornado takes %.0f%% of a hatchling's bar, %.0f%% of a giant's" % [
+		creature.body.toll(tornado, 0.01), creature.body.toll(tornado, 1.0)])
+	print("SMOKE TEST: practice makes it cheaper — heal at %.1f%% raw, %.1f%% mastered" % [
+		creature.body.toll(MiracleManager.effort_of("heal"), 0.5),
+		creature.body.toll(MiracleManager.effort_of("heal") * 0.45, 0.5)])
+	# AND IT MUST BE ABLE TO OVERREACH. Nothing may stop it attempting a cast
+	# it cannot afford — being told its own limit is exactly what it must not
+	# be. The offer stands whatever its reserves.
+	creature.energy = 1.0
+	creature.mind.familiarity["heal"] = 1.0
+	var offered := false
+	for opt: Dictionary in creature._perceive():
+		if opt["verb"] == "cast":
+			offered = true
+	print("SMOKE TEST: exhausted, a cast is still OFFERED (it learns by failing): %s" % offered)
+	creature.energy = 90.0
+
 	# THE OPENING LESSONS. Every step must be well formed and every condition
 	# must be safe to ASK — a step that throws would strand a new player on it
 	# with no way forward but F4.

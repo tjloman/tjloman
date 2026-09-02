@@ -616,6 +616,14 @@ func _add_bird(flock: Node3D, local_pos: Vector3, body_color: Color, bank: float
 ## imperfect: `skill` (0..1 familiarity) scales the potency, so an apprentice's
 ## rain is a drizzle. It costs the creature nothing but effort — this is its own
 ## power, not your prayer — and the villages read it as a wonder all the same.
+## WHAT A MIRACLE TAKES OUT OF A BEAST. The prayer a miracle costs YOU is a
+## fair measure of how grand it is, so the creature is charged in the same
+## coin — out of its own reserves rather than yours. Working a tornado should
+## lay it flat; a heal should not.
+static func effort_of(miracle: String) -> float:
+	return float(MIRACLES.get(miracle, {}).get("cost", 25.0))
+
+
 func creature_cast(miracle: String, pos: Vector3, skill: float) -> void:
 	if not MIRACLES.has(miracle):
 		return

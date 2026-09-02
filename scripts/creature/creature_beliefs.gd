@@ -46,6 +46,8 @@ const TAG_PHRASE := {
 	"cheered": "delights the people",
 	"feared": "makes the people flee",
 	"alone": "leaves it friendless",
+	"spent": "leaves it with nothing left",
+	"forgiven": "brings it home again",
 }
 
 

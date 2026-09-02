@@ -38,6 +38,14 @@ const STRENGTH_PER_EXERTION := 3.5
 ## The Strength miracle: a giant's grip, for a while.
 const BOOST_STRENGTH := 100.0
 
+## THE ENERGY POOL. `energy` on the creature is a BAR, 0..100, and everything
+## reads it that way. What grows with the beast is the pool that bar stands
+## for: a hatchling's whole reserve is a hundred units, a full-grown one's is
+## nearly four hundred. So the same miracle empties a small creature and barely
+## dents a large one, without a single existing tuning number having to change.
+const BASE_ENERGY := 100.0
+const ENERGY_PER_GROWTH := 280.0
+
 var stomach := 0.0        # food units currently being digested
 var fat := 0.0            # 0..100 — sleek to obese
 var strength := 15.0      # 0..100 — earned by exertion
@@ -104,6 +112,17 @@ func idle(delta: float) -> void:
 	strength = maxf(strength - STRENGTH_DECAY * delta, 0.0)
 	if boost_time > 0.0:
 		boost_time -= delta
+
+
+## How deep its reserves run, in absolute units, at this size.
+func energy_pool(growth: float) -> float:
+	return BASE_ENERGY + growth * ENERGY_PER_GROWTH
+
+
+## What an effort of this many absolute units takes OUT OF THE BAR — the only
+## place the pool and the bar are reconciled.
+func toll(effort: float, growth: float) -> float:
+	return clampf(effort / maxf(energy_pool(growth), 1.0) * 100.0, 0.0, 100.0)
 
 
 ## Effective strength, counting the miracle.
