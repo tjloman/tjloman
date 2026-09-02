@@ -154,11 +154,12 @@ static func radiance(halo: OmniLight3D, energy: float, delta: float,
 ## beast has become without a word: a saint is warm gold, a monster burns low
 ## and red, and a creature that has settled on neither gives off the plain cold
 ## moon-white of something that has not made up its mind.
+##
+## The palette itself lives in GameState, because the god's hand burns by the
+## same rules — and the whole point of the colour is being able to see at a
+## glance that a gold hand has raised a red creature.
 static func radiance_color(align: float) -> Color:
-	var plain := Color(0.72, 0.80, 1.0)
-	if align > 0.0:
-		return plain.lerp(Color(1.0, 0.88, 0.55), minf(align, 1.0))
-	return plain.lerp(Color(1.0, 0.22, 0.12), minf(-align, 1.0))
+	return GameState.divine_light(align)
 
 
 ## Ease the eyes toward the shape of the current feeling.

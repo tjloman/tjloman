@@ -27,6 +27,18 @@ const DAY_YEARS := DAY_SECONDS / YEAR_SECONDS
 const GOOD_COLOR := Color(1.0, 0.9, 0.65)
 const EVIL_COLOR := Color(0.75, 0.12, 0.1)
 
+## WHAT A DIVINE THING BURNS LIKE IN THE DARK, and the one place that palette
+## is decided — the god's hand and the creature it raises must speak the same
+## visual language, or a saintly hand over a monstrous beast says nothing.
+##
+## Kept apart from `alignment_color()`, which lerps straight from red to gold
+## and so makes a NEUTRAL soul a muddy orange. That is fine for a painted hand
+## and quite wrong for a light: undecided should read as the plain cold white
+## of moonlight, not as half-wicked.
+const SAINT_LIGHT := Color(1.0, 0.88, 0.55)
+const WICKED_LIGHT := Color(1.0, 0.22, 0.12)
+const MOON_LIGHT := Color(0.72, 0.80, 1.0)
+
 var prayer_power: float = 60.0
 var max_prayer_power: float = 100.0
 
@@ -95,6 +107,22 @@ func shift_alignment(amount: float) -> void:
 ## Gold when good, blood-red when evil; used by the hand and influence ring.
 func alignment_color() -> Color:
 	return EVIL_COLOR.lerp(GOOD_COLOR, (alignment + 100.0) / 200.0)
+
+
+## The colour a soul at `align` (-1..+1) gives off. Saintly gold one way,
+## blood-red the other, and moon-white in the middle — see the palette above.
+## Takes the alignment rather than reading it, because the creature's soul is
+## its own and is very often not the god's. Not static: everything reaches it
+## through the autoload, and calling a static function on an instance warns.
+func divine_light(align: float) -> Color:
+	if align > 0.0:
+		return MOON_LIGHT.lerp(SAINT_LIGHT, minf(align, 1.0))
+	return MOON_LIGHT.lerp(WICKED_LIGHT, minf(-align, 1.0))
+
+
+## The same, for the god's own hand.
+func hand_light() -> Color:
+	return divine_light(alignment / 100.0)
 
 
 func alignment_word() -> String:

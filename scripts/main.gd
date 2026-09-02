@@ -1027,6 +1027,18 @@ func _smoke_test_night() -> void:
 		get_tree().get_nodes_in_group("village").size(), creature.radiance()])
 	assert(pool <= Quality.night_lights(), "the night's light budget is FIXED")
 
+	# THE HAND'S COLUMN, and the palette it shares with the creature. A god and
+	# the beast it raises must be readable apart at a glance, so the three
+	# alignments have to give three plainly different colours.
+	print("SMOKE TEST: hand beam — %.2f over a %.0fm pool, colour %s" % [
+		divine_hand.beam_energy(), divine_hand.beam_width(),
+		str(divine_hand.beam_color())])
+	print("SMOKE TEST: divine palette — saint %s / undecided %s / monster %s" % [
+		str(GameState.divine_light(1.0)), str(GameState.divine_light(0.0)),
+		str(GameState.divine_light(-1.0))])
+	assert(GameState.divine_light(1.0) != GameState.divine_light(-1.0),
+		"a saintly god and a monstrous one must not burn the same colour")
+
 	# Noon must put every one of them out again.
 	GameState.game_years = _at_hour(0.5)
 	_update_daylight()

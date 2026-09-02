@@ -9,6 +9,18 @@ signal hover_info_changed(text: String)
 enum HandState { IDLE, DRAG_LAND, HOLDING, GESTURING }
 
 const HOVER_HEIGHT := 1.4
+
+## THE HAND'S SPOTLIGHT (see `_build_beam`). It shines from high overhead down
+## through the hand, because a lamp on a palm hovering 1.4m up lights nothing.
+## At 26 degrees from 16m over the hand (so ~17.4m over the ground) that is a
+## pool about SEVENTEEN METRES across — enough to work a field or find a
+## villager by, without turning night into day.
+const BEAM_HEIGHT := 16.0
+const BEAM_ANGLE := 26.0
+const BEAM_SPILL := 10.0     # how far past the ground the cone keeps reaching
+const BEAM_ENERGY := 3.2
+const BEAM_EASE := 1.4       # how fast it comes up at dusk and goes at dawn
+
 const RAY_LENGTH := 500.0
 const HIT_MASK := 1 | 2 | 4 | 8  # ground | units | props | trees
 const THROW_BOOST := 1.6     # hand velocity -> projectile velocity
@@ -102,6 +114,8 @@ var _idle_time := 0.0
 
 var _hand_material: StandardMaterial3D
 var _glow: OmniLight3D
+var _beam: SpotLight3D            # the column of light the hand casts at night
+var _beam_energy := 0.0
 var _animator: ModelAnimator = null   # non-null only for a rigged hand model
 
 # The primary pointer is still pressed (for hold-to-grab-more at a store).
@@ -139,14 +153,45 @@ func _build_hand_mesh() -> void:
 		var thumb := Util.box(Vector3(0.16, 0.15, 0.42), Color.WHITE, Vector3(0.55, 0.0, 0.05))
 		thumb.rotation_degrees.y = -40
 		_add_hand_part(thumb)
-	# Faint divine glow.
+	# Faint divine glow: the aura on the hand itself and whatever it is holding.
 	_glow = OmniLight3D.new()
-	_glow.light_color = Color(1.0, 0.95, 0.8)
+	_glow.light_color = GameState.hand_light()
 	_glow.light_energy = 0.6
 	_glow.omni_range = 4.0
 	_glow.position = Vector3(0, 0.5, 0)
 	add_child(_glow)
+	_build_beam()
 	GameState.alignment_changed.connect(_on_alignment_changed)
+
+
+## THE SHAFT OF LIGHT FROM THE HEAVENS.
+##
+## The hand hovers barely a metre off the ground, so a lamp ON it lights a
+## dinner plate. This is a column instead: the source sits high overhead and
+## points straight down THROUGH the hand, which is both the only way to get a
+## fair pool of light out of it and the right image for a god — you move your
+## hand across the land and a circle of daylight moves with it.
+##
+## It carries the god's own alignment, so at night the whole world under your
+## hand is lit gold, or red, or plain moon-white (see GameState.divine_light).
+## And it is night-only, eased in with the dark: by day the sun does this job
+## better, and a spotlight competing with it is a wasted light.
+func _build_beam() -> void:
+	_beam = SpotLight3D.new()
+	_beam.position = Vector3(0, BEAM_HEIGHT, 0)
+	_beam.rotation_degrees = Vector3(-90, 0, 0)   # a spot points down its own -Z
+	_beam.spot_range = BEAM_HEIGHT + BEAM_SPILL
+	_beam.spot_angle = BEAM_ANGLE
+	_beam.spot_angle_attenuation = 1.6            # a soft edge, not a hard disc
+	_beam.spot_attenuation = 0.9
+	_beam.light_color = GameState.hand_light()
+	_beam.light_energy = 0.0
+	_beam.light_specular = 0.1
+	# Never shadowed. A shadowed spot this wide, moving every frame, is the most
+	# expensive thing that could possibly be added to a phone build.
+	_beam.shadow_enabled = false
+	_beam.visible = false
+	add_child(_beam)
 
 
 func _add_hand_part(part: MeshInstance3D) -> void:
@@ -154,11 +199,41 @@ func _add_hand_part(part: MeshInstance3D) -> void:
 	add_child(part)
 
 
+## The hand's FLESH keeps the old straight red-to-gold ramp; its LIGHT takes the
+## divine palette, where an undecided god burns moon-white rather than a muddy
+## half-wicked orange. See GameState.divine_light.
 func _on_alignment_changed(_value: float) -> void:
-	var c := GameState.alignment_color()
 	if _hand_material != null:
-		_hand_material.albedo_color = c
-	_glow.light_color = c
+		_hand_material.albedo_color = GameState.alignment_color()
+	var lit := GameState.hand_light()
+	_glow.light_color = lit
+	if _beam != null:
+		_beam.light_color = lit
+
+
+## How brightly the column is burning, how wide a circle it lays on the ground,
+## and what colour it is — for the readouts and the smoke test.
+func beam_energy() -> float:
+	return _beam_energy
+
+
+func beam_width() -> float:
+	return 2.0 * tan(deg_to_rad(BEAM_ANGLE)) * (BEAM_HEIGHT + HOVER_HEIGHT)
+
+
+func beam_color() -> Color:
+	return _beam.light_color if _beam != null else Color.WHITE
+
+
+## Bring the column up as the dark comes on, and put it out at dawn. Eased, so
+## dusk lights the lamp rather than flicking a switch.
+func _tick_beam(delta: float) -> void:
+	if _beam == null:
+		return
+	var darkness := clampf(-GameState.sun_elevation() * 2.2, 0.0, 1.0)
+	_beam_energy = move_toward(_beam_energy, BEAM_ENERGY * darkness, BEAM_EASE * delta)
+	_beam.light_energy = _beam_energy
+	_beam.visible = _beam_energy > 0.01
 
 
 func _physics_process(delta: float) -> void:
@@ -194,6 +269,7 @@ func _physics_process(delta: float) -> void:
 
 	_tick_press_charge(delta)
 	_tick_casting(delta)
+	_tick_beam(delta)
 
 	match state:
 		HandState.DRAG_LAND:

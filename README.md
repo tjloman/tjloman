@@ -663,6 +663,14 @@ across the map and the same four lights come with you. Add a thousand villages
 and the budget does not move. A hearth changing hands fades out and fades in
 somewhere else rather than sliding across a field.
 
+**The hand's column of light.** Your hand hovers barely a metre off the
+ground, so a lamp *on* it lights a dinner plate. It casts a **shaft from
+overhead straight down through itself** instead — the only way to get a fair
+pool out of it, and the right image for a god besides. Move your hand across
+the land and a **17-metre circle of daylight** moves with it, which is enough
+to work a field or find someone by without turning night into day. Night-only,
+eased in with the dark: by day the sun does this job better.
+
 **The creature's own radiance.** One omni light on the beast, and the one worth
 spending unconditionally, because it is always where you are looking: whatever
 else you cannot make out at night, you can always find your creature. It burns
@@ -671,10 +679,19 @@ miracle, and its **colour is what it has become** — warm gold for a saint, low
 red for a monster, and the plain cold moon-white of something that has not made
 up its mind. It eases in at dusk the way an ember comes up.
 
-The whole night therefore costs **at most seven point lights**, none of them
-shadowed, whatever the size of the world — and a device that is getting hot
-lets the hearths go out one at a time and keeps only the beast you are
-watching.
+**Gold, red, or moon-white.** The hand and the creature burn by *the same
+palette* (`GameState.divine_light`) and by their *own* alignments, which are
+very often not the same alignment — so a single glance at a lit night tells you
+that a saintly god has raised a monster. Warm gold one way, low red the other,
+and the plain cold moon-white of a soul that has not made up its mind in the
+middle. This is deliberately **not** `alignment_color()`, which ramps straight
+from red to gold and so paints an undecided soul a muddy orange: fine for
+painted flesh, quite wrong for a light.
+
+The whole night therefore costs **at most seven point lights and one spot**,
+none of them shadowed, whatever the size of the world — and a device that is
+getting hot lets the hearths go out one at a time. What it never drops is the
+two you steer by: the light in your hand and the beast you are watching.
 
 ## When the device gets hot, the creature looks up at you
 
