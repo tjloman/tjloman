@@ -71,10 +71,12 @@ const BREATH_MAX := 0.16
 ## The colour of vapour, from a pale shower to a bruised storm front.
 const PALE := Color(0.78, 0.80, 0.86)
 const DARK := Color(0.24, 0.25, 0.32)
-## How solid one layer is allowed to be. Low, because the look comes from a
-## dozen of them overlapping, not from any one being opaque.
-const DENSITY_CALM := 0.28
-const DENSITY_FIERCE := 0.46
+## How solid one layer is allowed to be. The first pass ran these far too low —
+## a quarter-opaque sheet is nearly invisible against a bright sky, and seven of
+## them still read as haze. A sprinkle now sits at half, a deluge nearly solid,
+## which is what makes the fierce weather actually darken the ground under it.
+const DENSITY_CALM := 0.50
+const DENSITY_FIERCE := 0.90
 
 ## The soft streaked patch every layer is drawn with. Generated once, in code,
 ## and shared by every cloud ever cast (see `_vapour_texture`).
@@ -188,11 +190,11 @@ func _write_layers() -> void:
 		var reach: float = float(layer["reach"])
 		# Flat in the sky (the quad stands up by default, so it is laid down),
 		# then rolled about the vertical so each sheet points its own way.
-		var basis := Basis(Vector3.UP, float(layer["roll"])) \
+		var facing := Basis(Vector3.UP, float(layer["roll"])) \
 			* Basis(Vector3.RIGHT, -PI * 0.5) \
 			* Basis().scaled(Vector3(wide, wide, 1.0))
 		var where := Vector3(cos(orbit) * reach, float(layer["height"]), sin(orbit) * reach)
-		_multi.set_instance_transform(i, Transform3D(basis, where))
+		_multi.set_instance_transform(i, Transform3D(facing, where))
 		_multi.set_instance_color(i, Color(_tint.r, _tint.g, _tint.b, alpha))
 
 

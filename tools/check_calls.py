@@ -457,6 +457,40 @@ def check_shadowed_vars(files):
     return problems
 
 
+def check_untyped_array_results(files):
+    """Find a typed array assigned the result of filter()/map()/slice().
+
+    These return a PLAIN `Array`, whatever they were called on, so
+
+        _clouds = _clouds.filter(func(c): return is_instance_valid(c))
+
+    where `_clouds` is an `Array[StormCloud]` fails at RUNTIME with "Trying to
+    assign an array of type Array to a variable of type Array[StormCloud]" --
+    and only on the frame that line first runs, which in practice meant a
+    miracle that had shipped and could not be cast.
+
+    gdparse does not catch it, and nor does the editor: the type error is
+    raised when the assignment executes. So it is caught here, by remembering
+    which names were declared as typed arrays.
+    """
+    problems = []
+    typed_array = re.compile(r"^\s*var\s+(\w+)\s*:\s*Array\[")
+    loose = re.compile(r"^\s*(\w+)\s*=\s*.*\.(filter|map|slice)\s*\(")
+    for path in files:
+        typed = set()
+        with open(path, encoding="utf-8") as fh:
+            lines = fh.readlines()
+        for line in lines:
+            m = typed_array.match(line)
+            if m:
+                typed.add(m.group(1))
+        for lineno, line in enumerate(lines, 1):
+            m = loose.match(line)
+            if m and m.group(1) in typed:
+                problems.append((path, lineno, m.group(1), m.group(2), line.strip()))
+    return problems
+
+
 def main():
     root = "scripts"
     targets = sys.argv[1:] or [root]
@@ -485,7 +519,13 @@ def main():
         print("%s:%d: '%%' binds tighter than '+', so only the LAST piece of this "
               "string is formatted — wrap the whole concatenation in parentheses"
               "\n    %s" % (path, lineno, line))
-    total = len(problems) + len(escapes) + len(formats) + len(shadowed)
+    loose_arrays = check_untyped_array_results(files)
+    for path, lineno, name, call, line in loose_arrays:
+        print("%s:%d: %s() returns a plain Array, and '%s' is a TYPED array — this "
+              "fails at runtime on the frame it first runs. Build the new array with "
+              "a loop instead.\n    %s" % (path, lineno, call, name, line))
+    total = len(problems) + len(escapes) + len(formats) + len(shadowed) \
+        + len(loose_arrays)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

@@ -21,6 +21,13 @@ const EXPR_CODE := {
 	"scared": 4.0, "curious": 5.0, "love": 6.0, "hurt": 7.0,
 }
 
+## How bright the creature's own light burns at night, how far it reaches at
+## its smallest and largest, and how fast it eases. See `radiance`.
+const RADIANCE := 2.4
+const RADIANCE_REACH_MIN := 7.0
+const RADIANCE_REACH_MAX := 34.0
+const RADIANCE_EASE := 0.9
+
 
 
 ## WORDS FOR A STATE ------------------------------------------------------------
@@ -105,6 +112,53 @@ static func apply_alignment(align: float, fur_mat: StandardMaterial3D,
 		if is_instance_valid(m):
 			(m as GeometryInstance3D).set_instance_shader_parameter("alignment", align)
 			set_blend_shape(m as GeometryInstance3D, "menace", menace)
+
+
+## GODLY RADIANCE ---------------------------------------------------------------
+##
+## The creature's own light: the one light in the world that is always where
+## the player is looking, and so the one worth spending unconditionally. Night
+## used to be unreadable on a phone; now, whatever else you cannot make out,
+## you can always find your creature.
+##
+## Reach is in metres of world, at the smallest and the largest the beast gets
+## (the four numbers themselves are up with the other constants).
+
+
+## Ease the halo toward what the hour, the size and the working ask for, and
+## hand back its new steady energy. Eased rather than switched, so dusk brings
+## it up the way an ember comes up and dawn takes it away without a blink.
+##
+## `body_scale` is the creature's own scale: Godot scales a light's reach along
+## with its parent, and the beast grows to fifteen times its own size, so the
+## reach meant here is divided back out.
+static func radiance(halo: OmniLight3D, energy: float, delta: float,
+		elevation: float, grown: float, align: float,
+		working: bool, body_scale: float) -> float:
+	var darkness := clampf(-elevation * 2.2, 0.0, 1.0)
+	var grand := lerpf(0.5, 1.0, grown)
+	var want := RADIANCE * darkness * grand * (1.7 if working else 1.0)
+	var lit := move_toward(energy, want, RADIANCE_EASE * delta)
+	halo.light_energy = lit
+	halo.visible = lit > 0.01
+	if halo.visible:
+		halo.light_color = radiance_color(align)
+		halo.omni_range = lerpf(RADIANCE_REACH_MIN, RADIANCE_REACH_MAX, grown) \
+			/ maxf(body_scale, 0.01)
+	return lit
+
+
+## WHAT COLOUR A CREATURE BURNS IN THE DARK, for a soul at `align` (-1..+1).
+##
+## Its own light is the last thing left when night falls, so it says what the
+## beast has become without a word: a saint is warm gold, a monster burns low
+## and red, and a creature that has settled on neither gives off the plain cold
+## moon-white of something that has not made up its mind.
+static func radiance_color(align: float) -> Color:
+	var plain := Color(0.72, 0.80, 1.0)
+	if align > 0.0:
+		return plain.lerp(Color(1.0, 0.88, 0.55), minf(align, 1.0))
+	return plain.lerp(Color(1.0, 0.22, 0.12), minf(-align, 1.0))
 
 
 ## Ease the eyes toward the shape of the current feeling.

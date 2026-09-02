@@ -16,6 +16,7 @@ class_name Util
 # from here — it is shared by every part that asked for the same thing.
 static var _mesh_pool := {}
 static var _mat_pool := {}
+static var _glow: ImageTexture = null   # the soft dot every torch is drawn with
 
 
 static func mat(color: Color, emission := false) -> StandardMaterial3D:
@@ -287,6 +288,76 @@ static func small_flame(top := 1.4) -> Node3D:
 			Vector3(randf_range(-0.14, 0.14), top * 0.35 + i * 0.22, randf_range(-0.14, 0.14)),
 			0.0, 6, true))
 	return fire
+
+
+## DROP EVERY FREED OBJECT from a list of nodes, in place.
+##
+## This looks like a job for `items.filter(is_instance_valid)`, and half the
+## codebase used to do exactly that. It is a TRAP: `filter()` hands back a
+## plain `Array` whatever it was called on, so assigning the result back to an
+## `Array[Farm]` fails — not at parse time, not in the editor, but on the frame
+## that line first runs, with "Trying to assign an array of type Array to a
+## variable of type Array[Farm]". It cost this project a shipped miracle that
+## could not be cast, and there were seven more of it waiting.
+##
+## Pruning IN PLACE sidesteps the whole question: the array keeps its type
+## because it is never reassigned, and nothing is allocated. Walk backwards so
+## removing an element cannot skip the next one. (tools/check_calls.py rejects
+## the filter() form now, so it cannot come back.)
+static func prune(items: Array) -> void:
+	for i in range(items.size() - 1, -1, -1):
+		if not is_instance_valid(items[i]):
+			items.remove_at(i)
+
+
+## A FLAME, for a MultiMesh: one billboarded quad with a soft round glow on it,
+## ADDITIVE so it pours light into a dark screen instead of merely being a
+## bright square in it, and taking its colour per instance so every torch in a
+## town can flicker on its own out of a single draw call.
+##
+## Shared by every torch in the world (see Village), which is why it is pooled
+## and why the little texture is generated once and kept.
+static func flame_mesh(width: float, height: float) -> QuadMesh:
+	var key := "flame|%.3f|%.3f" % [width, height]
+	var m: QuadMesh = _mesh_pool.get(key)
+	if m != null:
+		return m
+	m = QuadMesh.new()
+	m.size = Vector2(width, height)
+	var skin := StandardMaterial3D.new()
+	skin.albedo_texture = _glow_texture()
+	skin.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	skin.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	skin.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	skin.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	skin.billboard_keep_scale = true
+	skin.cull_mode = BaseMaterial3D.CULL_DISABLED
+	skin.disable_receive_shadows = true
+	skin.vertex_color_use_as_albedo = true   # per-instance colour and flicker
+	skin.no_depth_test = false
+	m.material = skin
+	_mesh_pool[key] = m
+	return m
+
+
+## A soft round glow, brightest in the middle, generated once. 32 pixels is
+## plenty for something that is never more than a few pixels wide on screen.
+static func _glow_texture() -> ImageTexture:
+	if _glow != null:
+		return _glow
+	var size := 32
+	var img := Image.create_empty(size, size, false, Image.FORMAT_RGBA8)
+	var mid := (size - 1) * 0.5
+	for y in size:
+		for x in size:
+			var u := (x - mid) / mid
+			var v := (y - mid) / mid
+			# Taller than it is wide, so the flame is a teardrop not a ball.
+			var d := sqrt(u * u * 1.35 + v * v * 0.75)
+			var a := smoothstep(1.0, 0.0, d)
+			img.set_pixel(x, y, Color(1.0, 1.0, 1.0, a * a))
+	_glow = ImageTexture.create_from_image(img)
+	return _glow
 
 
 ## Distance culling: every renderable under `root` stops drawing past

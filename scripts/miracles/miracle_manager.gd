@@ -387,7 +387,10 @@ func _cast_rain(pos: Vector3, potency := 1.0) -> void:
 ## away, which is both cheaper and better weather — rain that stacks six deep
 ## over one field looks like a bug, not a downpour.
 func _hold_cloud(cloud: StormCloud) -> void:
-	_clouds = _clouds.filter(func(c: StormCloud) -> bool: return is_instance_valid(c))
+	# Pruned in place, never reassigned: filter() hands back a plain untyped
+	# Array, which will not go into an Array[StormCloud] and fails on the frame
+	# the line first runs. See Util.prune.
+	Util.prune(_clouds)
 	_clouds.append(cloud)
 	while _clouds.size() > RAIN_CLOUDS:
 		var oldest: StormCloud = _clouds.pop_front()

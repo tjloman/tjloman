@@ -193,6 +193,8 @@ var _cheer_time := 0.0
 var _look_time := 0.0      # when it next turns its head, while lounging
 var _body: Node3D
 var _label: Label3D
+var _halo: OmniLight3D = null         # its own light in the dark
+var _halo_energy := 0.0
 var _animator: ModelAnimator = null   # non-null only for a rigged custom model
 
 # Appearance & expression. Procedural parts are recoloured/animated directly;
@@ -261,6 +263,17 @@ func _ready() -> void:
 			arm.material_override = _fur_mat
 			arm.rotation_degrees.z = 25 * side
 			_body.add_child(arm)
+
+	# Its own light, at chest height, dark until dusk. Never shadowed: one
+	# shadowed point light costs more than every other light in the night put
+	# together, and this one moves constantly.
+	_halo = OmniLight3D.new()
+	_halo.position = Vector3(0, 1.6, 0)
+	_halo.light_energy = 0.0
+	_halo.light_specular = 0.2
+	_halo.shadow_enabled = false
+	_halo.visible = false
+	add_child(_halo)
 
 	_label = Util.status_label()
 	_label.position = Vector3(0, 3.0, 0)
@@ -421,6 +434,7 @@ func _physics_process(delta: float) -> void:
 func _tick_feelings(delta: float) -> void:
 	_tick_exile(delta)
 	_tick_heat(delta)
+	_tick_radiance(delta)
 	hunger = minf(hunger + 1.0 * delta, 100.0)
 	if state != State.SLEEPING:
 		energy = maxf(energy - 0.4 * delta, 0.0)
@@ -1985,6 +1999,22 @@ func _process_heed(delta: float) -> void:
 		_decide()
 
 
+## How brightly it is burning right now, for the readouts.
+func radiance() -> float:
+	return _halo_energy
+
+
+## Its own light in the dark — how bright, how far and what colour all live in
+## CreatureLook with the rest of how it looks.
+func _tick_radiance(delta: float) -> void:
+	if not is_instance_valid(_halo):
+		return
+	_halo_energy = CreatureLook.radiance(
+		_halo, _halo_energy, delta, GameState.sun_elevation(), growth,
+		morality / 100.0, state in [State.CAST, State.PRAY, State.COMMUNE],
+		scale.x)
+
+
 ## The device has started or stopped struggling. Called from the tick, cheaply.
 func _tick_heat(_delta: float) -> void:
 	if Quality.hot():
@@ -2300,10 +2330,10 @@ func receive_heal() -> void:
 ## `express` remains for the momentary twitch of a face with no feeling behind
 ## it; anything the creature actually UNDERGOES should come through here, so it
 ## can be held, cooled, learned from and read off it by everyone else.
-func feel(emotion: String, force := 0.6, show := 1.8) -> void:
+func feel(emotion: String, force := 0.6, linger := 1.8) -> void:
 	heart.stir(emotion, force)
 	if CreatureHeart.FEELINGS.has(emotion):
-		express(String(CreatureHeart.FEELINGS[emotion]["face"]), show)
+		express(String(CreatureHeart.FEELINGS[emotion]["face"]), linger)
 
 
 ## Flash an emotion for a moment. It shapes the procedural eyes and drives a

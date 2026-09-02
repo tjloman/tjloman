@@ -3,6 +3,16 @@ extends Node3D
 ## and wires all systems together. Terrain, villages, and wildlife are the
 ## WorldGen's job now — this file owns the sky, the clock, and the player.
 
+## HOW BRIGHT THE NIGHT IS. Kept together and named, because "why can I not
+## see anything" was answered by four numbers scattered through the file.
+## MOONLIGHT is the full moon's fill; STARLIGHT is the floor under it that
+## never goes out; NIGHT_AMBIENT is how much bounced light the world keeps at
+## midnight; MOON_AMBIENT is what colour that bounced light is.
+const MOONLIGHT := 0.55
+const STARLIGHT := 0.10
+const NIGHT_AMBIENT := 0.55
+const MOON_AMBIENT := Color(0.42, 0.52, 0.85)
+
 var camera_rig: CameraRig
 var divine_hand: DivineHand
 var miracles: MiracleManager
@@ -44,6 +54,12 @@ func _ready() -> void:
 	camera_rig = CameraRig.new()
 	add_child(camera_rig)
 	world_gen.focus_node = camera_rig
+
+	# The small pool of real lights that follows the camera from town to town
+	# after dark. Everything else about the night is sky, ambient and emission.
+	var nightfall := Nightfall.new()
+	nightfall.camera_rig = camera_rig
+	add_child(nightfall)
 
 	miracles = MiracleManager.new()
 	add_child(miracles)
@@ -137,13 +153,19 @@ func _update_daylight() -> void:
 	_sun.light_energy = maxf(elev, 0.0) * 1.2 + 0.02
 	_sun.light_color = Color(1.0, 0.75 + 0.25 * clampf(elev, 0, 1), 0.6 + 0.4 * clampf(elev, 0, 1))
 
+	# THE MOON DOES REAL WORK NOW. At 0.22 it was a rumour, and on a phone in
+	# daylight the night read as a black screen. It is a proper cool fill, and
+	# it never quite goes out even at the moon's lowest — starlight is what
+	# keeps a silhouette readable when nothing else is lit.
 	_moon.rotation_degrees = Vector3(-(df * 360.0 + 90.0), -30.0, 0)
-	_moon.light_energy = maxf(-elev, 0.0) * 0.22
+	_moon.light_energy = maxf(-elev, 0.0) * MOONLIGHT + STARLIGHT * clampf(-elev * 3.0, 0.0, 1.0)
 
 	var day_top := Color(0.32, 0.52, 0.82)
 	var day_horizon := Color(0.7, 0.78, 0.85)
-	var night_top := Color(0.03, 0.04, 0.1)
-	var night_horizon := Color(0.08, 0.09, 0.16)
+	# The night sky is lifted off black. It is the ambient source (70% of it),
+	# so a sky at 0.03 meant the world under it got no bounced light at all.
+	var night_top := Color(0.07, 0.09, 0.19)
+	var night_horizon := Color(0.14, 0.16, 0.27)
 	var dusk_horizon := Color(0.9, 0.5, 0.3)
 	var t := clampf((elev + 0.3) / 0.9, 0.0, 1.0)
 	var top := night_top.lerp(day_top, t)
@@ -165,7 +187,17 @@ func _update_daylight() -> void:
 	_sky_material.sky_top_color = top
 	_sky_material.sky_horizon_color = horizon
 	_sky_material.ground_horizon_color = horizon
-	_environment.ambient_light_energy = lerpf(0.25, 1.0, t)
+
+	# AMBIENT AT NIGHT. The sky supplies most of the ambient light, and a night
+	# sky is nearly black, so the old floor of 0.25 lit nothing — you could not
+	# find your own creature on a phone screen. Two changes: the floor comes up,
+	# and as the sun goes the sky hands the ambient over to an explicit moon-blue
+	# so the dark has a COLOUR rather than an absence of one. Bounced light is
+	# free (it is one uniform, not a light), which is why it does the heavy
+	# lifting and the real lights stay few — see Nightfall.
+	_environment.ambient_light_energy = lerpf(NIGHT_AMBIENT, 1.0, t)
+	_environment.ambient_light_color = MOON_AMBIENT.lerp(Color.WHITE, t)
+	_environment.ambient_light_sky_contribution = lerpf(0.25, 0.7, t)
 	_environment.fog_light_color = horizon.darkened(0.2)
 
 
@@ -954,8 +986,58 @@ func _run_smoke_test() -> void:
 		GameState.day_fraction(),
 		GameState.is_night(),
 	])
+
+	# NIGHT MUST BE LEGIBLE. Not a look at the screen — a check that the four
+	# sources of light in the dark are actually there and actually bounded: the
+	# moon and the ambient floor do the work, the hearth pool is FIXED however
+	# many towns there are, and the creature carries its own light.
+	await _smoke_test_night()
+
 	print("SMOKE TEST OK")
 	get_tree().quit(0)
+
+
+## THE NIGHT, MEASURED. Winds the clock to midnight, reads what is lit, and
+## checks the two things that could go wrong without anyone noticing: that the
+## dark still has light in it, and that the light does not grow with the world.
+func _smoke_test_night() -> void:
+	# The clock is kept in villager-years, and the day starts at 0.35 of one, so
+	# winding to a given hour means solving for it rather than assigning it.
+	var was := GameState.game_years
+	GameState.game_years = _at_hour(0.0)   # midnight
+	_update_daylight()
+	print("SMOKE TEST: midnight — moon=%.2f ambient=%.2f (sky %.0f%%) sun=%.2f night=%s" % [
+		_moon.light_energy, _environment.ambient_light_energy,
+		_environment.ambient_light_sky_contribution * 100.0,
+		_sun.light_energy, GameState.is_night()])
+	assert(_moon.light_energy > 0.3, "the moon must actually light the world")
+	assert(_environment.ambient_light_energy > 0.4, "night needs an ambient floor")
+
+	# The hearth pool deals itself on a lazy clock, so give it one to run on.
+	await get_tree().create_timer(1.8).timeout
+
+	# The pool is fixed by the graphics tier and nothing else — this is the
+	# whole reason a thousand villages costs no more light than one.
+	var pool := 0
+	for n in get_children():
+		if n is Nightfall:
+			pool = (n as Nightfall).lights_lit()
+	print("SMOKE TEST: night lights — pool=%d of %d allowed, villages=%d, creature glow=%.2f" % [
+		pool, Quality.night_lights(),
+		get_tree().get_nodes_in_group("village").size(), creature.radiance()])
+	assert(pool <= Quality.night_lights(), "the night's light budget is FIXED")
+
+	# Noon must put every one of them out again.
+	GameState.game_years = _at_hour(0.5)
+	_update_daylight()
+	print("SMOKE TEST: noon — moon=%.2f ambient=%.2f sun=%.2f" % [
+		_moon.light_energy, _environment.ambient_light_energy, _sun.light_energy])
+	GameState.game_years = was
+
+
+## The clock reading that puts the day at `fraction` (0 midnight, 0.5 noon).
+func _at_hour(fraction: float) -> float:
+	return (fraction - 0.35 + 1.0) * GameState.DAY_YEARS
 
 
 func _smoke_test_gestures() -> void:

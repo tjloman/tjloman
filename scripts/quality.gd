@@ -250,6 +250,15 @@ func fog_density() -> float:
 	return [0.008, 0.006, 0.004][effective_tier()]
 
 
+## HOW MANY REAL LIGHTS the night is allowed on the ground, over and above the
+## creature's own radiance (see Nightfall). Point lights are what a tiled
+## mobile GPU minds most, and there may be hundreds of villages, so the pool is
+## small and fixed and the nearest towns get it. A hot device lets them go out
+## one at a time and keeps only the beast you are watching.
+func night_lights() -> int:
+	return [2, 4, 6][effective_tier()]
+
+
 ## Manual override -------------------------------------------------------------
 
 ## Cycle LOW -> MEDIUM -> HIGH, persist it, and re-apply what can change

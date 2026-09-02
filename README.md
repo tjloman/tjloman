@@ -599,10 +599,15 @@ shape. So severity is simply *how many*:
 
 | Working | Sheets | Mass | Layers deep | Opacity | Look |
 |---|---|---|---|---|---|
-| rain | 7 | 18m | 3.7× | 28% | pale |
-| cloudburst | 13 | 24m | 4.5× | 36% | grey |
-| tempest | 16 | 27m | 5.0× | 39% | grey |
-| deluge | 22 | 32m | 5.5× | 46% | bruised |
+| rain | 7 | 18m | 3.7× | 50% | pale |
+| cloudburst | 13 | 24m | 4.5× | 66% | grey |
+| tempest | 16 | 27m | 5.0× | 75% | grey |
+| deluge | 22 | 32m | 5.5× | 90% | bruised |
+
+Those opacities are the second pass. The first ran a shower at 28% and a deluge
+at 46%, which on a bright sky read as haze rather than weather — a quarter-solid
+sheet is very nearly nothing, and seven of them is still very nearly nothing. A
+deluge is now all but solid, which is what lets it darken the ground under it.
 
 The whole cloud is **one draw call**. A MultiMesh carries every sheet with its
 own transform and its own colour — per-instance alpha is what lets each fade
@@ -621,6 +626,55 @@ The vapour texture is drawn in code like everything else here: a soft
 elliptical falloff multiplied by noise sampled with a squashed vertical, so the
 detail runs in horizontal **streaks** rather than reading as a stack of fuzzy
 balls. 64×64, built once at world load, shared by every cloud ever cast.
+
+## Night you can actually see
+
+On a phone, in daylight, night was a black screen. You could not find your own
+creature in it. The fix is not a brightness slider — it is giving the dark some
+real sources of light and letting the eye read shape by them. There are four,
+and only one of them costs anything.
+
+**The moon and the stars.** The moon's fill was 0.22, which is a rumour; it is
+now 0.55, with a floor under it that never goes out, because starlight is what
+keeps a silhouette readable when nothing else is lit. The night sky itself came
+off black (0.03 → 0.07) for a reason that is easy to miss: *the sky is the
+ambient source*. A black sky means the world under it gets no bounced light at
+all, however many lamps you light.
+
+**The ambient floor.** As the sun goes, the sky hands the ambient over to an
+explicit moon-blue, so the dark has a *colour* rather than an absence of one,
+and the floor rises from 0.25 to 0.55. Bounced light is a uniform, not a light
+— it is free, which is exactly why it does the heavy lifting here and the real
+lights stay few.
+
+**Windows and torches.** Houses already lit their panes at dusk. Now anyone
+still out after dark carries a flame, and a town at three in the morning reads
+as a few lit windows and a watchman rather than a field of dark boxes. These
+are **not lights**: there may be a thousand villagers, and a thousand point
+lights is not a thing a phone will do. They are additive billboards, all of a
+town's in one MultiMesh and so one draw call, re-dealt on a lazy clock and only
+while the town is close enough to see. Each flickers on its own phase, so a row
+of them does not read as fairy lights.
+
+**Hearths.** The only real lights, and the only thing here that actually pools
+light on the ground. The count is **fixed** — 2 / 4 / 6 by graphics tier — and
+a small pool follows the camera, handing itself to the nearest towns. Walk
+across the map and the same four lights come with you. Add a thousand villages
+and the budget does not move. A hearth changing hands fades out and fades in
+somewhere else rather than sliding across a field.
+
+**The creature's own radiance.** One omni light on the beast, and the one worth
+spending unconditionally, because it is always where you are looking: whatever
+else you cannot make out at night, you can always find your creature. It burns
+brighter the larger it has grown and brighter still while it is working a
+miracle, and its **colour is what it has become** — warm gold for a saint, low
+red for a monster, and the plain cold moon-white of something that has not made
+up its mind. It eases in at dusk the way an ember comes up.
+
+The whole night therefore costs **at most seven point lights**, none of them
+shadowed, whatever the size of the world — and a device that is getting hot
+lets the hearths go out one at a time and keeps only the beast you are
+watching.
 
 ## When the device gets hot, the creature looks up at you
 
@@ -931,6 +985,8 @@ scripts/world/
   food_store.gd               Storehouse: plants, meat, lumber, stone
   food_item.gd                Physical food: grain sheaves & species-named meat
   corpse.gd                   The dead, as physical objects
+  nightfall.gd                The night's small, fixed pool of real lights,
+                              handed to whichever hearths you are nearest
 scripts/animals/animal.gd     EVERY beast, one data table: livestock, pets,
                               predators, prey — taming, riding, guarding
 scripts/villager/villager.gd  Full villager lives: needs, age, pregnancy,
@@ -951,7 +1007,8 @@ scripts/creature/
   creature_steering.gd        Routes, waypoints, wedges, and bad ground
   creature_body.gd            Stomach, digestion, fat, muscle and energy
   creature_eyes.gd            Perception only: nearest X, circumstances, plights
-  creature_look.gd            Alignment colour, expressions, blend shapes
+  creature_look.gd            Alignment colour, expressions, blend shapes, and
+                              the godly radiance it gives off after dark
 scripts/miracles/
   spellbook.gd                The GRAMMAR: runes, recipes, and the blend fallback
   miracle_manager.gd          Catalog, effects, unlock ladder, power scaling

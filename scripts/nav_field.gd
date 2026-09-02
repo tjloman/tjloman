@@ -244,6 +244,7 @@ func _enqueue(open: Array, priority: float, cell: Vector2i) -> void:
 	var lo := 0
 	var hi := open.size()
 	while lo < hi:
+		@warning_ignore("integer_division")
 		var mid := (lo + hi) / 2
 		if float(open[mid][0]) < priority:
 			lo = mid + 1

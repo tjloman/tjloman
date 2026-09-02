@@ -421,6 +421,7 @@ func reminder(ctx: Dictionary, where := Vector3.INF) -> Dictionary:
 	for i in looked:
 		# Half from the recent past, half sampled from the whole of its life, so
 		# an old shock is still reachable long after the day it happened.
+		@warning_ignore("integer_division")
 		var idx := count - 1 - i if i < looked / 2 else randi() % count
 		var ep: Dictionary = episodes[idx]
 		var felt: String = String(ep.get("felt", ""))

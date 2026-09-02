@@ -448,8 +448,12 @@ func apply_pending(world: WorldGen, creature: Creature) -> void:
 
 
 ## How long this creature has been alive under your hand, in plain words.
-static func spent(seconds: float) -> String:
+## Not static: everything reaches it through the `SaveGame` autoload instance,
+## and calling a static function on an instance is a warning.
+func spent(seconds: float) -> String:
+	@warning_ignore("integer_division")
 	var hours := int(seconds) / 3600
+	@warning_ignore("integer_division")
 	var minutes := (int(seconds) % 3600) / 60
 	if hours > 0:
 		return "%dh %dm" % [hours, minutes]

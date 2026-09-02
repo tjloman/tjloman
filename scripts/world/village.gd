@@ -28,6 +28,22 @@ const TERRORS := [
 	"lightning", "fireball", "thunderclap", "lightning_storm", "tornado",
 	"thunderstorm", "tempest", "firestorm", "hurricane",
 ]
+## TORCHES. Anyone still out after dark carries one, and they are the reason a
+## village reads as inhabited at night rather than as a field of dark boxes.
+##
+## They are NOT lights. There may be a thousand villagers, and a thousand point
+## lights is not a thing a phone will do — the real light after dark is a small
+## pool that follows the camera (Nightfall) plus the creature's own glow. These
+## are flames: emissive billboards, all of a town's in ONE MultiMesh and so one
+## draw call, updated on a lazy clock and only while the town is near enough to
+## see. What they cost is a couple of dozen matrices a second.
+const TORCH_RANGE := 90.0        # past this a town's torches stop drawing at all
+const TORCH_REFRESH := 0.4       # how often the flames are re-dealt to people
+const TORCH_FLICKER := 1.0 / 15.0
+const TORCH_MOST := 24           # the most flames one town ever draws
+const TORCH_COLOR := Color(1.0, 0.68, 0.28)
+const TORCH_SIZE := Vector2(0.28, 0.42)
+
 const ALARM_SECONDS := 45.0
 const GRUDGE_HOSTILE := 35.0
 const GRUDGE_DECAY := 0.4          # per second: fear of the beast fades slowly
@@ -109,6 +125,10 @@ var _breed_timer := 30.0
 ## roster reads the trend out loud instead of leaving you to find the bodies.
 var _pop_samples: Array = []
 var _pop_timer := 20.0
+var _torches: MultiMeshInstance3D = null   # built the first night it is watched
+var _torch_timer := 0.0
+var _torch_age := 0.0
+var _flicker_beat := 0.0
 
 
 func _ready() -> void:
@@ -240,7 +260,7 @@ func feed_penned() -> void:
 ## claimed by someone else. Claims it for them (one farmer per field), reserved
 ## by the WANTING — so others look elsewhere the moment this one decides to go.
 func pick_farm(from: Vector3, by: Villager) -> Farm:
-	farms = farms.filter(func(f): return is_instance_valid(f))
+	Util.prune(farms)
 	var best: Farm = null
 	var best_dist := INF
 	for f in farms:
@@ -308,7 +328,7 @@ func _flat(v: Vector3) -> Vector2:
 
 ## Wants another field? One per ~7 mouths, capped so villages stay villages.
 func wants_new_farm() -> bool:
-	farms = farms.filter(func(f): return is_instance_valid(f))
+	Util.prune(farms)
 	return farms.size() < mini(1 + int(population() / 7.0), 4)
 
 
@@ -432,6 +452,11 @@ func needs_teacher() -> bool:
 
 
 func _process(delta: float) -> void:
+	# Ahead of the LOD gate, on the real clock: the torches are a LOOK, and a
+	# look that updates on a strided tick judders. They cost nothing when the
+	# town is far off or the sun is up, which the tick checks first thing.
+	_tick_torches(delta)
+
 	# Simulation LOD: a village far from the camera runs its bookkeeping (prayer,
 	# belief, housing) on a slower clock — the per-frame worshipper scan is the
 	# priciest thing here, and distant towns needn't pay it every frame.
@@ -479,6 +504,92 @@ func _process(delta: float) -> void:
 		_pop_samples.append(population())
 		if _pop_samples.size() > 12:      # about four minutes of history
 			_pop_samples.pop_front()
+
+
+## TORCHLIGHT ------------------------------------------------------------------
+
+## Flames over the people who are still out after dark. Everything expensive is
+## behind an early return: by day, or from far off, this is two comparisons.
+func _tick_torches(delta: float) -> void:
+	var wanted := GameState.is_night() \
+		and Util.sim_stride(global_position) <= 2 \
+		and _within(TORCH_RANGE)
+	if not wanted:
+		if _torches != null and _torches.visible:
+			_torches.visible = false
+		return
+	_torch_age += delta
+	_torch_timer -= delta
+	if _torch_timer > 0.0:
+		# Flicker on its own slower clock. A flame at 15Hz is indistinguishable
+		# from one at 60, and this is a per-instance write for every torch in
+		# town — worth doing a quarter as often.
+		_flicker_beat -= delta
+		if _flicker_beat <= 0.0:
+			_flicker_beat = TORCH_FLICKER
+			_flicker_torches()
+		return
+	_torch_timer = TORCH_REFRESH
+	_deal_torches()
+
+
+## Hand the flames out to whoever is awake and outdoors. Sleepers carry none:
+## a town at three in the morning should be a few lit windows and a watchman,
+## not a torchlit parade.
+func _deal_torches() -> void:
+	var carriers: Array[Vector3] = []
+	var most := Quality.particles(TORCH_MOST)
+	for v in my_villagers():
+		if carriers.size() >= most:
+			break
+		if v.state == Villager.State.SLEEPING or v.is_dying():
+			continue
+		carriers.append(v.global_position + Vector3(0.35, 1.45, 0))
+	if carriers.is_empty():
+		if _torches != null:
+			_torches.visible = false
+		return
+	if _torches == null:
+		_build_torches()
+	var mm := _torches.multimesh
+	mm.instance_count = carriers.size()
+	for i in carriers.size():
+		mm.set_instance_transform(i, Transform3D(Basis(), to_local(carriers[i])))
+		mm.set_instance_color(i, TORCH_COLOR)
+	_torches.visible = true
+	_flicker_torches()
+
+
+## A flame is never steady. Two waves out of step per torch, so no two in the
+## town pulse together — which is what stops a row of them reading as a string
+## of fairy lights.
+func _flicker_torches() -> void:
+	if _torches == null or not _torches.visible:
+		return
+	var mm := _torches.multimesh
+	for i in mm.instance_count:
+		var phase := float(i) * 1.7
+		var beat := sin(_torch_age * 7.1 + phase) * 0.16 \
+			+ sin(_torch_age * 3.3 + phase * 2.1) * 0.1
+		mm.set_instance_color(i, Color(
+			TORCH_COLOR.r, TORCH_COLOR.g, TORCH_COLOR.b, clampf(0.85 + beat, 0.4, 1.0)))
+
+
+func _build_torches() -> void:
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = Util.flame_mesh(TORCH_SIZE.x, TORCH_SIZE.y)
+	mm.instance_count = 0
+	_torches = MultiMeshInstance3D.new()
+	_torches.multimesh = mm
+	_torches.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_torches)
+
+
+## Is what the player is looking at inside `reach` of this town?
+func _within(reach: float) -> bool:
+	return GameState.camera_focus.distance_to(global_position) < reach
 
 
 func my_villagers() -> Array[Villager]:
@@ -603,7 +714,7 @@ func homeless_count() -> int:
 ## Also marks which houses are lived in — occupancy is what keeps a
 ## house standing against the years.
 func _assign_housing() -> void:
-	houses = houses.filter(func(h): return is_instance_valid(h))
+	Util.prune(houses)
 	var villagers := my_villagers()
 	var slots := []
 	for h in houses:
@@ -722,7 +833,7 @@ func on_tamed_lost(animal: Animal) -> void:
 
 
 func tamed_count() -> int:
-	tamed_animals = tamed_animals.filter(func(a): return is_instance_valid(a))
+	Util.prune(tamed_animals)
 	return tamed_animals.size()
 
 
@@ -759,7 +870,7 @@ func best_penned_meat() -> Animal:
 
 ## Penned livestock multiplies slowly.
 func _breed_livestock() -> void:
-	tamed_animals = tamed_animals.filter(func(a): return is_instance_valid(a))
+	Util.prune(tamed_animals)
 	if tamed_animals.size() < 2 or tamed_animals.size() >= MAX_TAMED:
 		return
 	var by_species := {}
@@ -951,7 +1062,7 @@ func armed_count() -> int:
 func mark_for_death(beast: Animal) -> void:
 	if beast == null or not is_instance_valid(beast):
 		return
-	vendetta = vendetta.filter(func(a): return is_instance_valid(a))
+	Util.prune(vendetta)
 	if not vendetta.has(beast):
 		vendetta.append(beast)
 		if is_player_home:
@@ -964,7 +1075,7 @@ func mark_for_death(beast: Animal) -> void:
 ## otherwise any predator that has come inside the village bounds. Returns null
 ## when there is nothing to fight.
 func fight_target(from: Vector3) -> Animal:
-	vendetta = vendetta.filter(func(a): return is_instance_valid(a))
+	Util.prune(vendetta)
 	var best: Animal = null
 	var best_dist := INF
 	for a in vendetta:
