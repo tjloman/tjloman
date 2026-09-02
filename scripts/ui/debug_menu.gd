@@ -1,19 +1,22 @@
 class_name DebugMenu
 extends CanvasLayer
-## The workshop drawer (F3): save, load, and the two world-shaking levers —
-## REGENERATE (roll a new land but keep the creature you raised) and NEW GAME
-## (start over entirely). Below those sit the small cheats that make testing
-## the long systems bearable: prayer, growth, and instant converts.
+## The workshop drawer (F3): a deliberate checkpoint save, a reload, the way
+## through to the creatures you have raised, and REGENERATE — roll a new land
+## but keep the creature. Below those sit the small cheats that make testing the
+## long systems bearable: prayer, growth, and instant converts.
 ##
-## The two destructive buttons ARM before they fire: the first press turns the
-## button red and asks again, and it disarms itself after a few seconds. No
-## stray click throws away an hour of raising a creature.
+## The world writes itself down on its own now (see SaveGame), so nothing here
+## is load-bearing any more. What is left that cannot be undone still ARMS
+## before it fires: the first press turns the button red and asks again, and it
+## disarms itself after a few seconds. No stray click throws away an hour of
+## raising a creature.
 
 const ARM_SECONDS := 4.0
 
 var world_gen: WorldGen
 var creature: Creature
 var tutorial: Tutorial
+var profiles: ProfileMenu
 
 var _panel: PanelContainer
 var _armed: Button = null
@@ -45,19 +48,20 @@ func _build() -> void:
 	box.add_theme_constant_override("separation", 6)
 	box.add_child(_heading("WORKSHOP  [F3]"))
 
-	box.add_child(_button("Save world", _on_save,
-		"Write this world down (overwrites the last save)."))
-	box.add_child(_button("Load saved world", _on_load,
-		"Return to the world you last wrote down."))
+	box.add_child(_button("Save now", _on_save,
+		"Write this world down. The game already saves itself every couple\n"
+		+ "of minutes and whenever you leave, so this is only a checkpoint."))
+	box.add_child(_button("Reload last save", _on_load,
+		"Throw away what has happened since the last save."))
+	box.add_child(_button("The creatures you have raised  [F5]", _on_profiles,
+		"Switch between creatures, or name and begin a new one. Each has\n"
+		+ "its own world, and none of them costs the others anything."))
 	box.add_child(_gap())
 
 	box.add_child(_heading("START AGAIN"))
 	box.add_child(_button("New land, SAME creature", _on_regenerate,
 		"Roll a brand new world. Your creature comes along with every\n"
 		+ "habit, belief and pound of fat it has earned.", true))
-	box.add_child(_button("New game", _on_new_game,
-		"Everything begins again: new land, newborn creature, nothing\n"
-		+ "remembered.", true))
 	box.add_child(_gap())
 
 	box.add_child(_heading("CHEATS"))
@@ -155,8 +159,12 @@ func _on_regenerate() -> void:
 	SaveGame.regenerate_world(creature)
 
 
-func _on_new_game() -> void:
-	SaveGame.new_game()
+## Beginning again no longer means throwing anything away: it makes a NEW
+## creature, in its own profile, beside the ones already raised.
+func _on_profiles() -> void:
+	if profiles != null and is_instance_valid(profiles):
+		_panel.visible = false
+		profiles.open(SaveGame.profiles.is_empty())
 
 
 func _on_prayer() -> void:

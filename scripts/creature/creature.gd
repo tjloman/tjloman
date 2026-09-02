@@ -41,6 +41,9 @@ const DEED_FLOOR := 0.5
 const AMENDS_SECONDS := 120.0
 const AMENDS_TRUST := 45.0
 
+## WHAT ITS GOD CALLED IT. Chosen when the profile is made; empty until then,
+## and every message simply says "your creature" instead.
+var creature_name := ""
 var hunger := 40.0
 var energy := 90.0
 var growth := 0.01            # 0..1 of its destined size; every game starts small
@@ -174,7 +177,7 @@ func _ready() -> void:
 	add_to_group("creature")
 	collision_layer = 2
 	collision_mask = 1
-	set_meta("hover_name", "Your creature")
+	_apply_name()
 
 	var col := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
@@ -2293,6 +2296,23 @@ func _cargo_word() -> String:
 ## WHAT IT IS, named off the six-axis compass — "tender wrecker", "bold
 ## recluse", "beloved of the village". The old five-word good-to-evil scale is
 ## still used for VILLAGERS, who are simple souls; the creature has outgrown it.
+## Name it. Everything that speaks about the creature picks this up at once,
+## including the thirty-odd messages written as "your creature".
+func name_it(given: String) -> void:
+	creature_name = given.strip_edges().substr(0, 24)
+	_apply_name()
+
+
+func _apply_name() -> void:
+	GameState.creature_name = creature_name
+	set_meta("hover_name", creature_name if creature_name != "" else "Your creature")
+
+
+## What to call it in a sentence.
+func called() -> String:
+	return creature_name if creature_name != "" else "Your creature"
+
+
 func morality_word() -> String:
 	return mind.character()
 
@@ -2313,17 +2333,18 @@ func favorite_deed() -> String:
 
 
 func hover_text() -> String:
-	return ("Your creature — %s (%s, %s)\n" +
+	return ("%s — %s (%s, %s)\n" +
 		"bond %d · trusts you %d · attention %d\n" +
 		"hunger %d · energy %d · %s\n" +
 		"[P — pet   ·   L — scold   ·   C — lock camera]") % [
-		_status_word(), morality_word(), mood_word(),
+		called(), _status_word(), morality_word(), mood_word(),
 		int(bond), int(trust), int(attention),
 		int(hunger), int(energy), favorite_deed()]
 
 
 func to_dict() -> Dictionary:
 	return {
+		"name": creature_name,
 		"pos": [global_position.x, global_position.y, global_position.z],
 		"growth": growth,
 		"hunger": hunger,
@@ -2352,6 +2373,7 @@ func from_dict(data: Dictionary) -> void:
 	var p: Array = data.get("pos", [])
 	if p.size() == 3:
 		global_position = Vector3(float(p[0]), float(p[1]), float(p[2]))
+	name_it(String(data.get("name", creature_name)))
 	growth = float(data.get("growth", 0.01))
 	hunger = float(data.get("hunger", 40.0))
 	energy = float(data.get("energy", 90.0))

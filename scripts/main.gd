@@ -80,10 +80,17 @@ func _ready() -> void:
 	tutorial.miracles = miracles
 	add_child(tutorial)
 
+	# THE CREATURES YOU HAVE RAISED. Above everything, because on the very first
+	# run it is the only thing on screen: a god names its creature before it does
+	# anything else with it.
+	var profiles := ProfileMenu.new()
+	add_child(profiles)
+
 	var debug_menu := DebugMenu.new()
 	debug_menu.world_gen = world_gen
 	debug_menu.creature = creature
 	debug_menu.tutorial = tutorial
+	debug_menu.profiles = profiles
 	add_child(debug_menu)
 
 	# Whatever a reload was carrying — a whole saved game, or just a creature
@@ -180,6 +187,7 @@ func _setup_input() -> void:
 		"leash_creature": [KEY_G],
 		"toggle_debug": [KEY_F3],
 		"skip_tutorial": [KEY_F4],
+		"toggle_profiles": [KEY_F5],
 	}
 	for action: String in actions:
 		if InputMap.has_action(action):
@@ -834,15 +842,29 @@ func _run_smoke_test() -> void:
 			village.mark_for_death(wolf)
 			print("SMOKE TEST: vendetta size=%d" % village.vendetta.size())
 
-	# PERSISTENCE: a mind written down and read back must be the same mind.
+	# PERSISTENCE: a mind written down and read back must be the same mind, and
+	# it must land in the ACTIVE PROFILE rather than in one global slot. The test
+	# makes its own profile by hand, because the real route (start_new) reloads
+	# the scene and there would be nothing left to test with.
 	creature.body.fat = 44.0
 	creature.mind.q["smash|tree"] = 1.75
+	creature.name_it("Testbeast")
+	SaveGame.profiles.append({
+		"id": "smoketest", "name": "Testbeast", "seed": world_gen.world_seed,
+		"created": 0.0, "played": 0.0, "saved_at": 0.0,
+		"character": "newborn", "growth": 0.0,
+	})
+	SaveGame.active = "smoketest"
 	var wrote := SaveGame.save_to_disk(world_gen, creature)
 	var parcel := SaveGame.read_from_disk()
 	var twin := CreatureMind.new()
 	twin.from_dict((parcel.get("creature", {}) as Dictionary).get("mind", {}))
 	var body_twin := CreatureBody.new()
 	body_twin.from_dict((parcel.get("creature", {}) as Dictionary).get("body", {}))
+	print("SMOKE TEST: profile — %s, %s | announcements now say: %s" % [
+		String(SaveGame.active_profile().get("name", "?")),
+		String(SaveGame.active_profile().get("character", "?")),
+		GameState.named("Your creature purrs and leans into your hand.")])
 	print("SMOKE TEST: save — wrote=%s seed=%d villages=%d | mind smash|tree %.2f temperament %.1f, fat %.0f" % [
 		wrote, int(parcel.get("seed", 0)), (parcel.get("villages", []) as Array).size(),
 		float(twin.q.get("smash|tree", 0.0)), twin.temperament, body_twin.fat])

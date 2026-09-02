@@ -42,6 +42,13 @@ var alignment := 0.0
 ## the player is looking at, the fewer physics frames they spend.
 var camera_focus := Vector3.ZERO
 
+## WHAT THE CREATURE IS CALLED, once its god has named it. Every message in the
+## game was written saying "Your creature", and rather than rewrite thirty
+## strings — and every future one — the name is substituted at the moment a
+## message is announced. One line, total coverage, and a message written the
+## natural way keeps working.
+var creature_name := ""
+
 
 func _process(delta: float) -> void:
 	game_years += delta / YEAR_SECONDS
@@ -103,7 +110,14 @@ func alignment_word() -> String:
 
 
 func announce(text: String) -> void:
-	announcement.emit(text)
+	announcement.emit(named(text))
+
+
+## Put the creature's name where the writing says "your creature".
+func named(text: String) -> String:
+	if creature_name == "":
+		return text
+	return text.replace("Your creature", creature_name).replace("your creature", creature_name)
 
 
 func hint(text: String) -> void:

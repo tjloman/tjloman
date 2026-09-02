@@ -247,8 +247,9 @@ G .......................... LEAD your creature to where your hand points
 V .......................... open the VILLAGES roster — snap the camera to any of yours
 F1 ......................... toggle this help
 F2 ......................... cycle graphics quality: Low / Medium / High
-F3 ......................... the WORKSHOP: save, load, and start again
+F3 ......................... the WORKSHOP: checkpoint, reload, new land
 F4 ......................... skip the opening lessons
+F5 ......................... the CREATURES YOU HAVE RAISED — switch, name, begin
 
 THE OPENING LESSONS
 A short course runs the first time you play: drag the land, lift a thing,
@@ -257,16 +258,27 @@ Every lesson is finished by DOING it — there is nothing to click past —
 and a hint appears only once you have been stuck a while. F4 sets them
 aside; the workshop (F3) can run them again whenever you like.
 
-SAVING (F3)
-The land itself is never written down — every hill, shore and town site
+SAVING — IT LOOKS AFTER ITSELF
+There is nothing to remember. The world writes itself down every couple
+of minutes, whenever the game is put in the background, and when you
+quit — and it puts you straight back where you were next time you play.
+The land itself is never written down: every hill, shore and town site
 grows back exactly from the world's seed. What is saved is what PLAY
 changed: your standing, each village's faith, stocks, doctrine and
-people, and your creature's whole mind, beliefs and body.
+people, and your creature's whole mind, heart, beliefs and body.
+
+THE CREATURES YOU HAVE RAISED (F5)
+A creature is a long relationship, and you may want more than one — a
+beast raised kindly over weeks, and a monster to let off the leash on a
+wet afternoon. Each lives in its own world with its own towns, and
+switching between them costs neither of them anything. Name a new one
+in the field at the bottom and it begins straight away. Forgetting one
+is the only thing here that cannot be undone, and it asks twice.
+
+STARTING OVER (F3)
   New land, SAME creature — roll a fresh world and bring your creature
     into it with every habit and belief it earned. The land and its
-    people are strangers; the beast at your side is not.
-  New game — everything begins again, and it remembers nothing.
-Both ask twice before they fire.
+    people are strangers; the beast at your side is not. Asks twice.
 
 ON TOUCHSCREENS
 One finger ................. everything the left mouse does (per the Mode button)
