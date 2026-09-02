@@ -491,6 +491,41 @@ def check_untyped_array_results(files):
     return problems
 
 
+# Container methods GDScript declares as returning Variant, even when called on
+# a TYPED array. Inferring a variable's type from one of these gives Variant.
+VARIANT_RETURNS = ("pop_back", "pop_front", "pop_at", "front", "back",
+                   "pick_random", "get")
+
+
+def check_inferred_variant(files):
+    """Find `var x := <container>.pop_back()` and friends.
+
+    This project builds with untyped declarations treated as errors, so
+
+        var gone := _lights.pop_back()
+
+    fails to COMPILE with "The variable type is being inferred from a Variant
+    value" -- and it takes the whole dependency chain down with it, so one
+    line in one file stops main.gd loading. gdparse does not catch it, because
+    it does no type inference at all.
+
+    Only flagged when the call is the WHOLE right-hand side: wrapping it, as
+    `float(ep.get("worth", 0.0))` does throughout, is exactly the fix and must
+    not be reported.
+    """
+    problems = []
+    inferred = re.compile(
+        r"^\s*var\s+\w+\s*:=\s*[\w\.\[\]\"']+\.(%s)\([^()]*\)\s*(?:#.*)?$"
+        % "|".join(VARIANT_RETURNS))
+    for path in files:
+        with open(path, encoding="utf-8") as fh:
+            for lineno, line in enumerate(fh, 1):
+                m = inferred.match(line.rstrip())
+                if m:
+                    problems.append((path, lineno, m.group(1), line.strip()))
+    return problems
+
+
 def main():
     root = "scripts"
     targets = sys.argv[1:] or [root]
@@ -524,8 +559,14 @@ def main():
         print("%s:%d: %s() returns a plain Array, and '%s' is a TYPED array — this "
               "fails at runtime on the frame it first runs. Build the new array with "
               "a loop instead.\n    %s" % (path, lineno, call, name, line))
+    variants = check_inferred_variant(files)
+    for path, lineno, call, line in variants:
+        print("%s:%d: %s() is declared as returning Variant, so ':=' infers a "
+              "Variant here — this project builds that as an ERROR and it stops "
+              "every dependent script loading. Declare the type, or wrap the "
+              "call.\n    %s" % (path, lineno, call, line))
     total = len(problems) + len(escapes) + len(formats) + len(shadowed) \
-        + len(loose_arrays)
+        + len(loose_arrays) + len(variants)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

@@ -82,7 +82,9 @@ func _on_heat_changed(_level: int) -> void:
 func _resize_pool(want: int) -> void:
 	want = maxi(want, 0)
 	while _lights.size() > want:
-		var gone := _lights.pop_back()
+		# Typed explicitly: pop_back() is declared as returning Variant even on a
+		# typed array, and this project treats an inferred Variant as an error.
+		var gone: OmniLight3D = _lights.pop_back()
 		_claims.pop_back()
 		_held.pop_back()
 		_energy.pop_back()
