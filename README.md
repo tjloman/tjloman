@@ -579,6 +579,49 @@ or *obese*.
 - **Lightning is lethal** at the point of impact. The evil path is real.
 - **Sheep** wander, breed slowly, get hunted, and are 100% throwable.
 
+## Weather that looks like weather
+
+A rain cloud used to be five bulbous spheres that snapped into existence, sat
+perfectly still for twelve seconds, and snapped out again. It read as five grey
+balls, because that is what it was.
+
+It is now a **swirl of soft streaked sheets** — wide flat patches of vapour
+lying in the sky, each of which **turns** at its own rate and direction so the
+mass shears against itself, **breathes** in and out of phase with its
+neighbours so it billows rather than merely rotating, and **comes and goes**:
+fading in somewhere, holding, fading out, and being reborn elsewhere. The cloud
+is never twice the same cloud, and nothing in the sky ever pops — the mass
+gathers when it is cast and disperses when it is done.
+
+**Definition comes from overlap.** One sheet is a vague smudge; a dozen
+overlapping at different angles, heights and opacities have edges, depth and
+shape. So severity is simply *how many*:
+
+| Working | Sheets | Mass | Layers deep | Opacity | Look |
+|---|---|---|---|---|---|
+| rain | 7 | 18m | 3.7× | 28% | pale |
+| cloudburst | 13 | 24m | 4.5× | 36% | grey |
+| tempest | 16 | 27m | 5.0× | 39% | grey |
+| deluge | 22 | 32m | 5.5× | 46% | bruised |
+
+The whole cloud is **one draw call**. A MultiMesh carries every sheet with its
+own transform and its own colour — per-instance alpha is what lets each fade
+independently — and a sheet is a single quad. A deluge's twenty-two layers come
+to **44 triangles**, against 1,440 for the five spheres it replaces, in one
+draw instead of five.
+
+The real cost is **fill rate**, not geometry: stacked soft transparent quads
+are overdraw, which is what a tiled mobile GPU minds most. So the density is
+worked out rather than eyeballed (the first pass had a deluge *thinner* than a
+drizzle), and the sheet count runs through the graphics budget — and therefore
+through the thermal band, so a struggling phone gets a two-layer-deep cloud
+either way.
+
+The vapour texture is drawn in code like everything else here: a soft
+elliptical falloff multiplied by noise sampled with a squashed vertical, so the
+detail runs in horizontal **streaks** rather than reading as a stack of fuzzy
+balls. 64×64, built once at world load, shared by every cloud ever cast.
+
 ## When the device gets hot, the creature looks up at you
 
 Godot exposes **no thermal sensor** on any platform, so nothing here pretends to
@@ -914,6 +957,7 @@ scripts/miracles/
   miracle_manager.gd          Catalog, effects, unlock ladder, power scaling
   miracle_orb.gd              Generic conjured-and-thrown miracle carrier
   fireball.gd                 The throwable fire miracle: ballistic, explosive
+  storm_cloud.gd              Swirling, breathing, fading layers of vapour
 scripts/ui/hud.gd             Bars, legend, tooltips, help
 scripts/ui/debug_menu.gd      The F3 workshop: save/load/regenerate + cheats
 scripts/ui/cast_overlay.gd    The casting ring and countdown — what the mode looks like

@@ -90,13 +90,16 @@ var divine_hand: DivineHand = null  # wired by main; orbs land in the grip
 var casts_made := 0
 var last_rune_count := 0
 ## The showers currently in the sky, oldest first.
-var _clouds: Array[Node3D] = []
+var _clouds: Array[StormCloud] = []
 
 
 ## Your reach: 1.0 alone, rising with converted villages and their belief.
 ## Scales the extent of the grander miracles.
 func _ready() -> void:
 	add_to_group("miracles")
+	# Draw the cloud texture now, while the world is being built and a few
+	# milliseconds cost nothing, rather than on the first shower.
+	StormCloud.vapour_texture()
 
 
 func power() -> float:
@@ -324,20 +327,21 @@ func _cast_food(pos: Vector3) -> void:
 
 func _cast_rain(pos: Vector3, potency := 1.0) -> void:
 	var reach := 14.0 * potency
-	var cloud := Node3D.new()
+	# THE CLOUD ITSELF. A swirl of soft streaked layers that turn, breathe, and
+	# come and go — the fiercer the working, the more of them, the darker and
+	# the faster they churn. See StormCloud; it is one draw call either way.
+	var cloud := StormCloud.new()
 	cloud.position = pos + Vector3(0, 12, 0)
-
-	for i in 5:
-		var puff := Util.sphere(
-			randf_range(1.5, 2.5), Color(0.55, 0.58, 0.65),
-			Vector3(randf_range(-2.5, 2.5), randf_range(-0.5, 0.5), randf_range(-2.5, 2.5)))
-		cloud.add_child(puff)
+	cloud.brew(potency)
 
 	var drops := CPUParticles3D.new()
 	drops.amount = Quality.particles(RAIN_DROPS)
 	drops.lifetime = 1.4
 	drops.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-	drops.emission_box_extents = Vector3(5, 0.2, 5)
+	# The rain falls from the UNDERSIDE of the mass, and spreads as wide as the
+	# weather does, so a deluge is not a shower through a bigger cloud.
+	drops.emission_box_extents = Vector3(4.0 * potency, 0.2, 4.0 * potency)
+	drops.position.y = cloud.underside()
 	drops.direction = Vector3.DOWN
 	drops.initial_velocity_min = 8.0
 	drops.initial_velocity_max = 10.0
@@ -374,19 +378,21 @@ func _cast_rain(pos: Vector3, potency := 1.0) -> void:
 				body.call("extinguish")
 
 	_hold_cloud(cloud)
-	get_tree().create_timer(12.0).timeout.connect(cloud.queue_free)
+	# It disperses rather than being deleted: the layers fade out over a few
+	# seconds and the node frees itself when the sky is clear.
+	get_tree().create_timer(12.0).timeout.connect(cloud.disperse)
 
 
-## Keep the sky to a few showers. A new one over a crowded sky retires the
-## oldest, which is both cheaper and better weather — rain that stacks six deep
+## Keep the sky to a few showers. A new one over a crowded sky sends the oldest
+## away, which is both cheaper and better weather — rain that stacks six deep
 ## over one field looks like a bug, not a downpour.
-func _hold_cloud(cloud: Node3D) -> void:
-	_clouds = _clouds.filter(func(c: Node3D) -> bool: return is_instance_valid(c))
+func _hold_cloud(cloud: StormCloud) -> void:
+	_clouds = _clouds.filter(func(c: StormCloud) -> bool: return is_instance_valid(c))
 	_clouds.append(cloud)
 	while _clouds.size() > RAIN_CLOUDS:
-		var oldest: Node3D = _clouds.pop_front()
+		var oldest: StormCloud = _clouds.pop_front()
 		if is_instance_valid(oldest):
-			oldest.queue_free()
+			oldest.disperse()
 
 
 ## A raindrop: two triangles, billboarded, stretched into a streak. It used to

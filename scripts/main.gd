@@ -610,6 +610,20 @@ func _run_smoke_test() -> void:
 		String(jogged.get("felt", "nothing")), float(jogged.get("strength", 0.0)),
 		lived.episodes.size()])
 
+	# THE CLOUDS THEMSELVES. Five static spheres that snapped in and out are now
+	# a swirl of soft streaked sheets that turn, breathe, and come and go — and
+	# severity is simply how many of them there are, how dark, and how fast.
+	var sky := PackedStringArray()
+	for storm: Array in [["rain", 1.0], ["cloudburst", 2.2], ["deluge", 3.6]]:
+		var mass := StormCloud.new()
+		mass.brew(float(storm[1]))
+		sky.append("%s: %s" % [String(storm[0]), mass.report()])
+		mass.free()
+	print("SMOKE TEST: clouds — %s" % "  |  ".join(sky))
+	print("SMOKE TEST: clouds — 2 tris a sheet in ONE draw call "
+		+ "(was 5 spheres = 1,440 tris in 5 draws), texture %dx%d built once"
+		% [StormCloud.TEXTURE_SIZE, StormCloud.TEXTURE_SIZE])
+
 	# THE COST OF WEATHER. A default SphereMesh is 64 segments by 32 rings —
 	# 4,224 triangles — and every particle mesh here set only its radius, so a
 	# 400-droplet shower drew 1.7 MILLION triangles for a spray of specks two
