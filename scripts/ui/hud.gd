@@ -470,6 +470,10 @@ func _update_creature_panel() -> void:
 	# WHAT IT BELIEVES — the convictions it has drawn from its own life.
 	var creed: Array = creature.mind.beliefs.creed(2)
 	var believes := "nothing firmly yet" if creed.is_empty() else "\n          ".join(creed)
+	# WHAT IT MAKES OF THE WORLD ITSELF — what tends to happen, and which
+	# stretches of country it has come to feel something about.
+	var picture: Array = creature.mind.world_picture()
+	var world := "no idea yet" if picture.is_empty() else "\n          ".join(picture)
 	var spells: Array = creature.mind.known_miracles()
 	var magic: String = ", ".join(spells) if not spells.is_empty() else "none yet"
 	# ITS CHARACTER, spelled out. The one-word nature above is the compass
@@ -492,6 +496,7 @@ func _update_creature_panel() -> void:
 		+ "Body:     %s  (fat %d · strength %d%s)\n"
 		+ "Learned:  %s\n"
 		+ "Believes: %s\n"
+		+ "World:    %s\n"
 		+ "Miracles: %s") % [
 			creature.activity_word(), creature.morality_word(), character,
 			" and ".join(creature.heart.account()), creature.mood_word(),
@@ -501,7 +506,7 @@ func _update_creature_panel() -> void:
 			"  (digesting)" if creature.body.stomach > 0.05 else "",
 			creature.body.condition_word(), int(creature.body.fat),
 			int(creature.body.strength), "  BOOSTED" if creature.body.is_boosted() else "",
-			learned, believes, magic]
+			learned, believes, world, magic]
 
 
 ## Village roster ------------------------------------------------------------

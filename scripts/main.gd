@@ -575,6 +575,41 @@ func _run_smoke_test() -> void:
 		print("SMOKE TEST: compass — %-28s -> %-30s (good/evil %+.0f) %s" % [
 			life, soul.character(), soul.temperament, str(soul.character_account(2))])
 
+	# MEMORY, PLACES AND LORE. Beyond "what my deeds cause" it has to build a
+	# picture of what the WORLD does on its own, learn how it feels about actual
+	# stretches of ground, and be able to be REMINDED of something.
+	var lived := CreatureBeliefs.new()
+	var bad_wood := Vector3(220.0, 0.0, -80.0)
+	var night_alone := {"night": 1.0, "alone": 1.0, "hungry": 0.8, "predator": 1.0}
+	for i in 14:
+		lived.remember("wander|none", night_alone, bad_wood, "dread")
+		lived.consequence("hurt", -1.5)
+	for i in 14:
+		lived.remember("tend|farm", {"in_village": 1.0, "crowd": 1.0, "kin_glad": 1.0},
+			Vector3(4.0, 0.0, 4.0), "contentment")
+		lived.consequence("cheered", 1.2)
+	print("SMOKE TEST: lore — %s" % str(lived.omens()))
+	print("SMOKE TEST: places — %s | that wood feels %+.2f, home feels %+.2f" % [
+		str(lived.haunts()), lived.place_feel(bad_wood), lived.place_feel(Vector3(4, 0, 4))])
+	print("SMOKE TEST: foretaste — a night alone with beasts about %+.2f, the village %+.2f" % [
+		lived.foretaste(night_alone),
+		lived.foretaste({"in_village": 1.0, "crowd": 1.0, "kin_glad": 1.0})])
+	var jogged := lived.reminder(night_alone, bad_wood)
+	print("SMOKE TEST: reminded — standing there again brings back %s (%.2f) from %d episodes" % [
+		String(jogged.get("felt", "nothing")), float(jogged.get("strength", 0.0)),
+		lived.episodes.size()])
+
+	# WHAT ALL THIS WEIGHS. The honest number, measured rather than guessed:
+	# every learned structure written out as JSON, for a mind that has lived.
+	var weighed := {
+		"q + seen": JSON.stringify(creature.mind.q).length()
+			+ JSON.stringify(creature.mind.seen).length(),
+		"beliefs": JSON.stringify(creature.mind.beliefs.to_dict()).length(),
+		"whole mind": JSON.stringify(creature.mind.to_dict()).length(),
+		"heart": JSON.stringify(creature.heart.to_dict()).length(),
+	}
+	print("SMOKE TEST: mind weight (bytes of JSON) — %s" % str(weighed))
+
 	# THE CROWD MIND. The town has to work out once, for everybody, what it has
 	# seen and what it is minded to do — and the same event must read completely
 	# differently depending on which end of it the village was on.

@@ -501,7 +501,14 @@ func _observe_world() -> void:
 	# right now gets quietly associated with whatever it is feeling right now,
 	# and over a lifetime that becomes the only account it has of what hunger,
 	# darkness or a crowd is actually like.
-	heart.learn(_circumstances())
+	var now := _circumstances()
+	heart.learn(now)
+	# DOES THIS BRING SOMETHING BACK? A moment much like one it felt strongly
+	# about — especially standing in the very spot — returns a shadow of the old
+	# feeling, and it will never be able to say why it does not like it here.
+	var back := mind.beliefs.reminder(now, global_position)
+	if not back.is_empty():
+		heart.stir(String(back["felt"]), float(back["strength"]))
 	if GameState.is_night():
 		for a in get_tree().get_nodes_in_group("animals"):
 			var animal := a as Animal
@@ -539,7 +546,15 @@ func _decide() -> void:
 		_action_time = DEED_FLOOR - since
 		return
 	_last_decision = Time.get_ticks_msec()
+	# The situation is read once and used three times: for what it wants, for
+	# what it expects of the moment, and for what its beliefs are learned against.
+	var here := _circumstances()
 	var drive := {
+		# WHAT IT EXPECTS of a moment like this, and of this ground — a creature
+		# that has learned nights go badly is uneasy at dusk before anything has
+		# happened, and one that keeps coming off worst in the same wood gives
+		# the wood a wide berth. See CreatureBeliefs.foretaste and place_feel.
+		"omen": mind.beliefs.foretaste(here) + mind.beliefs.place_feel(global_position),
 		"hunger": hunger, "energy": energy, "boredom": boredom,
 		"mood": mood, "fear": fear, "wounded": _wounded_nearby(),
 		"full": body.fullness(growth), "lazy": body.laziness(),
@@ -549,7 +564,7 @@ func _decide() -> void:
 		# to torment. The drive does not care which.
 		"lonely": 1.0 if _audience(24.0) == 0 else 0.0,
 	}
-	var choice := mind.choose(_perceive(), drive, _circumstances())
+	var choice := mind.choose(_perceive(), drive, here, global_position, heart.strongest())
 	_act_verb = choice["verb"]
 	_act_type = choice.get("type", "none")
 	_enact(choice)

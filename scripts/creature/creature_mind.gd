@@ -111,6 +111,9 @@ const VERB_TRAITS := {
 	"dance": {"thrill": 0.75, "social": 0.6, "effort": 0.5},
 	"pray": {"calms": 0.6, "social": 0.7},
 	"commune": {"social": 1.0, "calms": 0.25, "effort": 0.2},
+	# Sitting with somebody who is frightened. Company for both of them, and it
+	# costs almost nothing — which is why a lazy, gentle creature reaches for it.
+	"soothe": {"social": 0.9, "calms": 0.4, "effort": 0.25},
 	"run": {"effort": 1.0, "thrill": 0.7, "calms": 0.1},
 	"mimic": {"thrill": 0.4, "social": 0.5, "effort": 0.4},
 	# What a creature does when it has stopped trusting you.
@@ -213,6 +216,11 @@ func _drive_fit(verb: String, drive: Dictionary) -> float:
 	var full: float = drive.get("full", 0.0)      # 0 empty .. 1 stuffed
 	var lazy: float = drive.get("lazy", 0.0)      # how fat, and so how disinclined
 	var lonely: float = drive.get("lonely", 0.0)  # nobody about
+	# WHAT IT EXPECTS OF THIS MOMENT AND THIS GROUND, before it has done
+	# anything at all — its picture of what the world does on its own, plus how
+	# it feels about where it is standing. Negative is a bad sort of moment.
+	var omen: float = drive.get("omen", 0.0)
+	var uneasy := maxf(-omen, 0.0)
 	# Appetite is hunger MINUS how full the belly already is: a stuffed creature
 	# has no interest in food however long since it last ate.
 	var appetite := maxf(hunger - full * 1.4, -0.45)
@@ -221,7 +229,10 @@ func _drive_fit(verb: String, drive: Dictionary) -> float:
 	fit += float(traits.get("calms", 0.0)) * (tired * 2.4 + lazy * 1.0 + full * 0.4)
 	fit += float(traits.get("thrill", 0.0)) * (bored * 1.5 + low * 0.6)
 	fit += float(traits.get("social", 0.0)) * (0.2 + lonely * 1.1)
-	fit += float(traits.get("escape", 0.0)) * afraid * 2.4
+	fit += float(traits.get("escape", 0.0)) * (afraid * 2.4 + uneasy * 1.2)
+	# And it is less inclined to make its own excitement in a moment it already
+	# expects to go badly.
+	fit -= float(traits.get("thrill", 0.0)) * uneasy * 0.5
 	fit += float(traits.get("heals", 0.0)) * wounded * 2.0
 	# Effort is what a tired or heavy body flinches from — the one universal cost.
 	fit -= float(traits.get("effort", 0.0)) * (lazy * 0.9 + tired * 0.6)
@@ -232,7 +243,8 @@ func _drive_fit(verb: String, drive: Dictionary) -> float:
 ## the best option is usually taken but a curious mind keeps trying others —
 ## which is how new behaviours (and quirks) are ever discovered. `options` is an
 ## Array of Dictionaries: {verb, type, target, pos}. Returns the chosen one.
-func choose(options: Array, drive: Dictionary, ctx := {}) -> Dictionary:
+func choose(options: Array, drive: Dictionary, ctx := {},
+		where := Vector3.INF, felt := "") -> Dictionary:
 	if options.is_empty():
 		_last_key = ""
 		_last_verb = ""
@@ -265,7 +277,7 @@ func choose(options: Array, drive: Dictionary, ctx := {}) -> Dictionary:
 	_last_key = _key(chosen["verb"], chosen.get("type", "none"))
 	# Remember the deed AND the circumstances, so a later consequence can be
 	# traced back to it.
-	beliefs.remember(_last_key, ctx)
+	beliefs.remember(_last_key, ctx, where, felt)
 	return chosen
 
 
@@ -389,6 +401,14 @@ func known_miracles() -> Array:
 		if float(familiarity[m]) >= MIRACLE_READY:
 			ready.append(m)
 	return ready
+
+
+## WHAT IT EXPECTS OF THE WORLD, and which stretches of country it has feelings
+## about — the half of its picture that is not about its own deeds at all.
+func world_picture() -> Array:
+	var said := beliefs.omens()
+	said.append_array(beliefs.haunts())
+	return said
 
 
 ## Its habits of ORDER, in plain words — "likes to fish before it casts heal".

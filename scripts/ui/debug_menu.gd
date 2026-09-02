@@ -210,6 +210,8 @@ func _on_creed() -> void:
 		creed.append(rite)
 	for habit: String in creature.mind.character_account():
 		creed.append(habit)
+	for picture: String in creature.mind.world_picture():
+		creed.append(picture)
 	creed.append("feels %s" % " and ".join(creature.heart.account()))
 	creed.append("understands %d kinds of circumstance from the inside (empathy %d%%)"
 		% [creature.heart.wisdom(), int(creature.heart.empathy * 100.0)])
