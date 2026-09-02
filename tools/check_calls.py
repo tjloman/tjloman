@@ -55,12 +55,19 @@ own_call_re = re.compile(r"(?<![\w.$\"])(_\w+)\s*\(")
 
 # A whole function signature, so the declared type of each parameter is known.
 signature_re = re.compile(r"^(?:static\s+)?func\s+(\w+)\s*\(([^)]*)\)", re.M)
-# `thing.method(` where `thing` is a lower-case identifier -- a typed member, so
-# its class can be resolved from `var thing := SomeClass.new()` in the same file.
-member_call_re = re.compile(r"(?<![\w.$\"])([a-z_]\w*)\s*\.\s*(\w+)\s*\(")
-# `var thing := SomeClass.new()` and `var thing: SomeClass`
+# A whole dotted path before a call: `mind.judge(`, `wronged.mind.judge(`,
+# `creature.mind.beliefs.creed(`. Resolved left to right, one member at a time,
+# which is what it takes to catch a bad argument two levels down.
+member_call_re = re.compile(r"(?<![\w.$\"])([a-z_]\w*(?:\s*\.\s*\w+)+)\s*\(")
+# `var thing := SomeClass.new()` and `var thing: SomeClass`, at column 0 --
+# these are the CLASS MEMBERS, which is what a dotted chain walks through.
 typed_var_re = re.compile(r"^var\s+(\w+)\s*:?=?\s*([A-Z]\w+)\.new\(\)", re.M)
 typed_decl_re = re.compile(r"^var\s+(\w+)\s*:\s*([A-Z]\w+)", re.M)
+# The same, at ANY indent, so locals declared inside a function are resolved
+# too. Leaving this out is why `wronged.mind.judge(0.8, ...)` in a smoke test
+# sailed past the checker and stopped the game compiling.
+local_var_re = re.compile(r"^\s*var\s+(\w+)\s*:?=?\s*([A-Z]\w+)\.new\(\)", re.M)
+local_decl_re = re.compile(r"^\s*var\s+(\w+)\s*:\s*([A-Z]\w+)", re.M)
 
 # What a literal argument obviously IS. Anything not obvious is left alone.
 LITERAL_FLOAT = re.compile(r"^-?\d+\.\d+$")
@@ -178,6 +185,7 @@ def collect(root):
     """class name -> (members, base class name)."""
     classes = {}
     SIGNATURES.clear()
+    MEMBER_TYPES.clear()
     for dirpath, _dirs, files in os.walk(root):
         for name in files:
             if not name.endswith(".gd"):
@@ -194,11 +202,16 @@ def collect(root):
             classes[m.group(1)] = (members, base.group(1) if base else None)
             for fname, raw in signature_re.findall(src):
                 SIGNATURES[(m.group(1), fname)] = parse_params(raw)
+            here = dict(typed_var_re.findall(src))
+            here.update(dict(typed_decl_re.findall(src)))
+            MEMBER_TYPES[m.group(1)] = here
     return classes
 
 
 # (class, method) -> [(param name, declared type or None)]. Filled by collect().
 SIGNATURES = {}
+# class -> {member name -> class}, so a dotted call chain can be followed.
+MEMBER_TYPES = {}
 
 
 def signature_of(cls, method, classes, seen=None):
@@ -267,9 +280,21 @@ def check(paths, classes):
         src = open(path, encoding="utf-8").read()
         mine = own_members(path, src, classes)
         # `var mind := CreatureMind.new()` tells us what `mind.judge(...)` is a
-        # call to, which is what makes argument checking possible at all.
-        typed = dict(typed_var_re.findall(src))
-        typed.update(dict(typed_decl_re.findall(src)))
+        # call to, which is what makes argument checking possible at all. Locals
+        # count, so a smoke test's `var wronged := Creature.new()` resolves too.
+        #
+        # A name declared as two different classes anywhere in the file is
+        # AMBIGUOUS -- two functions may each have their own `var v` -- so it is
+        # dropped rather than guessed at. Silence beats a false alarm.
+        typed = {}
+        ambiguous = set()
+        for rx in (local_var_re, local_decl_re):
+            for word, kind in rx.findall(src):
+                if word in typed and typed[word] != kind:
+                    ambiguous.add(word)
+                typed[word] = kind
+        for word in ambiguous:
+            typed.pop(word, None)
         for lineno, line in enumerate(src.split("\n"), 1):
             if line.lstrip().startswith("#"):
                 continue
@@ -286,10 +311,11 @@ def check(paths, classes):
                 _flag_args(problems, path, lineno, line, classes,
                            m.group(1), m.group(2), line[m.end():])
             for m in member_call_re.finditer(line):
-                cls = typed.get(m.group(1))
+                chain = [p.strip() for p in m.group(1).split(".")]
+                cls = _walk_chain(chain, typed, classes)
                 if cls:
                     _flag_args(problems, path, lineno, line, classes,
-                               cls, m.group(2), line[m.end():])
+                               cls, chain[-1], line[m.end():])
             # A call on SELF to a private helper that is not there. This is the
             # bug that keeps reaching the player: delete or rename a `_helper`
             # and every call to it still parses, still lints, and still fails
@@ -303,6 +329,21 @@ def check(paths, classes):
                     continue
                 problems.append((path, lineno, "self", method, line.strip()))
     return problems
+
+
+def _walk_chain(chain, local_types, classes):
+    """Follow `a.b.c.method` to the class `method` is actually called on.
+
+    `a` comes from a typed declaration in this file; every step after that from
+    the declared member types of the class before it. Returns None the moment a
+    link cannot be resolved, so anything uncertain is simply not checked.
+    """
+    cls = local_types.get(chain[0])
+    for step in chain[1:-1]:
+        if cls is None:
+            return None
+        cls = MEMBER_TYPES.get(cls, {}).get(step)
+    return cls
 
 
 def _flag_args(problems, path, lineno, line, classes, cls, method, rest):

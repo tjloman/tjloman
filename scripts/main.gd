@@ -850,7 +850,7 @@ func _run_smoke_test() -> void:
 	# regained AND a long stretch with no repeat of what it left over. Kindness
 	# alone will not do it, and neither will time alone.
 	var wronged := Creature.new()
-	wronged.mind.judge(0.8, 1.0, false)      # a good heart...
+	wronged.mind.judge("rescue", 1.0, false)  # a good heart...
 	wronged.trust = 10.0                     # ...and a god it cannot abide
 	wronged._begin_departure()
 
