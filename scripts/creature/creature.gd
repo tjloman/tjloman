@@ -105,6 +105,10 @@ var mind := CreatureMind.new()
 ## THE BODY: a real stomach that fills and takes time to empty, fat from
 ## overeating, and muscle earned by work. See CreatureBody.
 var body := CreatureBody.new()
+## HOW IT GETS ANYWHERE: routes planned over the shape of the land, local
+## steering around what it meets, and a memory of the ground that has given it
+## trouble before. See CreatureSteering.
+var steering := CreatureSteering.new()
 ## THE HEART: a dozen named feelings held at once, each cooling at its own rate.
 ## It learns what its own circumstances FEEL like, and reads other people by
 ## matching their plight against that — which is the whole of its empathy, and
@@ -148,7 +152,6 @@ var _look_time := 0.0      # when it next turns its head, while lounging
 var _body: Node3D
 var _label: Label3D
 var _animator: ModelAnimator = null   # non-null only for a rigged custom model
-var _walk_phase := 0.0
 
 # Appearance & expression. Procedural parts are recoloured/animated directly;
 # a custom model is driven through instance shader params ("alignment",
@@ -160,7 +163,6 @@ var _model_meshes: Array[GeometryInstance3D] = []
 var _shown_align := 999.0                  # last applied alignment (throttle)
 var _expression := "neutral"
 var _expr_time := 0.0
-var _wedge_time := 0.0             # seconds shoving forward without advancing
 var _fly_height := 0.0             # how high the flight miracle currently holds it
 var _sway_tick := 0                # throttles the push-trees-aside sweep
 
@@ -427,8 +429,8 @@ func _tick_watchdogs(delta: float) -> void:
 	# Wedged against a grove for more than a beat: give up this target now
 	# rather than grinding a huge collider into the trunks (jank AND physics
 	# lag) until STUCK_SECONDS finally trips.
-	if _wedge_time > 1.4 and state != State.SLEEPING:
-		_wedge_time = 0.0
+	if steering.wedge_time > 1.4 and state != State.SLEEPING:
+		steering.wedge_time = 0.0
 		_decide()
 	# Fell out of the world (chunk streamed away) or buried in a hillside
 	# (bad spawn, collision hiccup)? Pop back to the surface.
@@ -1547,8 +1549,8 @@ func _process_play(delta: float) -> void:
 		_apply_gravity_only(delta)
 		rotate_y(delta * 4.0)
 		if _animator == null:
-			_body.position.y = absf(sin(_walk_phase)) * 0.3
-		_walk_phase += delta * 10.0
+			_body.position.y = absf(sin(steering.walk_phase)) * 0.3
+		steering.walk_phase += delta * 10.0
 	if _cheer_time <= 0.0:
 		_cheer_time = 1.5
 		for v in get_tree().get_nodes_in_group("villagers"):
@@ -1726,48 +1728,11 @@ func _grow_by(amount: float) -> void:
 			GameState.announce("Your creature grows a little larger.")
 
 
+## Walk toward a spot, returning true once it is there. All the work — routing
+## around the shape of the land, steering past trunks, wading, getting unwedged
+## and remembering where the bad ground is — lives in CreatureSteering.
 func _move_toward(target: Vector3, speed: float, delta: float) -> bool:
-	var to_target := target - global_position
-	to_target.y = 0
-	if to_target.length() < 1.0:
-		_apply_gravity_only(delta)
-		_wedge_time = 0.0
-		return true
-	var dir := to_target.normalized()
-	# Steer around trees and rocks (not the one it's heading for). The avoid
-	# radius tracks the creature's ACTUAL size (its collider is 0.6 * scale) so
-	# a grown beast swerves wide around groves instead of ramming the trunks.
-	# skip_trees: the creature wades straight THROUGH groves (shoving them aside,
-	# see _sway_trees), steering only around solid rock.
-	dir = NavField.steer(global_position, dir, 0.6 * scale.x + 0.4, target, true)
-	# The creature WADES: water is passable but slow — half speed with
-	# its legs in the lake. (A future miracle will let it walk ON water.)
-	if not walks_on_water:
-		var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-		if world != null and world.is_underwater(global_position.x, global_position.z):
-			speed *= 0.5
-	var before := global_position
-	velocity.x = dir.x * speed
-	velocity.z = dir.z * speed
-	velocity.y -= GRAVITY * delta
-	move_and_slide()
-	# Wedged? If it's pushing but barely advancing, RELAX the drive so a
-	# giant collider stops grinding into the trunks (the source of the jank
-	# and the physics-contact lag); the watchdog re-decides shortly after.
-	var advanced := Vector2(global_position.x - before.x, global_position.z - before.z).length()
-	if is_on_wall() and advanced < speed * delta * 0.3:
-		_wedge_time += delta
-		if _wedge_time > 0.35:
-			velocity.x = 0.0  # stop shoving the trunk (kills the jank and lag)
-			velocity.z = 0.0
-	else:
-		_wedge_time = 0.0
-	# Body faces +Z; look_at aims -Z. Look away from travel to face it.
-	look_at(global_position - Vector3(dir.x, 0, dir.z), Vector3.UP)
-	_walk_phase += delta * 9.0
-	# Moving under its own power is exercise — more so while carrying something.
-	body.exert(0.25 if _carried == null else 0.7, delta)
-	return false
+	return steering.advance(self, target, speed, delta)
 
 
 func _apply_gravity_only(delta: float) -> void:
@@ -1780,8 +1745,8 @@ func _apply_gravity_only(delta: float) -> void:
 func _animate_waddle(_delta: float) -> void:
 	var moving := Vector2(velocity.x, velocity.z).length() > 0.5
 	if moving:
-		_body.position.y = absf(sin(_walk_phase)) * 0.15
-		_body.rotation_degrees.z = sin(_walk_phase) * 6.0
+		_body.position.y = absf(sin(steering.walk_phase)) * 0.15
+		_body.rotation_degrees.z = sin(steering.walk_phase) * 6.0
 	elif state != State.SLEEPING and state != State.PLAY:
 		_body.position.y = lerpf(_body.position.y, 0.0, 0.2)
 		_body.rotation_degrees.z = lerpf(_body.rotation_degrees.z, 0.0, 0.2)
@@ -2159,6 +2124,12 @@ func grant_strength(seconds: float) -> void:
 	GameState.announce("Your creature swells with borrowed might!")
 
 
+## Is it carrying something? Hauling is harder work than walking, and the
+## locomotion module needs to know without reaching into the state machine.
+func is_laden() -> bool:
+	return _carried != null and is_instance_valid(_carried)
+
+
 ## Can it actually lift this? A sapling needs little; a forest giant needs real
 ## muscle — earned by work, or lent by the Strength miracle.
 func can_lift(thing: Node3D) -> bool:
@@ -2392,6 +2363,7 @@ func to_dict() -> Dictionary:
 		"mind": mind.to_dict(),
 		"body": body.to_dict(),
 		"heart": heart.to_dict(),
+		"trouble": steering.to_dict(),
 	}
 
 
@@ -2418,6 +2390,7 @@ func from_dict(data: Dictionary) -> void:
 	mind.from_dict(data.get("mind", {}))
 	body.from_dict(data.get("body", {}))
 	heart.from_dict(data.get("heart", {}))
+	steering.from_dict(data.get("trouble", {}))
 	morality = mind.temperament
 	scale = Vector3.ONE * lerpf(MIN_SCALE, MAX_SCALE, growth)
 	_shown_align = 999.0   # force the hide/eyes to re-colour for the restored soul

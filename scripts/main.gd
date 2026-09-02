@@ -575,6 +575,26 @@ func _run_smoke_test() -> void:
 		print("SMOKE TEST: compass — %-28s -> %-30s (good/evil %+.0f) %s" % [
 			life, soul.character(), soul.temperament, str(soul.character_account(2))])
 
+	# PATHFINDING. Local steering alone walks into a bay and stays there. A route
+	# is planned over the shape of the land first — and must actually come back
+	# with something for a walk across the island, cost almost nothing the second
+	# time (the terrain cache), and bend around ground it has got stuck in.
+	var here := creature.global_position
+	var yonder := here + Vector3(140.0, 0.0, 110.0)
+	var began := Time.get_ticks_usec()
+	var way := NavField.route(here, yonder, 2.0)
+	var cold := Time.get_ticks_usec() - began
+	began = Time.get_ticks_usec()
+	var again := NavField.route(here, yonder, 2.0)
+	print("SMOKE TEST: routing — %d waypoints over %.0fm, %.1fms cold, %.1fms warm | %s" % [
+		way.size(), here.distance_to(yonder), cold / 1000.0,
+		(Time.get_ticks_usec() - began) / 1000.0, NavField.routing_report()])
+	creature.steering.remember_trouble(here + Vector3(40.0, 0.0, 30.0))
+	creature.steering.remember_trouble(here + Vector3(46.0, 0.0, 36.0))
+	var detour := NavField.route(here, yonder, 2.0, creature.steering.shunned())
+	print("SMOKE TEST: routing — plain route %d waypoints; shunning %d bad places, %d" % [
+		again.size(), creature.steering.trouble_spots(), detour.size()])
+
 	# THE HEART, AND EMPATHY BOUGHT WITH EXPERIENCE. A creature reads other
 	# people by matching their plight against what those same circumstances have
 	# felt like to IT — so one that has never gone hungry has nothing to

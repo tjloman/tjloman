@@ -3,6 +3,5 @@ max-line-length: 120
 max-returns: 40
 max-public-methods: 56
 # creature.gd is the state machine; its modules (mind, beliefs, ethos, heart,
-# body, eyes, look) are split out. Raised while the heart landed; the next pass
-# lifts locomotion into its own module and this comes back down.
-max-file-lines: 2500
+# body, steering, eyes, look) are all split out of it.
+max-file-lines: 2400
