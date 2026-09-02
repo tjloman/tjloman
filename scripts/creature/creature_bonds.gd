@@ -45,8 +45,13 @@ var _last := ""                # who the next outcome is credited to
 ## What to call somebody, stably enough to survive a save. Only PEOPLE get
 ## names: to this creature a sheep is a sheep, and that is not a failing of
 ## its memory but a fair description of a sheep.
+## Validity is checked FIRST: a ballot can carry a target that was freed between
+## the creature perceiving it and choosing it, and asking a dead object what
+## class it is throws.
 static func name_of(who: Object) -> String:
-	if who is Villager and is_instance_valid(who):
+	if who == null or not is_instance_valid(who):
+		return ""
+	if who is Villager:
 		return String((who as Villager).villager_name)
 	return ""
 
