@@ -143,6 +143,15 @@ var beliefs := CreatureBeliefs.new()
 ## it can adore one shepherd and avoid another while holding no opinion at all
 ## about shepherds. See CreatureBonds.
 var bonds := CreatureBonds.new()
+## WHAT IT THINKS WOULD HAPPEN NEXT. The only part of the mind that faces
+## forwards: it learns what deeds DO to a situation, imagines the situation each
+## option would leave it in, and asks its own heart how a moment like that would
+## feel. See CreatureForesight.
+var foresight := CreatureForesight.new()
+
+## ITS HEART, handed over by the creature at birth. The mind needs it for one
+## thing only: to ask how an imagined future would FEEL (see CreatureForesight).
+var heart: CreatureHeart = null
 
 var _last_judged := 0       # ticks (ms) of the last judgement, for pacing
 var _sated := {}            # "verb|type" -> how thoroughly sick of it it is
@@ -259,17 +268,26 @@ func choose(options: Array, drive: Dictionary, ctx := {},
 	var best_v := -INF
 	var scored := []
 	for opt: Dictionary in options:
+		var key := _key(opt["verb"], opt.get("type", "none"))
 		var v := value(opt["verb"], opt.get("type", "none"), drive, ctx)
 		# WHO it would be dealing with, on top of WHAT they are. This is the only
 		# part of the ballot that is about a particular person rather than a kind.
 		v += bonds.regard_for(opt.get("target", null))
+		# AND WHERE IT WOULD LEAVE IT. Everything above is memory of how the deed
+		# has gone; this is the one term that looks at the situation the deed
+		# would CREATE and asks the heart how a moment like that feels. It is
+		# silent for anything the creature has not seen play out a few times.
+		v += foresight.prospect(key, ctx, heart, beliefs) * CreatureForesight.WEIGHT
 		scored.append(v)
 		best_v = maxf(best_v, v)
 	# Softmax sample (temperature EXPLORE), numerically stabilised by best_v.
 	var total := 0.0
 	var weights := []
+	# A creature whose picture of the world just failed casts about more widely.
+	# Surprise is the only thing that reopens a settled mind.
+	var temperature := EXPLORE * (1.0 + foresight.restlessness())
 	for v: float in scored:
-		var w: float = exp((v - best_v) / EXPLORE)
+		var w: float = exp((v - best_v) / temperature)
 		weights.append(w)
 		total += w
 	var roll := randf() * total
@@ -283,6 +301,8 @@ func choose(options: Array, drive: Dictionary, ctx := {},
 	_last_verb = chosen["verb"]
 	_last_key = _key(chosen["verb"], chosen.get("type", "none"))
 	bonds.dealing_with(chosen.get("target", null))
+	# Commit to a guess about what this will do. The next decision checks it.
+	foresight.expect(_last_key, ctx)
 	# Remember the deed AND the circumstances, so a later consequence can be
 	# traced back to it.
 	beliefs.remember(_last_key, ctx, where, felt)
@@ -416,7 +436,8 @@ func known_miracles() -> Array:
 ## WHAT IT EXPECTS OF THE WORLD, and which stretches of country it has feelings
 ## about — the half of its picture that is not about its own deeds at all.
 func world_picture() -> Array:
-	var said := beliefs.omens()
+	var said := foresight.expectations()
+	said.append_array(beliefs.omens())
 	said.append_array(beliefs.haunts())
 	said.append_array(bonds.attachments())
 	return said
@@ -468,6 +489,7 @@ func to_dict() -> Dictionary:
 		"ethos": ethos.to_dict(),
 		"beliefs": beliefs.to_dict(),
 		"bonds": bonds.to_dict(),
+		"foresight": foresight.to_dict(),
 	}
 
 
@@ -487,4 +509,5 @@ func from_dict(data: Dictionary) -> void:
 	_sated.clear()
 	beliefs.from_dict(data.get("beliefs", {}))
 	bonds.from_dict(data.get("bonds", {}))
+	foresight.from_dict(data.get("foresight", {}))
 

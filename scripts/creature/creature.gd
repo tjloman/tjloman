@@ -114,6 +114,8 @@ var steering := CreatureSteering.new()
 ## matching their plight against that — which is the whole of its empathy, and
 ## why a creature that has never gone hungry cannot pity a starving man.
 var heart := CreatureHeart.new()
+# The mind borrows the heart for one purpose only: to ask how an imagined
+# future would FEEL. Foresight here is empathy aimed forwards.
 ## Learned dread, raised by pain and fright. High fear makes fleeing attractive,
 ## so a creature that keeps getting hurt near people can become a recluse.
 var fear := 0.0
@@ -168,6 +170,7 @@ var _sway_tick := 0                # throttles the push-trees-aside sweep
 
 
 func _ready() -> void:
+	mind.heart = heart
 	add_to_group("creature")
 	collision_layer = 2
 	collision_mask = 1
@@ -390,6 +393,7 @@ func _tick_feelings(delta: float) -> void:
 	# THE HEART cools at its own rates, and what it holds drags mood with it —
 	# so mood is downstream of feeling now rather than a second set of books.
 	heart.settle(delta)
+	mind.foresight.cool(delta)
 	mood = clampf(mood + heart.balance() * 0.35 * delta, 0.0, 100.0)
 	# Attention fades with neglect — but a hand hovering close-by is
 	# magnetic: the creature watches it, and stays ready to learn or catch.
@@ -551,6 +555,11 @@ func _decide() -> void:
 	# The situation is read once and used three times: for what it wants, for
 	# what it expects of the moment, and for what its beliefs are learned against.
 	var here := _circumstances()
+	# CHECK WHAT IT THOUGHT WOULD HAPPEN. The last deed made a prediction about
+	# the situation it would leave behind; this is where the world answers, the
+	# model is corrected, and being badly wrong registers as SURPRISE.
+	if mind.foresight.settle(here) > 0.35:
+		heart.stir("wonder", mind.foresight.surprise * 0.5)
 	var drive := {
 		# WHAT IT EXPECTS of a moment like this, and of this ground — a creature
 		# that has learned nights go badly is uneasy at dusk before anything has

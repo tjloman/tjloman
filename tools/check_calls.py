@@ -164,6 +164,32 @@ def check_escapes(files):
     return problems
 
 
+def check_format_precedence(files):
+    """Find `"a" + "b" % [args]` — a crash that gdparse and gdlint both pass.
+
+    `%` binds tighter than `+` in GDScript, so a format string split across
+    lines with `+` formats ONLY THE LAST PIECE, and every placeholder in the
+    earlier pieces goes unfilled. Godot then raises "not all arguments
+    converted during string formatting" the moment that line runs. It has
+    already cost this project two crashes, and it is invisible to both the
+    parser and the linter because the code is perfectly valid.
+
+    The fix is always the same: wrap the whole concatenation in parentheses.
+    """
+    problems = []
+    # A continuation line that starts with `+ "` and ends with a `%` format.
+    joined = re.compile(r'^\s*\+\s*"')
+    formatted = re.compile(r'"\s*%\s*[\[(]')
+    for path in files:
+        with open(path, encoding="utf-8") as fh:
+            for lineno, line in enumerate(fh, 1):
+                if line.lstrip().startswith("#"):
+                    continue
+                if joined.match(line) and formatted.search(line):
+                    problems.append((path, lineno, line.strip()))
+    return problems
+
+
 def main():
     root = "scripts"
     targets = sys.argv[1:] or [root]
@@ -182,7 +208,12 @@ def main():
     for path, lineno, seq, line in escapes:
         print("%s:%d: invalid string escape '%s' (Godot rejects it; gdparse does not)"
               "\n    %s" % (path, lineno, seq, line))
-    total = len(problems) + len(escapes)
+    formats = check_format_precedence(files)
+    for path, lineno, line in formats:
+        print("%s:%d: '%%' binds tighter than '+', so only the LAST piece of this "
+              "string is formatted — wrap the whole concatenation in parentheses"
+              "\n    %s" % (path, lineno, line))
+    total = len(problems) + len(escapes) + len(formats)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

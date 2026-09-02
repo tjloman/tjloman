@@ -599,6 +599,42 @@ func _run_smoke_test() -> void:
 		String(jogged.get("felt", "nothing")), float(jogged.get("strength", 0.0)),
 		lived.episodes.size()])
 
+	# FORESIGHT. The one part of the mind that faces forwards: it learns what
+	# deeds DO to a situation, imagines the situation each option would leave it
+	# in, and asks its own heart how a moment like that would feel. So a creature
+	# that has never been mobbed cannot picture being mobbed — and walks in.
+	var seer := CreatureForesight.new()
+	var quiet := {"in_village": 1.0, "crowd": 0.4, "hungry": 0.7}
+	var after_smashing := {"in_village": 1.0, "crowd": 0.4, "hungry": 0.7,
+		"kin_afraid": 1.0, "armed": 0.9}
+	for i in 12:
+		seer.expect("smash|house", quiet)
+		seer.settle(after_smashing)
+		seer.expect("tend|farm", quiet)
+		seer.settle({"in_village": 1.0, "crowd": 0.4, "hungry": 0.7, "kin_glad": 0.9})
+	var pictured := seer.imagine("smash|house", quiet)
+	print("SMOKE TEST: foresight — it pictures smashing a house leaving kin_afraid %.2f, armed %.2f" % [
+		float(pictured.get("kin_afraid", 0.0)), float(pictured.get("armed", 0.0))])
+	print("SMOKE TEST: foresight — %s" % str(seer.expectations(2)))
+	# The SAME model, read by two different lives. Only the one that has been
+	# mobbed can feel what it is imagining.
+	var naive := CreatureHeart.new()
+	var burnt := CreatureHeart.new()
+	for i in 40:
+		burnt.stir("dread", 1.0)
+		burnt.stir("pain", 0.8)
+		burnt.learn({"kin_afraid": 1.0, "armed": 1.0})
+	print(("SMOKE TEST: foresight — smashing looks like %+.2f to a sheltered creature, "
+		+ "%+.2f to one that has been mobbed for it") % [
+			seer.prospect("smash|house", quiet, naive, null),
+			seer.prospect("smash|house", quiet, burnt, null)])
+	# And being wrong is worth something: a failed prediction widens its search.
+	seer.expect("tend|farm", quiet)
+	seer.settle({"in_village": 1.0, "predator": 1.0, "afraid": 1.0, "hurt": 1.0})
+	print(("SMOKE TEST: foresight — the world confounds it: surprise %.2f, "
+		+ "exploration widened by %d%%, it can see %d%% of its deeds coming") % [
+			seer.surprise, int(seer.restlessness() * 100.0), int(seer.reach() * 100.0)])
+
 	# KNOWING PEOPLE. Everything else it learns is about KINDS; this is the one
 	# ledger that is about individuals, and it must be able to hold two opposite
 	# opinions of two people of exactly the same kind.
