@@ -1,0 +1,197 @@
+<title>Rune Legibility</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+:root{
+  --ground:#e6e9ec; --slab:#fbfcfd; --slab-2:#eef1f4;
+  --ink:#12161c; --ink-2:#39424f; --muted:#66717f; --faint:#98a2ae;
+  --rule:#cfd6de; --hair:#e2e7ec;
+  --brass:#7d5f16; --brass-soft:#f0e7d0;
+  --safe:#1b6046; --safe-soft:#d9ece3;
+  --clash:#93271f; --clash-soft:#f6e2df;
+  --chalk:#12161c;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0e1116; --slab:#161b22; --slab-2:#12171e;
+    --ink:#e2e8f0; --ink-2:#b3bdc9; --muted:#8391a1; --faint:#5d6a79;
+    --rule:#262f3a; --hair:#1c232c;
+    --brass:#d7ae55; --brass-soft:#2b2415;
+    --safe:#57c496; --safe-soft:#11291f;
+    --clash:#e8776a; --clash-soft:#2c1614;
+    --chalk:#e7edf4;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0e1116; --slab:#161b22; --slab-2:#12171e;
+  --ink:#e2e8f0; --ink-2:#b3bdc9; --muted:#8391a1; --faint:#5d6a79;
+  --rule:#262f3a; --hair:#1c232c;
+  --brass:#d7ae55; --brass-soft:#2b2415;
+  --safe:#57c496; --safe-soft:#11291f;
+  --clash:#e8776a; --clash-soft:#2c1614;
+  --chalk:#e7edf4;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);margin:0;
+  font-family:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1140px;margin:0 auto;padding:44px 24px 90px}
+h1,h2,h3{font-family:Newsreader,Georgia,"Times New Roman",serif;
+  font-weight:500;text-wrap:balance;margin:0}
+h1{font-size:clamp(34px,5vw,52px);line-height:1.06;letter-spacing:-.015em}
+h2{font-size:25px;letter-spacing:-.01em}
+h3{font-size:17px;font-weight:600}
+.eyebrow{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--brass);margin:0 0 12px}
+.lede{font-family:Newsreader,Georgia,serif;font-size:20px;line-height:1.5;
+  color:var(--ink-2);max-width:60ch;margin:18px 0 0;font-style:italic}
+.note{color:var(--muted);font-size:14px;max-width:66ch;margin:14px 0 0}
+header{border-bottom:2px solid var(--ink);padding-bottom:26px}
+section{margin-top:52px}
+.sec-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+  border-bottom:1px solid var(--rule);padding-bottom:9px;margin-bottom:20px}
+.sec-head .count{font-family:"JetBrains Mono",monospace;font-size:11.5px;
+  color:var(--faint);letter-spacing:.06em;margin-left:auto}
+/* --- the chart: distance to nearest rune, against the match threshold --- */
+.chart{background:var(--slab);border:1px solid var(--rule);border-radius:3px;
+  padding:20px 22px 14px}
+.row{display:grid;grid-template-columns:104px 62px 1fr;gap:14px;align-items:center;
+  padding:5px 0;border-bottom:1px solid var(--hair)}
+.row:last-child{border-bottom:0}
+.row .nm{font-family:"JetBrains Mono",monospace;font-size:12.5px;font-weight:500}
+.row .gl{display:flex;justify-content:center}
+.row svg{width:40px;height:40px}
+.row polyline{fill:none;stroke:var(--chalk);stroke-width:5.5;
+  stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.track{position:relative;height:26px}
+.bar{position:absolute;left:0;top:5px;height:16px;border-radius:2px;
+  background:var(--clash-soft);border:1px solid var(--clash)}
+.bar.ok{background:var(--safe-soft);border-color:var(--safe)}
+.thresh{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink);opacity:.75}
+.val{position:absolute;top:4px;font-family:"JetBrains Mono",monospace;
+  font-size:11.5px;font-variant-numeric:tabular-nums;color:var(--ink-2);white-space:nowrap}
+.near{color:var(--faint);font-size:11px}
+.axis{display:flex;justify-content:space-between;font-family:"JetBrains Mono",monospace;
+  font-size:10.5px;color:var(--faint);margin-top:8px;padding-left:180px}
+/* --- specimen strip of the ten runes in use --- */
+.strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(98px,1fr));gap:10px}
+.spec{background:var(--slab);border:1px solid var(--rule);border-radius:3px;
+  padding:12px 8px 9px;text-align:center}
+.spec svg{width:52px;height:52px}
+.spec polyline{fill:none;stroke:var(--chalk);stroke-width:6;
+  stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.spec .r{font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:600;
+  display:block;margin-top:4px}
+.spec .s{font-size:10.5px;color:var(--faint)}
+.spec.bad{border-color:var(--clash);background:var(--clash-soft)}
+/* --- the two failure tables --- */
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+@media(max-width:760px){.pair{grid-template-columns:1fr}.axis{padding-left:0}
+  .row{grid-template-columns:88px 48px 1fr;gap:9px}}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-family:"JetBrains Mono",monospace;font-size:10.5px;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--faint);
+  font-weight:500;padding:0 0 7px;border-bottom:1px solid var(--rule)}
+td{padding:7px 0;border-bottom:1px solid var(--hair);vertical-align:baseline}
+td.n{font-family:"JetBrains Mono",monospace;font-variant-numeric:tabular-nums;
+  text-align:right;width:58px}
+tr.fail td{color:var(--clash)}
+tr.fail td.n{font-weight:700}
+td .to{color:var(--faint);font-size:12px}
+.callout{background:var(--slab);border-left:3px solid var(--brass);
+  padding:18px 22px;border-radius:0 3px 3px 0}
+.callout p{margin:0 0 10px;max-width:64ch}
+.callout p:last-child{margin-bottom:0}
+.callout b{color:var(--brass)}
+footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--rule);
+  color:var(--faint);font-size:13px}
+code{font-family:"JetBrains Mono",monospace;font-size:.9em;
+  background:var(--slab-2);padding:1px 5px;border-radius:2px}
+</style>
+
+<div class="wrap">
+<header>
+  <p class="eyebrow">Hand of the Heavens &middot; input calibration</p>
+  <h1>Rune Legibility</h1>
+  <p class="lede">Sixteen candidate glyphs, measured against the ten already in use
+  &mdash; and the two runes that are failing today.</p>
+  <p class="note">Every number here comes from <code>tools/rune_legibility.py</code>,
+  a faithful port of the game&rsquo;s own recognizer run against strokes drawn with a
+  hand&rsquo;s wobble and reported by a digitizer that is losing sample rate and
+  resolution. Nothing is an opinion about how a shape feels to draw.</p>
+</header>
+
+<section>
+  <div class="sec-head"><h2>The ten in use</h2>
+    <span class="count">worst survival across healthy / hot / throttled</span></div>
+  <p class="note">Eight of the ten are unshakeable. The two in red are the subject of
+  this page: <b>life</b> collides with its neighbours on a perfectly healthy screen,
+  and <b>fury</b> is the only rune that breaks thermally.</p>
+  <div class="strip"><div class="spec"><svg viewBox="0 0 100 100" role="img" aria-label="force stroke"><polyline points="8.0,8.0 8.0,9.4 8.0,10.8 8.0,12.3 8.0,13.7 8.0,15.1 8.0,16.5 8.0,18.0 8.0,19.4 8.0,20.8 8.0,22.2 8.0,23.7 8.0,25.1 8.0,26.5 8.0,27.9 8.0,29.4 8.0,30.8 8.0,32.2 8.0,33.6 8.0,35.1 8.0,36.5 8.0,37.9 8.0,39.3 8.0,40.7 8.0,42.2 8.0,43.6 8.0,45.0 8.0,46.4 8.0,47.9 8.0,49.3 8.0,50.7 8.0,52.1 8.0,53.6 8.0,55.0 8.0,56.4 8.0,57.8 8.0,59.3 8.0,60.7 8.0,62.1 8.0,63.5 8.0,64.9 8.0,66.4 8.0,67.8 8.0,69.2 8.0,70.6 8.0,72.1 8.0,73.5 8.0,74.9 8.0,76.3 8.0,77.8 8.0,79.2 8.0,80.6 8.0,82.0 8.0,83.5 8.0,84.9 8.0,86.3 8.0,87.7 8.0,89.2 8.0,90.6 8.0,92.0"/></svg><span class="r">force</span><span class="s">100% at worst</span></div><div class="spec"><svg viewBox="0 0 100 100" role="img" aria-label="earth stroke"><polyline points="8.0,8.0 9.4,8.0 10.8,8.0 12.3,8.0 13.7,8.0 15.1,8.0 16.5,8.0 18.0,8.0 19.4,8.0 20.8,8.0 22.2,8.0 23.7,8.0 25.1,8.0 26.5,8.0 27.9,8.0 29.4,8.0 30.8,8.0 32.2,8.0 33.6,8.0 35.1,8.0 36.5,8.0 37.9,8.0 39.3,8.0 40.7,8.0 42.2,8.0 43.6,8.0 45.0,8.0 46.4,8.0 47.9,8.0 49.3,8.0 50.7,8.0 52.1,8.0 53.6,8.0 55.0,8.0 56.4,8.0 57.8,8.0 59.3,8.0 60.7,8.0 62.1,8.0 63.5,8.0 64.9,8.0 66.4,8.0 67.8,8.0 69.2,8.0 70.6,8.0 72.1,8.0 73.5,8.0 74.9,8.0 76.3,8.0 77.8,8.0 79.2,8.0 80.6,8.0 82.0,8.0 83.5,8.0 84.9,8.0 86.3,8.0 87.7,8.0 89.2,8.0 90.6,8.0 92.0,8.0"/></svg><span class="r">earth</span><span class="s">100% at worst</span></div><div class="spec"><svg viewBox="0 0 100 100" role="img" aria-label="fire stroke"><polyline points="8.0,8.0 9.4,9.4 10.8,10.7 12.3,12.1 13.7,13.5 15.1,14.8 16.5,16.2 18.0,17.6 19.4,19.0 20.8,20.3 22.2,21.7 23.7,23.1 25.1,24.4 26.5,25.8 27.9,27.2 29.4,28.5 30.8,29.9 32.2,31.3 33.6,32.6 35.1,34.0 36.5,35.4 37.9,36.7 39.3,38.1 40.7,39.5 42.2,40.9 43.6,42.2 45.0,43.6 46.4,45.0 47.9,46.3 49.3,47.7 50.7,49.1 52.1,50.4 53.6,51.8 55.0,53.2 56.4,54.5 57.8,55.9 59.3,57.3 60.7,58.7 62.1,60.0 63.5,61.4 64.9,62.8 66.4,64.1 67.8,65.5 69.2,66.9 70.6,68.2 72.1,69.6 73.5,71.0 74.9,72.3 76.3,73.7 77.8,75.1 79.2,76.4 80.6,77.8 82.0,79.2 83.5,80.6 84.9,81.9 86.3,83.3 87.7,84.7 89.2,86.0 90.6,87.4 92.0,88.8"/></svg><span class="r">fire</span><span class="s">100% at worst</span></div><div class="spec bad"><svg viewBox="0 0 100 100" role="img" aria-label="life stroke"><polyline points="92.0,50.0 91.7,54.5 91.0,58.9 89.8,63.2 88.2,67.4 86.2,71.3 83.7,75.1 80.8,78.5 77.6,81.6 74.1,84.4 70.3,86.8 66.3,88.7 62.1,90.2 57.7,91.3 53.3,91.9 48.8,92.0 44.4,91.6 40.0,90.8 35.7,89.5 31.6,87.8 27.7,85.6 24.0,83.0 20.6,80.1 17.6,76.8 14.9,73.2 12.7,69.4 10.8,65.3 9.4,61.1 8.5,56.7 8.0,52.2 8.0,47.8 8.5,43.3 9.4,38.9 10.8,34.7 12.7,30.6 14.9,26.8 17.6,23.2 20.6,19.9 24.0,17.0 27.7,14.4 31.6,12.2 35.7,10.5 40.0,9.2 44.4,8.4 48.8,8.0 53.3,8.1 57.7,8.7 62.1,9.8 66.3,11.3 70.3,13.2 74.1,15.6 77.6,18.4 80.8,21.5 83.7,24.9 86.2,28.7 88.2,32.6 89.8,36.8 91.0,41.1 91.7,45.5 92.0,50.0"/></svg><span class="r">life</span><span class="s">100% at worst</span></div><div class="spec"><svg viewBox="0 0 100 100" role="img" aria-label="air stroke"><polyline points="60.2,42.0 60.7,43.8 60.5,45.8 59.8,47.8 58.4,49.7 56.4,51.2 53.8,52.2 50.9,52.4 48.0,51.8 45.1,50.3 42.6,47.9 40.8,44.9 39.8,41.2 39.9,37.3 41.1,33.3 43.4,29.7 46.7,26.7 50.8,24.6 55.6,23.7 60.5,24.1 65.4,25.9 69.8,29.0 73.2,33.3 75.5,38.5 76.4,44.4 75.6,50.4 73.2,56.1 69.2,61.2 63.8,65.1 57.5,67.5 50.6,68.2 43.5,67.0 36.9,63.9 31.2,59.0 26.9,52.6 24.4,45.2 24.0,37.1 25.7,29.1 29.6,21.6 35.4,15.3 42.8,10.7 51.4,8.2 60.5,8.0 69.5,10.3 77.8,14.9 84.6,21.7 89.5,30.3 92.0,40.0 91.9,50.1 89.0,60.1 83.5,69.1 75.7,76.5 66.0,81.6 55.2,84.0 44.0,83.5 33.1,79.9 23.4,73.5 15.5,64.7 10.3,53.9 8.0,42.0"/></svg><span class="r">air</span><span class="s">100% at worst</span></div><div class="spec"><svg viewBox="0 0 100 100" role="img" aria-label="calm stroke"><polyline points="60.2,50.0 60.7,48.2 60.5,46.2 59.8,44.2 58.4,42.3 56.4,40.8 53.8,39.8 50.9,39.6 48.0,40.2 45.1,41.7 42.6,44.1 40.8,47.1 39.8,50.8 39.9,54.7 41.1,58.6 43.4,62.3 46.7,65.3 50.8,67.4 55.6,68.3 60.5,67.9 65.4,66.1 69.8,63.0 73.2,58.7 75.5,53.5 76.4,47.6 75.6,41.6 73.2,35.8 69.2,30.8 63.8,26.9 57.5,24.5 50.6,23.8 43.5,25.0 36.9,28.1 31.2,33.0 26.9,39.4 24.4,46.8 24.0,54.9 25.7,62.9 29.6,70.4 35.4,76.6 42.8,81.3 51.4,83.8 60.5,84.0 69.5,81.7 77.8,77.1 84.6,70.3 89.5,61.7 92.0,52.0 91.9,41.8 89.0,31.9 83.5,22.9 75.7,15.5 66.0,10.4 55.2,8.0 44.0,8.5 33.1,12.1 23.4,18.4 15.5,27.3 10.3,38.1 8.0,50.0"/></svg><span class="r">calm</span><span class="s">100% at worst</span></div><div class="spec"><svg viewBox="0 0 100 100" role="img" aria-label="water stroke"><polyline points="8.0,33.2 9.4,35.9 10.8,38.5 12.3,41.1 13.7,43.6 15.1,46.0 16.5,48.2 18.0,50.3 19.4,52.2 20.8,53.8 22.2,55.2 23.7,56.4 25.1,57.3 26.5,58.0 27.9,58.3 29.4,58.4 30.8,58.2 32.2,57.7 33.6,56.9 35.1,55.9 36.5,54.6 37.9,53.0 39.3,51.2 40.7,49.3 42.2,47.1 43.6,44.8 45.0,42.4 46.4,39.8 47.9,37.2 49.3,34.5 50.7,31.8 52.1,29.2 53.6,26.6 55.0,24.0 56.4,21.6 57.8,19.3 59.3,17.1 60.7,15.1 62.1,13.4 63.5,11.8 64.9,10.5 66.4,9.5 67.8,8.7 69.2,8.2 70.6,8.0 72.1,8.1 73.5,8.4 74.9,9.1 76.3,10.0 77.8,11.1 79.2,12.6 80.6,14.2 82.0,16.1 83.5,18.2 84.9,20.4 86.3,22.8 87.7,25.3 89.2,27.9 90.6,30.5 92.0,33.2"/></svg><span class="r">water</span><span class="s">100% at worst</span></div><div class="spec bad"><svg viewBox="0 0 100 100" role="img" aria-label="fury stroke"><polyline points="8.0,52.8 9.4,49.0 10.8,45.2 12.3,41.4 13.7,37.6 15.1,33.8 16.5,30.8 18.0,34.6 19.4,38.4 20.8,42.2 22.2,46.0 23.7,49.8 25.1,8.8 26.5,12.6 27.9,16.4 29.4,20.1 30.8,23.9 32.2,27.7 33.6,29.3 35.1,25.5 36.5,21.7 37.9,17.9 39.3,14.1 40.7,10.3 42.2,51.3 43.6,47.5 45.0,43.7 46.4,39.9 47.9,36.1 49.3,32.3 50.7,32.3 52.1,36.1 53.6,39.9 55.0,43.7 56.4,47.5 57.8,51.3 59.3,10.3 60.7,14.1 62.1,17.9 63.5,21.7 64.9,25.5 66.4,29.3 67.8,27.7 69.2,23.9 70.6,20.1 72.1,16.4 73.5,12.6 74.9,8.8 76.3,49.8 77.8,46.0 79.2,42.2 80.6,38.4 82.0,34.6 83.5,30.8 84.9,33.8 86.3,37.6 87.7,41.4 89.2,45.2 90.6,49.0 92.0,8.0"/></svg><span class="r">fury</span><span class="s">73% at worst</span></div><div class="spec"><svg viewBox="0 0 100 100" role="img" aria-label="sky stroke"><polyline points="8.0,66.5 9.4,64.5 10.8,62.5 12.3,60.4 13.7,58.4 15.1,56.4 16.5,54.4 18.0,52.4 19.4,50.4 20.8,48.3 22.2,46.3 23.7,44.3 25.1,42.3 26.5,40.3 27.9,38.3 29.4,36.2 30.8,34.2 32.2,32.2 33.6,30.2 35.1,28.2 36.5,26.2 37.9,24.1 39.3,22.1 40.7,20.1 42.2,18.1 43.6,16.1 45.0,14.1 46.4,12.0 47.9,10.0 49.3,8.0 50.7,8.0 52.1,10.0 53.6,12.0 55.0,14.1 56.4,16.1 57.8,18.1 59.3,20.1 60.7,22.1 62.1,24.1 63.5,26.2 64.9,28.2 66.4,30.2 67.8,32.2 69.2,34.2 70.6,36.2 72.1,38.3 73.5,40.3 74.9,42.3 76.3,44.3 77.8,46.3 79.2,48.3 80.6,50.4 82.0,52.4 83.5,54.4 84.9,56.4 86.3,58.4 87.7,60.4 89.2,62.5 90.6,64.5 92.0,66.5"/></svg><span class="r">sky</span><span class="s">100% at worst</span></div><div class="spec"><svg viewBox="0 0 100 100" role="img" aria-label="ward stroke"><polyline points="8.0,43.9 8.4,41.9 8.8,39.9 9.4,37.9 10.0,36.0 10.8,34.1 11.6,32.2 12.5,30.4 13.5,28.6 14.6,26.9 15.8,25.2 17.0,23.6 18.4,22.1 19.8,20.6 21.2,19.2 22.8,17.8 24.4,16.6 26.0,15.4 27.7,14.3 29.5,13.3 31.3,12.3 33.2,11.5 35.0,10.7 37.0,10.0 38.9,9.5 40.9,9.0 42.9,8.6 44.9,8.3 46.9,8.1 49.0,8.0 51.0,8.0 53.1,8.1 55.1,8.3 57.1,8.6 59.1,9.0 61.1,9.5 63.0,10.0 65.0,10.7 66.8,11.5 68.7,12.3 70.5,13.3 72.3,14.3 74.0,15.4 75.6,16.6 77.2,17.8 78.8,19.2 80.2,20.6 81.6,22.1 83.0,23.6 84.2,25.2 85.4,26.9 86.5,28.6 87.5,30.4 88.4,32.2 89.2,34.1 90.0,36.0 90.6,37.9 91.2,39.9 91.6,41.9 92.0,43.9"/></svg><span class="r">ward</span><span class="s">100% at worst</span></div></div>
+</section>
+
+<section>
+  <div class="sec-head"><h2>What is actually wrong</h2></div>
+  <div class="pair">
+    <div>
+      <h3>Life &mdash; a hand does not close a circle</h3>
+      <p class="note">Healthy screen throughout. Only the sweep and the roundness vary,
+      never the orientation.</p>
+      <table><thead><tr><th>How it was drawn</th><th class="n">Life</th><th>Reads as</th></tr></thead><tbody><tr><td>closed and round</td><td class="n">100%</td><td class="to">&mdash;</td></tr><tr><td>lifted early, 85%</td><td class="n">80%</td><td class="to">caret</td></tr><tr class="fail"><td>lifted early, 75%</td><td class="n">0%</td><td class="to">wave / water</td></tr><tr class="fail"><td>overshot, 115%</td><td class="n">0%</td><td class="to">rev_spiral / calm</td></tr><tr class="fail"><td>overshot, 130%</td><td class="n">0%</td><td class="to">rev_spiral / calm</td></tr><tr><td>narrow oval</td><td class="n">81%</td><td class="to">arc / ward</td></tr><tr><td>small ring</td><td class="n">100%</td><td class="to">&mdash;</td></tr></tbody></table>
+      <p class="note">Lift a quarter early and it is <b>water</b>. Overshoot by a sixth
+      and it is <b>calm</b>. All three are tier&nbsp;1 &mdash; the first runes a player
+      is ever taught are the ones that collide.</p>
+    </div>
+    <div>
+      <h3>Fury &mdash; teeth stop being sampled</h3>
+      <p class="note">The same drawing every time. Only the digitizer degrades, the way
+      a hot or nearly-flat phone degrades it.</p>
+      <table><thead><tr><th>Device</th><th class="n">Fury</th><th>Reads as</th></tr></thead><tbody><tr><td>healthy <span class="to">90 pts, no grid</span></td><td class="n">100%</td><td class="to">&mdash;</td></tr><tr><td>warm <span class="to">45 pts, 4px</span></td><td class="n">100%</td><td class="to">&mdash;</td></tr><tr><td>hot <span class="to">24 pts, 8px</span></td><td class="n">100%</td><td class="to">&mdash;</td></tr><tr class="fail"><td>throttled <span class="to">14 pts, 14px</span></td><td class="n">63%</td><td class="to">earth</td></tr><tr class="fail"><td>worst <span class="to">10 pts, 20px</span></td><td class="n">70%</td><td class="to">earth</td></tr></tbody></table>
+      <p class="note">It holds perfectly down to 24 samples, then collapses into a plain
+      horizontal line &mdash; <b>earth</b>. And <code>earth&nbsp;+&nbsp;fury</code> is the
+      earthquake, so on a hot phone asking the earth to convulse plants a wood instead.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><h2>Sixteen candidates</h2>
+    <span class="count">distance to the nearest rune already in use</span></div>
+  <p class="note">A stroke is claimed by whichever reference drawing it sits nearest to,
+  and anything within <b>68</b> of an existing rune will sometimes be read as that rune
+  instead. So the threshold line is the whole test: a candidate has to clear it to be
+  usable at all. Sorted by how much room it has.</p>
+  <div class="chart"><div class="row"><span class="nm">box<br><span class="near">closed square</span></span><span class="gl"><svg viewBox="0 0 100 100" role="img" aria-label="box stroke"><polyline points="8.0,8.0 13.7,8.0 19.4,8.0 25.1,8.0 30.8,8.0 36.5,8.0 42.2,8.0 47.9,8.0 53.6,8.0 59.3,8.0 64.9,8.0 70.6,8.0 76.3,8.0 82.0,8.0 87.7,8.0 92.0,9.4 92.0,15.1 92.0,20.8 92.0,26.5 92.0,32.2 92.0,37.9 92.0,43.6 92.0,49.3 92.0,55.0 92.0,60.7 92.0,66.4 92.0,72.1 92.0,77.8 92.0,83.5 92.0,89.2 89.2,92.0 83.5,92.0 77.8,92.0 72.1,92.0 66.4,92.0 60.7,92.0 55.0,92.0 49.3,92.0 43.6,92.0 37.9,92.0 32.2,92.0 26.5,92.0 20.8,92.0 15.1,92.0 9.4,92.0 8.0,87.7 8.0,82.0 8.0,76.3 8.0,70.6 8.0,64.9 8.0,59.3 8.0,53.6 8.0,47.9 8.0,42.2 8.0,36.5 8.0,30.8 8.0,25.1 8.0,19.4 8.0,13.7 8.0,8.0"/></svg></span><span class="track"><span class="bar" style="width:75.4%"></span><span class="thresh" style="left:75.6%"></span><span class="val" style="left:calc(75.4% + 8px)">67.9 &middot; reads as rev_spiral</span></span></div><div class="row"><span class="nm">cross<br><span class="near">plus, retraced</span></span><span class="gl"><svg viewBox="0 0 100 100" role="img" aria-label="cross stroke"><polyline points="49.6,8.0 49.6,13.5 49.6,19.0 49.6,24.5 49.6,30.1 49.6,35.6 49.6,41.1 49.6,46.6 49.6,52.1 49.6,57.6 49.6,63.1 49.6,68.7 49.6,74.2 49.6,79.7 49.6,85.2 49.6,88.6 49.6,85.9 49.6,83.1 49.6,80.4 49.6,77.6 49.6,74.9 49.6,72.1 49.6,69.3 49.6,66.6 49.6,63.8 49.6,61.1 49.6,58.3 49.6,55.6 49.6,52.8 49.6,50.0 48.2,48.7 45.3,48.7 42.5,48.7 39.6,48.7 36.7,48.7 33.8,48.7 31.0,48.7 28.1,48.7 25.2,48.7 22.4,48.7 19.5,48.7 16.6,48.7 13.7,48.7 10.9,48.7 8.0,48.7 11.6,48.7 17.3,48.7 23.1,48.7 28.8,48.7 34.6,48.7 40.3,48.7 46.1,48.7 51.8,48.7 57.5,48.7 63.3,48.7 69.0,48.7 74.8,48.7 80.5,48.7 86.3,48.7 92.0,48.7"/></svg></span><span class="track"><span class="bar" style="width:61.2%"></span><span class="thresh" style="left:75.6%"></span><span class="val" style="left:calc(61.2% + 8px)">55.1 &middot; reads as spiral</span></span></div><div class="row"><span class="nm">infinity<br><span class="near">lemniscate</span></span><span class="gl"><svg viewBox="0 0 100 100" role="img" aria-label="infinity stroke"><polyline points="92.0,18.9 91.3,22.1 89.3,25.0 86.3,27.3 82.6,28.8 78.7,29.6 74.8,29.8 71.1,29.4 67.6,28.7 64.4,27.6 61.5,26.3 58.8,24.9 56.3,23.4 53.9,21.8 51.6,20.1 49.4,18.5 47.1,16.9 44.8,15.2 42.3,13.7 39.7,12.2 36.9,10.8 33.9,9.6 30.5,8.7 26.9,8.1 23.0,8.0 19.1,8.5 15.3,9.7 11.9,11.6 9.4,14.2 8.0,17.3 8.0,20.5 9.4,23.6 11.9,26.2 15.3,28.1 19.1,29.3 23.0,29.8 26.9,29.7 30.5,29.1 33.9,28.2 36.9,27.0 39.7,25.6 42.3,24.1 44.8,22.6 47.1,20.9 49.4,19.3 51.6,17.7 53.9,16.0 56.3,14.4 58.8,12.9 61.5,11.5 64.4,10.2 67.6,9.1 71.1,8.4 74.8,8.0 78.7,8.2 82.6,9.0 86.3,10.5 89.3,12.8 91.3,15.7 92.0,18.9"/></svg></span><span class="track"><span class="bar" style="width:59.1%"></span><span class="thresh" style="left:75.6%"></span><span class="val" style="left:calc(59.1% + 8px)">53.2 &middot; reads as spiral</span></span></div><div class="row"><span class="nm">sq_spiral<br><span class="near">square spiral</span></span><span class="gl"><svg viewBox="0 0 100 100" role="img" aria-label="sq_spiral stroke"><polyline points="74.0,20.0 69.4,20.0 64.8,20.0 60.3,20.0 55.7,20.0 51.1,20.0 46.5,20.0 42.0,20.0 37.4,20.0 32.8,20.0 28.2,20.0 23.7,20.0 20.0,21.2 20.0,27.3 20.0,33.4 20.0,39.5 20.0,45.6 20.0,51.7 20.0,57.8 20.0,63.9 20.0,70.0 20.0,76.1 20.0,82.2 20.0,88.3 22.4,92.0 28.5,92.0 34.6,92.0 40.7,92.0 46.8,92.0 52.9,92.0 59.1,92.0 65.2,92.0 71.3,92.0 77.4,92.0 83.5,92.0 89.6,92.0 92.0,87.7 92.0,80.6 92.0,73.5 92.0,66.4 92.0,59.3 92.0,52.1 92.0,45.0 92.0,37.9 92.0,30.8 92.0,23.7 92.0,16.5 92.0,9.4 86.3,8.0 79.2,8.0 72.1,8.0 64.9,8.0 57.8,8.0 50.7,8.0 43.6,8.0 36.5,8.0 29.4,8.0 22.2,8.0 15.1,8.0 8.0,8.0"/></svg></span><span class="track"><span class="bar" style="width:47.8%"></span><span class="thresh" style="left:75.6%"></span><span class="val" style="left:calc(47.8% + 8px)">43.0 &middot; reads as circle</span></span></div><div class="row"><span class="nm">omega<br><span class="near">omega bell</span></span><span class="gl"><svg viewBox="0 0 100 100" role="img" aria-label="omega stroke"><polyline points="10.0,82.6 10.9,81.2 11.8,79.9 12.7,78.5 13.6,77.1 14.5,75.8 15.4,74.4 16.3,73.1 17.2,71.7 12.3,8.0 10.6,11.8 9.4,15.8 8.5,19.8 8.0,24.0 8.0,28.1 8.4,32.3 9.1,36.3 10.3,40.3 11.9,44.2 13.8,47.9 16.1,51.3 18.7,54.6 21.6,57.5 24.8,60.2 28.3,62.5 31.9,64.5 35.7,66.1 39.7,67.3 43.8,68.1 47.9,68.5 52.1,68.5 56.2,68.1 60.3,67.3 64.3,66.1 68.1,64.5 71.7,62.5 75.2,60.2 78.4,57.5 81.3,54.6 83.9,51.3 86.2,47.9 88.1,44.2 89.7,40.3 90.9,36.3 91.6,32.3 92.0,28.1 92.0,24.0 91.5,19.8 90.6,15.8 89.4,11.8 87.7,8.0 82.8,71.7 83.7,73.1 84.6,74.4 85.5,75.8 86.4,77.1 87.3,78.5 88.2,79.9 89.1,81.2 90.0,82.6"/></svg></span><span class="track"><span class="bar" style="width:45.7%"></span><span class="thresh" style="left:75.6%"></span><span class="val" style="left:calc(45.7% + 8px)">41.1 &middot; reads as zigzag</span></span></div><div class="row"><span class="nm">tee<br><span class="near">T, retraced</span></span><span class="gl"><svg viewBox="0 0 100 100" role="img" aria-label="tee stroke"><polyline points="8.0,8.0 12.2,8.0 16.3,8.0 20.5,8.0 24.7,8.0 28.8,8.0 33.0,8.0 37.2,8.0 41.3,8.0 45.5,8.0 49.7,8.0 53.8,8.0 58.0,8.0 62.2,8.0 66.3,8.0 70.5,8.0 74.7,8.0 78.8,8.0 83.0,8.0 87.2,8.0 89.3,8.0 87.2,8.0 85.1,8.0 83.0,8.0 80.9,8.0 78.8,8.0 76.8,8.0 74.7,8.0 72.6,8.0 70.5,8.0 68.4,8.0 66.3,8.0 64.3,8.0 62.2,8.0 60.1,8.0 58.0,8.0 55.9,8.0 53.8,8.0 51.8,8.0 49.7,8.0 49.0,10.8 49.0,15.1 49.0,19.4 49.0,23.7 49.0,27.9 49.0,32.2 49.0,36.5 49.0,40.7 49.0,45.0 49.0,49.3 49.0,53.6 49.0,57.8 49.0,62.1 49.0,66.4 49.0,70.6 49.0,74.9 49.0,79.2 49.0,83.5 49.0,87.7 49.0,92.0"/></svg></span><span class="track"><span class="bar" style="width:40.9%"></span><span class="thresh" style="left:75.6%"></span><span class="val" style="left:calc(40.9% + 8px)">36.8 &middot; reads as caret</span></span></div><div class="row"><span class="nm">chevron2<br><span class="near">double chevron</span></span><span class="gl"><svg viewBox="0 0 100 100" role="img" aria-label="chevron2 stroke"><polyline points="8.0,8.0 11.9,11.6 15.8,15.1 19.7,18.7 23.7,22.2 27.6,25.8 31.5,29.4 35.4,32.9 39.3,36.5 43.2,40.0 47.2,43.6 51.1,47.2 53.4,50.7 49.5,54.3 45.6,57.8 41.7,61.4 37.8,64.9 33.8,68.5 29.9,72.1 26.0,75.6 22.1,79.2 18.2,82.7 14.3,86.3 10.3,89.9 9.6,92.0 13.5,92.0 17.4,92.0 21.3,92.0 25.2,92.0 29.1,92.0 33.1,92.0 37.0,92.0 40.9,92.0 44.8,92.0 48.7,92.0 52.6,92.0 56.1,89.9 59.3,86.3 62.5,82.7 65.7,79.2 68.9,75.6 72.1,72.1 75.3,68.5 78.5,64.9 81.7,61.4 85.0,57.8 88.2,54.3 91.4,50.7 89.4,47.2 86.2,43.6 83.0,40.0 79.8,36.5 76.6,32.9 73.4,29.4 70.2,25.8 67.0,22.2 63.8,18.7 60.6,15.1 57.4,11.6 54.2,8.0"/></svg></span><span class="track"><span class="bar" style="width:35.0%"></span><span class="thresh" style="left:75.6%"></span><span class="val" style="left:calc(35.0% + 8px)">31.5 &middot; reads as circle</span></span></div><div class="row"><span class="nm">ell<br><span class="near">right angle, 1 corner</span></span><span class="gl"><svg viewBox="0 0 100 100" role="img" aria-label="ell stroke"><polyline points="8.0,8.0 8.0,10.8 8.0,13.7 8.0,16.5 8.0,19.4 8.0,22.2 8.0,25.1 8.0,27.9 8.0,30.8 8.0,33.6 8.0,36.5 8.0,39.3 8.0,42.2 8.0,45.0 8.0,47.9 8.0,50.7 8.0,53.6 8.0,56.4 8.0,59.3 8.0,62.1 8.0,64.9 8.0,67.8 8.0,70.6 8.0,73.5 8.0,76.3 8.0,79.2 8.0,82.0 8.0,84.9 8.0,87.7 8.0,90.6 9.2,92.0 11.6,92.0 13.9,92.0 16.3,92.0 18.7,92.0 21.1,92.0 23.4,92.0 25.8,92.0 28.2,92.0 30.5,92.0 32.9,92.0 35.3,92.0 37.7,92.0 40.0,92.0 42.4,92.0 44.8,92.0 47.2,92.0 49.5,92.0 51.9,92.0 54.3,92.0 56.6,92.0 59.0,92.0 61.4,92.0 63.8,92.0 66.1,92.0 68.5,92.0 70.9,92.0 73.3,92.0 75.6,92.0 78.0,92.0"/></svg></span><span class="track"><span class="bar" style="width:34.0%"></span><span class="thresh" style="left:75.6%"></span><span class="val" style="left:calc(34.0% + 8px)">30.6 &middot; reads as dline</span></span></div><div class="row"><span class="nm">triangle<br><span class="near">closed triangle</span></span><span class="gl"><svg viewBox="0 0 100 100" role="img" aria-label="triangle stroke"><polyline points="49.5,8.0 51.7,12.3 53.9,16.5 56.1,20.8 58.3,25.1 60.5,29.4 62.6,33.6 64.8,37.9 67.0,42.2 69.2,46.4 71.4,50.7 73.6,55.0 75.8,59.3 77.9,63.5 80.1,67.8 82.3,72.1 84.5,76.3 86.7,80.6 88.9,84.9 91.1,89.2 91.1,92.0 86.7,92.0 82.3,92.0 77.9,92.0 73.6,92.0 69.2,92.0 64.8,92.0 60.5,92.0 56.1,92.0 51.7,92.0 47.3,92.0 43.0,92.0 38.6,92.0 34.2,92.0 29.9,92.0 25.5,92.0 21.1,92.0 16.7,92.0 12.4,92.0 8.0,92.0 8.0,89.2 10.2,84.9 12.4,80.6 14.6,76.3 16.7,72.1 18.9,67.8 21.1,63.5 23.3,59.3 25.5,55.0 27.7,50.7 29.9,46.4 32.0,42.2 34.2,37.9 36.4,33.6 38.6,29.4 40.8,25.1 43.0,20.8 45.2,16.5 47.3,12.3 49.5,8.0"/></svg></span><span class="track"><span class="bar" style="width:27.4%"></span><span class="thresh" style="left:75.6%"></span><span class="val" style="left:calc(27.4% + 8px)">24.7 &middot; reads as circle</span></span></div><div class="row"><span class="nm">staple<br><span class="near">U / staple</span></span><span class="gl"><svg viewBox="0 0 100 100" role="img" aria-label="staple stroke"><polyline points="8.0,8.0 8.0,12.3 8.0,16.5 8.0,20.8 8.0,25.1 8.0,29.4 8.0,33.6 8.0,37.9 8.0,42.2 8.0,46.4 8.0,50.7 8.0,55.0 8.0,59.3 8.0,63.5 8.0,67.8 8.0,72.1 8.0,76.3 8.0,80.6 8.0,84.9 8.0,89.2 9.2,92.0 12.8,92.0 16.4,92.0 20.0,92.0 23.6,92.0 27.2,92.0 30.8,92.0 34.4,92.0 38.0,92.0 41.6,92.0 45.2,92.0 48.8,92.0 52.4,92.0 56.0,92.0 59.6,92.0 63.2,92.0 66.7,92.0 70.3,92.0 73.9,92.0 77.5,92.0 78.7,89.2 78.7,84.9 78.7,80.6 78.7,76.3 78.7,72.1 78.7,67.8 78.7,63.5 78.7,59.3 78.7,55.0 78.7,50.7 78.7,46.4 78.7,42.2 78.7,37.9 78.7,33.6 78.7,29.4 78.7,25.1 78.7,20.8 78.7,16.5 78.7,12.3 78.7,8.0"/></svg></span><span class="track"><span class="bar" style="width:27.2%"></span><span class="thresh" style="left:75.6%"></span><span class="val" style="left:calc(27.2% + 8px)">24.5 &middot; reads as circle</span></span></div><div class="row"><span class="nm">zed<br><span class="near">sharp Z, 2 corners</span></span><span class="gl"><svg viewBox="0 0 100 100" role="img" aria-label="zed stroke"><polyline points="8.0,8.0 12.3,8.0 16.5,8.0 20.8,8.0 25.1,8.0 29.4,8.0 33.6,8.0 37.9,8.0 42.2,8.0 46.4,8.0 50.7,8.0 55.0,8.0 59.3,8.0 63.5,8.0 67.8,8.0 72.1,8.0 76.3,8.0 80.6,8.0 84.9,8.0 89.2,8.0 90.6,9.4 86.3,13.6 82.0,17.7 77.8,21.9 73.5,26.1 69.2,30.3 64.9,34.4 60.7,38.6 56.4,42.8 52.1,47.0 47.9,51.1 43.6,55.3 39.3,59.5 35.1,63.7 30.8,67.8 26.5,72.0 22.2,76.2 18.0,80.4 13.7,84.5 9.4,88.7 10.8,90.1 15.1,90.1 19.4,90.1 23.7,90.1 27.9,90.1 32.2,90.1 36.5,90.1 40.7,90.1 45.0,90.1 49.3,90.1 53.6,90.1 57.8,90.1 62.1,90.1 66.4,90.1 70.6,90.1 74.9,90.1 79.2,90.1 83.5,90.1 87.7,90.1 92.0,90.1"/></svg></span><span class="track"><span class="bar" style="width:25.7%"></span><span class="thresh" style="left:75.6%"></span><span class="val" style="left:calc(25.7% + 8px)">23.1 &middot; reads as wave</span></span></div><div class="row"><span class="nm">bolt<br><span class="near">lightning, 3 corners</span></span><span class="gl"><svg viewBox="0 0 100 100" role="img" aria-label="bolt stroke"><polyline points="52.3,8.0 50.6,10.1 48.9,12.2 47.2,14.3 45.5,16.4 43.7,18.5 42.0,20.6 40.3,22.7 38.6,24.8 36.9,26.9 35.2,29.0 33.5,31.1 31.8,33.2 30.1,35.3 28.4,37.4 26.7,39.5 25.0,41.5 23.2,43.6 21.5,45.7 19.8,47.8 19.1,49.2 20.5,49.2 21.8,49.2 23.1,49.2 24.4,49.2 25.7,49.2 27.1,49.2 28.4,49.2 29.7,49.2 31.0,49.2 32.3,49.2 33.7,49.2 35.0,49.2 36.3,49.2 37.6,49.2 38.9,49.2 40.3,49.2 41.6,49.2 42.9,49.2 44.2,49.2 43.4,50.7 41.5,52.9 39.7,55.0 37.8,57.2 36.0,59.4 34.1,61.6 32.2,63.7 30.4,65.9 28.5,68.1 26.6,70.3 24.8,72.4 22.9,74.6 21.0,76.8 19.2,79.0 17.3,81.1 15.5,83.3 13.6,85.5 11.7,87.7 9.9,89.8 8.0,92.0"/></svg></span><span class="track"><span class="bar" style="width:23.8%"></span><span class="thresh" style="left:75.6%"></span><span class="val" style="left:calc(23.8% + 8px)">21.4 &middot; reads as vline</span></span></div><div class="row"><span class="nm">diamond<br><span class="near">closed diamond</span></span><span class="gl"><svg viewBox="0 0 100 100" role="img" aria-label="diamond stroke"><polyline points="44.3,8.0 46.8,10.9 49.3,13.8 51.8,16.7 54.3,19.6 56.8,22.5 59.3,25.4 61.8,28.3 64.3,31.2 66.8,34.1 69.3,37.0 71.8,39.9 74.3,42.8 76.8,45.7 79.3,48.6 80.5,51.4 78.0,54.3 75.5,57.2 73.0,60.1 70.5,63.0 68.0,65.9 65.5,68.8 63.0,71.7 60.5,74.6 58.0,77.5 55.5,80.4 53.0,83.3 50.5,86.2 48.0,89.1 45.5,92.0 43.0,92.0 40.5,89.1 38.0,86.2 35.5,83.3 33.0,80.4 30.5,77.5 28.0,74.6 25.5,71.7 23.0,68.8 20.5,65.9 18.0,63.0 15.5,60.1 13.0,57.2 10.5,54.3 8.0,51.4 9.3,48.6 11.8,45.7 14.3,42.8 16.8,39.9 19.3,37.0 21.8,34.1 24.3,31.2 26.8,28.3 29.3,25.4 31.8,22.5 34.3,19.6 36.8,16.7 39.3,13.8 41.8,10.9 44.3,8.0"/></svg></span><span class="track"><span class="bar" style="width:23.0%"></span><span class="thresh" style="left:75.6%"></span><span class="val" style="left:calc(23.0% + 8px)">20.7 &middot; reads as circle</span></span></div><div class="row"><span class="nm">hook<br><span class="near">J hook</span></span><span class="gl"><svg viewBox="0 0 100 100" role="img" aria-label="hook stroke"><polyline points="37.8,8.0 37.8,9.5 37.8,11.1 37.8,12.6 37.8,14.2 37.8,15.7 37.8,17.3 37.8,18.8 37.8,20.4 37.8,21.9 37.8,23.5 37.8,25.0 37.8,26.6 37.8,28.1 37.8,29.7 37.8,31.2 37.8,32.8 37.8,34.3 37.8,35.9 37.8,37.4 37.8,39.0 37.8,40.5 37.8,42.1 37.8,43.6 37.8,45.2 37.8,46.7 37.8,48.3 37.8,49.8 37.8,51.4 37.8,52.9 37.8,54.5 37.8,56.0 37.8,57.6 36.1,58.3 32.9,58.5 29.8,58.9 26.8,59.5 23.9,60.3 21.2,61.2 18.7,62.3 16.3,63.6 14.3,65.0 12.5,66.5 10.9,68.1 9.7,69.8 8.8,71.6 8.2,73.4 8.0,75.2 8.1,77.0 8.5,78.9 9.3,80.6 10.4,82.4 11.8,84.0 13.5,85.6 15.5,87.0 17.7,88.3 20.2,89.5 22.8,90.5 25.7,91.3 28.6,92.0"/></svg></span><span class="track"><span class="bar" style="width:18.8%"></span><span class="thresh" style="left:75.6%"></span><span class="val" style="left:calc(18.8% + 8px)">16.9 &middot; reads as wave</span></span></div><div class="row"><span class="nm">pentagon<br><span class="near">closed pentagon</span></span><span class="gl"><svg viewBox="0 0 100 100" role="img" aria-label="pentagon stroke"><polyline points="50.0,8.0 53.6,10.7 57.2,13.4 60.7,16.1 64.3,18.9 67.9,21.6 71.5,24.3 75.1,27.0 78.7,29.7 82.2,32.4 85.8,35.2 89.4,37.9 92.0,40.9 90.6,45.2 89.3,49.4 87.9,53.7 86.6,57.9 85.2,62.2 83.9,66.5 82.5,70.7 81.1,75.0 79.8,79.2 78.4,83.5 77.1,87.8 74.5,90.3 70.0,90.3 65.6,90.3 61.1,90.3 56.7,90.3 52.2,90.3 47.8,90.3 43.3,90.3 38.9,90.3 34.4,90.3 30.0,90.3 25.5,90.3 22.9,87.8 21.6,83.5 20.2,79.2 18.9,75.0 17.5,70.7 16.1,66.5 14.8,62.2 13.4,57.9 12.1,53.7 10.7,49.4 9.4,45.2 8.0,40.9 10.6,37.9 14.2,35.2 17.8,32.4 21.3,29.7 24.9,27.0 28.5,24.3 32.1,21.6 35.7,18.9 39.3,16.1 42.8,13.4 46.4,10.7 50.0,8.0"/></svg></span><span class="track"><span class="bar" style="width:12.3%"></span><span class="thresh" style="left:75.6%"></span><span class="val" style="left:calc(12.3% + 8px)">11.1 &middot; reads as circle</span></span></div><div class="row"><span class="nm">teardrop<br><span class="near">teardrop</span></span><span class="gl"><svg viewBox="0 0 100 100" role="img" aria-label="teardrop stroke"><polyline points="50.0,8.0 52.3,8.0 54.6,8.1 57.0,8.2 59.4,8.5 62.0,8.9 64.8,9.4 67.6,10.3 70.5,11.4 73.5,12.8 76.5,14.6 79.4,16.9 82.3,19.6 84.9,22.7 87.2,26.3 89.2,30.3 90.7,34.8 91.6,39.5 92.0,44.5 91.7,49.6 90.7,54.8 88.9,59.9 86.5,64.8 83.3,69.5 79.4,73.7 75.0,77.4 70.0,80.5 64.6,82.9 58.9,84.5 53.0,85.4 47.0,85.4 41.1,84.5 35.4,82.9 30.0,80.5 25.0,77.4 20.6,73.7 16.7,69.5 13.5,64.8 11.1,59.9 9.3,54.8 8.3,49.6 8.0,44.5 8.4,39.5 9.3,34.8 10.8,30.3 12.8,26.3 15.1,22.7 17.7,19.6 20.6,16.9 23.5,14.6 26.5,12.8 29.5,11.4 32.4,10.3 35.2,9.4 38.0,8.9 40.6,8.5 43.0,8.2 45.4,8.1 47.7,8.0 50.0,8.0"/></svg></span><span class="track"><span class="bar" style="width:7.4%"></span><span class="thresh" style="left:75.6%"></span><span class="val" style="left:calc(7.4% + 8px)">6.7 &middot; reads as circle</span></span></div></div>
+  <div class="axis"><span>0 &mdash; identical</span><span>68 &mdash; the threshold</span><span>90</span></div>
+</section>
+
+<section>
+  <div class="sec-head"><h2>What the numbers say</h2></div>
+  <div class="callout">
+    <p><b>One candidate out of sixteen clears the bar, and only barely.</b> The closed
+    box sits at 67.9 against a threshold of 68 &mdash; which is to say it does not really
+    clear it either. Everything else is nearer to a rune already in use than the
+    recognizer&rsquo;s own tolerance.</p>
+    <p><b>That is the finding, not a shortage of ideas.</b> Six of the ten runes in use
+    are smooth curves living in one another&rsquo;s shape-space &mdash; circle, spiral,
+    reverse spiral, wave, arc, caret. A new smooth curve has nowhere to go, and a new
+    sharp shape has to fight the three straight lines. The alphabet is not short of a
+    glyph; it is <em>full</em>.</p>
+    <p><b>Corners survive what curvature does not.</b> Every shape here is 100% robust
+    to the thermal degradation once it is the only claimant &mdash; the failures above are
+    collisions, not blur. Sharp corners and closure survive a coarse grid; a five-tooth
+    zigzag and a not-quite-closed loop do not.</p>
+    <p>So the honest options are to <b>thin the curves</b> &mdash; move two or three of
+    the six onto corner-and-crossing forms and free the space &mdash; or to accept the
+    box for life, take fury onto a two-corner Z, and live with tight margins.</p>
+  </div>
+</section>
+
+<footer>
+  Distances are mean per-point distance between normalised 48-point strokes, the same
+  measure the game uses to pick a rune. Survival percentages are 30&ndash;60 drawings per
+  condition with hand wobble. Regenerate with
+  <code>python3 tools/rune_legibility.py</code>.
+</footer>
+</div>
