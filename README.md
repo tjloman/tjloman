@@ -247,6 +247,135 @@ Everything you conjure is a throwable you place where you choose.
 - **Rendering**: the Mobile renderer + MSAA. Good and plain — meant to look
   right on a phone, no advanced GPU required (yet).
 
+## Its character is a compass, not a wire
+
+Every god game before this one ran its creature down a single wire from GOOD to
+EVIL, so every beast ever raised sat somewhere on one line and the only question
+left was how far along it got. That line throws away almost everything worth
+knowing about a character: the beast that tends fields, the one that dances for
+the villagers and the one that hauls stone home all read as "gentle".
+
+Character here is a **point in six dimensions**, each a running impression of
+what the creature has lately been doing:
+
+| | | |
+|---|---|---|
+| **mercy** ↔ cruelty | how it treats things that can suffer | *carries moral weight* |
+| **bounty** ↔ appetite | whether it produces or consumes | *carries moral weight* |
+| **order** ↔ ruin | whether it builds up or breaks down | *carries moral weight* |
+| **fellowship** ↔ solitude | whether it seeks people or gets away from them | flavour |
+| **daring** ↔ caution | what it does about risk | flavour |
+| **devotion** ↔ wilfulness | what it does about **you** | flavour |
+
+Only the first three carry any good and evil at all. The other three are pure
+flavour, **and flavour is the point**: a creature can be a *tender wrecker*, a
+*ravenous disciple*, a *bold recluse*, a *cruel provider*. Simulating four
+thousand random lives gives **383 distinct readings**, and **169 different
+characters all sitting at good/evil zero** — the fifty flavours of neutrality
+this was built for, three times over. Sixteen pairings earn a name of their own
+once both leanings are firmly held: *man-eater*, *beloved of the village*,
+*better than its god*, *force of nature*, *your instrument*.
+
+**Conscience runs on all six axes.** A creature that has grown SOLITARY finds
+holding court before the village genuinely unpleasant though nothing about it is
+cruel; a WILFUL one finds copying you distasteful without being wicked. Neither
+refusal was expressible on a wire.
+
+Nothing here chooses anything. The compass only reads what deeds *mean*, and
+that meaning then feeds back into what the creature finds congenial — which is
+how a character sticks without a single rule saying "be a wrecker".
+
+## What it feels, and how it reads other people
+
+Mood was one number from wretched to delighted. A number cannot be frightened
+**and** lonely, cannot be ashamed while it is also proud of something, and above
+all **cannot be read off somebody else**.
+
+Its heart holds **thirteen named feelings at once**, each cooling at its own
+rate — fury is gone in seventeen seconds, grief lasts four minutes, loneliness
+seven and only really lifts when somebody turns up. The strongest drives its
+face and the word over its head, so a beast carrying last night's grief looks
+like it while it goes about its business. Mood is now downstream of feeling
+rather than a second set of books.
+
+**Empathy has to be paid for in experience.** Every few seconds the creature
+notes which feelings it is holding and which circumstances are true at the time,
+and slowly builds up an account of what being hungry, hurt or alone in the dark
+is actually like — *for it*. Nothing is written down in advance. Reading
+somebody else is then that same account applied to their plight, described in
+exactly the same vocabulary. So:
+
+| The creature | reads a starving man as | and feels |
+|---|---|---|
+| has never suffered | nothing at all | nothing |
+| has starved itself | in pain, and friendless | **pity** |
+| was raised among joy (reading a *happy* villager) | delighted | **delight** |
+| was beaten near the village (same happy villager) | full of dread | **pity** |
+
+It is not a sensor. It is a creature guessing about other people out of its own
+history, and it is wrong in exactly the ways that history makes it wrong.
+
+There is a deed to go with it: **soothe** — walk over to whoever nearby is worst
+off and simply *be there*. No carrying, no miracle. They steady, and it feels
+the comfort it gives, which is the loop that makes a comforted creature grow up
+comforting. Whether it ever takes that option is entirely its own affair.
+
+## The crowd mind
+
+A village used to be a hundred people each independently noticing a god. That is
+both wrong about crowds and ruinously expensive — every villager scanning for
+the creature sixty times a second is exactly what stops this holding a thousand
+of them.
+
+Now **the town thinks once**. It holds five feelings (awe, terror, anger, joy,
+sorrow), what the crowd is looking at, and what it is minded to do, recomputed
+about twice a second for the whole settlement. Villagers read those few numbers
+in their own decision — a dictionary lookup and a dice roll, no scanning — so
+responding to you costs the same whether the village holds twenty people or a
+thousand.
+
+**The grip is never total.** Each villager rolls privately against the share of
+the town the mood has swept up, so a crowd half-mad with awe still has people
+getting the harvest in.
+
+| What the town saw | What it does |
+|---|---|
+| rain overhead | **watches** |
+| a second wonder | **adores** |
+| fire from the sky | **scatters** |
+| the creature in the granary, once | takes it as an outrage |
+| ...and again, and again | **takes up arms** |
+| a funeral | **mourns** |
+| the creature dancing | **comes and joins in** |
+
+That last one closes a loop nobody wrote. The creature can only dance because it
+watched villagers dance; once it can, its dancing is an **invitation** — not a
+summons — and a town that is not frightened of it comes and takes part. Which
+puts the creature in the middle of a crowd of people dancing and praying, which
+is precisely the thing it learns dancing and praying by watching. A village that
+is frightened of the beast declines, and it dances alone.
+
+## Getting anywhere
+
+Local steering is a bug algorithm: it flows around a trunk beautifully and walks
+straight into a bay, a horseshoe ridge or a cliff-backed cove and stays there
+until a watchdog gives up. From outside that reads as a stupid animal, and no
+amount of cleverness in its head fixes it.
+
+Anything more than a short hop is now **routed** — a bounded A* over a coarse
+grid costed from the land itself: water depth, the rise between cells, how thick
+the standing timber is. The terrain half of that cost is cached for the whole
+session (the world comes from a seed; a hillside is the same hillside all game),
+so the hundredth crossing of a valley is nearly free. The search is capped, and a
+search that runs out simply returns nothing and the creature walks the old way —
+routing can never make it worse than it was.
+
+**And it learns the landscape.** Every spot it gets properly stuck in is written
+down and priced into every route it plans afterwards, so a creature that has
+wedged itself in the same gully twice starts going round it. The memory fades —
+a gully choked with fallen timber in spring is walkable by autumn — and it
+survives a save, because it was earned.
+
 ## What your creature BELIEVES
 
 Its learned action-values answer *"is this worth doing?"*. Its **beliefs**
@@ -262,6 +391,31 @@ is what makes one creature genuinely a different person from another.
   — it works that out because being chased keeps following having eaten one.
 - **Contextual weights.** Each action carries a small learned model over the
   circumstances, so the lesson attaches to the *situation*, not the deed alone.
+- **Lore — what the world does on its own.** Separately from blaming its own
+  deeds, it notes that *this sort of thing happens in this sort of moment*.
+  After a run of bad nights it holds "nights end in pain", "beasts about end in
+  pain", "the village is where it is cheered" — and a night alone with wolves
+  around reads as a bad moment **before it has done anything at all**, which
+  leans it toward getting away and away from making its own excitement. A
+  creature that can only explain the world through its own agency has a very
+  small world.
+- **Places.** A memory of *ground*, in eighteen-metre patches. The wood where it
+  kept coming off worst ends up hated and home ends up loved, and that colours
+  everything it might do while standing there. It is not told which places
+  matter; it simply keeps getting hurt in the same stretch of country.
+- **Recall.** It holds four hundred moments — most of an afternoon rather than
+  two minutes — each with **where** it happened and **how it felt**. When the
+  present closely resembles a strongly-felt past, especially standing in the
+  very spot, a shadow of the old feeling comes back. It is a whisper, so
+  standing somewhere awful builds dread over half a minute instead of flooring
+  the beast the instant it arrives. **It will never be able to say why it does
+  not like it here.**
+- **People, by name.** Everything above is about *kinds* — villagers, sheep,
+  houses — which is right for a mind that has to generalise. But a dog knows
+  *who you are*. A separate ledger holds a few hundred **individuals**, and
+  every dealing nudges its regard for **them**, so a creature can adore one
+  shepherd and give another a wide berth while holding no opinion whatever
+  about shepherds.
 
 The result is that the **same act teaches opposite lessons** depending on what
 actually follows it:
@@ -451,18 +605,34 @@ what happens when it overreaches is discovered by overreaching.
 
 ### How big is the creature's mind?
 
-Small enough to stop worrying about, which is worth knowing before making it
-more complicated:
+Worth knowing before making it more complicated, and measured rather than
+guessed — every learned structure written out and weighed:
 
-| | q-table | belief rules | JSON on disk | in RAM |
-|---|---|---|---|---|
-| A well-played creature | ~100 | ~1,000 | **53 KB** | **~190 KB** |
-| Absolute ceiling (every verb tried on every kind of thing) | 500 | 5,000 | 253 KB | ~900 KB |
+| What | At the ceiling | Roughly, in RAM |
+|---|---|---|
+| Action values (`q`, `seen`) | 26 verbs × 20 kinds = 520 each | ~120 KB |
+| Contextual weights | 520 actions × 16 circumstances | ~1.0 MB |
+| Consequence rules | 520 × ~10 outcomes | ~620 KB |
+| Rituals (orders that paid off) | a few thousand pairs | ~360 KB |
+| Episodic memory | 400 moments × 21 fields | ~1.0 MB |
+| Places, lore, people, heart | 120 + 192 + 200 + 208 entries | ~150 KB |
+| **The whole mind** | | **~3.3 MB** |
+| The world's remembered terrain (shared) | up to 60,000 route cells | ~14 MB |
 
-The ceiling is 25 verbs × 20 kinds of thing, every consequence rule formed, and
-it still lands under a megabyte. The episodic memory is capped at 40 and only
-the last 12 are saved. There is a great deal of room to make this creature
-cleverer before its mind costs anything a phone would notice.
+A lived-in creature is nearer **1 MB**; 3.3 MB is every verb tried on every kind
+of thing with every rule formed. Per-decision cost is bounded by what is
+*nearby*, not by how much has been learned, so a creature that has lived for
+hours thinks no more slowly than a newborn.
+
+**On the 800 MB question.** We are using about two per cent of that, and adding
+zeroes would not make it cleverer. Black & White's hundreds of megabytes were
+overwhelmingly *art and audio*; the learned state of its creature was small too.
+What buys intelligence here is **richer representations** — a compass instead of
+a wire, thirteen feelings instead of one, a world model, a memory of ground, a
+ledger of people — and that is where the work has gone. The budget is there when
+we want it: an obvious next spend is memory of **individual objects** (this tree,
+this house) rather than kinds, and a learned forward model so it can picture what
+a deed would do before doing it. Neither is blocked by bytes.
 
 ## The opening lessons
 
@@ -594,7 +764,8 @@ scripts/game_state.gd         Autoload: prayer, alignment, game time
 scripts/save_game.gd          Autoload: seed-based saves, and the F3 levers
 scripts/audio/sound_bank.gd   Autoload: all sounds, synthesized in code
 scripts/util.gd               Primitive-shape building helpers
-scripts/nav_field.gd          Autoload: periodic obstacle field for steering
+scripts/nav_field.gd          Autoload: obstacle field for local steering, plus
+                              a bounded A* router costed from the terrain
 scripts/player/
   camera_rig.gd               God-game camera (pan/rotate/zoom)
   divine_hand.gd              THE hand: hover, grab, throw, drag, gestures
@@ -604,6 +775,7 @@ scripts/world/
   world_gen.gd                Endless world: chunks, noise, biomes, villages
   chunk.gd                    One 48m tile: mesh, collision, water, scatter
   village.gd                  Belief/conversion, diet, housing, pen, jobs
+  village_hive.gd             The crowd mind: what the town feels and does, once
   house.gd                    Dwellings: sizes, health, age, collapse
   edubba.gd                   The schoolhouse: gathers children, frees mothers
   wild_tree.gd                Harvestable trees (biome-styled)
@@ -621,10 +793,15 @@ scripts/creature/
                               pet/scold training — it coordinates the modules
   creature_mind.gd            The learning brain: action values, curiosity,
                               conscience, satiation, emergent character
-  creature_beliefs.gd         Episodes, credit assignment, contextual weights —
-                              what it believes, and in WHICH circumstances
-  creature_body.gd            Stomach, digestion, fat and muscle
-  creature_eyes.gd            Perception only: what is the nearest X
+  creature_ethos.gd           The six-axis moral compass and what it names
+  creature_heart.gd           Thirteen feelings at once; learning its own heart,
+                              and reading other people through it
+  creature_beliefs.gd         Episodes, credit assignment, contextual weights,
+                              lore, places, recall — what it believes, and WHEN
+  creature_bonds.gd           Who it knows, by name
+  creature_steering.gd        Routes, waypoints, wedges, and bad ground
+  creature_body.gd            Stomach, digestion, fat, muscle and energy
+  creature_eyes.gd            Perception only: nearest X, circumstances, plights
   creature_look.gd            Alignment colour, expressions, blend shapes
 scripts/miracles/
   spellbook.gd                The GRAMMAR: runes, recipes, and the blend fallback
@@ -760,6 +937,14 @@ godot --headless --path . -- --smoke-test
 - ~~Livestock, taming, riding, guard dogs, predators~~ ✔
 - ~~Procedural sound~~ ✔
 - ~~Creature learning (reward/punish via petting/scolding)~~ ✔ — next: direct control, leashes
+- ~~A moral compass with more than two directions~~ ✔
+- ~~An emotion engine, and empathy paid for in experience~~ ✔
+- ~~A crowd mind so villages respond as towns, not as crowds of individuals~~ ✔
+- ~~Real pathfinding, and a creature that learns bad ground~~ ✔
+- **Terrain-deforming miracles** — the world as something it can really mess
+  about with rather than only learn: flooding a valley to open a river,
+  cracking the earth into an actively erupting volcano (an end-game working),
+  fireballs that scar and gouge, force bolts that leave steaming craters
 - Festivals, music, dance, named relationships (lovers, parents, friends)
 - **The opponent**: a rival god with its own villages, creature, and
   temperament (all systems are per-instance already to make this possible)

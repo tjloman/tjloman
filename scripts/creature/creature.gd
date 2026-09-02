@@ -464,6 +464,8 @@ func _observe_world() -> void:
 		# for a starving man, and one that has never gone hungry feels nothing.
 		heart.attend(OBSERVE_PERIOD)
 		heart.sympathise(CreatureEyes.plight_of(villager), 1.0 / maxf(souls, 1.0))
+		# And it notices WHO. Not "a villager" — this one, by name (CreatureBonds).
+		mind.bonds.meet(villager)
 		match villager.state:
 			Villager.State.FARMING:
 				mind.teach("tend", "farm", 1.0, 0.02)

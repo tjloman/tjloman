@@ -139,6 +139,10 @@ var temperament := 0.0      # -100 monstrous .. +100 angelic: emergent, follows 
 ## WHAT IT BELIEVES about the world, and in what circumstances (see
 ## CreatureBeliefs). This is the half of its personality that says "not now".
 var beliefs := CreatureBeliefs.new()
+## WHO IT KNOWS, by name — laid over everything it thinks about their KIND, so
+## it can adore one shepherd and avoid another while holding no opinion at all
+## about shepherds. See CreatureBonds.
+var bonds := CreatureBonds.new()
 
 var _last_judged := 0       # ticks (ms) of the last judgement, for pacing
 var _sated := {}            # "verb|type" -> how thoroughly sick of it it is
@@ -256,6 +260,9 @@ func choose(options: Array, drive: Dictionary, ctx := {},
 	var scored := []
 	for opt: Dictionary in options:
 		var v := value(opt["verb"], opt.get("type", "none"), drive, ctx)
+		# WHO it would be dealing with, on top of WHAT they are. This is the only
+		# part of the ballot that is about a particular person rather than a kind.
+		v += bonds.regard_for(opt.get("target", null))
 		scored.append(v)
 		best_v = maxf(best_v, v)
 	# Softmax sample (temperature EXPLORE), numerically stabilised by best_v.
@@ -275,6 +282,7 @@ func choose(options: Array, drive: Dictionary, ctx := {},
 	var chosen: Dictionary = options[pick]
 	_last_verb = chosen["verb"]
 	_last_key = _key(chosen["verb"], chosen.get("type", "none"))
+	bonds.dealing_with(chosen.get("target", null))
 	# Remember the deed AND the circumstances, so a later consequence can be
 	# traced back to it.
 	beliefs.remember(_last_key, ctx, where, felt)
@@ -291,6 +299,7 @@ func reinforce(reward: float) -> void:
 	seen[_last_key] = int(seen.get(_last_key, 0)) + 1
 	_sated[_last_key] = minf(float(_sated.get(_last_key, 0.0)) + SATIATION, 2.5)
 	beliefs.credit(reward)   # the circumstances get their share of the lesson
+	bonds.settle(reward)     # and so does whoever it was dealing with
 	judge(_last_verb)
 
 
@@ -347,6 +356,7 @@ func decay() -> void:
 	for k: String in q:
 		q[k] = move_toward(q[k], 0.0, FORGET)
 	beliefs.fade()
+	bonds.fade(1.0)
 
 
 ## Something happened TO the creature. Let it work out for itself which of its
@@ -408,6 +418,7 @@ func known_miracles() -> Array:
 func world_picture() -> Array:
 	var said := beliefs.omens()
 	said.append_array(beliefs.haunts())
+	said.append_array(bonds.attachments())
 	return said
 
 
@@ -456,6 +467,7 @@ func to_dict() -> Dictionary:
 		"repertoire": repertoire.duplicate(true),
 		"ethos": ethos.to_dict(),
 		"beliefs": beliefs.to_dict(),
+		"bonds": bonds.to_dict(),
 	}
 
 
@@ -474,4 +486,5 @@ func from_dict(data: Dictionary) -> void:
 	temperament = ethos.temperament()
 	_sated.clear()
 	beliefs.from_dict(data.get("beliefs", {}))
+	bonds.from_dict(data.get("bonds", {}))
 

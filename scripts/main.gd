@@ -599,12 +599,31 @@ func _run_smoke_test() -> void:
 		String(jogged.get("felt", "nothing")), float(jogged.get("strength", 0.0)),
 		lived.episodes.size()])
 
+	# KNOWING PEOPLE. Everything else it learns is about KINDS; this is the one
+	# ledger that is about individuals, and it must be able to hold two opposite
+	# opinions of two people of exactly the same kind.
+	var acquaintance := CreatureBonds.new()
+	var folk := village.my_villagers()
+	if folk.size() >= 2:
+		var friend: Villager = folk[0]
+		var foe: Villager = folk[1]
+		for i in 12:
+			acquaintance.dealing_with(friend)
+			acquaintance.settle(1.6)
+			acquaintance.dealing_with(foe)
+			acquaintance.settle(-1.6)
+		print("SMOKE TEST: bonds — %s %+.2f, %s %+.2f, a stranger %+.2f | %s" % [
+			friend.villager_name, acquaintance.regard_for(friend),
+			foe.villager_name, acquaintance.regard_for(foe),
+			acquaintance.regard_for(null), str(acquaintance.attachments())])
+
 	# WHAT ALL THIS WEIGHS. The honest number, measured rather than guessed:
 	# every learned structure written out as JSON, for a mind that has lived.
 	var weighed := {
 		"q + seen": JSON.stringify(creature.mind.q).length()
 			+ JSON.stringify(creature.mind.seen).length(),
 		"beliefs": JSON.stringify(creature.mind.beliefs.to_dict()).length(),
+		"bonds": JSON.stringify(creature.mind.bonds.to_dict()).length(),
 		"whole mind": JSON.stringify(creature.mind.to_dict()).length(),
 		"heart": JSON.stringify(creature.heart.to_dict()).length(),
 	}
