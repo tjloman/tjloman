@@ -80,8 +80,18 @@ const RECIPES := {
 	"earth+life": "forest_seed",
 	"life+water": "forage_thicket",
 	"earth+earth": "forest_seed",
+	# MOVING THE EARTH. Fury is the rune of violence done to a thing, so earth
+	# under fury is the ground itself convulsing, and adding fire to that is the
+	# ground splitting open. These are the first miracles that change the SHAPE
+	# of the world rather than what is standing on it.
+	"earth+fury": "earthquake",
+	"earth+fire+fury": "volcano",
 	# The kindly and the useful.
 	"calm+life": "heal",
+	# Ward is shelter held over something; over water it is footing. Rain that
+	# is also calm and life is not weather at all, it is a mercy.
+	"ward+water": "water_walk",
+	"calm+life+water": "healing_shower",
 	"air+calm": "flight",
 	"air+earth": "portal",
 	"earth+ward": "strength",

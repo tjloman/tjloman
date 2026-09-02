@@ -8,9 +8,17 @@ extends Node3D
 ## MOONLIGHT is the full moon's fill; STARLIGHT is the floor under it that
 ## never goes out; NIGHT_AMBIENT is how much bounced light the world keeps at
 ## midnight; MOON_AMBIENT is what colour that bounced light is.
-const MOONLIGHT := 0.55
-const STARLIGHT := 0.10
-const NIGHT_AMBIENT := 0.55
+##
+## SPLIT THE DIFFERENCE. The first pass at a legible night was 0.25; the second
+## overshot to 0.55 and read as dusk rather than dark. AMBIENT is the number
+## that flattens a night, because it lights everything equally and so kills the
+## contrast that makes shape readable — so it takes the cut, landing halfway.
+## The MOON keeps most of its gain: it is directional, it casts a direction and
+## a shape, and it is what stops the dark being featureless. The lamps do the
+## rest now, which is the whole point of having built them.
+const MOONLIGHT := 0.48
+const STARLIGHT := 0.08
+const NIGHT_AMBIENT := 0.40
 const MOON_AMBIENT := Color(0.42, 0.52, 0.85)
 
 var camera_rig: CameraRig
@@ -162,10 +170,11 @@ func _update_daylight() -> void:
 
 	var day_top := Color(0.32, 0.52, 0.82)
 	var day_horizon := Color(0.7, 0.78, 0.85)
-	# The night sky is lifted off black. It is the ambient source (70% of it),
-	# so a sky at 0.03 meant the world under it got no bounced light at all.
-	var night_top := Color(0.07, 0.09, 0.19)
-	var night_horizon := Color(0.14, 0.16, 0.27)
+	# The night sky is lifted off black — it is the ambient source, so a sky at
+	# 0.03 meant no bounced light at all — but only part of the way, so the sky
+	# still reads as night rather than as a late dusk.
+	var night_top := Color(0.05, 0.06, 0.14)
+	var night_horizon := Color(0.10, 0.12, 0.21)
 	var dusk_horizon := Color(0.9, 0.5, 0.3)
 	var t := clampf((elev + 0.3) / 0.9, 0.0, 1.0)
 	var top := night_top.lerp(day_top, t)
@@ -992,9 +1001,60 @@ func _run_smoke_test() -> void:
 	# moon and the ambient floor do the work, the hearth pool is FIXED however
 	# many towns there are, and the creature carries its own light.
 	await _smoke_test_night()
+	await _smoke_test_earth()
 
 	print("SMOKE TEST OK")
 	get_tree().quit(0)
+
+
+## LAND THAT REMEMBERS. The terrain is derived from the seed, so the whole
+## claim of deformation is that a scar RIDES ON TOP of it and every other
+## system agrees — this checks that claim rather than the look of a crater.
+func _smoke_test_earth() -> void:
+	var spot := Vector2(150.0, -150.0)     # well clear of the village cradle
+	var before := world_gen.height_at(spot.x, spot.y)
+	var before_color := world_gen.ground_color(spot.x, spot.y, before)
+
+	world_gen.deform(TerrainScars.Kind.CRATER, spot, 9.0, -2.0, 3.0, 0.9)
+	var after := world_gen.height_at(spot.x, spot.y)
+	var burned := world_gen.ground_color(spot.x, spot.y, after)
+	print("SMOKE TEST: a crater — ground %.2f -> %.2f (%.2fm deep), colour %s -> %s" % [
+		before, after, before - after, str(before_color), str(burned)])
+	assert(after < before - 0.5, "a crater must actually sink the ground")
+	assert(burned.r < before_color.r, "and burn it black")
+
+	# The edge of a scar must reach exactly zero, or the world gets a cliff.
+	var rim := world_gen.height_at(spot.x + 9.2, spot.y)
+	var unscarred := world_gen.scars.offset_at(spot.x + 9.2, spot.y)
+	print("SMOKE TEST: past the rim, offset=%.4f (must be 0 — no seam)" % unscarred)
+	assert(is_zero_approx(unscarred), "a scar must fade to nothing at its rim")
+
+	# A cone, a ripple, and everything downstream of height_at agreeing.
+	world_gen.deform(TerrainScars.Kind.CONE, Vector2(190.0, -150.0), 12.0, 9.0)
+	world_gen.deform(TerrainScars.Kind.RIPPLE, Vector2(150.0, -190.0), 14.0, 1.6, 4.0)
+	print("SMOKE TEST: earth moved — %d scars | cone peak %.1fm | slope there %.2f | underwater=%s" % [
+		world_gen.scars.count(), world_gen.height_at(190.0, -150.0),
+		world_gen.slope_at(190.0, -150.0), world_gen.is_underwater(spot.x, spot.y)])
+
+	# Scars are the one part of the terrain a seed cannot rebuild, so they have
+	# to survive a save. Round-trip them through the same path the disk uses.
+	var written := world_gen.scars.to_save()
+	var echo := TerrainScars.new()
+	echo.from_save(JSON.parse_string(JSON.stringify(written)) as Array)
+	print("SMOKE TEST: scars saved — %d written, %d read back, height %.3f vs %.3f" % [
+		written.size(), echo.count(),
+		world_gen.scars.offset_at(spot.x, spot.y), echo.offset_at(spot.x, spot.y)])
+	assert(is_equal_approx(world_gen.scars.offset_at(spot.x, spot.y),
+		echo.offset_at(spot.x, spot.y)), "a saved world must come back the same shape")
+
+	# And the new workings themselves, resolved directly (the unlock ladder is
+	# the player's problem, not the test's).
+	for miracle: String in ["earthquake", "volcano", "water_walk", "healing_shower"]:
+		miracles.resolve(miracle, Vector3(150, 0, 210))
+		print("SMOKE TEST: resolve %s" % miracle)
+		await get_tree().create_timer(0.4).timeout
+	print("SMOKE TEST: after the earth-movers — %d scars, creature walks on water=%s" % [
+		world_gen.scars.count(), creature.walks_on_water])
 
 
 ## THE NIGHT, MEASURED. Winds the clock to midnight, reads what is lit, and
@@ -1011,7 +1071,8 @@ func _smoke_test_night() -> void:
 		_environment.ambient_light_sky_contribution * 100.0,
 		_sun.light_energy, GameState.is_night()])
 	assert(_moon.light_energy > 0.3, "the moon must actually light the world")
-	assert(_environment.ambient_light_energy > 0.4, "night needs an ambient floor")
+	assert(_environment.ambient_light_energy > 0.3, "night needs an ambient floor")
+	assert(_environment.ambient_light_energy < 0.5, "and must still read as NIGHT")
 
 	# The hearth pool deals itself on a lazy clock, so give it one to run on.
 	await get_tree().create_timer(1.8).timeout

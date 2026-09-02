@@ -37,6 +37,14 @@ const MIRACLES := {
 	"tempest": {"cost": 150.0, "color": Color(0.7, 0.75, 1.0)},
 	"firestorm": {"cost": 130.0, "color": Color(1.0, 0.45, 0.2)},
 	"hurricane": {"cost": 190.0, "color": Color(0.55, 0.65, 0.8)},
+	# THE EARTH-MOVERS and two mercies. DELIBERATELY CHEAP FOR NOW — these are
+	# new and want playing with, and an earthquake at two hundred prayer would
+	# be cast twice and never understood. They will be priced properly once it
+	# is clear what they are actually worth.
+	"earthquake": {"cost": 30.0, "color": Color(0.62, 0.5, 0.36)},
+	"volcano": {"cost": 45.0, "color": Color(0.95, 0.35, 0.12)},
+	"water_walk": {"cost": 20.0, "color": Color(0.55, 0.85, 0.95)},
+	"healing_shower": {"cost": 25.0, "color": Color(0.55, 1.0, 0.7)},
 }
 
 ## How each resolved miracle moves the player's karma, and what the creature
@@ -63,6 +71,12 @@ const KARMA := {
 	"tempest": {"player": -9.0, "creature": -7.0},
 	"firestorm": {"player": -9.0, "creature": -7.0},
 	"hurricane": {"player": -11.0, "creature": -8.0},
+	# Shaking the ground under people terrifies them even when nobody is hurt;
+	# opening a volcano under them is among the worst things a god can do.
+	"earthquake": {"player": -4.0, "creature": -3.0},
+	"volcano": {"player": -10.0, "creature": -7.5},
+	"water_walk": {"player": 1.5, "creature": 2.5},
+	"healing_shower": {"player": 4.5, "creature": 3.5},
 }
 
 ## THE UNLOCK LADDER now runs on RUNES, not on finished miracles — see
@@ -301,6 +315,11 @@ func resolve(miracle: String, pos: Vector3, momentum := Vector3.ZERO,
 		"tempest": _cast_tempest(pos, potency, momentum)
 		"firestorm": _cast_firestorm(pos, potency, momentum)
 		"hurricane": _cast_hurricane(pos, potency, momentum)
+		# The earth-movers, and two mercies.
+		"earthquake": _cast_earthquake(pos, potency)
+		"volcano": _cast_volcano(pos, potency)
+		"water_walk": _cast_water_walk(pos, potency)
+		"healing_shower": _cast_healing_shower(pos, potency)
 		_: return
 	_apply_karma(miracle, pos)
 	for v in get_tree().get_nodes_in_group("village"):
@@ -477,6 +496,255 @@ func _cast_heal(pos: Vector3, potency := 1.0) -> void:
 		var creature := c as Creature
 		if creature.global_position.distance_to(pos) < reach:
 			creature.receive_heal()
+
+
+## Moving the earth -----------------------------------------------------------
+##
+## The first miracles that change the SHAPE of the world rather than what is
+## standing on it. They go through `WorldGen.deform`, which cuts a scar into the
+## land; every other system finds out through `height_at()` a frame later, so
+## the water, the collision, the routing and where villagers may build all
+## agree with the new ground without any of them being told.
+
+## THE GROUND CONVULSES. A ripple of standing waves grows outward from the
+## point of the blow — the land itself still ringing — and everything on it is
+## thrown about.
+##
+## The ripple GROWS: three passes over a second and a half, each wider than the
+## last, so you watch it spread rather than finding a finished pattern. Each
+## pass re-cuts the land, which is why there are three of them and not thirty.
+func _cast_earthquake(pos: Vector3, potency := 1.0) -> void:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	var reach := minf(11.0 + 5.0 * potency, TerrainScars.BUCKET)
+	var lift := 1.1 + 0.5 * potency
+	SoundBank.play_at("boom", pos, 2.0)
+	_quake_everything(pos, reach * 1.6, potency)
+	if world == null:
+		return
+	for pass_no in 3:
+		var grown := reach * lerpf(0.45, 1.0, pass_no / 2.0)
+		var here := pos + Vector3(randf_range(-2.5, 2.5), 0, randf_range(-2.5, 2.5))
+		world.deform(TerrainScars.Kind.RIPPLE, Vector2(here.x, here.z),
+			grown, lift * (1.0 - pass_no * 0.22), 3.0 + pass_no)
+		_shake_camera(1.1 - pass_no * 0.25)
+		if pass_no < 2:
+			await get_tree().create_timer(0.55).timeout
+			if not is_instance_valid(self):
+				return
+
+
+## Everyone and everything within reach is thrown about: people and beasts
+## panic, loose objects are tossed, and the towns rouse.
+func _quake_everything(pos: Vector3, reach: float, potency: float) -> void:
+	for v in get_tree().get_nodes_in_group("villagers"):
+		var villager := v as Villager
+		if is_instance_valid(villager) and villager.global_position.distance_to(pos) < reach:
+			villager.scare(pos)
+			villager.take_damage(6.0 * potency, true)
+	for a in get_tree().get_nodes_in_group("animals"):
+		var animal := a as Animal
+		if is_instance_valid(animal) and animal.global_position.distance_to(pos) < reach:
+			animal.scare(pos)
+	for h in get_tree().get_nodes_in_group("houses"):
+		var house := h as House
+		if is_instance_valid(house) and house.global_position.distance_to(pos) < reach:
+			house.damage(18.0 * potency)
+	# Anything loose is thrown into the air — the readable signature of a quake.
+	for p in get_tree().get_nodes_in_group("pickable"):
+		var loose := p as RigidBody3D
+		if not is_instance_valid(loose) or loose.freeze:
+			continue
+		if loose.global_position.distance_to(pos) < reach:
+			loose.apply_impulse(Vector3(
+				randf_range(-2.0, 2.0), randf_range(3.0, 6.0), randf_range(-2.0, 2.0)))
+	var creature := get_tree().get_first_node_in_group("creature") as Creature
+	if creature != null and creature.global_position.distance_to(pos) < reach:
+		creature.feel("fear", 0.7, 2.5)
+
+
+## THE EARTH SPLITS OPEN. A mountain is raised where the miracle lands, with a
+## crater bitten out of its summit, and then it erupts: fire thrown from the
+## mouth, embers raining, and everything around it set alight.
+##
+## The single most destructive thing a god can do here, and the terrain it
+## leaves behind is permanent — a volcano is a landmark, not an event.
+func _cast_volcano(pos: Vector3, potency := 1.0) -> void:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	var reach := minf(13.0 + 5.0 * potency, TerrainScars.BUCKET)
+	SoundBank.play_at("boom", pos, 6.0)
+	if world != null:
+		# The mountain rises in two bites so it is seen to GROW out of the land.
+		world.deform(TerrainScars.Kind.CONE, Vector2(pos.x, pos.z),
+			reach * 0.6, 5.0 + 3.0 * potency, 3.0, 0.35)
+		_shake_camera(1.4)
+		await get_tree().create_timer(0.7).timeout
+		if not is_instance_valid(self):
+			return
+		world.deform(TerrainScars.Kind.CONE, Vector2(pos.x, pos.z),
+			reach, 7.0 + 5.0 * potency, 3.0, 0.6)
+		_shake_camera(1.8)
+	var summit := pos
+	if world != null:
+		summit.y = world.height_at(pos.x, pos.z)
+	_erupt(summit, reach, potency)
+
+
+## The eruption itself: a column of fire from the mouth, a glow that lights the
+## whole valley, and the country around it catching alight.
+func _erupt(summit: Vector3, reach: float, potency: float) -> void:
+	var fountain := CPUParticles3D.new()
+	fountain.amount = Quality.particles(220)
+	fountain.lifetime = 3.2
+	fountain.mesh = Util.speck_mesh(0.5, 0.5, Color(1.0, 0.55, 0.12, 0.95), true)
+	fountain.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	fountain.emission_sphere_radius = reach * 0.15
+	fountain.direction = Vector3.UP
+	fountain.spread = 32.0
+	fountain.initial_velocity_min = 14.0
+	fountain.initial_velocity_max = 26.0
+	fountain.gravity = Vector3(0, -14.0, 0)
+	fountain.position = summit + Vector3(0, 1.5, 0)
+	add_child(fountain)
+
+	var glare := OmniLight3D.new()
+	glare.light_color = Color(1.0, 0.42, 0.12)
+	glare.light_energy = 7.0
+	glare.omni_range = reach * 3.5
+	glare.shadow_enabled = false
+	glare.position = summit + Vector3(0, 3.0, 0)
+	add_child(glare)
+
+	# Everything in the country around it burns.
+	var burn := reach * 1.8
+	for t in get_tree().get_nodes_in_group("trees"):
+		var tree := t as WildTree
+		if is_instance_valid(tree) and tree.global_position.distance_to(summit) < burn:
+			tree.ignite()
+	for f in get_tree().get_nodes_in_group("farms"):
+		var farm := f as Farm
+		if is_instance_valid(farm) and farm.global_position.distance_to(summit) < burn:
+			farm.ignite()
+	for grp in ["villagers", "animals"]:
+		for n in get_tree().get_nodes_in_group(grp):
+			var body := n as Node3D
+			if not is_instance_valid(body):
+				continue
+			var d := body.global_position.distance_to(summit)
+			if d < burn and body.has_method("ignite"):
+				body.call("ignite")
+			if d < burn * 1.6 and body.has_method("scare"):
+				body.call("scare", summit)
+	_quake_everything(summit, burn, potency)
+
+	# It burns itself out, and the mountain it built stays. The fountain stops
+	# EMITTING rather than being faded out, so the last thrown embers finish
+	# their arc instead of blinking away mid-air.
+	var over := get_tree().create_tween()
+	over.tween_interval(9.0)
+	over.tween_callback(func() -> void: fountain.emitting = false)
+	over.tween_property(glare, "light_energy", 0.0, 3.0)
+	over.tween_callback(glare.queue_free)
+	over.tween_callback(fountain.queue_free)
+
+
+func _shake_camera(strength: float) -> void:
+	var rig := get_tree().get_first_node_in_group("camera_rig") as CameraRig
+	if rig != null:
+		rig.shake(strength)
+
+
+## Two mercies -----------------------------------------------------------------
+
+## FOOTING ON WATER. Ward is a shelter held over a thing; held over water it is
+## ground. The creature crosses lakes at full stride instead of wading them at
+## half speed, and its router will happily plan straight across open water.
+func _cast_water_walk(pos: Vector3, potency := 1.0) -> void:
+	var creature := get_tree().get_first_node_in_group("creature") as Creature
+	if creature == null:
+		GameState.hint("There is no creature here to bless.")
+		return
+	if creature.global_position.distance_to(pos) > 60.0:
+		GameState.hint("Cast it nearer your creature to bless its feet.")
+		return
+	creature.grant_water_walking(30.0 + potency * 20.0)
+	var ring := TorusMesh.new()
+	ring.inner_radius = 0.85
+	ring.outer_radius = 1.0
+	var halo := Util.mesh_node(ring, Color(0.55, 0.85, 0.95, 0.85),
+		creature.global_position + Vector3(0, 0.25, 0), true)
+	add_child(halo)
+	var tween := create_tween()
+	tween.tween_property(halo, "scale", Vector3(4.0, 1, 4.0), 1.0)
+	tween.parallel().tween_property(halo, "transparency", 1.0, 1.0)
+	tween.tween_callback(halo.queue_free)
+
+
+## A HEALING SHOWER. Rain that is also calm and life: for ten seconds it puts
+## out every fire under it and mends everything standing in it, over and over.
+## The kindest thing in the spellbook, and the answer to a fire you started.
+func _cast_healing_shower(pos: Vector3, potency := 1.0) -> void:
+	var reach := 9.0 * potency
+	var cloud := StormCloud.new()
+	cloud.position = pos + Vector3(0, 11, 0)
+	cloud.brew(1.0)
+
+	# A child of the cloud, exactly as ordinary rain is: `underside()` is a
+	# LOCAL offset down to the base of the mass, not a world height.
+	var drops := CPUParticles3D.new()
+	drops.amount = Quality.particles(int(RAIN_DROPS * 0.5))
+	drops.lifetime = 1.3
+	drops.mesh = Util.speck_mesh(0.04, 0.24, Color(0.6, 1.0, 0.75, 0.85), true)
+	drops.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	drops.emission_box_extents = Vector3(reach, 0.2, reach)
+	drops.direction = Vector3.DOWN
+	drops.initial_velocity_min = 9.0
+	drops.initial_velocity_max = 13.0
+	drops.gravity = Vector3(0, -12.0, 0)
+	drops.position.y = cloud.underside()
+	cloud.add_child(drops)
+	add_child(cloud)
+
+	GameState.announce("A green rain falls. What is burning goes out; what is hurt begins to mend.")
+	await _shower_mercy(pos, reach)
+
+	# Stop making new drops and let the ones in the air finish falling; the
+	# cloud dissolves on its own.
+	if is_instance_valid(drops):
+		drops.emitting = false
+	cloud.disperse()
+
+
+## The ten seconds of mercy: twenty passes, half a second apart, each one
+## dousing what burns and mending what hurts. Continuous rather than a single
+## pulse, so walking someone INTO the rain saves them.
+func _shower_mercy(pos: Vector3, reach: float) -> void:
+	for tick in 20:
+		if not is_instance_valid(self):
+			return
+		for v in get_tree().get_nodes_in_group("villagers"):
+			var villager := v as Villager
+			if not is_instance_valid(villager):
+				continue
+			if villager.global_position.distance_to(pos) < reach:
+				villager.extinguish()
+				villager.receive_heal()
+		for a in get_tree().get_nodes_in_group("animals"):
+			var animal := a as Animal
+			if is_instance_valid(animal) and animal.global_position.distance_to(pos) < reach:
+				animal.extinguish()
+		for t in get_tree().get_nodes_in_group("trees"):
+			var tree := t as WildTree
+			if is_instance_valid(tree) and tree.burning \
+					and tree.global_position.distance_to(pos) < reach:
+				tree.extinguish()
+		for f in get_tree().get_nodes_in_group("farms"):
+			var farm := f as Farm
+			if is_instance_valid(farm) and farm.global_position.distance_to(pos) < reach:
+				farm.extinguish()
+		var creature := get_tree().get_first_node_in_group("creature") as Creature
+		if creature != null and creature.global_position.distance_to(pos) < reach:
+			creature.receive_heal()
+		await get_tree().create_timer(0.5).timeout
 
 
 ## Nature -------------------------------------------------------------------

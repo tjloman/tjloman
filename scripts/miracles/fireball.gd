@@ -11,11 +11,34 @@ const FUSE_SECONDS := 25.0
 const KARMA_PER_KILL := -3.0
 const TRAIL_INTERVAL := 0.09     # seconds between flames dropped in flight
 const TRAIL_IGNITE_RADIUS := 1.7  # a narrow lick of fire along the path
-const REST_SPEED := 0.6           # below this it has come to rest -> bursts
+const REST_SPEED := 1.2           # below this it has come to rest -> bursts
+
+## THE ROLLING PROBLEM. A fireball is a sphere, and `friction` on a physics
+## material only resists SLIDING — a rolling ball it barely touches. With no
+## damping at all, one thrown at a hillside would roll to the lowest point in
+## the county and burst three villages away from where it was aimed.
+##
+## So it is braked BY HAND, and only once it is actually on the ground: damping
+## it in flight would flatten the ballistic arc that makes throwing feel like
+## throwing. GRIP is per second and exponential, so a 20 m/s roll is down to a
+## walking pace inside a second.
+const GROUND_GRIP := 3.6
+const SPIN_GRIP := 4.5
+## How close to the ground counts as rolling rather than flying.
+const TOUCHING := 0.7
+## And a hard stop: however gentle the slope, it bursts after this long on the
+## ground. Nothing rolls out of the shot the player actually took.
+const ROLL_SECONDS := 2.5
+
+## HOW DEEP IT DIGS. A fireball does not only scorch — it gouges a bowl out of
+## the earth and blackens what is left, and the mark stays in the world.
+const GOUGE_DEPTH := 1.7
+const GOUGE_CHAR := 0.9
 
 var _armed := false
 var _exploded := false
 var _trail_time := 0.0
+var _rolling := 0.0
 
 
 func _init() -> void:
@@ -72,9 +95,28 @@ func _physics_process(delta: float) -> void:
 		_armed = true
 	if _armed:
 		_lay_trail(delta)
-		# It rolls until friction stops it, then bursts where it settles.
-		if linear_velocity.length() < REST_SPEED:
+		_brake(delta)
+		# It rolls until it stops, then bursts where it settles.
+		if linear_velocity.length() < REST_SPEED or _rolling > ROLL_SECONDS:
 			_explode()
+
+
+## Slow the roll — but only once it is down. In the air it keeps every bit of
+## the momentum the throw gave it; the moment it touches, the ground drags it
+## down hard. Horizontal only, so gravity is never fought.
+func _brake(delta: float) -> void:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world == null:
+		return
+	var ground := maxf(world.height_at(global_position.x, global_position.z),
+		WorldGen.WATER_LEVEL)
+	if global_position.y > ground + TOUCHING:
+		return                       # still flying: leave the arc alone
+	_rolling += delta
+	var drag := exp(-GROUND_GRIP * delta)
+	linear_velocity.x *= drag
+	linear_velocity.z *= drag
+	angular_velocity *= exp(-SPIN_GRIP * delta)
 
 
 ## Drops a small flame at the ball's ground track and lightly sets alight
@@ -164,11 +206,26 @@ func _explode() -> void:
 		if is_instance_valid(farm) and farm.global_position.distance_to(pos) < BLAST_RADIUS:
 			farm.ignite()
 
+	# THE EARTH ITSELF. A bowl gouged out of the ground with a lip of thrown
+	# spoil around it, and the whole of it burned black — and unlike everything
+	# else here, it stays. Come back in an hour and the crater is still there.
+	_gouge(pos)
+
 	# The blast is the sermon: terror converts where the fireball LANDS.
 	for v in get_tree().get_nodes_in_group("village"):
 		(v as Village).witness_miracle("fireball", pos)
 
 	queue_free()
+
+
+## Dig the crater. Skipped over open water, where there is no ground to dig and
+## a bowl in the lake bed would only be a bigger lake.
+func _gouge(pos: Vector3) -> void:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world == null or world.is_underwater(pos.x, pos.z):
+		return
+	world.deform(TerrainScars.Kind.CRATER, Vector2(pos.x, pos.z),
+		BLAST_RADIUS * 0.8, -GOUGE_DEPTH, 3.0, GOUGE_CHAR)
 
 
 func _blast_visuals(pos: Vector3) -> void:
@@ -184,16 +241,10 @@ func _blast_visuals(pos: Vector3) -> void:
 	flash.omni_range = 22.0
 	flash.position = pos + Vector3(0, 2, 0)
 	scene.add_child(flash)
-	# The scorch is burned into the GROUND, wherever the blast happened
-	# above it — never left floating in mid-air.
-	var ground_y := pos.y
-	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-	if world != null:
-		ground_y = maxf(world.height_at(pos.x, pos.z), WorldGen.WATER_LEVEL)
-	var scorch := Util.cylinder(BLAST_RADIUS * 0.55, 0.06, Color(0.12, 0.09, 0.07),
-		Vector3(pos.x, ground_y + 0.05, pos.z))
-	scene.add_child(scorch)
-
+	# There used to be a black disc laid on the ground here, faded out after
+	# twenty-five seconds. It is gone: the scorch is now cut into the terrain
+	# itself (see `_gouge`), so it is a real feature of the world rather than a
+	# decal with a timer, and it does not vanish while you are looking at it.
 	var tween := scene.create_tween()
 	tween.tween_property(fire, "scale", Vector3.ONE * BLAST_RADIUS, 0.45) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
@@ -201,7 +252,6 @@ func _blast_visuals(pos: Vector3) -> void:
 	tween.parallel().tween_property(flash, "light_energy", 0.0, 0.5)
 	tween.tween_callback(fire.queue_free)
 	tween.tween_callback(flash.queue_free)
-	scene.get_tree().create_timer(25.0).timeout.connect(scorch.queue_free)
 
 
 func hover_text() -> String:

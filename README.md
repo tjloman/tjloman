@@ -667,6 +667,65 @@ elliptical falloff multiplied by noise sampled with a squashed vertical, so the
 detail runs in horizontal **streaks** rather than reading as a stack of fuzzy
 balls. 64×64, built once at world load, shared by every cloud ever cast.
 
+## Land you can wreck
+
+Every hill in this world is derived from the world seed. That is what makes it
+endless and what makes it free — nothing about the terrain is stored, because
+`WorldGen.height_at()` can work any point out from noise. A world you can only
+*look at* needs nothing more.
+
+A world you can **wreck** does. So the ground is now **noise plus a list of
+scars** — craters, cones, ripples, basins — and `height_at()` adds them up.
+
+The whole design rests on one thing: **everything that reads the land goes
+through that one function.** So a scar propagates for free to the mesh, the
+collision, the water table, where villagers are allowed to build, what the
+router thinks is walkable, and the colour of the ground. Gouge a hole and the
+whole simulation agrees with you a frame later — nothing had to be told.
+
+**The cost has to be nothing**, because `height_at()` is on every hot path in
+the game. Three guards, in order:
+
+1. **No scars at all** — one `is_empty()`, and that is the entire call. This is
+   an untouched world, which is most worlds most of the time.
+2. **Outside everything** — one box test against the union of every scar. In an
+   endless world nearly every query is nowhere near the damage.
+3. **Actually near one** — only now does it hash into buckets, and only the
+   nine around the point, because a scar's reach is capped to one bucket.
+
+Scars are **play, not seed**, so unlike the terrain they go into the save.
+Rebuilding is bounded too: a scar re-cuts at most **nine chunks**, and usually
+four — mesh, collision, water and everything standing on it, which is set back
+down on the new ground. (Living things are left alone; they have gravity and
+find the new ground themselves, which looks far better than teleporting.)
+
+### The workings that move the earth
+
+| Runes | Miracle | What it does to the land |
+|---|---|---|
+| earth + fury | **earthquake** | a ripple of standing waves grows outward in three passes, and everything on it is thrown about |
+| earth + fire + fury | **volcano** | raises a mountain with a crater bitten out of its summit, then erupts |
+| ward + water | **water walk** | *(no terrain)* the creature crosses lakes at a full stride |
+| calm + life + water | **healing shower** | *(no terrain)* ten seconds of green rain that douses every fire and mends what stands in it |
+
+Plus **fireballs now gouge**: a bowl 1.7m deep with a lip of thrown spoil
+around it, burned black, and it stays. The old version laid a dark disc on the
+ground and faded it out after twenty-five seconds.
+
+These four are **deliberately cheap for now** (20–45 prayer). They are new and
+want playing with, and an earthquake priced at two hundred would be cast twice
+and never understood. They will be priced properly once it is clear what they
+are actually worth. Note that `fury` is a tier-4 rune, so the two earth-movers
+need four faithful villages — the F3 workshop's *Convert nearest village* is
+the quick way there.
+
+**Two things the simulation caught** that a playthrough would have blamed on
+something else. The crater profile was *inverted*: passing a depth of −2m built
+a 2m hill ringed by a moat, because the bowl term was already −1 at the centre.
+And the first rebuild grew the affected area by a whole chunk on every side,
+tripling the cost of every quake to prevent a seam that a metre of slack
+already prevents.
+
 ## Night you can actually see
 
 On a phone, in daylight, night was a black screen. You could not find your own
@@ -1042,6 +1101,8 @@ scripts/world/
   food_store.gd               Storehouse: plants, meat, lumber, stone
   food_item.gd                Physical food: grain sheaves & species-named meat
   corpse.gd                   The dead, as physical objects
+  terrain_scars.gd            Land that remembers: craters, cones, ripples —
+                              the one part of the ground the seed cannot rebuild
   nightfall.gd                The night's small, fixed pool of real lights,
                               handed to whichever hearths you are nearest
 scripts/animals/animal.gd     EVERY beast, one data table: livestock, pets,
@@ -1062,6 +1123,8 @@ scripts/creature/
   creature_foresight.gd       What it thinks a deed would DO — one move ahead
   creature_record.gd          Writing a creature down, and giving it back
   creature_steering.gd        Routes, waypoints, wedges, and bad ground
+  creature_blessings.gd       Flight and footing on water: what a god has laid
+                              on it, and how long each lasts
   creature_body.gd            Stomach, digestion, fat, muscle and energy
   creature_eyes.gd            Perception only: nearest X, circumstances, plights
   creature_look.gd            Alignment colour, expressions, blend shapes, and

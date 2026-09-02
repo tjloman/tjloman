@@ -34,6 +34,7 @@ static func of(who: Creature) -> Dictionary:
 		"attention": who.attention,
 		"walks_on_water": who.walks_on_water,
 		"flight": who.flight_time,
+		"water_walk": who.blessings.water_walk_time,
 		"inedible": who.distastes().duplicate(),
 		"mind": who.mind.to_dict(),
 		"body": who.body.to_dict(),
@@ -69,6 +70,7 @@ static func into(who: Creature, data: Dictionary) -> void:
 	who.attention = float(data.get("attention", 20.0))
 	who.walks_on_water = bool(data.get("walks_on_water", false))
 	who.flight_time = float(data.get("flight", 0.0))
+	who.blessings.water_walk_time = float(data.get("water_walk", 0.0))
 	who.set_distastes(data.get("inedible", {}) as Dictionary)
 	who.mind.from_dict(data.get("mind", {}))
 	who.body.from_dict(data.get("body", {}))

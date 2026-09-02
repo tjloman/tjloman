@@ -9,6 +9,8 @@ const MIN_ZOOM := 1.2   # close enough to stand at a villager's feet
 const MAX_ZOOM := 70.0
 const PAN_SPEED := 22.0
 const ROTATE_SPEED := 1.6
+## How fast a camera shake dies away, per second (see `shake`).
+const SHAKE_FADE := 2.2
 
 var camera: Camera3D
 var pitch_node: Node3D
@@ -23,9 +25,13 @@ var _rotating := false
 var _touches := {}        # touch index -> screen position
 var _pinch_dist := 0.0
 var _world_cache: WorldGen = null
+var _shake := 0.0        # current shake amplitude, in local camera units
 
 
 func _ready() -> void:
+	# Findable by group, so anything that needs to shake the view (an
+	# earthquake, a volcano) does not need a reference wired to it.
+	add_to_group("camera_rig")
 	pitch_node = Node3D.new()
 	# A low, B&W-style default gaze: the horizon sits high and the sky
 	# fills a good share of the frame.
@@ -40,6 +46,28 @@ func _ready() -> void:
 	pitch_node.add_child(camera)
 
 	position = Vector3(0, 0, 8)
+
+
+## THE GROUND MOVING UNDER YOU. A decaying jitter of the camera. The terrain
+## actually deforming is the fact of an earthquake; this is what makes the
+## player FEEL it — without it a quake reads as the world quietly changing
+## shape, which is eerie rather than violent.
+##
+## Applied to the camera's local offset AFTER the frame zeroes it, so it never
+## fights the rig's own framing and leaves nothing behind when it fades.
+func shake(strength: float) -> void:
+	_shake = maxf(_shake, strength)
+
+
+func _tick_shake(delta: float) -> void:
+	if _shake <= 0.001:
+		return
+	_shake *= exp(-SHAKE_FADE * delta)
+	if _shake <= 0.001:
+		_shake = 0.0
+		return
+	camera.position.x += randf_range(-_shake, _shake)
+	camera.position.y += randf_range(-_shake, _shake)
 
 
 func _process(delta: float) -> void:
@@ -79,6 +107,7 @@ func _process(delta: float) -> void:
 	camera.position.x = 0.0
 	camera.position.y = 0.0
 	camera.position.z = lerpf(camera.position.z, zoom_distance, minf(delta * 8.0, 1.0))
+	_tick_shake(delta)
 
 	_update_rig_height(delta)
 

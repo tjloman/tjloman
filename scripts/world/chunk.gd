@@ -8,11 +8,55 @@ extends Node3D
 var world: WorldGen
 var cell := Vector2i.ZERO
 
+## Held so the land can be RE-cut when a miracle moves the earth under it.
+var _ground: MeshInstance3D = null
+var _body: StaticBody3D = null
+var _water: MeshInstance3D = null
+## Everything scattered here that has to be set back down on the new ground.
+var _standing: Array[Node3D] = []
+
 
 func _ready() -> void:
 	_build_terrain()
 	_build_water()
 	_scatter()
+
+
+## THE EARTH MOVED. Re-cut the mesh and the collision from the new heights, put
+## the water back where it now belongs, and set everything standing here back
+## down on the ground.
+##
+## The whole chunk is rebuilt rather than the affected vertices patched: it is
+## 169 height samples and a 288-triangle surface, which is nothing beside the
+## bookkeeping that tracking partial edits would cost — and a miracle only ever
+## touches a handful of chunks at once.
+func rebuild_terrain() -> void:
+	if _ground != null and is_instance_valid(_ground):
+		_ground.queue_free()
+	if _body != null and is_instance_valid(_body):
+		_body.queue_free()
+	if _water != null and is_instance_valid(_water):
+		_water.queue_free()
+		_water = null
+	_build_terrain()
+	_build_water()
+	_reground()
+
+
+## Trees, rocks and bushes do not fall when the ground drops out from under
+## them — they were placed at a height that no longer exists, so they are put
+## back on the surface. Living things are left alone: they have gravity and
+## will find the new ground themselves, which looks far better than teleporting.
+func _reground() -> void:
+	var kept: Array[Node3D] = []
+	for node in _standing:
+		if not is_instance_valid(node):
+			continue
+		kept.append(node)
+		node.position.y = world.height_at(
+			position.x + node.position.x, position.z + node.position.z) - float(
+				node.get_meta("sink", 0.0))
+	_standing = kept
 
 
 func _build_terrain() -> void:
@@ -45,16 +89,17 @@ func _build_terrain() -> void:
 				st.add_vertex(v)
 	st.generate_normals()
 
-	var mesh_instance := MeshInstance3D.new()
-	mesh_instance.mesh = st.commit()
+	_ground = MeshInstance3D.new()
+	_ground.mesh = st.commit()
 	var mat := StandardMaterial3D.new()
 	mat.vertex_color_use_as_albedo = true
 	mat.roughness = 1.0
-	mesh_instance.material_override = mat
-	add_child(mesh_instance)
+	_ground.material_override = mat
+	add_child(_ground)
 
 	# Heightmap collision (layer 1 = ground).
 	var body := StaticBody3D.new()
+	_body = body
 	body.collision_layer = 1
 	body.collision_mask = 0
 	body.add_to_group("ground")
@@ -84,6 +129,7 @@ func _build_water() -> void:
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(WorldGen.CHUNK_SIZE, WorldGen.CHUNK_SIZE)
 	var water := MeshInstance3D.new()
+	_water = water
 	water.mesh = plane
 	var mat := StandardMaterial3D.new()
 	# Transparent + reflective water is heavy overdraw on tiled mobile GPUs,
@@ -157,6 +203,10 @@ func _place(node: Node3D, local: Vector3, sink := 0.0) -> void:
 	local.y = world.height_at(position.x + local.x, position.z + local.z) - sink
 	node.position = local
 	add_child(node)
+	# Remembered so it can be set back down if the ground under it ever moves.
+	# The sink rides along because a tree is planted slightly INTO the earth.
+	node.set_meta("sink", sink)
+	_standing.append(node)
 
 
 func _scatter_trees(rng: RandomNumberGenerator, count: int, style: String) -> void:

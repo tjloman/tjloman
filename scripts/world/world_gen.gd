@@ -33,6 +33,11 @@ var world_seed := 20260714
 var focus_node: Node3D            # usually the camera rig
 var player_village: Village
 
+## WHAT HAS BEEN DONE TO THE LAND. The terrain itself is pure seed, so this is
+## the only part of it that is real history — see TerrainScars, and `deform()`
+## below for how a miracle actually moves the earth.
+var scars := TerrainScars.new()
+
 var _height_noise := FastNoiseLite.new()
 var _detail_noise := FastNoiseLite.new()
 var _temp_noise := FastNoiseLite.new()
@@ -81,7 +86,11 @@ func height_at(x: float, z: float) -> float:
 	# The cradle: land near the origin is gently flattened so the player's
 	# village always has room to breathe.
 	var d := Vector2(x, z).length()
-	return lerpf(2.0, h, smoothstep(28.0, 80.0, d))
+	var seeded := lerpf(2.0, h, smoothstep(28.0, 80.0, d))
+	# ...and then whatever has been DONE to the land since. Scars ride on top of
+	# the seed rather than replacing it, so a crater in a hillside is still a
+	# hillside. Costs one is_empty() check on an untouched world.
+	return seeded + scars.offset_at(x, z)
 
 
 func biome_at(x: float, z: float) -> String:
@@ -180,7 +189,58 @@ func ground_color(x: float, z: float, h: float) -> Color:
 	var s := slope_at(x, z)
 	if s > 1.0:
 		base = base.lerp(Color(0.48, 0.45, 0.42), clampf((s - 1.0) / 1.5, 0.0, 0.9))
+	# BURNED GROUND stays burned. A fireball does not only dent the earth, it
+	# blackens it, and the mark is part of the world from then on.
+	var burn := scars.scorch_at(x, z)
+	if burn > 0.0:
+		base = base.lerp(Color(0.09, 0.07, 0.06), burn * 0.85)
 	return base
+
+
+## Deforming the land ----------------------------------------------------------
+
+## MOVE THE EARTH. Cuts a scar into the world and rebuilds whatever is standing
+## on it — mesh, collision, water and everything scattered.
+##
+## This is the whole public surface of terrain deformation: a miracle says what
+## shape it wants and where, and everything else in the game finds out through
+## `height_at()`. Returns the scar so a caller that wants to keep pushing (an
+## earthquake spreading, a volcano growing) can widen it over time.
+## `char_amount` blackens the ground as well as moving it.
+func deform(kind: int, at: Vector2, radius: float, amount: float,
+		rings := 3.0, char_amount := 0.0) -> Dictionary:
+	var scar := scars.add(kind, at, radius, amount, rings, char_amount)
+	rebuild_around(TerrainScars.reach_of(scar))
+	return scar
+
+
+## Rebuild every LOADED chunk overlapping a patch of world. Chunks not loaded
+## need nothing: they read the scars when they are next built.
+func rebuild_around(area: Rect2) -> void:
+	# Grown by a metre, which is exactly what the shared edges need and no more.
+	# A chunk's rim vertices sit at the same world points as its neighbour's, so
+	# a scar reaching a chunk boundary must move BOTH or a seam opens along it —
+	# the metre of slack pulls the neighbour in. A whole extra ring of chunks
+	# was the first attempt, and it tripled the cost of every quake for nothing.
+	var grown := area.grow(1.0)
+	var x0 := floori(grown.position.x / CHUNK_SIZE)
+	var x1 := floori(grown.end.x / CHUNK_SIZE)
+	var z0 := floori(grown.position.y / CHUNK_SIZE)
+	var z1 := floori(grown.end.y / CHUNK_SIZE)
+	for cz in range(z0, z1 + 1):
+		for cx in range(x0, x1 + 1):
+			var chunk: Chunk = _chunks.get(Vector2i(cx, cz))
+			if chunk != null and is_instance_valid(chunk):
+				chunk.rebuild_terrain()
+
+
+## Every loaded chunk rebuilt — for restoring a save full of scars, where the
+## land under the player has already been built from an unscarred seed.
+func rebuild_all() -> void:
+	for cell: Vector2i in _chunks:
+		var chunk: Chunk = _chunks[cell]
+		if is_instance_valid(chunk):
+			chunk.rebuild_terrain()
 
 
 ## Chunk streaming ------------------------------------------------------------

@@ -43,7 +43,9 @@ const INDEX_PATH := "user://profiles.json"
 ## keeps their creature: it is adopted as their first profile and then left
 ## alone, never deleted, in case they roll back.
 const LEGACY_PATH := "user://hand_of_the_heavens.save"
-const VERSION := 2
+## 3 adds the terrain scars — craters, ripples, volcanoes. An older save simply
+## has none, which is exactly right: nothing had moved the earth yet.
+const VERSION := 3
 
 ## How near a freshly generated town must stand to a saved one to BE it.
 const SAME_TOWN := 60.0
@@ -286,6 +288,10 @@ func snapshot(world: WorldGen, creature: Creature) -> Dictionary:
 		"max_prayer": GameState.max_prayer_power,
 		"creature": creature.to_dict(),
 		"villages": villages,
+		# WHAT WAS DONE TO THE LAND. Everything else about the terrain comes
+		# back from the seed; craters, ripples and volcanoes do not, so they are
+		# the one part of the ground that has to be written down.
+		"scars": world.scars.to_save(),
 	}
 
 
@@ -437,6 +443,13 @@ func apply_pending(world: WorldGen, creature: Creature) -> void:
 		GameState.announce("A new world — but your creature remembers everything.")
 	elif not pending_world.is_empty():
 		creature.from_dict(pending_world.get("creature", {}))
+		# The land as the player left it, not as the seed made it. The chunks
+		# under them were already raised from an unscarred seed, so every one
+		# of them is re-cut now that the scars are known.
+		var scars := pending_world.get("scars", []) as Array
+		if not scars.is_empty():
+			world.scars.from_save(scars)
+			world.rebuild_all()
 		GameState.announce("The world returns as you left it.")
 	# A brand-new profile names its creature the moment it draws breath.
 	var named := String(active_profile().get("name", ""))

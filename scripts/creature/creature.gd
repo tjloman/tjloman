@@ -84,11 +84,22 @@ var growth: float:
 		stature = clampf(
 			pow(clampf(value, 0.0, 1.0), 1.0 / GROWTH_CURVE) * FULL_STATURE,
 			1.0, FULL_STATURE)
-var walks_on_water := false   # granted by a future miracle buff
+## WHAT THE GOD HAS LAID ON IT — flight, footing on water, and their clocks.
+## See CreatureBlessings; `walks_on_water` below is the one answer the steering
+## needs, kept here so every reader does not have to know about the module.
+var blessings := CreatureBlessings.new()
 ## FLIGHT, granted by a miracle: while aloft the creature ignores the ground
 ## entirely — it soars over water, forest and hill alike, which is how it keeps
-## up with a god on a map this wide.
-var flight_time := 0.0
+## up with a god on a map this wide. Forwarded to the blessings module, which
+## owns the clocks, so saving and the smoke test read it as they always did.
+var flight_time: float:
+	get: return blessings.flight_time
+	set(value): blessings.flight_time = value
+## Can it cross water at a full stride? Set by flight OR by the Walk-on-Water
+## blessing; the steering reads only this.
+var walks_on_water: bool:
+	get: return blessings.walks_on_water
+	set(value): blessings.walks_on_water = value
 ## THE LEASH: where you have ordered it to go. While set, your command overrides
 ## its own wants — it goes there and waits — but it still LEARNS from whatever
 ## happens on the way, so leading it somewhere is itself a way of teaching.
@@ -207,7 +218,6 @@ var _model_meshes: Array[GeometryInstance3D] = []
 var _shown_align := 999.0                  # last applied alignment (throttle)
 var _expression := "neutral"
 var _expr_time := 0.0
-var _fly_height := 0.0             # how high the flight miracle currently holds it
 var _sway_tick := 0                # throttles the push-trees-aside sweep
 
 
@@ -1811,10 +1821,18 @@ func _animate_waddle(_delta: float) -> void:
 
 ## A miracle lifts the beast into the air for a while. Cast it again to top up.
 func grant_flight(seconds: float) -> void:
-	flight_time = maxf(flight_time, seconds)
-	walks_on_water = true
+	blessings.grant_flight(seconds)
 	express("happy")
 	GameState.announce("Your creature takes to the air!")
+
+
+## FOOTING ON WATER, without the flight. It crosses lakes at a full stride
+## rather than wading them at half speed, and its router will plan straight
+## across open water instead of walking the long way round a shore.
+func grant_water_walking(seconds: float) -> void:
+	blessings.grant_water_walking(seconds)
+	feel("wonder", 0.6, 2.5)
+	GameState.announce("Your creature steps onto the water, and does not sink.")
 
 
 ## Order it to a spot (the hand's ground point). It drops what it is doing.
@@ -2255,27 +2273,16 @@ func can_lift(thing: Node3D) -> bool:
 
 
 func is_flying() -> bool:
-	return flight_time > 0.0
+	return blessings.flying()
 
 
-## While aloft the body rises off the terrain and drifts; when the miracle runs
-## out it settles back down to walking.
+## The god's blessings run their clocks and move the body — flight holding it
+## above the ground, footing on water holding it at the surface. All of it lives
+## in CreatureBlessings; what comes back is a line to say when one runs out.
 func _tick_flight(delta: float) -> void:
-	var want := 0.0
-	if flight_time > 0.0:
-		flight_time -= delta
-		want = 9.0 + scale.y * 1.5
-		if flight_time <= 0.0:
-			walks_on_water = false
-			GameState.announce("Your creature sinks back to the earth.")
-	_fly_height = lerpf(_fly_height, want, minf(delta * 1.6, 1.0))
-	if _fly_height > 0.05:
-		var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-		if world != null:
-			var ground := maxf(
-				world.height_at(global_position.x, global_position.z), WorldGen.WATER_LEVEL)
-			global_position.y = ground + _fly_height
-			velocity.y = 0.0
+	var ended := blessings.tick(self, delta)
+	if ended != "":
+		GameState.announce(ended)
 
 
 ## Put a meal in the stomach. A small body simply cannot finish a big animal —
