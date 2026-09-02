@@ -17,7 +17,7 @@ enum State {
 	IDLE, WANDER, SEEK_FOOD, EATING, SLEEPING, GO_TEND, TENDING,
 	WATCH, GO_GATHER, CARRYING, PLAY, GUARD, SULK, CATCH,
 	GO_FISH, FISHING, GO_STORE, SMASH, FLEE, CAST, LEASHED,
-	LOUNGE, DANCE, PRAY, COMMUNE, RUN, MIMIC, SHUN, DEPART,
+	LOUNGE, DANCE, PRAY, COMMUNE, RUN, MIMIC, SHUN, DEPART, SOOTHE,
 }
 
 const WALK_SPEED := 3.5
@@ -105,6 +105,11 @@ var mind := CreatureMind.new()
 ## THE BODY: a real stomach that fills and takes time to empty, fat from
 ## overeating, and muscle earned by work. See CreatureBody.
 var body := CreatureBody.new()
+## THE HEART: a dozen named feelings held at once, each cooling at its own rate.
+## It learns what its own circumstances FEEL like, and reads other people by
+## matching their plight against that — which is the whole of its empathy, and
+## why a creature that has never gone hungry cannot pity a starving man.
+var heart := CreatureHeart.new()
 ## Learned dread, raised by pain and fright. High fear makes fleeing attractive,
 ## so a creature that keeps getting hurt near people can become a recluse.
 var fear := 0.0
@@ -320,6 +325,8 @@ func _physics_process(delta: float) -> void:
 			_process_pray(delta)
 		State.COMMUNE:
 			_process_commune(delta)
+		State.SOOTHE:
+			_process_soothe(delta)
 		State.RUN:
 			_process_run(delta)
 		State.MIMIC:
@@ -378,10 +385,16 @@ func _tick_feelings(delta: float) -> void:
 	# Mood slowly settles toward contentment scaled by bond: a loved
 	# creature's resting state is happier.
 	mood = lerpf(mood, 45.0 + bond * 0.3, 0.03 * delta)
+	# THE HEART cools at its own rates, and what it holds drags mood with it —
+	# so mood is downstream of feeling now rather than a second set of books.
+	heart.settle(delta)
+	mood = clampf(mood + heart.balance() * 0.35 * delta, 0.0, 100.0)
 	# Attention fades with neglect — but a hand hovering close-by is
 	# magnetic: the creature watches it, and stays ready to learn or catch.
 	attention = maxf(attention - 0.6 * delta, 0.0)
 	fear = maxf(fear - 1.2 * delta, 0.0)
+	if fear > 35.0:
+		heart.stir("dread", (fear - 35.0) / 100.0 * delta)
 	# Digest: the stomach empties over time, and where the food GOES depends on
 	# whether the body wanted it. Eating when sated is what makes it fat.
 	var d := body.digest(delta, growth, hunger)
@@ -430,14 +443,25 @@ func _tick_watchdogs(delta: float) -> void:
 
 ## The slow gaze: passively learn from whatever the villagers are doing
 ## nearby — and simply watching them work holds its attention.
+##
+## This is also where it LOOKS AT PEOPLE. Watching somebody is how empathy is
+## earned, and reading their plight through its own history is how it comes to
+## feel anything about them at all (see CreatureHeart).
 func _observe_world() -> void:
 	var watched_work := false
+	var souls := 0
 	for v in get_tree().get_nodes_in_group("villagers"):
 		var villager := v as Villager
 		if not is_instance_valid(villager):
 			continue
 		if villager.global_position.distance_to(global_position) > 16.0:
 			continue
+		souls += 1
+		# Close enough to READ. What it makes of them is entirely its own
+		# business: a creature whose every memory of hunger is a bad one feels
+		# for a starving man, and one that has never gone hungry feels nothing.
+		heart.attend(OBSERVE_PERIOD)
+		heart.sympathise(CreatureEyes.plight_of(villager), 1.0 / maxf(souls, 1.0))
 		match villager.state:
 			Villager.State.FARMING:
 				mind.teach("tend", "farm", 1.0, 0.02)
@@ -464,6 +488,18 @@ func _observe_world() -> void:
 		# Curiosity about the villagers' work keeps it engaged and alert.
 		attention = minf(attention + 5.0, 100.0)
 		boredom = maxf(boredom - 4.0, 0.0)
+		feel("wonder", 0.12, 0.0)
+	# NOBODY ABOUT. Loneliness is the one feeling that barely cools on its own;
+	# it needs company to lift, which is what gives a solitary life its weight.
+	if souls == 0:
+		heart.stir("loneliness", 0.03)
+	else:
+		heart.stir("contentment", 0.03 * minf(souls, 3))
+	# AND IT LEARNS WHAT ALL THIS FEELS LIKE. Whatever is true of its situation
+	# right now gets quietly associated with whatever it is feeling right now,
+	# and over a lifetime that becomes the only account it has of what hunger,
+	# darkness or a crowd is actually like.
+	heart.learn(_circumstances())
 	if GameState.is_night():
 		for a in get_tree().get_nodes_in_group("animals"):
 			var animal := a as Animal
@@ -524,6 +560,13 @@ func _circumstances() -> Dictionary:
 	var crowd := 0
 	var armed := 0
 	var predator := 0.0
+	# HOW EVERYONE ELSE IS DOING is part of the situation too. Beliefs learned
+	# against these read like "smashing the store goes badly when the people are
+	# already frightened" — the creature can be contextual about other people's
+	# states, not merely about its own hunger and the hour.
+	var kin_afraid := 0.0
+	var kin_hurting := 0.0
+	var kin_glad := 0.0
 	for v in get_tree().get_nodes_in_group("villagers"):
 		var villager := v as Villager
 		if not is_instance_valid(villager):
@@ -532,6 +575,12 @@ func _circumstances() -> Dictionary:
 			crowd += 1
 			if villager.weapon != "":
 				armed += 1
+			if villager.is_afraid() or villager.burning:
+				kin_afraid += 1.0
+			if villager.is_dying() or villager.health < 55.0 or villager.hunger > 80.0:
+				kin_hurting += 1.0
+			if villager.happiness > 70.0:
+				kin_glad += 1.0
 	for a in get_tree().get_nodes_in_group("animals"):
 		var beast := a as Animal
 		if is_instance_valid(beast) and beast.spec.get("predator", false) \
@@ -561,6 +610,9 @@ func _circumstances() -> Dictionary:
 		"in_village": in_village,
 		"night": 1.0 if GameState.is_night() else 0.0,
 		"alone": 1.0 if crowd == 0 else 0.0,
+		"kin_afraid": clampf(kin_afraid / 3.0, 0.0, 1.0),
+		"kin_hurting": clampf(kin_hurting / 3.0, 0.0, 1.0),
+		"kin_glad": clampf(kin_glad / 3.0, 0.0, 1.0),
 	}
 
 
@@ -620,6 +672,14 @@ func _perceive() -> Array:
 			_offer(opts, "play", t, node)
 			if (node as Animal).is_tamable():
 				_offer(opts, "gift", t, node)
+
+	# SOMEBODY IN TROUBLE. On the ballot whenever the plainly worst-off soul
+	# nearby is badly enough off to notice. Whether the creature cares is its
+	# own affair — and a beast that has never been frightened itself has nothing
+	# to recognise their fright WITH (see CreatureHeart.read).
+	var troubled := CreatureEyes.neediest_soul(get_tree(), global_position, 26.0)
+	if troubled != null:
+		_offer(opts, "soothe", "villager", troubled)
 
 	var farm := CreatureEyes.nearest_farm(get_tree(), global_position)
 	if farm != null:
@@ -806,7 +866,7 @@ func _enact(choice: Dictionary) -> void:
 			# enough for you to sit and watch it.
 			state = State.LOUNGE
 			_action_time = randf_range(9.0, 20.0)
-			express("happy", 3.0)
+			feel("contentment", 0.5, 3.0)
 		"dance":
 			state = State.DANCE
 			_action_time = randf_range(6.0, 11.0)
@@ -826,13 +886,17 @@ func _enact(choice: Dictionary) -> void:
 				state = State.CATCH
 			else:
 				_begin_run()
+		"soothe":
+			_watch_subject = target as Villager
+			state = State.SOOTHE
+			_action_time = randf_range(5.0, 9.0)
 		"mimic":
 			state = State.MIMIC
 			_action_time = randf_range(5.0, 9.0)
 		"sulk":
 			state = State.SULK
 			_action_time = randf_range(6.0, 12.0)
-			express("sad", 4.0)
+			feel("grief", 0.35, 4.0)
 		"shun":
 			state = State.SHUN
 			_action_time = randf_range(4.0, 8.0)
@@ -857,6 +921,13 @@ func _finish_deed(deed: String, mood_gain: float) -> void:
 	_last_deed = deed
 	mood = minf(mood + mood_gain, 100.0)
 	boredom = maxf(boredom - 25.0, 0.0)
+	# A deed that went well is FELT, and the feeling outlasts the deed — which
+	# is what the heart then learns to associate with the circumstances it was
+	# done in (see CreatureHeart.learn).
+	if mood_gain > 0.0:
+		heart.stir("delight", clampf(mood_gain / 14.0, 0.05, 0.6))
+	elif mood_gain < 0.0:
+		heart.stir("grief", clampf(-mood_gain / 20.0, 0.05, 0.5))
 	# Every finished deed teaches the mind what it was worth.
 	_deed_verb = _act_verb
 	_deed_type = _act_type
@@ -1284,7 +1355,7 @@ func _process_smash(delta: float) -> void:
 	var victim := _smash_target
 	_smash_target = null
 	SoundBank.play_at("boom", global_position, -2.0)
-	express("angry")
+	feel("fury", 0.5)
 	# A release, yes — but not inherently more satisfying than honest work, or
 	# every creature drifts into vandalism whatever its nature.
 	var thrill := 0.15 + boredom / 260.0
@@ -1370,7 +1441,7 @@ func _process_cast(delta: float) -> void:
 	# limits, arrived at the same way it arrives at everything else.
 	if energy < toll:
 		energy = 0.0
-		express("hurt", 2.0)
+		feel("pain", 0.5, 2.0)
 		mind.experience("spent", -1.3)
 		mind.teach("cast", miracle, -1.0, 0.35)
 		GameState.announce("Your creature reaches for a miracle it has not the strength for.")
@@ -1457,7 +1528,7 @@ func _finish_choice(payoff: float) -> void:
 	felt += conscience
 	if conscience < -0.5:
 		mood = maxf(mood - 8.0, 0.0)   # it did not like itself for that
-		express("sad", 2.0)
+		feel("shame", 0.55, 2.0)
 	mind.reinforce(clampf(felt, -3.0, 3.0))
 	morality = mind.temperament
 	_decide()
@@ -1569,7 +1640,7 @@ func praise() -> void:
 	attention = minf(attention + 8.0, 100.0)
 	if _last_deed == "catch":
 		catch_skill = clampf(catch_skill + 0.25, 0.1, 2.5)
-	express("love")
+	feel("affection", 0.85)
 	mind.experience("praised", 2.0)
 	# THE STRONGEST LESSON: your approval teaches the mind that whatever it just
 	# did is worth doing. Praise cruelty and it learns to be cruel.
@@ -1621,7 +1692,7 @@ func scold() -> void:
 			"Your creature flinches from your hand. It no longer believes you are fair.")
 	else:
 		GameState.announce("Your creature whimpers, confused. It was only trying to help.")
-	express("hurt", 2.4)
+	feel("shame", 0.8, 2.4)
 	state = State.SULK
 	_action_time = 8.0
 
@@ -1879,6 +1950,45 @@ func _process_commune(delta: float) -> void:
 		_finish_choice(0.4 + audience * 0.3)
 
 
+## GOING TO SOMEBODY WHO IS IN TROUBLE — and doing nothing but being there.
+##
+## No carrying, no healing, no miracle: it walks over to the frightened or the
+## hurt or the starving and stays with them, and they steady. This is the plain
+## answer to a need that is not a wound or an empty belly, and it is the one
+## kind deed a creature can do that costs it nothing but its time.
+##
+## Nothing pushes it here. Soothing is on the ballot whenever somebody nearby is
+## visibly badly off, and the creature takes it only if it has learned to want
+## to — which, for a beast that has never itself been frightened, it very
+## likely has not (see CreatureHeart.read).
+func _process_soothe(delta: float) -> void:
+	if _watch_subject == null or not is_instance_valid(_watch_subject):
+		_decide()
+		return
+	var near := 3.0 + scale.x * 1.2
+	if global_position.distance_to(_watch_subject.global_position) > near:
+		if not _move_toward(_watch_subject.global_position, WALK_SPEED * 0.85, delta):
+			return
+	_apply_gravity_only(delta)
+	_face(_watch_subject.global_position)
+	_action_time -= delta
+	# Presence alone. They calm, they cheer up a little, and their fright drains
+	# faster than it otherwise would.
+	_watch_subject.cheer(9.0 * delta)
+	_watch_subject.attend(global_position)
+	heart.attend(delta)
+	# It feels the comfort it is giving — which is the loop that makes a
+	# creature that has been comforted grow up wanting to comfort.
+	heart.stir("affection", 0.10 * delta)
+	heart.stir("relief", 0.08 * delta)
+	if _action_time <= 0.0:
+		var eased := _watch_subject.happiness > 45.0
+		_last_deed = "soothe"
+		if eased:
+			GameState.announce("Your creature sits with the frightened until they are calm.")
+		_finish_choice(0.7 if eased else 0.3)
+
+
 func _begin_run() -> void:
 	state = State.RUN
 	_action_time = randf_range(7.0, 14.0)
@@ -1943,7 +2053,7 @@ func _begin_departure() -> void:
 	release_leash()
 	GameState.announce(
 		"Your creature turns away from you and walks. It has decided it is better than you.")
-	express("sad", 6.0)
+	feel("grief", 1.0, 6.0)
 
 
 ## The walk out. After this it simply LIVES out there — see `_tick_exile`.
@@ -1968,7 +2078,7 @@ func _tick_exile(delta: float) -> void:
 	exiled = false
 	grievance = ""
 	mind.experience("forgiven", 1.6)
-	express("love", 4.0)
+	feel("relief", 0.9, 4.0)
 	GameState.announce(
 		"Your creature comes back to you of its own accord. You have not done it again.")
 
@@ -2045,7 +2155,7 @@ func witness_god(verb: String, type: String, valence := 0.0) -> void:
 ## beyond what its own muscle could manage.
 func grant_strength(seconds: float) -> void:
 	body.boost_time = maxf(body.boost_time, seconds)
-	express("angry", 1.5)   # a roar of borrowed power
+	feel("pride", 0.8, 1.5)   # a roar of borrowed power
 	GameState.announce("Your creature swells with borrowed might!")
 
 
@@ -2110,7 +2220,7 @@ func take_damage(amount: float, _by_god := false, _instant := false) -> void:
 		earn_trust(-clampf(amount * 0.5, 4.0, 30.0), "struck")
 	fear = minf(fear + amount * 0.8, 100.0)
 	mood = maxf(mood - amount * 0.4, 0.0)
-	express("hurt", 2.0)
+	feel("pain", clampf(amount / 30.0, 0.2, 1.0), 2.0)
 	if _act_verb != "":
 		mind.teach(_act_verb, _act_type, -1.2)
 	if fear > 60.0 and state != State.FLEE:
@@ -2121,13 +2231,27 @@ func receive_heal() -> void:
 	energy = minf(energy + 40.0, 100.0)
 	mood = minf(mood + 10.0, 100.0)
 	earn_trust(6.0)
-	express("love")
+	feel("relief", 0.7)
 
 
 ## Appearance & expression ---------------------------------------------------
 
+## FEEL SOMETHING, by name. This is the way in to the heart: it puts the
+## feeling on, shows the matching face for a moment, and lets the feeling do its
+## own slow work on mood afterwards rather than jerking a number about.
+##
+## `express` remains for the momentary twitch of a face with no feeling behind
+## it; anything the creature actually UNDERGOES should come through here, so it
+## can be held, cooled, learned from and read off it by everyone else.
+func feel(emotion: String, force := 0.6, show := 1.8) -> void:
+	heart.stir(emotion, force)
+	if CreatureHeart.FEELINGS.has(emotion):
+		express(String(CreatureHeart.FEELINGS[emotion]["face"]), show)
+
+
 ## Flash an emotion for a moment. It shapes the procedural eyes and drives a
-## model's "expression" instance shader param; then it settles to neutral.
+## model's "expression" instance shader param; then it settles to whatever the
+## heart is actually holding.
 func express(emotion: String, dur := 1.6) -> void:
 	_expression = emotion
 	_expr_time = dur
@@ -2142,11 +2266,17 @@ func _apply_appearance() -> void:
 	CreatureLook.apply_alignment(align, _fur_mat, _pupils, _model_meshes)
 
 
+## A flashed face wins while it lasts; underneath, the creature wears whatever
+## its heart is actually holding. A beast carrying last night's grief around
+## LOOKS like it, even while it goes about its business — which is most of what
+## makes it read as a thing with an inner life rather than a state machine.
 func _tick_expression(delta: float) -> void:
 	if _expr_time > 0.0:
 		_expr_time -= delta
 		if _expr_time <= 0.0:
-			_expression = "neutral"
+			_expression = heart.face()
+	elif _expression != heart.face():
+		_expression = heart.face()
 	CreatureLook.apply_expression(_expression, delta, _eyes, _model_meshes)
 
 
@@ -2188,7 +2318,13 @@ func _status_word() -> String:
 	return CreatureLook.doing_word(state_name(), _carry_intent, _cargo_word())
 
 
+## The word that floats over its head. A feeling it is holding STRONGLY speaks
+## over whatever it happens to be doing — a creature grieving while it fishes
+## says "oh...", not "...". That is the point of a heart you can see.
 func _status_text() -> String:
+	var felt := heart.word()
+	if felt != "" and heart.intensity() > 0.55:
+		return felt
 	return CreatureLook.says_word(state_name(), _carry_intent)
 
 
@@ -2255,6 +2391,7 @@ func to_dict() -> Dictionary:
 		"inedible": _inedible.duplicate(),
 		"mind": mind.to_dict(),
 		"body": body.to_dict(),
+		"heart": heart.to_dict(),
 	}
 
 
@@ -2280,6 +2417,7 @@ func from_dict(data: Dictionary) -> void:
 	_inedible = (data.get("inedible", {}) as Dictionary).duplicate()
 	mind.from_dict(data.get("mind", {}))
 	body.from_dict(data.get("body", {}))
+	heart.from_dict(data.get("heart", {}))
 	morality = mind.temperament
 	scale = Vector3.ONE * lerpf(MIN_SCALE, MAX_SCALE, growth)
 	_shown_align = 999.0   # force the hide/eyes to re-colour for the restored soul

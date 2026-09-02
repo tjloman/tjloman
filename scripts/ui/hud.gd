@@ -482,6 +482,7 @@ func _update_creature_panel() -> void:
 		+ "Doing:    %s\n"
 		+ "Nature:   %s\n"
 		+ "Habits:   %s\n"
+		+ "Feeling:  %s\n"
 		+ "Mood:     %s\n"
 		+ "Bond:     %d / 100\n"
 		+ "Hunger:   %d / 100\n"
@@ -493,7 +494,7 @@ func _update_creature_panel() -> void:
 		+ "Believes: %s\n"
 		+ "Miracles: %s") % [
 			creature.activity_word(), creature.morality_word(), character,
-			creature.mood_word(),
+			" and ".join(creature.heart.account()), creature.mood_word(),
 			int(creature.bond), int(creature.hunger), int(creature.energy),
 			int(creature.fear),
 			int(creature.body.fullness(creature.growth) * 100.0),

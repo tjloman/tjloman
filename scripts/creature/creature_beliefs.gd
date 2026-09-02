@@ -53,9 +53,15 @@ const TAG_PHRASE := {
 
 ## The circumstances the creature can notice. Keeping this list short and
 ## meaningful is what keeps the learning fast and the beliefs legible.
+## The last three are how OTHER PEOPLE are doing, and they let a belief be
+## about somebody else's state rather than only about its own — "the store is
+## worth raiding when nobody is frightened yet", "dancing pays when the people
+## are already glad". A creature that could only notice its own hunger and the
+## hour of the day had a very thin world to be right or wrong about.
 const FEATURES := [
 	"hungry", "stuffed", "tired", "afraid", "hurt", "bored",
 	"crowd", "armed", "predator", "god_near", "in_village", "night", "alone",
+	"kin_afraid", "kin_hurting", "kin_glad",
 ]
 
 const MEMORY := 40          # episodes kept — its recent life

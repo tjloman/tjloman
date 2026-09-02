@@ -575,6 +575,34 @@ func _run_smoke_test() -> void:
 		print("SMOKE TEST: compass — %-28s -> %-30s (good/evil %+.0f) %s" % [
 			life, soul.character(), soul.temperament, str(soul.character_account(2))])
 
+	# THE HEART, AND EMPATHY BOUGHT WITH EXPERIENCE. A creature reads other
+	# people by matching their plight against what those same circumstances have
+	# felt like to IT — so one that has never gone hungry has nothing to
+	# recognise a starving man with, and feels precisely nothing.
+	var starving := {"hungry": 1.0, "hurt": 0.6, "alone": 1.0}
+	var innocent := CreatureHeart.new()
+	innocent.empathy = 1.0
+	print("SMOKE TEST: empathy — a creature that has never suffered reads a starving man as %s" % [
+		"nothing at all" if innocent.read(starving).is_empty() else str(innocent.read(starving))])
+	var scarred := CreatureHeart.new()
+	scarred.empathy = 1.0
+	for i in 60:
+		scarred.stir("pain", 1.0)
+		scarred.stir("loneliness", 1.0)
+		scarred.learn({"hungry": 1.0, "hurt": 1.0, "alone": 1.0})
+	var guessed := scarred.read(starving)
+	scarred.feeling.clear()
+	scarred.sympathise(starving)
+	print("SMOKE TEST: empathy — one that HAS reads %s, and catches pity %.2f (understands %d)" % [
+		str(guessed.keys()), scarred.level("pity"), scarred.wisdom()])
+	# And feelings cool at their own rates: fury burns off, grief does not.
+	var carried := CreatureHeart.new()
+	carried.stir("fury", 1.0)
+	carried.stir("grief", 1.0)
+	carried.settle(20.0)
+	print("SMOKE TEST: heart — after 20s, fury %.2f but grief %.2f; it looks %s and says '%s'" % [
+		carried.level("fury"), carried.level("grief"), carried.face(), carried.word()])
+
 	# DEMOGRAPHICS. A lifetime here is ~3.6 real hours, so an overnight run turns
 	# over two whole generations — a village that cannot replace its dead dies
 	# quietly while nobody is watching. Conception must actually FIRE when a
