@@ -1,0 +1,369 @@
+<title>Rune Grammar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+:root{
+  --ground:#eef1f5; --panel:#ffffff; --panel-2:#f7f9fb;
+  --ink:#151d2a; --ink-2:#3b4859; --muted:#63728a; --faint:#8b99ad;
+  --rule:#d7dee8; --rule-2:#e6ecf3;
+  --accent:#9a6210; --accent-soft:#f3e6cf; --on-accent:#ffffff;
+  --bless:#20694a; --bless-soft:#dcefe5;
+  --wrath:#9c2f27; --wrath-soft:#f6e0dd;
+  --shadow:0 1px 2px rgba(20,30,48,.06),0 8px 24px -12px rgba(20,30,48,.18);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0c111a; --panel:#141b26; --panel-2:#101722;
+    --ink:#dde5f1; --ink-2:#b3c0d2; --muted:#8494ab; --faint:#5f6e84;
+    --rule:#242f40; --rule-2:#1c2532;
+    --accent:#e0a84e; --accent-soft:#2e2415; --on-accent:#0c111a;
+    --bless:#54bd8e; --bless-soft:#12291f;
+    --wrath:#e36d60; --wrath-soft:#2c1715;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -14px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0c111a; --panel:#141b26; --panel-2:#101722;
+  --ink:#dde5f1; --ink-2:#b3c0d2; --muted:#8494ab; --faint:#5f6e84;
+  --rule:#242f40; --rule-2:#1c2532;
+  --accent:#e0a84e; --accent-soft:#2e2415; --on-accent:#0c111a;
+  --bless:#54bd8e; --bless-soft:#12291f;
+  --wrath:#e36d60; --wrath-soft:#2c1715;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -14px rgba(0,0,0,.7);
+}
+*{box-sizing:border-box}
+body{
+  background:var(--ground); color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:15px; line-height:1.55; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:40px 24px 96px}
+h1,h2,h3{font-family:"IBM Plex Serif",Georgia,serif;text-wrap:balance;margin:0}
+h1{font-size:clamp(30px,4.4vw,44px);font-weight:600;letter-spacing:-.015em;line-height:1.1}
+h2{font-size:20px;font-weight:600;letter-spacing:-.005em}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:500}
+.lede{color:var(--ink-2);max-width:64ch;font-size:16.5px;margin-top:14px}
+.note{color:var(--muted);max-width:70ch;font-size:14px;margin-top:10px}
+header{border-bottom:1px solid var(--rule);padding-bottom:28px;margin-bottom:32px}
+section{margin-top:44px}
+.sec-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+.sec-head .count{font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--faint)}
+
+/* ---- stats ---- */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;
+  background:var(--rule);border:1px solid var(--rule);border-radius:3px;overflow:hidden;margin-top:26px}
+.stat{background:var(--panel);padding:16px 18px}
+.stat b{display:block;font-family:"IBM Plex Mono",monospace;font-size:26px;font-weight:600;
+  letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1}
+.stat span{display:block;font-size:12.5px;color:var(--muted);margin-top:5px}
+.stat.hi b{color:var(--accent)}
+
+/* ---- rune legend ---- */
+.legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));gap:1px;
+  background:var(--rule);border:1px solid var(--rule);border-radius:3px;overflow:hidden;margin-top:18px}
+.rune{background:var(--panel);padding:14px;display:flex;gap:13px;align-items:center}
+.rune svg{width:44px;height:44px;flex:none;border:1px solid var(--rule-2);
+  border-radius:2px;background:var(--panel-2)}
+.rune polyline{fill:none;stroke:var(--accent);stroke-width:6;
+  stroke-linecap:round;stroke-linejoin:round}
+.rune .nm{font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:14px;
+  letter-spacing:.02em;display:block}
+.rune .sub{font-size:12px;color:var(--muted);display:block;margin-top:2px}
+.rune .sub em{font-style:normal;color:var(--faint)}
+
+/* ---- controls ---- */
+.bar{position:sticky;top:0;z-index:5;background:var(--ground);
+  border-bottom:1px solid var(--rule);padding:12px 0;margin-top:8px;
+  display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+input[type=search],select{font:inherit;font-size:13.5px;color:var(--ink);
+  background:var(--panel);border:1px solid var(--rule);border-radius:3px;padding:7px 10px}
+input[type=search]{min-width:210px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.chipbtn{font:inherit;font-size:13px;padding:7px 12px;border-radius:3px;cursor:pointer;
+  background:var(--panel);border:1px solid var(--rule);color:var(--ink-2)}
+.chipbtn[aria-pressed=true]{background:var(--accent);border-color:var(--accent);
+  color:var(--on-accent);font-weight:500}
+.spacer{flex:1}
+
+/* ---- table ---- */
+.tbl{border:1px solid var(--rule);border-radius:3px;overflow:hidden;background:var(--panel);margin-top:14px}
+.hrow,.row{display:grid;grid-template-columns:minmax(150px,1.05fr) minmax(180px,1.5fr) 84px 62px 58px minmax(150px,1fr);
+  gap:14px;align-items:center;padding:9px 14px}
+.hrow{background:var(--panel-2);border-bottom:1px solid var(--rule);
+  font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--faint);position:sticky;top:57px;z-index:4}
+.row{border-bottom:1px solid var(--rule-2);font-size:13.5px}
+.row:last-child{border-bottom:0}
+.row:hover{background:var(--panel-2)}
+.draw{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.draw svg{width:26px;height:26px;flex:none;border:1px solid var(--rule-2);border-radius:2px;background:var(--panel-2)}
+.draw polyline{fill:none;stroke:var(--ink-2);stroke-width:8;stroke-linecap:round;stroke-linejoin:round}
+.row:hover .draw polyline{stroke:var(--accent)}
+.draw .txt{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted);margin-left:2px}
+.out{font-weight:500}
+.out .frag{color:var(--ink-2);font-weight:400}
+.out .pot{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--faint)}
+.num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;
+  font-size:13px;text-align:right}
+.karma.up{color:var(--bless)} .karma.down{color:var(--wrath)} .karma.flat{color:var(--faint)}
+.tag{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:10.5px;
+  letter-spacing:.07em;text-transform:uppercase;padding:2px 7px;border-radius:2px;border:1px solid}
+.tag.n{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.tag.s{background:transparent;border-color:var(--rule);color:var(--ink-2)}
+.tag.b{background:transparent;border-color:var(--rule-2);color:var(--faint)}
+.tier{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint);text-align:center}
+.flagged{font-size:11px;color:var(--wrath);font-family:"IBM Plex Mono",monospace}
+.n-in{font:inherit;font-size:12.5px;width:100%;background:transparent;color:var(--ink);
+  border:0;border-bottom:1px dashed var(--rule);padding:3px 2px}
+.n-in::placeholder{color:var(--faint)}
+.n-in:focus{border-bottom-color:var(--accent);outline:0}
+.n-in.has{border-bottom-style:solid;border-bottom-color:var(--bless)}
+.empty{padding:26px 14px;color:var(--muted);font-size:14px}
+.grouphead{grid-column:1/-1;font-family:"IBM Plex Mono",monospace;font-size:11px;
+  letter-spacing:.11em;text-transform:uppercase;color:var(--accent);padding-top:4px}
+.callout{border:1px solid var(--rule);border-left:3px solid var(--accent);
+  background:var(--panel);border-radius:3px;padding:16px 18px;margin-top:18px}
+.callout h3{font-size:15px;font-family:"IBM Plex Sans",sans-serif;font-weight:600;margin-bottom:6px}
+.callout ul{margin:8px 0 0;padding-left:18px;color:var(--ink-2);font-size:14px}
+.callout li{margin:4px 0}
+.callout code{font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--accent)}
+footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--rule);
+  color:var(--faint);font-size:13px}
+@media (max-width:840px){
+  .hrow{display:none}
+  .row{grid-template-columns:1fr 1fr;gap:6px 12px;padding:12px 14px}
+  .row>.tier,.row>.num{text-align:left}
+  .bar{position:static}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+<div class="wrap">
+<header>
+  <p class="eyebrow">Hand of the Heavens &middot; casting reference</p>
+  <h1>Rune Grammar</h1>
+  <p class="lede">Every drawing of one to three runes, and what it casts today. Most of
+  them have no name yet &mdash; they fall through to the blend rule and fire their parts
+  at once. Those are the slots worth arguing about.</p>
+  <p class="note">Generated by <code>tools/rune_sheet.py</code> from
+  <code>spellbook.gd</code> and <code>miracle_manager.gd</code>, so nothing here is
+  aspirational &mdash; it is what the build actually does, costed and weighed with the
+  game&rsquo;s own formulas. The stroke shapes are drawn from the recognizer&rsquo;s own
+  templates, so they cannot drift from what the game will accept.</p>
+  <p class="note"><b>New this pass:</b> four workings, two of which are the first that
+  change the <em>shape</em> of the world rather than what is standing on it &mdash;
+  <code>earth + fury</code> is an <b>earthquake</b>, <code>earth + fire + fury</code> a
+  <b>volcano</b>. Alongside them, <code>ward + water</code> gives the creature footing on
+  water and <code>calm + life + water</code> is a <b>healing shower</b>. All four are
+  priced low on purpose while they are being played with.</p>
+  <div class="stats" id="stats"></div>
+</header>
+
+<section>
+  <div class="sec-head"><h2>The ten runes</h2>
+    <span class="count">one stroke each &middot; order never matters</span></div>
+  <p class="note">Draw a shape, lift, draw another to add to it. Stop, and it casts.
+  The number is the village that teaches it.</p>
+  <div class="legend" id="legend"></div>
+</section>
+
+<section>
+  <div class="sec-head"><h2>What needs deciding</h2></div>
+  <div class="callout">
+    <h3>Three questions for testers</h3>
+    <ul>
+      <li><b>The 236 blends.</b> Any drawing with no name casts each rune&rsquo;s own
+      miracle at once, weakened. Which of these deserve to be their own thing?
+      <code>fire + water</code> ought to mean something &mdash; steam, surely. So ought
+      <code>calm + water</code>, now that its three-rune sibling
+      <code>calm + life + water</code> is a healing shower.</li>
+      <li><b>Seven drawings are pure waste</b> &mdash; a shorter one already casts
+      <em>exactly</em> the same thing, at the same potency, for the same or less prayer.
+      Filter to <em>Redundant</em> to see them. They should either do something of their
+      own or stop existing. (Note this is a stricter test than it looks:
+      <code>fire + fire</code> is <em>not</em> here, because a second fire rune buys a
+      bigger fireball rather than the same one.)</li>
+      <li><b>Fury is earning its place now.</b> It appears in seven named recipes and
+      genuinely changes the outcome in <b>four</b> of them &mdash; it was one of five
+      before the earth-movers arrived. The three that still do nothing are
+      <code>air + air + fury</code>, <code>air + fire + fury</code> and
+      <code>air + air + fury + water</code>, where the fury is simply ignored. So the
+      old question is half-answered: fury reads as an ingredient after all. Should the
+      three dead ones be given something to do, or dropped?</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><h2>Every drawing</h2>
+    <span class="count" id="shown"></span></div>
+  <div class="bar">
+    <input type="search" id="q" placeholder="Search a rune or an outcome&hellip;" aria-label="Search">
+    <select id="tier" aria-label="Filter by village">
+      <option value="0">Any village</option>
+      <option value="1">Castable at 1 village</option>
+      <option value="2">&hellip; at 2</option>
+      <option value="3">&hellip; at 3</option>
+      <option value="4">&hellip; at 4</option>
+    </select>
+    <button class="chipbtn" id="f-n" aria-pressed="false">Named</button>
+    <button class="chipbtn" id="f-s" aria-pressed="false">Stronger</button>
+    <button class="chipbtn" id="f-b" aria-pressed="false">Blend</button>
+    <button class="chipbtn" id="f-x" aria-pressed="false">Redundant</button>
+    <span class="spacer"></span>
+    <button class="chipbtn" id="copy">Copy my notes</button>
+  </div>
+  <div class="tbl">
+    <div class="hrow">
+      <span>Drawing</span><span>What it casts now</span><span>Kind</span>
+      <span>Prayer</span><span>Karma</span><span>What should it do?</span>
+    </div>
+    <div id="rows"></div>
+  </div>
+</section>
+
+<footer>
+  Notes you type stay in this browser only. Use <b>Copy my notes</b> to paste them back
+  to the team. Prayer costs and karma are computed with the same formulas the game uses.
+</footer>
+</div>
+
+<script>window.__RUNES__={"rows":[{"r":["air"],"k":"s","o":"gust","c":12,"m":0.0,"t":4},{"r":["calm"],"k":"s","o":"heal","c":15,"m":3.0,"t":1},{"r":["earth"],"k":"s","o":"forage_thicket","c":30,"m":2.0,"t":2},{"r":["fire"],"k":"s","o":"fireball","c":25,"m":-2.5,"t":3},{"r":["force"],"k":"s","o":"lightning","c":30,"m":-4.0,"t":2},{"r":["fury"],"k":"s","o":"thunderclap","c":15,"m":-1.0,"t":4},{"r":["life"],"k":"s","o":"food","c":20,"m":2.0,"t":1},{"r":["sky"],"k":"s","o":"bird_flock","c":40,"m":1.0,"t":3},{"r":["ward"],"k":"s","o":"strength","c":35,"m":1.0,"t":2},{"r":["water"],"k":"s","o":"rain","c":25,"m":2.0,"t":1},{"r":["air","air"],"k":"n","o":"tornado","c":110,"m":-8.0,"t":4},{"r":["air","calm"],"k":"n","o":"flight","c":55,"m":1.5,"t":4},{"r":["air","earth"],"k":"n","o":"portal","c":70,"m":1.0,"t":4},{"r":["air","fire"],"k":"n","o":"firestorm","c":130,"m":-9.0,"t":4},{"r":["air","force"],"k":"b","o":"gust + lightning","c":24,"m":-2.8,"t":4,"b":[["gust",0.71],["lightning",0.71]]},{"r":["air","fury"],"k":"b","o":"gust + thunderclap","c":15,"m":-0.7,"t":4,"b":[["gust",0.71],["thunderclap",0.71]]},{"r":["air","life"],"k":"b","o":"gust + food","c":18,"m":1.4,"t":4,"b":[["gust",0.71],["food",0.71]]},{"r":["air","sky"],"k":"b","o":"gust + bird_flock","c":29,"m":0.7,"t":4,"b":[["gust",0.71],["bird_flock",0.71]]},{"r":["air","ward"],"k":"b","o":"gust + strength","c":27,"m":0.7,"t":4,"b":[["gust",0.71],["strength",0.71]]},{"r":["air","water"],"k":"b","o":"gust + rain","c":21,"m":1.4,"t":4,"b":[["gust",0.71],["rain",0.71]]},{"r":["calm","calm"],"k":"s","o":"heal","c":23,"m":3.0,"t":1},{"r":["calm","earth"],"k":"b","o":"heal + forage_thicket","c":25,"m":3.5,"t":2,"b":[["heal",0.71],["forage_thicket",0.71]]},{"r":["calm","fire"],"k":"b","o":"heal + fireball","c":23,"m":0.4,"t":3,"b":[["heal",0.71],["fireball",0.71]]},{"r":["calm","force"],"k":"b","o":"heal + lightning","c":25,"m":-0.7,"t":2,"b":[["heal",0.71],["lightning",0.71]]},{"r":["calm","fury"],"k":"b","o":"heal + thunderclap","c":17,"m":1.4,"t":4,"b":[["heal",0.71],["thunderclap",0.71]]},{"r":["calm","life"],"k":"n","o":"heal","c":15,"m":3.0,"t":1,"x":1},{"r":["calm","sky"],"k":"b","o":"heal + bird_flock","c":31,"m":2.8,"t":3,"b":[["heal",0.71],["bird_flock",0.71]]},{"r":["calm","ward"],"k":"b","o":"heal + strength","c":28,"m":2.8,"t":2,"b":[["heal",0.71],["strength",0.71]]},{"r":["calm","water"],"k":"b","o":"heal + rain","c":23,"m":3.5,"t":1,"b":[["heal",0.71],["rain",0.71]]},{"r":["earth","earth"],"k":"n","o":"forest_seed","c":45,"m":2.5,"t":2},{"r":["earth","fire"],"k":"b","o":"forage_thicket + fireball","c":31,"m":-0.4,"t":3,"b":[["forage_thicket",0.71],["fireball",0.71]]},{"r":["earth","force"],"k":"b","o":"forage_thicket + lightning","c":34,"m":-1.4,"t":2,"b":[["forage_thicket",0.71],["lightning",0.71]]},{"r":["earth","fury"],"k":"n","o":"earthquake","c":30,"m":-4.0,"t":4},{"r":["earth","life"],"k":"n","o":"forest_seed","c":45,"m":2.5,"t":2},{"r":["earth","sky"],"k":"b","o":"forage_thicket + bird_flock","c":40,"m":2.1,"t":3,"b":[["forage_thicket",0.71],["bird_flock",0.71]]},{"r":["earth","ward"],"k":"n","o":"strength","c":35,"m":1.0,"t":2,"x":1},{"r":["earth","water"],"k":"b","o":"forage_thicket + rain","c":31,"m":2.8,"t":2,"b":[["forage_thicket",0.71],["rain",0.71]]},{"r":["fire","fire"],"k":"s","o":"fireball","c":38,"m":-2.5,"t":3},{"r":["fire","force"],"k":"n","o":"lightning","c":30,"m":-4.0,"t":3,"x":1},{"r":["fire","fury"],"k":"b","o":"fireball + thunderclap","c":23,"m":-2.5,"t":4,"b":[["fireball",0.71],["thunderclap",0.71]]},{"r":["fire","life"],"k":"b","o":"fireball + food","c":25,"m":-0.4,"t":3,"b":[["fireball",0.71],["food",0.71]]},{"r":["fire","sky"],"k":"b","o":"fireball + bird_flock","c":37,"m":-1.1,"t":3,"b":[["fireball",0.71],["bird_flock",0.71]]},{"r":["fire","ward"],"k":"b","o":"fireball + strength","c":34,"m":-1.1,"t":3,"b":[["fireball",0.71],["strength",0.71]]},{"r":["fire","water"],"k":"b","o":"fireball + rain","c":28,"m":-0.4,"t":3,"b":[["fireball",0.71],["rain",0.71]]},{"r":["force","force"],"k":"s","o":"lightning","c":46,"m":-4.0,"t":2},{"r":["force","fury"],"k":"b","o":"lightning + thunderclap","c":25,"m":-3.5,"t":4,"b":[["lightning",0.71],["thunderclap",0.71]]},{"r":["force","life"],"k":"b","o":"lightning + food","c":28,"m":-1.4,"t":2,"b":[["lightning",0.71],["food",0.71]]},{"r":["force","sky"],"k":"b","o":"lightning + bird_flock","c":40,"m":-2.1,"t":3,"b":[["lightning",0.71],["bird_flock",0.71]]},{"r":["force","ward"],"k":"b","o":"lightning + strength","c":37,"m":-2.1,"t":2,"b":[["lightning",0.71],["strength",0.71]]},{"r":["force","water"],"k":"n","o":"thunderstorm","c":60,"m":-5.0,"t":2},{"r":["fury","fury"],"k":"s","o":"thunderclap","c":23,"m":-1.0,"t":4},{"r":["fury","life"],"k":"b","o":"thunderclap + food","c":20,"m":0.7,"t":4,"b":[["thunderclap",0.71],["food",0.71]]},{"r":["fury","sky"],"k":"b","o":"thunderclap + bird_flock","c":31,"m":0.0,"t":4,"b":[["thunderclap",0.71],["bird_flock",0.71]]},{"r":["fury","ward"],"k":"b","o":"thunderclap + strength","c":28,"m":0.0,"t":4,"b":[["thunderclap",0.71],["strength",0.71]]},{"r":["fury","water"],"k":"b","o":"thunderclap + rain","c":23,"m":0.7,"t":4,"b":[["thunderclap",0.71],["rain",0.71]]},{"r":["life","life"],"k":"s","o":"food","c":30,"m":2.0,"t":1},{"r":["life","sky"],"k":"n","o":"bird_flock","c":40,"m":1.0,"t":3,"x":1},{"r":["life","ward"],"k":"b","o":"food + strength","c":31,"m":2.1,"t":2,"b":[["food",0.71],["strength",0.71]]},{"r":["life","water"],"k":"n","o":"forage_thicket","c":30,"m":2.0,"t":1,"x":1},{"r":["sky","sky"],"k":"s","o":"bird_flock","c":61,"m":1.0,"t":3},{"r":["sky","ward"],"k":"b","o":"bird_flock + strength","c":42,"m":1.4,"t":3,"b":[["bird_flock",0.71],["strength",0.71]]},{"r":["sky","water"],"k":"b","o":"bird_flock + rain","c":37,"m":2.1,"t":3,"b":[["bird_flock",0.71],["rain",0.71]]},{"r":["ward","ward"],"k":"s","o":"strength","c":53,"m":1.0,"t":2},{"r":["ward","water"],"k":"n","o":"water_walk","c":20,"m":1.5,"t":2},{"r":["water","water"],"k":"n","o":"cloudburst","c":45,"m":1.5,"t":1},{"r":["air","air","air"],"k":"s","o":"gust","c":25,"m":0.0,"t":4},{"r":["air","air","calm"],"k":"b","o":"gust + heal","c":19,"m":2.1,"t":4,"b":[["gust",1.13],["heal",0.71]]},{"r":["air","air","earth"],"k":"b","o":"gust + forage_thicket","c":28,"m":1.4,"t":4,"b":[["gust",1.13],["forage_thicket",0.71]]},{"r":["air","air","fire"],"k":"b","o":"gust + fireball","c":25,"m":-1.8,"t":4,"b":[["gust",1.13],["fireball",0.71]]},{"r":["air","air","force"],"k":"b","o":"gust + lightning","c":28,"m":-2.8,"t":4,"b":[["gust",1.13],["lightning",0.71]]},{"r":["air","air","fury"],"k":"n","o":"tornado","c":110,"m":-8.0,"t":4,"x":1},{"r":["air","air","life"],"k":"b","o":"gust + food","c":22,"m":1.4,"t":4,"b":[["gust",1.13],["food",0.71]]},{"r":["air","air","sky"],"k":"b","o":"gust + bird_flock","c":33,"m":0.7,"t":4,"b":[["gust",1.13],["bird_flock",0.71]]},{"r":["air","air","ward"],"k":"b","o":"gust + strength","c":31,"m":0.7,"t":4,"b":[["gust",1.13],["strength",0.71]]},{"r":["air","air","water"],"k":"n","o":"hurricane","c":190,"m":-11.0,"t":4},{"r":["air","calm","calm"],"k":"b","o":"gust + heal","c":20,"m":3.4,"t":4,"b":[["gust",0.71],["heal",1.13]]},{"r":["air","calm","earth"],"k":"b","o":"gust + heal + forage_thicket","c":26,"m":2.9,"t":4,"b":[["gust",0.58],["heal",0.58],["forage_thicket",0.58]]},{"r":["air","calm","fire"],"k":"b","o":"gust + heal + fireball","c":24,"m":0.3,"t":4,"b":[["gust",0.58],["heal",0.58],["fireball",0.58]]},{"r":["air","calm","force"],"k":"b","o":"gust + heal + lightning","c":26,"m":-0.6,"t":4,"b":[["gust",0.58],["heal",0.58],["lightning",0.58]]},{"r":["air","calm","fury"],"k":"b","o":"gust + heal + thunderclap","c":19,"m":1.2,"t":4,"b":[["gust",0.58],["heal",0.58],["thunderclap",0.58]]},{"r":["air","calm","life"],"k":"b","o":"gust + heal + food","c":22,"m":2.9,"t":4,"b":[["gust",0.58],["heal",0.58],["food",0.58]]},{"r":["air","calm","sky"],"k":"b","o":"gust + heal + bird_flock","c":31,"m":2.3,"t":4,"b":[["gust",0.58],["heal",0.58],["bird_flock",0.58]]},{"r":["air","calm","ward"],"k":"b","o":"gust + heal + strength","c":29,"m":2.3,"t":4,"b":[["gust",0.58],["heal",0.58],["strength",0.58]]},{"r":["air","calm","water"],"k":"b","o":"gust + heal + rain","c":24,"m":2.9,"t":4,"b":[["gust",0.58],["heal",0.58],["rain",0.58]]},{"r":["air","earth","earth"],"k":"b","o":"gust + forage_thicket","c":34,"m":2.3,"t":4,"b":[["gust",0.71],["forage_thicket",1.13]]},{"r":["air","earth","fire"],"k":"b","o":"gust + forage_thicket + fireball","c":31,"m":-0.3,"t":4,"b":[["gust",0.58],["forage_thicket",0.58],["fireball",0.58]]},{"r":["air","earth","force"],"k":"b","o":"gust + forage_thicket + lightning","c":33,"m":-1.2,"t":4,"b":[["gust",0.58],["forage_thicket",0.58],["lightning",0.58]]},{"r":["air","earth","fury"],"k":"b","o":"gust + forage_thicket + thunderclap","c":26,"m":0.6,"t":4,"b":[["gust",0.58],["forage_thicket",0.58],["thunderclap",0.58]]},{"r":["air","earth","life"],"k":"b","o":"gust + forage_thicket + food","c":29,"m":2.3,"t":4,"b":[["gust",0.58],["forage_thicket",0.58],["food",0.58]]},{"r":["air","earth","sky"],"k":"b","o":"gust + forage_thicket + bird_flock","c":38,"m":1.7,"t":4,"b":[["gust",0.58],["forage_thicket",0.58],["bird_flock",0.58]]},{"r":["air","earth","ward"],"k":"b","o":"gust + forage_thicket + strength","c":36,"m":1.7,"t":4,"b":[["gust",0.58],["forage_thicket",0.58],["strength",0.58]]},{"r":["air","earth","water"],"k":"b","o":"gust + forage_thicket + rain","c":31,"m":2.3,"t":4,"b":[["gust",0.58],["forage_thicket",0.58],["rain",0.58]]},{"r":["air","fire","fire"],"k":"b","o":"gust + fireball","c":29,"m":-2.8,"t":4,"b":[["gust",0.71],["fireball",1.13]]},{"r":["air","fire","force"],"k":"b","o":"gust + fireball + lightning","c":31,"m":-3.8,"t":4,"b":[["gust",0.58],["fireball",0.58],["lightning",0.58]]},{"r":["air","fire","fury"],"k":"n","o":"firestorm","c":130,"m":-9.0,"t":4,"x":1},{"r":["air","fire","life"],"k":"b","o":"gust + fireball + food","c":26,"m":-0.3,"t":4,"b":[["gust",0.58],["fireball",0.58],["food",0.58]]},{"r":["air","fire","sky"],"k":"b","o":"gust + fireball + bird_flock","c":36,"m":-0.9,"t":4,"b":[["gust",0.58],["fireball",0.58],["bird_flock",0.58]]},{"r":["air","fire","ward"],"k":"b","o":"gust + fireball + strength","c":33,"m":-0.9,"t":4,"b":[["gust",0.58],["fireball",0.58],["strength",0.58]]},{"r":["air","fire","water"],"k":"b","o":"gust + fireball + rain","c":29,"m":-0.3,"t":4,"b":[["gust",0.58],["fireball",0.58],["rain",0.58]]},{"r":["air","force","force"],"k":"b","o":"gust + lightning","c":34,"m":-4.5,"t":4,"b":[["gust",0.71],["lightning",1.13]]},{"r":["air","force","fury"],"k":"b","o":"gust + lightning + thunderclap","c":26,"m":-2.9,"t":4,"b":[["gust",0.58],["lightning",0.58],["thunderclap",0.58]]},{"r":["air","force","life"],"k":"b","o":"gust + lightning + food","c":29,"m":-1.2,"t":4,"b":[["gust",0.58],["lightning",0.58],["food",0.58]]},{"r":["air","force","sky"],"k":"b","o":"gust + lightning + bird_flock","c":38,"m":-1.7,"t":4,"b":[["gust",0.58],["lightning",0.58],["bird_flock",0.58]]},{"r":["air","force","ward"],"k":"b","o":"gust + lightning + strength","c":36,"m":-1.7,"t":4,"b":[["gust",0.58],["lightning",0.58],["strength",0.58]]},{"r":["air","force","water"],"k":"b","o":"gust + lightning + rain","c":31,"m":-1.2,"t":4,"b":[["gust",0.58],["lightning",0.58],["rain",0.58]]},{"r":["air","fury","fury"],"k":"b","o":"gust + thunderclap","c":20,"m":-1.1,"t":4,"b":[["gust",0.71],["thunderclap",1.13]]},{"r":["air","fury","life"],"k":"b","o":"gust + thunderclap + food","c":22,"m":0.6,"t":4,"b":[["gust",0.58],["thunderclap",0.58],["food",0.58]]},{"r":["air","fury","sky"],"k":"b","o":"gust + thunderclap + bird_flock","c":31,"m":0.0,"t":4,"b":[["gust",0.58],["thunderclap",0.58],["bird_flock",0.58]]},{"r":["air","fury","ward"],"k":"b","o":"gust + thunderclap + strength","c":29,"m":0.0,"t":4,"b":[["gust",0.58],["thunderclap",0.58],["strength",0.58]]},{"r":["air","fury","water"],"k":"b","o":"gust + thunderclap + rain","c":24,"m":0.6,"t":4,"b":[["gust",0.58],["thunderclap",0.58],["rain",0.58]]},{"r":["air","life","life"],"k":"b","o":"gust + food","c":25,"m":2.3,"t":4,"b":[["gust",0.71],["food",1.13]]},{"r":["air","life","sky"],"k":"b","o":"gust + food + bird_flock","c":33,"m":1.7,"t":4,"b":[["gust",0.58],["food",0.58],["bird_flock",0.58]]},{"r":["air","life","ward"],"k":"b","o":"gust + food + strength","c":31,"m":1.7,"t":4,"b":[["gust",0.58],["food",0.58],["strength",0.58]]},{"r":["air","life","water"],"k":"b","o":"gust + food + rain","c":26,"m":2.3,"t":4,"b":[["gust",0.58],["food",0.58],["rain",0.58]]},{"r":["air","sky","sky"],"k":"b","o":"gust + bird_flock","c":43,"m":1.1,"t":4,"b":[["gust",0.71],["bird_flock",1.13]]},{"r":["air","sky","ward"],"k":"b","o":"gust + bird_flock + strength","c":40,"m":1.2,"t":4,"b":[["gust",0.58],["bird_flock",0.58],["strength",0.58]]},{"r":["air","sky","water"],"k":"b","o":"gust + bird_flock + rain","c":36,"m":1.7,"t":4,"b":[["gust",0.58],["bird_flock",0.58],["rain",0.58]]},{"r":["air","ward","ward"],"k":"b","o":"gust + strength","c":38,"m":1.1,"t":4,"b":[["gust",0.71],["strength",1.13]]},{"r":["air","ward","water"],"k":"b","o":"gust + strength + rain","c":33,"m":1.7,"t":4,"b":[["gust",0.58],["strength",0.58],["rain",0.58]]},{"r":["air","water","water"],"k":"b","o":"gust + rain","c":29,"m":2.3,"t":4,"b":[["gust",0.71],["rain",1.13]]},{"r":["calm","calm","calm"],"k":"s","o":"heal","c":31,"m":3.0,"t":1},{"r":["calm","calm","earth"],"k":"b","o":"heal + forage_thicket","c":31,"m":4.8,"t":2,"b":[["heal",1.13],["forage_thicket",0.71]]},{"r":["calm","calm","fire"],"k":"b","o":"heal + fireball","c":28,"m":1.6,"t":3,"b":[["heal",1.13],["fireball",0.71]]},{"r":["calm","calm","force"],"k":"b","o":"heal + lightning","c":31,"m":0.6,"t":2,"b":[["heal",1.13],["lightning",0.71]]},{"r":["calm","calm","fury"],"k":"b","o":"heal + thunderclap","c":22,"m":2.7,"t":4,"b":[["heal",1.13],["thunderclap",0.71]]},{"r":["calm","calm","life"],"k":"b","o":"heal + food","c":25,"m":4.8,"t":1,"b":[["heal",1.13],["food",0.71]]},{"r":["calm","calm","sky"],"k":"b","o":"heal + bird_flock","c":36,"m":4.1,"t":3,"b":[["heal",1.13],["bird_flock",0.71]]},{"r":["calm","calm","ward"],"k":"b","o":"heal + strength","c":33,"m":4.1,"t":2,"b":[["heal",1.13],["strength",0.71]]},{"r":["calm","calm","water"],"k":"b","o":"heal + rain","c":28,"m":4.8,"t":1,"b":[["heal",1.13],["rain",0.71]]},{"r":["calm","earth","earth"],"k":"b","o":"heal + forage_thicket","c":36,"m":4.4,"t":2,"b":[["heal",0.71],["forage_thicket",1.13]]},{"r":["calm","earth","fire"],"k":"b","o":"heal + forage_thicket + fireball","c":32,"m":1.4,"t":3,"b":[["heal",0.58],["forage_thicket",0.58],["fireball",0.58]]},{"r":["calm","earth","force"],"k":"b","o":"heal + forage_thicket + lightning","c":35,"m":0.6,"t":2,"b":[["heal",0.58],["forage_thicket",0.58],["lightning",0.58]]},{"r":["calm","earth","fury"],"k":"b","o":"heal + forage_thicket + thunderclap","c":28,"m":2.3,"t":4,"b":[["heal",0.58],["forage_thicket",0.58],["thunderclap",0.58]]},{"r":["calm","earth","life"],"k":"b","o":"heal + forage_thicket + food","c":30,"m":4.0,"t":2,"b":[["heal",0.58],["forage_thicket",0.58],["food",0.58]]},{"r":["calm","earth","sky"],"k":"b","o":"heal + forage_thicket + bird_flock","c":39,"m":3.5,"t":3,"b":[["heal",0.58],["forage_thicket",0.58],["bird_flock",0.58]]},{"r":["calm","earth","ward"],"k":"b","o":"heal + forage_thicket + strength","c":37,"m":3.5,"t":2,"b":[["heal",0.58],["forage_thicket",0.58],["strength",0.58]]},{"r":["calm","earth","water"],"k":"b","o":"heal + forage_thicket + rain","c":32,"m":4.0,"t":2,"b":[["heal",0.58],["forage_thicket",0.58],["rain",0.58]]},{"r":["calm","fire","fire"],"k":"b","o":"heal + fireball","c":31,"m":-0.7,"t":3,"b":[["heal",0.71],["fireball",1.13]]},{"r":["calm","fire","force"],"k":"b","o":"heal + fireball + lightning","c":32,"m":-2.0,"t":3,"b":[["heal",0.58],["fireball",0.58],["lightning",0.58]]},{"r":["calm","fire","fury"],"k":"b","o":"heal + fireball + thunderclap","c":25,"m":-0.3,"t":4,"b":[["heal",0.58],["fireball",0.58],["thunderclap",0.58]]},{"r":["calm","fire","life"],"k":"b","o":"heal + fireball + food","c":28,"m":1.4,"t":3,"b":[["heal",0.58],["fireball",0.58],["food",0.58]]},{"r":["calm","fire","sky"],"k":"b","o":"heal + fireball + bird_flock","c":37,"m":0.9,"t":3,"b":[["heal",0.58],["fireball",0.58],["bird_flock",0.58]]},{"r":["calm","fire","ward"],"k":"b","o":"heal + fireball + strength","c":35,"m":0.9,"t":3,"b":[["heal",0.58],["fireball",0.58],["strength",0.58]]},{"r":["calm","fire","water"],"k":"b","o":"heal + fireball + rain","c":30,"m":1.4,"t":3,"b":[["heal",0.58],["fireball",0.58],["rain",0.58]]},{"r":["calm","force","force"],"k":"b","o":"heal + lightning","c":36,"m":-2.4,"t":2,"b":[["heal",0.71],["lightning",1.13]]},{"r":["calm","force","fury"],"k":"b","o":"heal + lightning + thunderclap","c":28,"m":-1.2,"t":4,"b":[["heal",0.58],["lightning",0.58],["thunderclap",0.58]]},{"r":["calm","force","life"],"k":"b","o":"heal + lightning + food","c":30,"m":0.6,"t":2,"b":[["heal",0.58],["lightning",0.58],["food",0.58]]},{"r":["calm","force","sky"],"k":"b","o":"heal + lightning + bird_flock","c":39,"m":0.0,"t":3,"b":[["heal",0.58],["lightning",0.58],["bird_flock",0.58]]},{"r":["calm","force","ward"],"k":"b","o":"heal + lightning + strength","c":37,"m":0.0,"t":2,"b":[["heal",0.58],["lightning",0.58],["strength",0.58]]},{"r":["calm","force","water"],"k":"b","o":"heal + lightning + rain","c":32,"m":0.6,"t":2,"b":[["heal",0.58],["lightning",0.58],["rain",0.58]]},{"r":["calm","fury","fury"],"k":"b","o":"heal + thunderclap","c":22,"m":1.0,"t":4,"b":[["heal",0.71],["thunderclap",1.13]]},{"r":["calm","fury","life"],"k":"b","o":"heal + thunderclap + food","c":23,"m":2.3,"t":4,"b":[["heal",0.58],["thunderclap",0.58],["food",0.58]]},{"r":["calm","fury","sky"],"k":"b","o":"heal + thunderclap + bird_flock","c":32,"m":1.7,"t":4,"b":[["heal",0.58],["thunderclap",0.58],["bird_flock",0.58]]},{"r":["calm","fury","ward"],"k":"b","o":"heal + thunderclap + strength","c":30,"m":1.7,"t":4,"b":[["heal",0.58],["thunderclap",0.58],["strength",0.58]]},{"r":["calm","fury","water"],"k":"b","o":"heal + thunderclap + rain","c":25,"m":2.3,"t":4,"b":[["heal",0.58],["thunderclap",0.58],["rain",0.58]]},{"r":["calm","life","life"],"k":"b","o":"heal + food","c":27,"m":4.4,"t":1,"b":[["heal",0.71],["food",1.13]]},{"r":["calm","life","sky"],"k":"b","o":"heal + food + bird_flock","c":35,"m":3.5,"t":3,"b":[["heal",0.58],["food",0.58],["bird_flock",0.58]]},{"r":["calm","life","ward"],"k":"b","o":"heal + food + strength","c":32,"m":3.5,"t":2,"b":[["heal",0.58],["food",0.58],["strength",0.58]]},{"r":["calm","life","water"],"k":"n","o":"healing_shower","c":25,"m":4.5,"t":1},{"r":["calm","sky","sky"],"k":"b","o":"heal + bird_flock","c":45,"m":3.3,"t":3,"b":[["heal",0.71],["bird_flock",1.13]]},{"r":["calm","sky","ward"],"k":"b","o":"heal + bird_flock + strength","c":42,"m":2.9,"t":3,"b":[["heal",0.58],["bird_flock",0.58],["strength",0.58]]},{"r":["calm","sky","water"],"k":"b","o":"heal + bird_flock + rain","c":37,"m":3.5,"t":3,"b":[["heal",0.58],["bird_flock",0.58],["rain",0.58]]},{"r":["calm","ward","ward"],"k":"b","o":"heal + strength","c":40,"m":3.3,"t":2,"b":[["heal",0.71],["strength",1.13]]},{"r":["calm","ward","water"],"k":"b","o":"heal + strength + rain","c":35,"m":3.5,"t":2,"b":[["heal",0.58],["strength",0.58],["rain",0.58]]},{"r":["calm","water","water"],"k":"b","o":"heal + rain","c":31,"m":4.4,"t":1,"b":[["heal",0.71],["rain",1.13]]},{"r":["earth","earth","earth"],"k":"s","o":"forage_thicket","c":61,"m":2.0,"t":2},{"r":["earth","earth","fire"],"k":"b","o":"forage_thicket + fireball","c":41,"m":0.5,"t":3,"b":[["forage_thicket",1.13],["fireball",0.71]]},{"r":["earth","earth","force"],"k":"b","o":"forage_thicket + lightning","c":44,"m":-0.6,"t":2,"b":[["forage_thicket",1.13],["lightning",0.71]]},{"r":["earth","earth","fury"],"k":"b","o":"forage_thicket + thunderclap","c":36,"m":1.6,"t":4,"b":[["forage_thicket",1.13],["thunderclap",0.71]]},{"r":["earth","earth","life"],"k":"b","o":"forage_thicket + food","c":38,"m":3.7,"t":2,"b":[["forage_thicket",1.13],["food",0.71]]},{"r":["earth","earth","sky"],"k":"b","o":"forage_thicket + bird_flock","c":50,"m":3.0,"t":3,"b":[["forage_thicket",1.13],["bird_flock",0.71]]},{"r":["earth","earth","ward"],"k":"b","o":"forage_thicket + strength","c":47,"m":3.0,"t":2,"b":[["forage_thicket",1.13],["strength",0.71]]},{"r":["earth","earth","water"],"k":"b","o":"forage_thicket + rain","c":41,"m":3.7,"t":2,"b":[["forage_thicket",1.13],["rain",0.71]]},{"r":["earth","fire","fire"],"k":"b","o":"forage_thicket + fireball","c":40,"m":-1.4,"t":3,"b":[["forage_thicket",0.71],["fireball",1.13]]},{"r":["earth","fire","force"],"k":"b","o":"forage_thicket + fireball + lightning","c":39,"m":-2.6,"t":3,"b":[["forage_thicket",0.58],["fireball",0.58],["lightning",0.58]]},{"r":["earth","fire","fury"],"k":"n","o":"volcano","c":45,"m":-10.0,"t":4},{"r":["earth","fire","life"],"k":"b","o":"forage_thicket + fireball + food","c":35,"m":0.9,"t":3,"b":[["forage_thicket",0.58],["fireball",0.58],["food",0.58]]},{"r":["earth","fire","sky"],"k":"b","o":"forage_thicket + fireball + bird_flock","c":44,"m":0.3,"t":3,"b":[["forage_thicket",0.58],["fireball",0.58],["bird_flock",0.58]]},{"r":["earth","fire","ward"],"k":"b","o":"forage_thicket + fireball + strength","c":42,"m":0.3,"t":3,"b":[["forage_thicket",0.58],["fireball",0.58],["strength",0.58]]},{"r":["earth","fire","water"],"k":"b","o":"forage_thicket + fireball + rain","c":37,"m":0.9,"t":3,"b":[["forage_thicket",0.58],["fireball",0.58],["rain",0.58]]},{"r":["earth","force","force"],"k":"b","o":"forage_thicket + lightning","c":44,"m":-3.1,"t":2,"b":[["forage_thicket",0.71],["lightning",1.13]]},{"r":["earth","force","fury"],"k":"b","o":"forage_thicket + lightning + thunderclap","c":35,"m":-1.7,"t":4,"b":[["forage_thicket",0.58],["lightning",0.58],["thunderclap",0.58]]},{"r":["earth","force","life"],"k":"b","o":"forage_thicket + lightning + food","c":37,"m":0.0,"t":2,"b":[["forage_thicket",0.58],["lightning",0.58],["food",0.58]]},{"r":["earth","force","sky"],"k":"b","o":"forage_thicket + lightning + bird_flock","c":46,"m":-0.6,"t":3,"b":[["forage_thicket",0.58],["lightning",0.58],["bird_flock",0.58]]},{"r":["earth","force","ward"],"k":"b","o":"forage_thicket + lightning + strength","c":44,"m":-0.6,"t":2,"b":[["forage_thicket",0.58],["lightning",0.58],["strength",0.58]]},{"r":["earth","force","water"],"k":"b","o":"forage_thicket + lightning + rain","c":39,"m":0.0,"t":2,"b":[["forage_thicket",0.58],["lightning",0.58],["rain",0.58]]},{"r":["earth","fury","fury"],"k":"b","o":"forage_thicket + thunderclap","c":31,"m":0.3,"t":4,"b":[["forage_thicket",0.71],["thunderclap",1.13]]},{"r":["earth","fury","life"],"k":"b","o":"forage_thicket + thunderclap + food","c":30,"m":1.7,"t":4,"b":[["forage_thicket",0.58],["thunderclap",0.58],["food",0.58]]},{"r":["earth","fury","sky"],"k":"b","o":"forage_thicket + thunderclap + bird_flock","c":39,"m":1.2,"t":4,"b":[["forage_thicket",0.58],["thunderclap",0.58],["bird_flock",0.58]]},{"r":["earth","fury","ward"],"k":"b","o":"forage_thicket + thunderclap + strength","c":37,"m":1.2,"t":4,"b":[["forage_thicket",0.58],["thunderclap",0.58],["strength",0.58]]},{"r":["earth","fury","water"],"k":"b","o":"forage_thicket + thunderclap + rain","c":32,"m":1.7,"t":4,"b":[["forage_thicket",0.58],["thunderclap",0.58],["rain",0.58]]},{"r":["earth","life","life"],"k":"b","o":"forage_thicket + food","c":35,"m":3.7,"t":2,"b":[["forage_thicket",0.71],["food",1.13]]},{"r":["earth","life","sky"],"k":"b","o":"forage_thicket + food + bird_flock","c":42,"m":2.9,"t":3,"b":[["forage_thicket",0.58],["food",0.58],["bird_flock",0.58]]},{"r":["earth","life","ward"],"k":"b","o":"forage_thicket + food + strength","c":39,"m":2.9,"t":2,"b":[["forage_thicket",0.58],["food",0.58],["strength",0.58]]},{"r":["earth","life","water"],"k":"b","o":"forage_thicket + food + rain","c":35,"m":3.5,"t":2,"b":[["forage_thicket",0.58],["food",0.58],["rain",0.58]]},{"r":["earth","sky","sky"],"k":"b","o":"forage_thicket + bird_flock","c":53,"m":2.5,"t":3,"b":[["forage_thicket",0.71],["bird_flock",1.13]]},{"r":["earth","sky","ward"],"k":"b","o":"forage_thicket + bird_flock + strength","c":48,"m":2.3,"t":3,"b":[["forage_thicket",0.58],["bird_flock",0.58],["strength",0.58]]},{"r":["earth","sky","water"],"k":"b","o":"forage_thicket + bird_flock + rain","c":44,"m":2.9,"t":3,"b":[["forage_thicket",0.58],["bird_flock",0.58],["rain",0.58]]},{"r":["earth","ward","ward"],"k":"b","o":"forage_thicket + strength","c":49,"m":2.5,"t":2,"b":[["forage_thicket",0.71],["strength",1.13]]},{"r":["earth","ward","water"],"k":"b","o":"forage_thicket + strength + rain","c":42,"m":2.9,"t":2,"b":[["forage_thicket",0.58],["strength",0.58],["rain",0.58]]},{"r":["earth","water","water"],"k":"b","o":"forage_thicket + rain","c":40,"m":3.7,"t":2,"b":[["forage_thicket",0.71],["rain",1.13]]},{"r":["fire","fire","fire"],"k":"s","o":"fireball","c":51,"m":-2.5,"t":3},{"r":["fire","fire","force"],"k":"b","o":"fireball + lightning","c":40,"m":-5.7,"t":3,"b":[["fireball",1.13],["lightning",0.71]]},{"r":["fire","fire","fury"],"k":"b","o":"fireball + thunderclap","c":31,"m":-3.5,"t":4,"b":[["fireball",1.13],["thunderclap",0.71]]},{"r":["fire","fire","life"],"k":"b","o":"fireball + food","c":34,"m":-1.4,"t":3,"b":[["fireball",1.13],["food",0.71]]},{"r":["fire","fire","sky"],"k":"b","o":"fireball + bird_flock","c":45,"m":-2.1,"t":3,"b":[["fireball",1.13],["bird_flock",0.71]]},{"r":["fire","fire","ward"],"k":"b","o":"fireball + strength","c":42,"m":-2.1,"t":3,"b":[["fireball",1.13],["strength",0.71]]},{"r":["fire","fire","water"],"k":"b","o":"fireball + rain","c":37,"m":-1.4,"t":3,"b":[["fireball",1.13],["rain",0.71]]},{"r":["fire","force","force"],"k":"b","o":"fireball + lightning","c":41,"m":-6.3,"t":3,"b":[["fireball",0.71],["lightning",1.13]]},{"r":["fire","force","fury"],"k":"b","o":"fireball + lightning + thunderclap","c":32,"m":-4.3,"t":4,"b":[["fireball",0.58],["lightning",0.58],["thunderclap",0.58]]},{"r":["fire","force","life"],"k":"b","o":"fireball + lightning + food","c":35,"m":-2.6,"t":3,"b":[["fireball",0.58],["lightning",0.58],["food",0.58]]},{"r":["fire","force","sky"],"k":"b","o":"fireball + lightning + bird_flock","c":44,"m":-3.2,"t":3,"b":[["fireball",0.58],["lightning",0.58],["bird_flock",0.58]]},{"r":["fire","force","ward"],"k":"b","o":"fireball + lightning + strength","c":42,"m":-3.2,"t":3,"b":[["fireball",0.58],["lightning",0.58],["strength",0.58]]},{"r":["fire","force","water"],"k":"b","o":"fireball + lightning + rain","c":37,"m":-2.6,"t":3,"b":[["fireball",0.58],["lightning",0.58],["rain",0.58]]},{"r":["fire","fury","fury"],"k":"b","o":"fireball + thunderclap","c":28,"m":-2.9,"t":4,"b":[["fireball",0.71],["thunderclap",1.13]]},{"r":["fire","fury","life"],"k":"b","o":"fireball + thunderclap + food","c":28,"m":-0.9,"t":4,"b":[["fireball",0.58],["thunderclap",0.58],["food",0.58]]},{"r":["fire","fury","sky"],"k":"b","o":"fireball + thunderclap + bird_flock","c":37,"m":-1.4,"t":4,"b":[["fireball",0.58],["thunderclap",0.58],["bird_flock",0.58]]},{"r":["fire","fury","ward"],"k":"b","o":"fireball + thunderclap + strength","c":35,"m":-1.4,"t":4,"b":[["fireball",0.58],["thunderclap",0.58],["strength",0.58]]},{"r":["fire","fury","water"],"k":"b","o":"fireball + thunderclap + rain","c":30,"m":-0.9,"t":4,"b":[["fireball",0.58],["thunderclap",0.58],["rain",0.58]]},{"r":["fire","life","life"],"k":"b","o":"fireball + food","c":32,"m":0.5,"t":3,"b":[["fireball",0.71],["food",1.13]]},{"r":["fire","life","sky"],"k":"b","o":"fireball + food + bird_flock","c":39,"m":0.3,"t":3,"b":[["fireball",0.58],["food",0.58],["bird_flock",0.58]]},{"r":["fire","life","ward"],"k":"b","o":"fireball + food + strength","c":37,"m":0.3,"t":3,"b":[["fireball",0.58],["food",0.58],["strength",0.58]]},{"r":["fire","life","water"],"k":"b","o":"fireball + food + rain","c":32,"m":0.9,"t":3,"b":[["fireball",0.58],["food",0.58],["rain",0.58]]},{"r":["fire","sky","sky"],"k":"b","o":"fireball + bird_flock","c":50,"m":-0.6,"t":3,"b":[["fireball",0.71],["bird_flock",1.13]]},{"r":["fire","sky","ward"],"k":"b","o":"fireball + bird_flock + strength","c":46,"m":-0.3,"t":3,"b":[["fireball",0.58],["bird_flock",0.58],["strength",0.58]]},{"r":["fire","sky","water"],"k":"b","o":"fireball + bird_flock + rain","c":42,"m":0.3,"t":3,"b":[["fireball",0.58],["bird_flock",0.58],["rain",0.58]]},{"r":["fire","ward","ward"],"k":"b","o":"fireball + strength","c":46,"m":-0.6,"t":3,"b":[["fireball",0.71],["strength",1.13]]},{"r":["fire","ward","water"],"k":"b","o":"fireball + strength + rain","c":39,"m":0.3,"t":3,"b":[["fireball",0.58],["strength",0.58],["rain",0.58]]},{"r":["fire","water","water"],"k":"b","o":"fireball + rain","c":37,"m":0.5,"t":3,"b":[["fireball",0.71],["rain",1.13]]},{"r":["force","force","force"],"k":"s","o":"lightning","c":61,"m":-4.0,"t":2},{"r":["force","force","fury"],"k":"b","o":"lightning + thunderclap","c":36,"m":-5.2,"t":4,"b":[["lightning",1.13],["thunderclap",0.71]]},{"r":["force","force","life"],"k":"b","o":"lightning + food","c":38,"m":-3.1,"t":2,"b":[["lightning",1.13],["food",0.71]]},{"r":["force","force","sky"],"k":"b","o":"lightning + bird_flock","c":50,"m":-3.8,"t":3,"b":[["lightning",1.13],["bird_flock",0.71]]},{"r":["force","force","ward"],"k":"b","o":"lightning + strength","c":47,"m":-3.8,"t":2,"b":[["lightning",1.13],["strength",0.71]]},{"r":["force","force","water"],"k":"n","o":"lightning_storm","c":90,"m":-7.0,"t":2},{"r":["force","fury","fury"],"k":"b","o":"lightning + thunderclap","c":31,"m":-4.0,"t":4,"b":[["lightning",0.71],["thunderclap",1.13]]},{"r":["force","fury","life"],"k":"b","o":"lightning + thunderclap + food","c":30,"m":-1.7,"t":4,"b":[["lightning",0.58],["thunderclap",0.58],["food",0.58]]},{"r":["force","fury","sky"],"k":"b","o":"lightning + thunderclap + bird_flock","c":39,"m":-2.3,"t":4,"b":[["lightning",0.58],["thunderclap",0.58],["bird_flock",0.58]]},{"r":["force","fury","ward"],"k":"b","o":"lightning + thunderclap + strength","c":37,"m":-2.3,"t":4,"b":[["lightning",0.58],["thunderclap",0.58],["strength",0.58]]},{"r":["force","fury","water"],"k":"n","o":"lightning_storm","c":90,"m":-7.0,"t":4},{"r":["force","life","life"],"k":"b","o":"lightning + food","c":35,"m":-0.6,"t":2,"b":[["lightning",0.71],["food",1.13]]},{"r":["force","life","sky"],"k":"b","o":"lightning + food + bird_flock","c":42,"m":-0.6,"t":3,"b":[["lightning",0.58],["food",0.58],["bird_flock",0.58]]},{"r":["force","life","ward"],"k":"b","o":"lightning + food + strength","c":39,"m":-0.6,"t":2,"b":[["lightning",0.58],["food",0.58],["strength",0.58]]},{"r":["force","life","water"],"k":"b","o":"lightning + food + rain","c":35,"m":0.0,"t":2,"b":[["lightning",0.58],["food",0.58],["rain",0.58]]},{"r":["force","sky","sky"],"k":"b","o":"lightning + bird_flock","c":53,"m":-1.7,"t":3,"b":[["lightning",0.71],["bird_flock",1.13]]},{"r":["force","sky","ward"],"k":"b","o":"lightning + bird_flock + strength","c":48,"m":-1.2,"t":3,"b":[["lightning",0.58],["bird_flock",0.58],["strength",0.58]]},{"r":["force","sky","water"],"k":"b","o":"lightning + bird_flock + rain","c":44,"m":-0.6,"t":3,"b":[["lightning",0.58],["bird_flock",0.58],["rain",0.58]]},{"r":["force","ward","ward"],"k":"b","o":"lightning + strength","c":49,"m":-1.7,"t":2,"b":[["lightning",0.71],["strength",1.13]]},{"r":["force","ward","water"],"k":"b","o":"lightning + strength + rain","c":42,"m":-0.6,"t":2,"b":[["lightning",0.58],["strength",0.58],["rain",0.58]]},{"r":["force","water","water"],"k":"b","o":"lightning + rain","c":40,"m":-0.6,"t":2,"b":[["lightning",0.71],["rain",1.13]]},{"r":["fury","fury","fury"],"k":"s","o":"thunderclap","c":31,"m":-1.0,"t":4},{"r":["fury","fury","life"],"k":"b","o":"thunderclap + food","c":25,"m":0.3,"t":4,"b":[["thunderclap",1.13],["food",0.71]]},{"r":["fury","fury","sky"],"k":"b","o":"thunderclap + bird_flock","c":36,"m":-0.4,"t":4,"b":[["thunderclap",1.13],["bird_flock",0.71]]},{"r":["fury","fury","ward"],"k":"b","o":"thunderclap + strength","c":33,"m":-0.4,"t":4,"b":[["thunderclap",1.13],["strength",0.71]]},{"r":["fury","fury","water"],"k":"b","o":"thunderclap + rain","c":28,"m":0.3,"t":4,"b":[["thunderclap",1.13],["rain",0.71]]},{"r":["fury","life","life"],"k":"b","o":"thunderclap + food","c":27,"m":1.6,"t":4,"b":[["thunderclap",0.71],["food",1.13]]},{"r":["fury","life","sky"],"k":"b","o":"thunderclap + food + bird_flock","c":35,"m":1.2,"t":4,"b":[["thunderclap",0.58],["food",0.58],["bird_flock",0.58]]},{"r":["fury","life","ward"],"k":"b","o":"thunderclap + food + strength","c":32,"m":1.2,"t":4,"b":[["thunderclap",0.58],["food",0.58],["strength",0.58]]},{"r":["fury","life","water"],"k":"b","o":"thunderclap + food + rain","c":28,"m":1.7,"t":4,"b":[["thunderclap",0.58],["food",0.58],["rain",0.58]]},{"r":["fury","sky","sky"],"k":"b","o":"thunderclap + bird_flock","c":45,"m":0.4,"t":4,"b":[["thunderclap",0.71],["bird_flock",1.13]]},{"r":["fury","sky","ward"],"k":"b","o":"thunderclap + bird_flock + strength","c":42,"m":0.6,"t":4,"b":[["thunderclap",0.58],["bird_flock",0.58],["strength",0.58]]},{"r":["fury","sky","water"],"k":"b","o":"thunderclap + bird_flock + rain","c":37,"m":1.2,"t":4,"b":[["thunderclap",0.58],["bird_flock",0.58],["rain",0.58]]},{"r":["fury","ward","ward"],"k":"b","o":"thunderclap + strength","c":40,"m":0.4,"t":4,"b":[["thunderclap",0.71],["strength",1.13]]},{"r":["fury","ward","water"],"k":"b","o":"thunderclap + strength + rain","c":35,"m":1.2,"t":4,"b":[["thunderclap",0.58],["strength",0.58],["rain",0.58]]},{"r":["fury","water","water"],"k":"b","o":"thunderclap + rain","c":31,"m":1.6,"t":4,"b":[["thunderclap",0.71],["rain",1.13]]},{"r":["life","life","life"],"k":"s","o":"food","c":41,"m":2.0,"t":1},{"r":["life","life","sky"],"k":"b","o":"food + bird_flock","c":41,"m":3.0,"t":3,"b":[["food",1.13],["bird_flock",0.71]]},{"r":["life","life","ward"],"k":"b","o":"food + strength","c":38,"m":3.0,"t":2,"b":[["food",1.13],["strength",0.71]]},{"r":["life","life","water"],"k":"b","o":"food + rain","c":32,"m":3.7,"t":1,"b":[["food",1.13],["rain",0.71]]},{"r":["life","sky","sky"],"k":"b","o":"food + bird_flock","c":48,"m":2.5,"t":3,"b":[["food",0.71],["bird_flock",1.13]]},{"r":["life","sky","ward"],"k":"b","o":"food + bird_flock + strength","c":44,"m":2.3,"t":3,"b":[["food",0.58],["bird_flock",0.58],["strength",0.58]]},{"r":["life","sky","water"],"k":"b","o":"food + bird_flock + rain","c":39,"m":2.9,"t":3,"b":[["food",0.58],["bird_flock",0.58],["rain",0.58]]},{"r":["life","ward","ward"],"k":"b","o":"food + strength","c":43,"m":2.5,"t":2,"b":[["food",0.71],["strength",1.13]]},{"r":["life","ward","water"],"k":"b","o":"food + strength + rain","c":37,"m":2.9,"t":2,"b":[["food",0.58],["strength",0.58],["rain",0.58]]},{"r":["life","water","water"],"k":"b","o":"food + rain","c":34,"m":3.7,"t":1,"b":[["food",0.71],["rain",1.13]]},{"r":["sky","sky","sky"],"k":"s","o":"bird_flock","c":82,"m":1.0,"t":3},{"r":["sky","sky","ward"],"k":"b","o":"bird_flock + strength","c":56,"m":1.8,"t":3,"b":[["bird_flock",1.13],["strength",0.71]]},{"r":["sky","sky","water"],"k":"b","o":"bird_flock + rain","c":50,"m":2.5,"t":3,"b":[["bird_flock",1.13],["rain",0.71]]},{"r":["sky","ward","ward"],"k":"b","o":"bird_flock + strength","c":54,"m":1.8,"t":3,"b":[["bird_flock",0.71],["strength",1.13]]},{"r":["sky","ward","water"],"k":"b","o":"bird_flock + strength + rain","c":46,"m":2.3,"t":3,"b":[["bird_flock",0.58],["strength",0.58],["rain",0.58]]},{"r":["sky","water","water"],"k":"b","o":"bird_flock + rain","c":45,"m":3.0,"t":3,"b":[["bird_flock",0.71],["rain",1.13]]},{"r":["ward","ward","ward"],"k":"s","o":"strength","c":72,"m":1.0,"t":2},{"r":["ward","ward","water"],"k":"b","o":"strength + rain","c":46,"m":2.5,"t":2,"b":[["strength",1.13],["rain",0.71]]},{"r":["ward","water","water"],"k":"b","o":"strength + rain","c":42,"m":3.0,"t":2,"b":[["strength",0.71],["rain",1.13]]},{"r":["water","water","water"],"k":"n","o":"deluge","c":80,"m":-1.0,"t":1}],"long":[{"r":["air","air","air","water"],"k":"n","o":"hurricane","c":190,"m":-11.0,"t":4},{"r":["air","air","fury","water"],"k":"n","o":"hurricane","c":190,"m":-11.0,"t":4},{"r":["force","force","fury","water"],"k":"n","o":"tempest","c":150,"m":-9.0,"t":4}],"gesture":{"water":"wave","force":"vline","earth":"hline","fire":"dline","life":"circle","air":"spiral","calm":"rev_spiral","fury":"zigzag","sky":"caret","ward":"arc"},"tier":{"water":1,"life":1,"calm":1,"earth":2,"force":2,"ward":2,"fire":3,"sky":3,"air":4,"fury":4},"base":{"water":"rain","force":"lightning","earth":"forage_thicket","fire":"fireball","life":"food","air":"gust","calm":"heal","fury":"thunderclap","sky":"bird_flock","ward":"strength"},"tiers":[["water","life","calm"],["earth","force","ward"],["fire","sky"],["air","fury"]],"glyphs":{"water":"12.0,50.0 13.2,52.6 14.4,55.3 15.6,57.8 16.8,60.3 18.0,62.7 19.2,65.0 20.4,67.1 21.7,69.0 22.9,70.8 24.1,72.3 25.3,73.7 26.5,74.8 27.7,75.6 28.9,76.2 30.1,76.5 31.3,76.6 32.5,76.4 33.7,75.9 34.9,75.2 36.1,74.2 37.3,73.0 38.5,71.6 39.7,69.9 41.0,68.1 42.2,66.1 43.4,63.9 44.6,61.5 45.8,59.1 47.0,56.6 48.2,54.0 49.4,51.3 50.6,48.7 51.8,46.0 53.0,43.4 54.2,40.9 55.4,38.5 56.6,36.1 57.8,33.9 59.0,31.9 60.3,30.1 61.5,28.4 62.7,27.0 63.9,25.8 65.1,24.8 66.3,24.1 67.5,23.6 68.7,23.4 69.9,23.5 71.1,23.8 72.3,24.4 73.5,25.2 74.7,26.3 75.9,27.7 77.1,29.2 78.3,31.0 79.6,32.9 80.8,35.0 82.0,37.3 83.2,39.7 84.4,42.2 85.6,44.7 86.8,47.4 88.0,50.0","force":"50.0,12.0 50.0,13.2 50.0,14.4 50.0,15.6 50.0,16.8 50.0,18.0 50.0,19.2 50.0,20.4 50.0,21.7 50.0,22.9 50.0,24.1 50.0,25.3 50.0,26.5 50.0,27.7 50.0,28.9 50.0,30.1 50.0,31.3 50.0,32.5 50.0,33.7 50.0,34.9 50.0,36.1 50.0,37.3 50.0,38.5 50.0,39.7 50.0,41.0 50.0,42.2 50.0,43.4 50.0,44.6 50.0,45.8 50.0,47.0 50.0,48.2 50.0,49.4 50.0,50.6 50.0,51.8 50.0,53.0 50.0,54.2 50.0,55.4 50.0,56.6 50.0,57.8 50.0,59.0 50.0,60.3 50.0,61.5 50.0,62.7 50.0,63.9 50.0,65.1 50.0,66.3 50.0,67.5 50.0,68.7 50.0,69.9 50.0,71.1 50.0,72.3 50.0,73.5 50.0,74.7 50.0,75.9 50.0,77.1 50.0,78.3 50.0,79.6 50.0,80.8 50.0,82.0 50.0,83.2 50.0,84.4 50.0,85.6 50.0,86.8 50.0,88.0","earth":"12.0,50.0 13.2,50.0 14.4,50.0 15.6,50.0 16.8,50.0 18.0,50.0 19.2,50.0 20.4,50.0 21.7,50.0 22.9,50.0 24.1,50.0 25.3,50.0 26.5,50.0 27.7,50.0 28.9,50.0 30.1,50.0 31.3,50.0 32.5,50.0 33.7,50.0 34.9,50.0 36.1,50.0 37.3,50.0 38.5,50.0 39.7,50.0 41.0,50.0 42.2,50.0 43.4,50.0 44.6,50.0 45.8,50.0 47.0,50.0 48.2,50.0 49.4,50.0 50.6,50.0 51.8,50.0 53.0,50.0 54.2,50.0 55.4,50.0 56.6,50.0 57.8,50.0 59.0,50.0 60.3,50.0 61.5,50.0 62.7,50.0 63.9,50.0 65.1,50.0 66.3,50.0 67.5,50.0 68.7,50.0 69.9,50.0 71.1,50.0 72.3,50.0 73.5,50.0 74.7,50.0 75.9,50.0 77.1,50.0 78.3,50.0 79.6,50.0 80.8,50.0 82.0,50.0 83.2,50.0 84.4,50.0 85.6,50.0 86.8,50.0 88.0,50.0","fire":"12.0,88.0 13.2,86.8 14.4,85.6 15.6,84.4 16.8,83.2 18.0,82.0 19.2,80.8 20.4,79.6 21.7,78.3 22.9,77.1 24.1,75.9 25.3,74.7 26.5,73.5 27.7,72.3 28.9,71.1 30.1,69.9 31.3,68.7 32.5,67.5 33.7,66.3 34.9,65.1 36.1,63.9 37.3,62.7 38.5,61.5 39.7,60.3 41.0,59.0 42.2,57.8 43.4,56.6 44.6,55.4 45.8,54.2 47.0,53.0 48.2,51.8 49.4,50.6 50.6,49.4 51.8,48.2 53.0,47.0 54.2,45.8 55.4,44.6 56.6,43.4 57.8,42.2 59.0,41.0 60.3,39.7 61.5,38.5 62.7,37.3 63.9,36.1 65.1,34.9 66.3,33.7 67.5,32.5 68.7,31.3 69.9,30.1 71.1,28.9 72.3,27.7 73.5,26.5 74.7,25.3 75.9,24.1 77.1,22.9 78.3,21.7 79.6,20.4 80.8,19.2 82.0,18.0 83.2,16.8 84.4,15.6 85.6,14.4 86.8,13.2 88.0,12.0","life":"88.0,50.0 87.8,53.8 87.2,57.5 86.3,61.2 85.0,64.8 83.4,68.2 81.4,71.4 79.1,74.4 76.5,77.2 73.7,79.7 70.6,81.9 67.3,83.8 63.9,85.4 60.3,86.6 56.6,87.4 52.8,87.9 49.0,88.0 45.2,87.7 41.5,87.1 37.9,86.0 34.3,84.6 31.0,82.9 27.8,80.9 24.8,78.5 22.1,75.9 19.7,73.0 17.5,69.8 15.7,66.5 14.3,63.0 13.1,59.4 12.4,55.7 12.0,51.9 12.0,48.1 12.4,44.3 13.1,40.6 14.3,37.0 15.7,33.5 17.5,30.2 19.7,27.0 22.1,24.1 24.8,21.5 27.8,19.1 31.0,17.1 34.3,15.4 37.9,14.0 41.5,12.9 45.2,12.3 49.0,12.0 52.8,12.1 56.6,12.6 60.3,13.4 63.9,14.6 67.3,16.2 70.6,18.1 73.7,20.3 76.5,22.8 79.1,25.6 81.4,28.6 83.4,31.8 85.0,35.2 86.3,38.8 87.2,42.5 87.8,46.2 88.0,50.0","air":"59.4,46.4 59.7,47.9 59.7,49.6 59.1,51.4 58.0,53.1 56.3,54.5 54.3,55.5 51.9,55.9 49.4,55.8 46.8,54.9 44.5,53.3 42.5,51.0 41.2,48.2 40.5,45.0 40.7,41.7 41.8,38.3 43.8,35.2 46.6,32.6 50.0,30.7 54.0,29.8 58.3,29.8 62.5,31.0 66.4,33.3 69.7,36.5 72.2,40.6 73.6,45.4 73.8,50.4 72.6,55.5 70.2,60.3 66.6,64.4 61.9,67.6 56.5,69.6 50.6,70.1 44.6,69.2 39.0,66.7 33.9,62.9 30.0,57.7 27.3,51.7 26.3,45.0 26.9,38.1 29.3,31.5 33.3,25.5 38.8,20.7 45.4,17.3 52.8,15.6 60.6,15.8 68.2,17.9 75.1,22.0 80.9,27.7 85.2,34.8 87.6,42.9 88.0,51.5 86.2,60.1 82.2,68.0 76.4,74.9 68.8,80.1 60.1,83.4 50.8,84.4 41.3,83.1 32.3,79.4 24.4,73.5 18.1,65.7 13.8,56.5 12.0,46.4","calm":"59.4,53.6 59.7,52.1 59.7,50.4 59.1,48.6 58.0,46.9 56.3,45.5 54.3,44.5 51.9,44.1 49.4,44.2 46.8,45.1 44.5,46.7 42.5,49.0 41.2,51.8 40.5,55.0 40.7,58.3 41.8,61.7 43.8,64.8 46.6,67.4 50.0,69.3 54.0,70.2 58.3,70.2 62.5,69.0 66.4,66.7 69.7,63.5 72.2,59.4 73.6,54.6 73.8,49.6 72.6,44.5 70.2,39.7 66.6,35.6 61.9,32.4 56.5,30.4 50.6,29.9 44.6,30.8 39.0,33.3 33.9,37.1 30.0,42.3 27.3,48.3 26.3,55.0 26.9,61.9 29.3,68.5 33.3,74.5 38.8,79.3 45.4,82.7 52.8,84.4 60.6,84.2 68.2,82.1 75.1,78.0 80.9,72.3 85.2,65.2 87.6,57.1 88.0,48.5 86.2,39.9 82.2,32.0 76.4,25.1 68.8,19.9 60.1,16.6 50.8,15.6 41.3,16.9 32.3,20.6 24.4,26.5 18.1,34.3 13.8,43.5 12.0,53.6","fury":"12.0,27.2 13.2,30.8 14.4,34.4 15.6,38.1 16.8,41.7 18.0,45.3 19.2,48.9 20.4,47.5 21.7,43.8 22.9,40.2 24.1,36.6 25.3,33.0 26.5,29.4 27.7,71.4 28.9,67.7 30.1,64.1 31.3,60.5 32.5,56.9 33.7,53.3 34.9,50.4 36.1,54.0 37.3,57.6 38.5,61.2 39.7,64.8 41.0,68.5 42.2,72.1 43.4,30.1 44.6,33.7 45.8,37.3 47.0,41.0 48.2,44.6 49.4,48.2 50.6,48.2 51.8,44.6 53.0,41.0 54.2,37.3 55.4,33.7 56.6,30.1 57.8,72.1 59.0,68.5 60.3,64.8 61.5,61.2 62.7,57.6 63.9,54.0 65.1,50.4 66.3,53.3 67.5,56.9 68.7,60.5 69.9,64.1 71.1,67.7 72.3,71.4 73.5,29.4 74.7,33.0 75.9,36.6 77.1,40.2 78.3,43.8 79.6,47.5 80.8,48.9 82.0,45.3 83.2,41.7 84.4,38.1 85.6,34.4 86.8,30.8 88.0,72.8","sky":"12.0,76.2 13.2,74.5 14.4,72.8 15.6,71.1 16.8,69.4 18.0,67.7 19.2,66.0 20.4,64.4 21.7,62.7 22.9,61.0 24.1,59.3 25.3,57.6 26.5,55.9 27.7,54.2 28.9,52.5 30.1,50.8 31.3,49.2 32.5,47.5 33.7,45.8 34.9,44.1 36.1,42.4 37.3,40.7 38.5,39.0 39.7,37.3 41.0,35.6 42.2,34.0 43.4,32.3 44.6,30.6 45.8,28.9 47.0,27.2 48.2,25.5 49.4,23.8 50.6,23.8 51.8,25.5 53.0,27.2 54.2,28.9 55.4,30.6 56.6,32.3 57.8,34.0 59.0,35.6 60.3,37.3 61.5,39.0 62.7,40.7 63.9,42.4 65.1,44.1 66.3,45.8 67.5,47.5 68.7,49.2 69.9,50.8 71.1,52.5 72.3,54.2 73.5,55.9 74.7,57.6 75.9,59.3 77.1,61.0 78.3,62.7 79.6,64.4 80.8,66.0 82.0,67.7 83.2,69.4 84.4,71.1 85.6,72.8 86.8,74.5 88.0,76.2","ward":"12.0,66.2 12.3,64.5 12.7,62.8 13.2,61.2 13.7,59.5 14.3,57.9 15.0,56.3 15.7,54.8 16.5,53.3 17.4,51.8 18.4,50.3 19.4,48.9 20.5,47.6 21.6,46.3 22.8,45.0 24.0,43.8 25.3,42.7 26.7,41.6 28.1,40.6 29.5,39.7 31.0,38.8 32.5,38.0 34.1,37.2 35.7,36.5 37.3,35.9 38.9,35.4 40.6,34.9 42.3,34.5 44.0,34.2 45.7,34.0 47.4,33.9 49.1,33.8 50.9,33.8 52.6,33.9 54.3,34.0 56.0,34.2 57.7,34.5 59.4,34.9 61.1,35.4 62.7,35.9 64.3,36.5 65.9,37.2 67.5,38.0 69.0,38.8 70.5,39.7 71.9,40.6 73.3,41.6 74.7,42.7 76.0,43.8 77.2,45.0 78.4,46.3 79.5,47.6 80.6,48.9 81.6,50.3 82.6,51.8 83.5,53.3 84.3,54.8 85.0,56.3 85.7,57.9 86.3,59.5 86.8,61.2 87.3,62.8 87.7,64.5 88.0,66.2"}};</script>
+<script>
+const D = window.__RUNES__;
+const ALL = D.rows.concat(D.long);
+const KIND = {n:"Named", s:"Stronger", b:"Blend"};
+const pretty = s => s.replace(/_/g," ").replace(/^./,c=>c.toUpperCase());
+const key = r => r.r.slice().sort().join("+");
+
+function glyph(rune, cls){
+  return '<svg viewBox="0 0 100 100" role="img" aria-label="'+rune+' stroke">'
+    + '<polyline points="'+D.glyphs[rune]+'"/></svg>';
+}
+
+/* ---- headline numbers ---- */
+const counts = {n:0,s:0,b:0,x:0};
+D.rows.forEach(r=>{counts[r.k]++; if(r.x) counts.x++;});
+const outcomes = new Set(D.rows.map(r=>r.o)).size;
+document.getElementById("stats").innerHTML = [
+  [D.rows.length,"drawings of 1&ndash;3 runes"],
+  [outcomes,"distinct outcomes already"],
+  [counts.b,"unnamed &mdash; they blend",1],
+  [counts.n,"named recipes"],
+  [counts.x,"redundant &mdash; a shorter drawing does it",1],
+].map(([v,l,hi])=>'<div class="stat'+(hi?" hi":"")+'"><b>'+v+'</b><span>'+l+'</span></div>').join("");
+
+/* ---- rune legend ---- */
+document.getElementById("legend").innerHTML = Object.keys(D.base).sort().map(rune=>{
+  const g = D.gesture[rune], t = D.tier[rune];
+  const shape = {wave:"S or ~",vline:"tall line",hline:"flat line",dline:"diagonal",
+    circle:"circle",spiral:"spiral",rev_spiral:"reverse spiral",
+    zigzag:"zigzag, 3&ndash;7 teeth",caret:"caret ^",arc:"bow"}[g] || g;
+  return '<div class="rune">'+glyph(rune)+'<div><span class="nm">'+rune+'</span>'
+    + '<span class="sub">'+shape+'</span>'
+    + '<span class="sub"><em>alone:</em> '+pretty(D.base[rune])+' &middot; <em>village '+t+'</em></span></div></div>';
+}).join("");
+
+/* ---- notes, kept in this browser only ---- */
+let notes = {};
+try { notes = JSON.parse(localStorage.getItem("rune-notes") || "{}"); } catch(e) { notes = {}; }
+const save = () => { try { localStorage.setItem("rune-notes", JSON.stringify(notes)); } catch(e){} };
+
+/* ---- filters ---- */
+const state = {q:"", tier:0, kinds:new Set(), red:false};
+const q = document.getElementById("q"), tierSel = document.getElementById("tier");
+q.addEventListener("input", ()=>{state.q=q.value.trim().toLowerCase(); render();});
+tierSel.addEventListener("change", ()=>{state.tier=+tierSel.value; render();});
+[["f-n","n"],["f-s","s"],["f-b","b"]].forEach(([id,k])=>{
+  const b=document.getElementById(id);
+  b.addEventListener("click",()=>{
+    const on = b.getAttribute("aria-pressed")==="true";
+    b.setAttribute("aria-pressed", String(!on));
+    on ? state.kinds.delete(k) : state.kinds.add(k);
+    render();
+  });
+});
+const redBtn=document.getElementById("f-x");
+redBtn.addEventListener("click",()=>{
+  state.red=!state.red; redBtn.setAttribute("aria-pressed",String(state.red)); render();
+});
+
+function passes(r){
+  if(state.tier && r.t !== state.tier) return false;
+  if(state.kinds.size && !state.kinds.has(r.k)) return false;
+  if(state.red && !r.x) return false;
+  if(state.q){
+    const hay = (r.r.join(" ")+" "+r.o+" "+KIND[r.k]).toLowerCase();
+    if(!hay.includes(state.q)) return false;
+  }
+  return true;
+}
+
+function outcomeHTML(r){
+  if(r.k === "b"){
+    return '<span class="frag">'+r.b.map(([m,p])=>pretty(m)+' <span class="pot">&times;'
+      +p.toFixed(2)+'</span>').join(' + ')+'</span>';
+  }
+  const pot = r.p && r.p !== 1 ? ' <span class="pot">&times;'+r.p.toFixed(2)+'</span>' : "";
+  return pretty(r.o)+pot;
+}
+
+function rowHTML(r){
+  const k = key(r);
+  const karmaCls = r.m > 0.15 ? "up" : (r.m < -0.15 ? "down" : "flat");
+  const karmaTxt = r.m > 0 ? "+"+r.m.toFixed(1) : r.m.toFixed(1);
+  const note = notes[k] || "";
+  return '<div class="row">'
+    + '<span class="draw">'+r.r.map(x=>glyph(x)).join("")
+      + '<span class="txt">'+r.r.join("+")+'</span></span>'
+    + '<span class="out">'+outcomeHTML(r)
+      + (r.x ? ' <span class="flagged">&mdash; a shorter drawing does this</span>' : '')+'</span>'
+    + '<span><span class="tag '+r.k+'">'+KIND[r.k]+'</span></span>'
+    + '<span class="num">'+r.c+'</span>'
+    + '<span class="num karma '+karmaCls+'">'+karmaTxt+'</span>'
+    + '<span><input class="n-in'+(note?" has":"")+'" data-k="'+k+'" value="'+
+        note.replace(/"/g,"&quot;")+'" placeholder="should be&hellip;" aria-label="Suggestion for '
+        +r.r.join(" plus ")+'"></span>'
+    + '</div>';
+}
+
+function render(){
+  const groups = [[1,"One rune"],[2,"Two runes"],[3,"Three runes"],[4,"Four runes &mdash; named only"]];
+  let html = "", shown = 0;
+  groups.forEach(([n,label])=>{
+    const set = ALL.filter(r => r.r.length === n && passes(r));
+    if(!set.length) return;
+    shown += set.length;
+    html += '<div class="row"><span class="grouphead">'+label+' &middot; '+set.length+'</span></div>';
+    html += set.map(rowHTML).join("");
+  });
+  document.getElementById("rows").innerHTML = html ||
+    '<p class="empty">Nothing matches those filters.</p>';
+  document.getElementById("shown").textContent = shown+" of "+ALL.length+" shown";
+}
+
+document.getElementById("rows").addEventListener("input", e=>{
+  const el = e.target;
+  if(!el.classList.contains("n-in")) return;
+  const k = el.dataset.k;
+  if(el.value.trim()) { notes[k] = el.value; el.classList.add("has"); }
+  else { delete notes[k]; el.classList.remove("has"); }
+  save();
+});
+
+document.getElementById("copy").addEventListener("click", async ()=>{
+  const lines = Object.keys(notes).sort().map(k=>k.replace(/\+/g," + ")+"  ->  "+notes[k]);
+  const btn = document.getElementById("copy");
+  if(!lines.length){ btn.textContent = "No notes yet"; setTimeout(()=>btn.textContent="Copy my notes",1600); return; }
+  const text = "Rune Grammar — suggestions ("+lines.length+")\n\n"+lines.join("\n");
+  try { await navigator.clipboard.writeText(text); btn.textContent = "Copied "+lines.length; }
+  catch(e){ btn.textContent = "Press Ctrl+C"; 
+    const ta=document.createElement("textarea"); ta.value=text; document.body.appendChild(ta);
+    ta.select(); setTimeout(()=>ta.remove(),8000); }
+  setTimeout(()=>btn.textContent="Copy my notes",1800);
+});
+
+render();
+
+</script>
