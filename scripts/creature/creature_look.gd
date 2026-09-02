@@ -176,6 +176,21 @@ static func doing_word(state_name: String, carry_intent: String, cargo: String) 
 	return DOING.get(state_name, "?")
 
 
+## What to call the thing it's hauling — honest about lumber and stone, not
+## "food" for everything.
+## Variant (not Node3D): the carried/targeted item may have been freed between
+## the creature's physics tick and a HUD read, and passing a freed object to a
+## typed parameter crashes. Guard it here instead.
+static func carriable_word(item: Variant) -> String:
+	if not is_instance_valid(item):
+		return "food"
+	if item is ResourceItem:
+		return (item as ResourceItem).kind
+	if item is WildTree:
+		return "timber"
+	return "food"
+
+
 static func says_word(state_name: String, carry_intent: String) -> String:
 	if state_name == "CARRYING":
 		return "nom?" if carry_intent == "eat" else "for you!"

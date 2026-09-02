@@ -459,7 +459,7 @@ func _run_smoke_test() -> void:
 	var verbs := {}
 	for opt: Dictionary in creature._perceive():
 		verbs[opt["verb"]] = true
-		if CreatureMind.VERB_VALENCE.get(opt["verb"], 0.0) == 0.0:
+		if absf(CreatureEthos.kindness(opt["verb"])) < 0.2:
 			quiet += 1
 	print("SMOKE TEST: repertoire — %d options, %d of them morally neutral, verbs=%s" % [
 		verbs.size(), quiet, str(verbs.keys())])
@@ -551,11 +551,29 @@ func _run_smoke_test() -> void:
 	# frame. A tight burst of cruelty must NOT make a monster on its own.
 	var burst := CreatureMind.new()
 	for i in 400:
-		burst.judge(-1.0)
+		burst.judge("eat_kin")
 	var spaced := CreatureMind.new()
-	spaced.judge(-1.0, CreatureMind.DEED_ALPHA, false)
+	spaced.judge("eat_kin", CreatureMind.DEED_ALPHA, false)
 	print("SMOKE TEST: pacing — 400 instant cruelties = %.1f, one lived deed = %.1f" % [
 		burst.temperament, spaced.temperament])
+
+	# THE COMPASS. Six lives, each a different creature — and the point is that
+	# hardly any of them can be told apart by the old good-to-evil number alone.
+	var lives := {
+		"a wrecker of empty houses": ["smash", "smash", "wander", "smash", "run"],
+		"a hermit who hurts nobody": ["fish", "wander", "rest", "lounge", "fish"],
+		"a village favourite": ["commune", "dance", "pray", "gift", "commune"],
+		"a devoted brute": ["mimic", "smash", "mimic", "throw", "mimic"],
+		"a provider who wants no thanks": ["gather", "tend", "gather", "wander", "tend"],
+		"a beast that walked away": ["depart", "shun", "sulk", "wander", "shun"],
+	}
+	for life: String in lives:
+		var soul := CreatureMind.new()
+		for i in 30:
+			for verb: String in lives[life]:
+				soul.judge(verb, CreatureMind.DEED_ALPHA, false)
+		print("SMOKE TEST: compass — %-28s -> %-30s (good/evil %+.0f) %s" % [
+			life, soul.character(), soul.temperament, str(soul.character_account(2))])
 
 	# DEMOGRAPHICS. A lifetime here is ~3.6 real hours, so an overnight run turns
 	# over two whole generations — a village that cannot replace its dead dies

@@ -1579,7 +1579,7 @@ func praise() -> void:
 		mind.teach(_deed_verb, _deed_type, 3.0)
 		# Approval endorses the deed's own moral weight, hard — but still as a
 		# pull toward the character it implies, never a free run to sainthood.
-		mind.judge(CreatureMind.VERB_VALENCE.get(_deed_verb, 0.0), 0.25, false)
+		mind.judge(_deed_verb, 0.25, false)
 		morality = mind.temperament
 	if _last_deed in ["hunt", "mischief", "smash"]:
 		GameState.announce("Your creature purrs. It believes cruelty pleases you.")
@@ -1600,15 +1600,16 @@ func scold() -> void:
 	# emphatic — one telling-off genuinely shifts what it believes.
 	if _deed_verb != "":
 		mind.teach(_deed_verb, _deed_type, -3.0)
-		# Disapproval pushes its heart the OPPOSITE way from the deed's weight.
-		mind.judge(-CreatureMind.VERB_VALENCE.get(_deed_verb, 0.0), 0.22, false)
+		# Disapproval pushes its character the OPPOSITE way from the deed's
+		# meaning — on every axis that deed touched, not merely good and evil.
+		mind.judge(_deed_verb, 0.22, false, -1.0)
 		morality = mind.temperament
 	# WAS IT FAIR? A telling-off for something genuinely cruel is a correction,
 	# and the creature takes it. A telling-off for lounging in the sun, dancing
 	# for the village or hauling grain home is simply a god being cruel, and it
 	# costs you exactly what cruelty should. This is the whole of how a player
 	# becomes someone their creature stops believing.
-	var deserved: float = CreatureMind.VERB_VALENCE.get(_deed_verb, 0.0)
+	var deserved: float = CreatureEthos.kindness(_deed_verb)
 	if deserved < -0.3:
 		earn_trust(-0.5)   # it knows what it did
 	else:
@@ -2195,14 +2196,22 @@ func _status_text() -> String:
 ## not "food" for everything. Empty when its hands are free.
 func _cargo_word() -> String:
 	if state == State.GO_GATHER:
-		return _carriable_word(_target_food)
+		return CreatureLook.carriable_word(_target_food)
 	if _carried != null and is_instance_valid(_carried):
-		return _carriable_word(_carried)
+		return CreatureLook.carriable_word(_carried)
 	return ""
 
 
+## WHAT IT IS, named off the six-axis compass — "tender wrecker", "bold
+## recluse", "beloved of the village". The old five-word good-to-evil scale is
+## still used for VILLAGERS, who are simple souls; the creature has outgrown it.
 func morality_word() -> String:
-	return CreatureLook.morality_word(morality)
+	return mind.character()
+
+
+## Its character spelled out, one plain habit per leaning it actually holds.
+func character_lines() -> Array:
+	return mind.character_account()
 
 
 func mood_word() -> String:
@@ -2223,21 +2232,6 @@ func hover_text() -> String:
 		_status_word(), morality_word(), mood_word(),
 		int(bond), int(trust), int(attention),
 		int(hunger), int(energy), favorite_deed()]
-
-
-## What to call the thing it's hauling — honest about lumber and stone,
-## not "food" for everything.
-## Variant (not Node3D): the carried/targeted item may have been freed between
-## the creature's physics tick and a HUD read, and passing a freed object to a
-## typed parameter crashes. Guard it here instead.
-func _carriable_word(item: Variant) -> String:
-	if not is_instance_valid(item):
-		return "food"
-	if item is ResourceItem:
-		return (item as ResourceItem).kind
-	if item is WildTree:
-		return "timber"
-	return "food"
 
 
 func to_dict() -> Dictionary:

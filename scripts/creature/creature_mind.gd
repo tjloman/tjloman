@@ -42,23 +42,23 @@ const RELISH := 0.45
 const TEACH_LR := 0.75
 
 ## CHARACTER IS A RUNNING IMPRESSION OF RECENT DEEDS, not a bank balance. The
-## creature IS what it has been DOING lately: each act pulls its heart a little
-## toward what that act means, so a habit defines it while a single lapse only
-## nudges. This is why a beast that spends its days smashing reads as monstrous
-## no matter how many kind miracles it once watched you cast — and it is the
-## whole reason the readout can be trusted.
-## Its heart is the RUNNING AVERAGE of the moral weight of its recent deeds —
-## roughly its last twenty acts. So character is the honest ratio of how it
-## spends its days: a creature that mostly tends fields stays kind even if it
-## sometimes lashes out, and one that mostly smashes is a monster however many
-## good deeds it can point to. A plain average also keeps the two directions
-## symmetric, so it cannot slide into cruelty faster than it can climb out.
-const DEED_ALPHA := 0.05        # how much one deed moves the average (~20-deed memory)
+## creature IS what it has been DOING lately: each act pulls its character a
+## little toward what that act means, so a habit defines it while a single lapse
+## only nudges. This is why a beast that spends its days smashing reads as a
+## wrecker no matter how many kind miracles it once watched you cast — and it is
+## the whole reason the readout can be trusted.
+##
+## What gets pulled is a SIX-AXIS compass (see CreatureEthos), not a number on a
+## wire between good and evil. `temperament` survives as the one-number
+## projection of it, because plenty of the game still needs one number — the
+## colour of its hide, whether a village will have it about. But the character
+## itself is the compass, and two creatures reading the same temperament can be
+## nothing alike.
+const DEED_ALPHA := 0.05        # how much one deed moves an axis (~20-deed memory)
 const WITNESS_ALPHA := 0.008    # merely WATCHING its god counts for far less
-const CHARACTER_SCALE := 90.0   # deed-average -1..+1 mapped onto the -100..100 heart
 ## Character is measured in LIFE LIVED, not in deeds counted. A creature that
 ## lands ten blows in a second has not become ten times the monster — it has
-## spent one second being one, and its heart should move accordingly. Each
+## spent one second being one, and its character should move accordingly. Each
 ## judgement therefore counts for the TIME it represents, up to one full deed's
 ## worth. Without this, anything that lets deeds resolve quickly rewrites the
 ## creature's whole character in seconds, and the readout means nothing.
@@ -71,21 +71,6 @@ const DEED_PERIOD := 2.0        # seconds of living that one full-weight deed is
 ## so keeps feeding its own habit). This is what keeps a life varied.
 const SATIATION := 0.25         # how much a deed palls each time it is done
 const SATIATION_FADE := 0.12    # how fast the appetite comes back, per decision
-
-## How KIND (+) or CRUEL (-) each verb is. This is the ONLY moral scaffolding,
-## and it does NOT choose actions — it only reads what a chosen deed MEANS, so
-## the emergent temperament tracks how the creature actually behaves.
-const VERB_VALENCE := {
-	"tend": 0.6, "gather": 0.5, "gift": 0.9, "rescue": 1.3, "guard": 0.4,
-	"watch": 0.1, "play": 0.2, "fish": 0.1, "cast": 0.25,
-	"smash": -1.0, "throw": -0.7, "eat_kin": -1.2, "eat": -0.1,
-	"flee": 0.0, "wander": 0.0, "rest": 0.0,
-	# A LIFE IS MOSTLY NEITHER. Most of what anything does is morally weightless,
-	# and a creature with only saintly and monstrous options on the table is
-	# forced to be one or the other. These are the hours in between.
-	"lounge": 0.0, "run": 0.0, "mimic": 0.0, "sulk": 0.0, "shun": 0.0,
-	"depart": 0.0, "dance": 0.15, "commune": 0.3, "pray": 0.4,
-}
 
 ## WHAT EACH VERB IS LIKE. Drives read these, never verb names (see `_drive_fit`).
 ##   effort — how physical, the cost a tired or fat body flinches from
@@ -143,13 +128,15 @@ var familiarity := {}       # miracle name -> 0..1, learned by witnessing
 ## Practices it has picked up by WATCHING — dancing, praying, holding court.
 ## An empty repertoire is a creature that has never seen anyone enjoy anything.
 var repertoire := {}        # verb -> 0..1 casts
+## ITS CHARACTER, on six axes at once — the whole of what it has become. The
+## one-number `temperament` below is only this compass squinted at.
+var ethos := CreatureEthos.new()
 var temperament := 0.0      # -100 monstrous .. +100 angelic: emergent, follows deeds
 
 ## WHAT IT BELIEVES about the world, and in what circumstances (see
 ## CreatureBeliefs). This is the half of its personality that says "not now".
 var beliefs := CreatureBeliefs.new()
 
-var _deed_avg := 0.0        # the running moral average that IS its character
 var _last_judged := 0       # ticks (ms) of the last judgement, for pacing
 var _sated := {}            # "verb|type" -> how thoroughly sick of it it is
 var _last_key := ""         # the (verb,type) the next outcome is credited to
@@ -187,8 +174,14 @@ func value(verb: String, type: String, drive: Dictionary, ctx := {}) -> float:
 
 ## How a deed sits with this creature's character: repellent if it runs against
 ## its nature, merely permitted if it runs with it (see RELISH).
+##
+## Now judged on all six axes at once, which is a much sharper instrument than
+## the old good-and-evil line. A creature that has grown SOLITARY finds holding
+## court before the village genuinely unpleasant even though nothing about it is
+## cruel; a WILFUL one finds copying you distasteful without being wicked. Those
+## refusals were simply not expressible before.
 func conscience_of(verb: String) -> float:
-	var c: float = VERB_VALENCE.get(verb, 0.0) * (temperament / 100.0) * CONSCIENCE
+	var c: float = ethos.congeniality(verb) * CONSCIENCE
 	return c * RELISH if c > 0.0 else c
 
 
@@ -286,18 +279,28 @@ func reinforce(reward: float) -> void:
 	seen[_last_key] = int(seen.get(_last_key, 0)) + 1
 	_sated[_last_key] = minf(float(_sated.get(_last_key, 0.0)) + SATIATION, 2.5)
 	beliefs.credit(reward)   # the circumstances get their share of the lesson
-	judge(VERB_VALENCE.get(_last_verb, 0.0))
+	judge(_last_verb)
 
 
-## Let a deed of moral weight `valence` (-1 cruel .. +1 kind) shape the heart,
-## pulling it toward the character such a life implies. Bounded by construction:
-## no amount of anything can push it past what its behaviour actually is.
+## A deed was done: let what it MEANS shape the creature's character, pulling
+## every axis the deed touches toward the life such a deed implies. Bounded by
+## construction — no amount of anything can push it past what its behaviour
+## actually is.
 ##
 ## `paced` deeds count for the TIME they occupied (see DEED_PERIOD), so a flurry
 ## of quick acts weighs no more than the same conduct spread out. The god's own
 ## praise and scolding are NOT paced: those are discrete acts of will, and they
-## should land with their full force the moment you press the key.
-func judge(valence: float, strength := DEED_ALPHA, paced := true) -> void:
+## should land with their full force the moment you press the key. `direction`
+## of -1 pushes the opposite way, which is what a scolding does.
+func judge(verb: String, strength := DEED_ALPHA, paced := true, direction := 1.0) -> void:
+	shape(CreatureEthos.meaning_of(verb), strength, paced, direction)
+
+
+## The same, for a moral shape assembled on the spot rather than looked up from
+## a verb — used for the god's own deeds, which the creature judges as conduct
+## without having a verb of its own for them.
+func shape(profile: Dictionary, strength := DEED_ALPHA, paced := true,
+		direction := 1.0) -> void:
 	var force := clampf(strength, 0.0, 1.0)
 	if paced:
 		var now := Time.get_ticks_msec()
@@ -305,14 +308,16 @@ func judge(valence: float, strength := DEED_ALPHA, paced := true) -> void:
 			else float(now - _last_judged) / 1000.0
 		_last_judged = now
 		force *= clampf(lived / DEED_PERIOD, 0.0, 1.0)
-	_deed_avg = clampf(_deed_avg + (valence - _deed_avg) * force, -1.5, 1.5)
-	temperament = clampf(_deed_avg * CHARACTER_SCALE, -100.0, 100.0)
+	ethos.push(profile, force, direction)
+	temperament = ethos.temperament()
 
 
 ## Watching its god act is a lesson, but a FAINT one next to its own conduct —
-## a creature is not made saintly by spectating.
+## a creature is not made saintly by spectating. What it reads off you is mercy
+## and ruin: it can see whether you spare a thing or break it, and little else.
 func observe_god(weight: float) -> void:
-	judge(clampf(weight / 5.0, -1.0, 1.0), WITNESS_ALPHA)
+	var w := clampf(weight / 5.0, -1.0, 1.0)
+	shape({"mercy": w, "order": w * 0.6}, WITNESS_ALPHA)
 
 
 ## Teach a specific (verb,type) directly — used when the world reinforces
@@ -391,6 +396,18 @@ func rites() -> Array:
 	return beliefs.rites()
 
 
+## WHAT IT HAS BECOME, named — "tender wrecker", "utterly solitary", "beloved
+## of the village". Read off the compass, so it is a character rather than a
+## grade.
+func character() -> String:
+	return ethos.reading()
+
+
+## The same spelled out, one plain sentence per leaning it actually holds.
+func character_account(limit := 3) -> Array:
+	return ethos.account(limit)
+
+
 ## A short, human-readable peek at the strongest thing it has learned — for the
 ## hover/dashboard, so its inner life is legible.
 func strongest_urge() -> String:
@@ -417,8 +434,7 @@ func to_dict() -> Dictionary:
 		"seen": seen.duplicate(true),
 		"familiarity": familiarity.duplicate(true),
 		"repertoire": repertoire.duplicate(true),
-		"temperament": temperament,
-		"deed_avg": _deed_avg,
+		"ethos": ethos.to_dict(),
 		"beliefs": beliefs.to_dict(),
 	}
 
@@ -428,8 +444,14 @@ func from_dict(data: Dictionary) -> void:
 	seen = (data.get("seen", {}) as Dictionary).duplicate(true)
 	familiarity = (data.get("familiarity", {}) as Dictionary).duplicate(true)
 	repertoire = (data.get("repertoire", {}) as Dictionary).duplicate(true)
-	temperament = float(data.get("temperament", 0.0))
-	_deed_avg = float(data.get("deed_avg", temperament / CHARACTER_SCALE))
+	# A save from before the compass existed carries one number; unfold it onto
+	# the axes that number used to stand for, so an old creature keeps its soul.
+	if data.has("ethos"):
+		ethos.from_dict(data.get("ethos", {}))
+	else:
+		var old := float(data.get("temperament", 0.0)) / 100.0
+		ethos.from_dict({"mercy": old, "order": old * 0.6, "bounty": old * 0.3})
+	temperament = ethos.temperament()
 	_sated.clear()
 	beliefs.from_dict(data.get("beliefs", {}))
 

@@ -208,6 +208,8 @@ func _on_creed() -> void:
 		creed.append(line)
 	for rite: String in creature.mind.rites():
 		creed.append(rite)
+	for habit: String in creature.mind.character_account():
+		creed.append(habit)
 	var said := "  ·  ".join(creed) if not creed.is_empty() \
 		else "It has learned nothing it can put into words yet."
 	GameState.announce("%s (%s, %s) — %s" % [

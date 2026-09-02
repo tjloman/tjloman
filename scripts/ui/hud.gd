@@ -472,9 +472,16 @@ func _update_creature_panel() -> void:
 	var believes := "nothing firmly yet" if creed.is_empty() else "\n          ".join(creed)
 	var spells: Array = creature.mind.known_miracles()
 	var magic: String = ", ".join(spells) if not spells.is_empty() else "none yet"
+	# ITS CHARACTER, spelled out. The one-word nature above is the compass
+	# named; these are the leanings that name actually stands for, so a player
+	# can see WHY their beast is called what it is called.
+	var habits: Array = creature.character_lines()
+	var character := "nothing settled yet" if habits.is_empty() \
+		else "\n          ".join(habits)
 	_creature_label.text = ("YOUR CREATURE\n"
 		+ "Doing:    %s\n"
 		+ "Nature:   %s\n"
+		+ "Habits:   %s\n"
 		+ "Mood:     %s\n"
 		+ "Bond:     %d / 100\n"
 		+ "Hunger:   %d / 100\n"
@@ -485,7 +492,8 @@ func _update_creature_panel() -> void:
 		+ "Learned:  %s\n"
 		+ "Believes: %s\n"
 		+ "Miracles: %s") % [
-			creature.activity_word(), creature.morality_word(), creature.mood_word(),
+			creature.activity_word(), creature.morality_word(), character,
+			creature.mood_word(),
 			int(creature.bond), int(creature.hunger), int(creature.energy),
 			int(creature.fear),
 			int(creature.body.fullness(creature.growth) * 100.0),
