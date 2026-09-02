@@ -28,20 +28,60 @@ python3 tools/check_calls.py     # calls to methods that DON'T EXIST
 
 That last one matters: `gdparse` only checks syntax and `gdlint` only checks
 style, so a call to a method that was never written passes both and then
-crashes the moment that code path runs. `check_calls.py` catches the three ways
-that has actually happened here:
+crashes the moment that code path runs. Every rule in `check_calls.py` is there
+because it shipped a broken build at least once:
 
 - **`ClassName.foo()` and `(x as ClassName).foo()`** — resolved against what
-  each `class_name` script really declares, following `extends`.
+  each `class_name` script really declares, following `extends`, and through
+  dotted chains (`wronged.mind.judge(...)`) so a bad call two levels down is
+  still caught.
+- **Wrong argument types and counts**, against the real signature.
 - **`_helper()` on self** — delete or rename a private helper and every call to
   it still parses and still lints. Restricted to underscore names, which are
   ours by convention; an unprefixed bare call could be any of hundreds of
   engine methods.
 - **Invalid string escapes** — a stray `\` in help text is a *parse* error that
-  gdparse accepts and Godot does not, and it takes the whole class down at load
-  time with an error naming only the line.
+  gdparse accepts and Godot does not.
+- **Redeclared variables**, tracked by indentation, since GDScript rejects a
+  second `var x` while the first is still in scope.
+- **`"a" + "b" % [args]`** — `%` binds tighter than `+`, so only the last piece
+  gets formatted.
+- **A typed array assigned from `filter()`/`map()`/`slice()`** — those return a
+  plain `Array`, which will not go into an `Array[T]`. It fails on the frame
+  that line first runs, so it reaches players. Use `Util.prune()` or a loop.
+- **A `:=` inferring Variant** from `pop_back()`, `front()`, `get()` and
+  friends, which this project builds as an *error* — one such line stops every
+  dependent script loading.
 
-Each of those three shipped a broken build at least once before it was added.
+The last three share a shape worth internalising: **Godot rejects it, gdparse
+does not.** Syntax checking cannot see any of them.
+
+### That `text_edit.cpp` gutter error spam
+
+If your log fills with hundreds of lines like
+
+```
+scene/gui/text_edit.cpp:6981 - Index p_gutter = -1 is out of bounds (gutters.size() = 4).
+```
+
+**it is not this project.** It is a long-standing Godot editor bug
+([#81135](https://github.com/godotengine/godot/issues/81135), earlier
+[#58075](https://github.com/godotengine/godot/issues/58075)): the script editor
+calls `set_line_gutter_item_color()` with `line_number_gutter`, whose default
+value is `-1`, before the gutter indexes have been resolved. It fires **once
+per line it tries to colour**, which is why the count runs to four figures.
+
+Nothing here can cause it — the project contains no `TextEdit` or `CodeEdit`
+at all (the one `LineEdit`, in the profile menu, is a different class with no
+gutters), and no editor plugins. It also comes from `editor/` code, which is
+not compiled into export templates, so **an exported build never prints it**.
+
+To stop it: **Editor Settings → Text Editor → Appearance → Gutters →
+Highlight Type Safe Lines → off.** Closing open script tabs before running also
+works. It shows up most in setups with an external editor attached (the
+`Debug adapter server` / `GDScript language server` lines in your log), and it
+hits this project harder than most for an ironic reason: that setting colours
+statically-typed lines, and nearly every line here is statically typed.
 
 ## Getting started
 
