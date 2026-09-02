@@ -67,7 +67,7 @@ func _build() -> void:
 	box.add_child(_heading("CHEATS"))
 	box.add_child(_button("+500 prayer", _on_prayer, "Fill the reservoir."))
 	box.add_child(_button("Grow creature", _on_grow,
-		"Age your creature a quarter of the way to full size."))
+		"Add about ten thousand stature — a few hours of ordinary growing."))
 	box.add_child(_button("Convert nearest village", _on_convert,
 		"Make the closest town believe — the quick way to test unlocks."))
 	box.add_child(_button("What does it believe?", _on_creed,
@@ -176,9 +176,8 @@ func _on_prayer() -> void:
 func _on_grow() -> void:
 	if not is_instance_valid(creature):
 		return
-	creature.growth = minf(creature.growth + 0.25, 1.0)
-	GameState.announce("Your creature surges to %d%% of its destined size."
-		% int(creature.growth * 100.0))
+	creature.gain_stature(Creature.FULL_STATURE * 0.15)
+	GameState.announce("Your creature surges to stature %s." % creature.stature_text())
 
 
 func _on_convert() -> void:

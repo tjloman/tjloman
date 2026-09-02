@@ -607,6 +607,23 @@ func _run_smoke_test() -> void:
 		String(jogged.get("felt", "nothing")), float(jogged.get("strength", 0.0)),
 		lived.episodes.size()])
 
+	# THE LONG ARC. Growth used to be a percentage, and a percentage ran out: a
+	# well-fed creature crossed the whole thing in an afternoon and then had
+	# nowhere left to go. Stature is 1..65,535, size is its square root, and the
+	# body's stomach and energy still read the SIZE, so a thirty-hour arc drops
+	# in under a body that was balanced for a one-hour one.
+	var arc := Creature.new()
+	var earned := 3600.0 / CreatureBody.NOURISHMENT * CreatureBody.STATURE_PER_UNIT
+	var shown := PackedStringArray()
+	for hours: float in [0.0, 1.0, 4.0, 8.0, 30.0]:
+		arc.stature = clampf(hours * earned, 1.0, Creature.FULL_STATURE)
+		shown.append("%gh %s %d%% %.1fm" % [
+			hours, arc.stature_text().split(" ")[-1], int(arc.growth * 100.0),
+			lerpf(Creature.MIN_SCALE, Creature.MAX_SCALE, arc.growth) * 2.5])
+	print("SMOKE TEST: stature — %.0f a hour, %.0f hours to FFFF | %s" % [
+		earned, Creature.FULL_STATURE / earned, "  ·  ".join(shown)])
+	arc.free()
+
 	# FORESIGHT. The one part of the mind that faces forwards: it learns what
 	# deeds DO to a situation, imagines the situation each option would leave it
 	# in, and asks its own heart how a moment like that would feel. So a creature

@@ -436,6 +436,45 @@ pays.
 Lock onto your creature (**C**) and the dashboard tells you what it currently
 believes, in plain words.
 
+## It grows for thirty hours, not for one
+
+Growth used to be a percentage, and a percentage is a terrible unit for a life:
+it ran out. A well-fed creature crossed the whole arc in about **an hour and a
+quarter** and then had nowhere left to go — both an anticlimax and a waste of
+the most legible reward the game has.
+
+It now has **STATURE**: a number from 1 to **65,535** (`0xFFFF`), which is the
+readout on the dashboard in decimal and in hex. It moves every time the creature
+digests something, so there is nearly always a little more of it than there was,
+and it is a long way from the top for a very long time.
+
+Two rules keep the arc honest:
+
+- **Only food the body actually WANTED counts.** Surplus goes to fat and buys no
+  stature at all, so a creature cannot be force-fed up the arc faster than it can
+  get hungry.
+- **Size is the SQUARE ROOT of stature.** The early climb is visible — a
+  hatchling is a different animal within the hour — and the last stretch to a
+  tower over the treetops is the work of many sessions.
+
+| Played | Stature | | Size | Height | Stomach | Energy pool |
+|---|---|---|---|---|---|---|
+| newborn | 1 | `0001` | 0% | 2.9m | 2.1 units | 101 |
+| 1 hour | 2,215 | `08A7` | 18% | 9.1m | 5.7 units | 151 |
+| 4 hours | 8,861 | `229D` | 36% | 15.5m | 9.4 units | 203 |
+| 8 hours | 17,723 | `453B` | 52% | 20.8m | 12.4 units | 246 |
+| 15 hours | 33,230 | `81CE` | 71% | 27.5m | 16.2 units | 299 |
+| 30 hours | 65,535 | `FFFF` | 100% | 37.5m | 22.0 units | 380 |
+
+(a villager is about 1.8m; a full-grown tree about 30m)
+
+The 0–1 `growth` number everything else reads — the size of its stomach, what it
+can lift, how much it can spend on a miracle, how fast it walks — still means
+*how far along its SIZE it is*, not how far along its whole life. That is what
+lets a thirty-hour arc drop in under a body balanced for a one-hour one without
+retuning a single other number. An old save's `growth` finds its own place on
+the new scale.
+
 ## Your creature's body
 
 It does not simply eat and grow. It has a **real stomach** whose size follows
@@ -540,33 +579,61 @@ or *obese*.
 - **Lightning is lethal** at the point of impact. The evil path is real.
 - **Sheep** wander, breed slowly, get hunted, and are 100% throwable.
 
-## Saving, and the workshop (F3)
+## Saving looks after itself, and you can raise more than one
+
+**There is nothing to remember.** The world writes itself down every couple of
+minutes, whenever the app is put in the background (the way a phone game
+actually ends), and on quit — the close is intercepted so the last two minutes
+survive it. Next launch it puts you straight back where you were: no menu, no
+loading step.
 
 The land is **never written down**. Every hill, shore, forest and town site
 grows back exactly from the world's **seed**, so a save holds only what *play*
 has changed: your standing with the heavens and the clock, each village's
 name, faith, diet, stocks, hard-won doctrine and full roster of people, and —
-the part no seed could ever reproduce — your creature's whole **mind, beliefs
-and body**.
+the part no seed could ever reproduce — your creature's whole **mind, heart,
+beliefs and body**.
 
 Loading works by handing the next scene a parcel and rebuilding around it,
-so there is never a half-torn-down world. Because the world **streams**, a
-town forty chunks away does not exist at load time; its saved life waits in
-memory and is handed back **the moment that village is born**, whenever you
-wander into it. A town you never revisit keeps its memory — and is written
-out again on the next save, unchanged.
+so there is never a half-torn-down world. At startup there is no scene to
+reload, so the parcel is simply armed from disk before anything is built.
+Because the world **streams**, a town forty chunks away does not exist at load
+time; its saved life waits in memory and is handed back **the moment that
+village is born**, whenever you wander into it. A town you never revisit keeps
+its memory — and is written out again on the next save, unchanged.
 
-That parcel is what makes the workshop's two levers possible:
+### The creatures you have raised (F5)
 
+A creature is a long relationship, and you may reasonably want more than one: a
+beast raised kindly over weeks, and a monster to let off the leash on a wet
+afternoon. Neither should cost the other. So a save is not a file, it is a
+**creature** — its own world seed, its own towns, its own mind — and F5 lists
+them by what they have *become* rather than by slot number:
+
+> **Baldur** ← you are here — tender wrecker · 18% grown · 1h 40m played
+> **Grendel** — man-eater · 4% grown · 12m played
+
+Switching costs neither of them anything. **Forgetting** one is the only
+irreversible thing here, and it asks twice.
+
+The very first time you ever play, the world is covered and the only thing on
+screen is a field asking **what you will call it**. Naming the thing you are
+about to raise is the right first act of a god, and a poor thing to bury in a
+menu. A save made before profiles existed is adopted as your first creature,
+comes through unnamed, and can be named from this menu without starting again.
+
+### The workshop (F3)
+
+Nothing here is load-bearing any more. What is left:
+
+- **Save now** — a deliberate checkpoint, on top of the automatic ones.
+- **Reload last save** — throw away what has happened since.
 - **New land, same creature** — a fresh seed, a stranger's world, but your
   creature walks into it carrying every habit, belief, appetite, pound of fat
   and lesson it ever earned. The perfect way to see what a mind you have
-  actually raised.
-- **New game** — a new seed and a newborn creature, remembering nothing.
-
-Both ask twice before they fire, and the arming lapses after a few seconds.
-The workshop also holds test cheats: prayer, instant growth, instant
-conversion, and a printout of what the creature currently believes.
+  actually raised. Asks twice, and the arming lapses after a few seconds.
+- Test cheats: prayer, a shove up the stature arc, instant conversion, and a
+  printout of everything the creature currently believes, feels and expects.
 
 ## Miracles cost the creature
 
@@ -761,7 +828,7 @@ beginning. A god who pets the creature between beatings never gets it back.
 scenes/main.tscn              Entry point (one node; world is built in code)
 scripts/main.gd               Orchestrator: sky, day/night clock, wiring
 scripts/game_state.gd         Autoload: prayer, alignment, game time
-scripts/save_game.gd          Autoload: seed-based saves, and the F3 levers
+scripts/save_game.gd          Autoload: profiles, autosave, and the F3 levers
 scripts/audio/sound_bank.gd   Autoload: all sounds, synthesized in code
 scripts/util.gd               Primitive-shape building helpers
 scripts/nav_field.gd          Autoload: obstacle field for local steering, plus
@@ -799,6 +866,8 @@ scripts/creature/
   creature_beliefs.gd         Episodes, credit assignment, contextual weights,
                               lore, places, recall — what it believes, and WHEN
   creature_bonds.gd           Who it knows, by name
+  creature_foresight.gd       What it thinks a deed would DO — one move ahead
+  creature_record.gd          Writing a creature down, and giving it back
   creature_steering.gd        Routes, waypoints, wedges, and bad ground
   creature_body.gd            Stomach, digestion, fat, muscle and energy
   creature_eyes.gd            Perception only: nearest X, circumstances, plights
@@ -812,6 +881,7 @@ scripts/ui/hud.gd             Bars, legend, tooltips, help
 scripts/ui/debug_menu.gd      The F3 workshop: save/load/regenerate + cheats
 scripts/ui/cast_overlay.gd    The casting ring and countdown — what the mode looks like
 scripts/ui/tutorial.gd        The opening lessons: data-driven, completed by doing
+scripts/ui/profile_menu.gd    The creatures you have raised: switch, name, begin
 scripts/ui/touch_controls.gd  Touchscreen-only buttons: Cast/Move mode,
                               follow-the-creature camera lock
 ```

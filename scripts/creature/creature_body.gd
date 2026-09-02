@@ -26,7 +26,14 @@ const DIGESTION_PER_GROWTH := 0.16
 
 ## What a digested unit is worth, and where it goes.
 const NOURISHMENT := 26.0      # hunger removed per digested unit
-const GROWTH_PER_UNIT := 0.006  # a well-fed creature grows
+## STEPS OF STATURE per unit of food the body actually WANTED. Surplus goes to
+## fat and buys nothing, so a creature cannot be force-fed up the arc faster
+## than it can get hungry — which is what keeps a full-grown beast the work of
+## many sessions rather than one determined afternoon.
+##
+## At the game's hunger rate this works out at roughly 2,200 steps an hour of
+## attentive play, so the whole 65,535 is about thirty hours with the creature.
+const STATURE_PER_UNIT := 16.0
 const FAT_PER_UNIT := 7.0      # food the body did NOT need becomes fat
 
 ## Fat and muscle both drift back toward nothing when unused.
@@ -93,7 +100,8 @@ func digest(delta: float, growth: float, hunger: float) -> Dictionary:
 	if surplus > 0.0:
 		fat = minf(fat + surplus * FAT_PER_UNIT, 100.0)
 	return {
-		"growth": used * GROWTH_PER_UNIT,
+		# Only the food the body NEEDED counts toward growing. The rest is fat.
+		"growth": needed * STATURE_PER_UNIT,
 		"hunger": new_hunger,
 		"fattened": surplus > 0.01,
 	}

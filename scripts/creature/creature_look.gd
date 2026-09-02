@@ -198,6 +198,19 @@ static func says_word(state_name: String, carry_intent: String) -> String:
 	return SAYS.get(state_name, "")
 
 
+## The tooltip over the beast. Presentation, so it lives here with the rest of
+## how the creature READS — `doing` comes in because only the creature knows
+## what it is carrying.
+static func hover_text(who: Creature, doing: String) -> String:
+	return ("%s — %s (%s, %s)\n" +
+		"bond %d · trusts you %d · attention %d\n" +
+		"hunger %d · energy %d · %s\n" +
+		"[P — pet   ·   L — scold   ·   C — lock camera]") % [
+		who.called(), doing, who.morality_word(), mood_word(who.mood),
+		int(who.bond), int(who.trust), int(who.attention),
+		int(who.hunger), int(who.energy), who.favorite_deed()]
+
+
 static func anim_for(state_name: String, moving: bool) -> String:
 	if ANIM.has(state_name):
 		return ANIM[state_name]

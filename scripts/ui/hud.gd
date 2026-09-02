@@ -491,7 +491,7 @@ func _update_creature_panel() -> void:
 	# ITS CHARACTER, spelled out. The one-word nature above is the compass
 	# named; these are the leanings that name actually stands for, so a player
 	# can see WHY their beast is called what it is called.
-	var habits: Array = creature.character_lines()
+	var habits: Array = creature.mind.character_account()
 	var character := "nothing settled yet" if habits.is_empty() \
 		else "\n          ".join(habits)
 	_creature_label.text = ("YOUR CREATURE\n"
@@ -506,6 +506,7 @@ func _update_creature_panel() -> void:
 		+ "Fear:     %d / 100\n"
 		+ "Belly:    %d%% full%s\n"
 		+ "Body:     %s  (fat %d · strength %d%s)\n"
+		+ "Stature:  %s\n"
 		+ "Learned:  %s\n"
 		+ "Believes: %s\n"
 		+ "World:    %s\n"
@@ -518,6 +519,7 @@ func _update_creature_panel() -> void:
 			"  (digesting)" if creature.body.stomach > 0.05 else "",
 			creature.body.condition_word(), int(creature.body.fat),
 			int(creature.body.strength), "  BOOSTED" if creature.body.is_boosted() else "",
+			creature.stature_text(),
 			learned, believes, world, magic]
 
 

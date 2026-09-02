@@ -28,6 +28,15 @@ const MIN_SCALE := 1.1
 ## At full growth the creature stands ~38m — a clear head above the tallest
 ## ~30m trees, the towering B&W silhouette over the land.
 const MAX_SCALE := 15.0
+## THE TOP OF THE ARC, and the shape of the climb to it. 0xFFFF because it is a
+## number worth seeing in the readout, and because a creature should be able to
+## keep growing for as long as anyone keeps playing with it.
+const FULL_STATURE := 65535.0
+## SIZE RISES AS THE SQUARE ROOT OF STATURE. The early climb is therefore
+## VISIBLE — a hatchling is a different animal within an hour — while the last
+## stretch to a tower over the treetops is the work of many sessions. Linear
+## would make the first hours look like nothing was happening at all.
+const GROWTH_CURVE := 0.5
 const STUCK_SECONDS := 30.0   # no state may hold the creature hostage
 const OBSERVE_PERIOD := 2.5
 ## How sharply a deed's moral weight colours how it FELT to do. This is what
@@ -46,7 +55,35 @@ const AMENDS_TRUST := 45.0
 var creature_name := ""
 var hunger := 40.0
 var energy := 90.0
-var growth := 0.01            # 0..1 of its destined size; every game starts small
+## STATURE — how far along its whole life it has come, 1 to 65,535 (0xFFFF).
+##
+## This used to be a percentage, and a percentage is a terrible unit for a life:
+## it ran out. A well-fed creature crossed the whole arc in an afternoon and
+## then had nowhere left to go, which is both an anticlimax and a waste of the
+## most legible reward the game has.
+##
+## Sixty-five thousand steps is a number you can climb for weeks. It moves every
+## time the creature digests something, so there is nearly always a little more
+## of it than there was, and it is a long way from the top for a very long time.
+## Kept as a float so a mouthful can be worth a fraction of a step and nothing
+## is ever lost to rounding; `stature_number` is the whole number it is shown as.
+var stature := 1.0
+## HOW BIG IT IS, 0..1 — the same reading it always was, now DERIVED from
+## stature through the curve. This matters more than it looks: the size of its
+## stomach, what it can lift, how much it can spend on a miracle and how fast it
+## walks were all tuned against this number meaning "how far along its SIZE",
+## not "how far along its whole life". Keeping that meaning is what lets a
+## thirty-hour arc drop in under a body that was balanced for a one-hour one.
+##
+## Assigning to it still works, and simply puts the stature counter wherever
+## that size implies — which is how an old save finds its place on the new scale.
+var growth: float:
+	get:
+		return pow(stature / FULL_STATURE, GROWTH_CURVE)
+	set(value):
+		stature = clampf(
+			pow(clampf(value, 0.0, 1.0), 1.0 / GROWTH_CURVE) * FULL_STATURE,
+			1.0, FULL_STATURE)
 var walks_on_water := false   # granted by a future miracle buff
 ## FLIGHT, granted by a miracle: while aloft the creature ignores the ground
 ## entirely — it soars over water, forest and hill alike, which is how it keeps
@@ -228,7 +265,7 @@ func _ready() -> void:
 	_label = Util.status_label()
 	_label.position = Vector3(0, 3.0, 0)
 	add_child(_label)
-	scale = Vector3.ONE * lerpf(MIN_SCALE, MAX_SCALE, growth)
+	_apply_stature()
 
 
 func _physics_process(delta: float) -> void:
@@ -1690,15 +1727,39 @@ func witness(weight: float) -> void:
 
 ## Growth is EARNED BY DIGESTION now, a little at a time, rather than jumping
 ## whenever a meal is swallowed.
-func _grow_by(amount: float) -> void:
-	if growth < 1.0:
-		var before := int(growth * 10.0)
-		growth = minf(growth + amount, 1.0)
-		scale = Vector3.ONE * lerpf(MIN_SCALE, MAX_SCALE, growth)
-		# A quiet word when it visibly grows (each 10% of its arc) — no
-		# numbers on screen; you watch it get bigger.
-		if int(growth * 10.0) > before:
-			GameState.announce("Your creature grows a little larger.")
+## It has earned some stature. Steps are small and constant; the SIZE they buy
+## is not, which is what makes the first hour feel like progress and the last
+## stretch feel like an achievement.
+func _grow_by(steps: float) -> void:
+	if stature >= FULL_STATURE:
+		return
+	var before := int(growth * 10.0)
+	stature = minf(stature + steps, FULL_STATURE)
+	_apply_stature()
+	# A quiet word when it visibly grows (each 10% of its arc) — no numbers on
+	# screen; you watch it get bigger.
+	if int(growth * 10.0) > before:
+		GameState.announce("Your creature grows a little larger.")
+
+
+## Grant stature directly — a miracle, or the workshop's cheat.
+func gain_stature(steps: float) -> void:
+	_grow_by(steps)
+
+
+## Height from size. (Size from stature is the `growth` property above.)
+func _apply_stature() -> void:
+	scale = Vector3.ONE * lerpf(MIN_SCALE, MAX_SCALE, growth)
+
+
+## The whole number a player sees, and the same in the hexadecimal it was
+## designed around — FFFF is a full-grown beast.
+func stature_number() -> int:
+	return int(stature)
+
+
+func stature_text() -> String:
+	return "%d / 65535  (%04X)" % [int(stature), int(stature)]
 
 
 ## Walk toward a spot, returning true once it is there. All the work — routing
@@ -2293,9 +2354,6 @@ func _cargo_word() -> String:
 	return ""
 
 
-## WHAT IT IS, named off the six-axis compass — "tender wrecker", "bold
-## recluse", "beloved of the village". The old five-word good-to-evil scale is
-## still used for VILLAGERS, who are simple souls; the creature has outgrown it.
 ## Name it. Everything that speaks about the creature picks this up at once,
 ## including the thirty-odd messages written as "your creature".
 func name_it(given: String) -> void:
@@ -2313,13 +2371,11 @@ func called() -> String:
 	return creature_name if creature_name != "" else "Your creature"
 
 
+## WHAT IT IS, named off the six-axis compass — "tender wrecker", "bold
+## recluse", "beloved of the village". The old five-word good-to-evil scale is
+## still used for VILLAGERS, who are simple souls; the creature has outgrown it.
 func morality_word() -> String:
 	return mind.character()
-
-
-## Its character spelled out, one plain habit per leaning it actually holds.
-func character_lines() -> Array:
-	return mind.character_account()
 
 
 func mood_word() -> String:
@@ -2333,68 +2389,33 @@ func favorite_deed() -> String:
 
 
 func hover_text() -> String:
-	return ("%s — %s (%s, %s)\n" +
-		"bond %d · trusts you %d · attention %d\n" +
-		"hunger %d · energy %d · %s\n" +
-		"[P — pet   ·   L — scold   ·   C — lock camera]") % [
-		called(), _status_word(), morality_word(), mood_word(),
-		int(bond), int(trust), int(attention),
-		int(hunger), int(energy), favorite_deed()]
+	return CreatureLook.hover_text(self, _status_word())
 
 
+## Persistence. The whole of what a creature IS, gathered and given back by
+## CreatureRecord — kept out of the state machine because it is bookkeeping,
+## not behaviour, and it grows a line every time the mind grows a faculty.
 func to_dict() -> Dictionary:
-	return {
-		"name": creature_name,
-		"pos": [global_position.x, global_position.y, global_position.z],
-		"growth": growth,
-		"hunger": hunger,
-		"energy": energy,
-		"mood": mood,
-		"bond": bond,
-		"trust": trust,
-		"exiled": exiled,
-		"grievance": grievance,
-		"grievance_time": grievance_time,
-		"catch_skill": catch_skill,
-		"boredom": boredom,
-		"fear": fear,
-		"attention": attention,
-		"walks_on_water": walks_on_water,
-		"flight": flight_time,
-		"inedible": _inedible.duplicate(),
-		"mind": mind.to_dict(),
-		"body": body.to_dict(),
-		"heart": heart.to_dict(),
-		"trouble": steering.to_dict(),
-	}
+	return CreatureRecord.of(self)
 
 
 func from_dict(data: Dictionary) -> void:
-	var p: Array = data.get("pos", [])
-	if p.size() == 3:
-		global_position = Vector3(float(p[0]), float(p[1]), float(p[2]))
-	name_it(String(data.get("name", creature_name)))
-	growth = float(data.get("growth", 0.01))
-	hunger = float(data.get("hunger", 40.0))
-	energy = float(data.get("energy", 90.0))
-	mood = float(data.get("mood", 60.0))
-	bond = float(data.get("bond", 20.0))
-	trust = float(data.get("trust", 55.0))
-	exiled = bool(data.get("exiled", false))
-	grievance = String(data.get("grievance", ""))
-	grievance_time = float(data.get("grievance_time", 0.0))
-	catch_skill = float(data.get("catch_skill", 0.3))
-	boredom = float(data.get("boredom", 20.0))
-	fear = float(data.get("fear", 0.0))
-	attention = float(data.get("attention", 20.0))
-	walks_on_water = bool(data.get("walks_on_water", false))
-	flight_time = float(data.get("flight", 0.0))
-	_inedible = (data.get("inedible", {}) as Dictionary).duplicate()
-	mind.from_dict(data.get("mind", {}))
-	body.from_dict(data.get("body", {}))
-	heart.from_dict(data.get("heart", {}))
-	steering.from_dict(data.get("trouble", {}))
-	morality = mind.temperament
-	scale = Vector3.ONE * lerpf(MIN_SCALE, MAX_SCALE, growth)
-	_shown_align = 999.0   # force the hide/eyes to re-colour for the restored soul
+	CreatureRecord.into(self, data)
 
+
+## The kinds of thing it has tried and will not try again. Public so the record
+## can carry it across a save.
+func distastes() -> Dictionary:
+	return _inedible
+
+
+func set_distastes(kinds: Dictionary) -> void:
+	_inedible = kinds.duplicate()
+
+
+## Re-apply everything that follows from a restored soul: its size, and the
+## colour of its hide and eyes.
+func refresh_appearance() -> void:
+	morality = mind.temperament
+	_apply_stature()
+	_shown_align = 999.0
