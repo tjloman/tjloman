@@ -251,6 +251,21 @@ F3 ......................... the WORKSHOP: checkpoint, reload, new land
 F4 ......................... skip the opening lessons
 F5 ......................... the CREATURES YOU HAVE RAISED — switch, name, begin
 
+WHEN THE DEVICE GETS HOT
+There is no thermal sensor on any platform Godot runs on, so instead the
+game watches its own frame times. Slow frames held for several seconds
+mean the chip has pulled its clocks back (or there is simply too much
+going on), and the world quietly does less: shadows, glow and MSAA go,
+draw distances pull in, distant villages think less often — all through
+the same paths that already existed for a budget phone.
+
+And your creature STOPS AND LOOKS UP AT YOU. Its own miracles are by a
+long way the most expensive thing in the game, so they are the first to
+go, and a creature that halts and turns to face you is not a glitch —
+it is the most legible thing on screen. It goes back to what it was
+doing the moment the frames recover. A single stutter never triggers
+any of this; the condition has to hold.
+
 THE OPENING LESSONS
 A short course runs the first time you play: drag the land, lift a thing,
 summon a casting, draw a rune, combine two, find your creature, teach it.

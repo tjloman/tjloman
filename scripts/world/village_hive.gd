@@ -133,7 +133,9 @@ func invite(what: String, who: Node3D, where: Vector3, warmth := 1.0) -> void:
 ## dozen arithmetic operations however many people live here.
 func tick(delta: float, village: Village) -> void:
 	_think += delta
-	if _think < PERIOD:
+	# A struggling device lets the towns think less often. Twice a second and
+	# once every second and a half are indistinguishable from outside a crowd.
+	if _think < PERIOD * float(Quality.sim_relief()):
 		return
 	var step := _think
 	_think = 0.0

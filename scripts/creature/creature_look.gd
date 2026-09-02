@@ -35,7 +35,7 @@ const ANIM := {
 	"GO_TEND": "work", "TENDING": "work", "FISHING": "work", "CAST": "work",
 	"WATCH": "idle", "SULK": "idle", "LOUNGE": "idle", "PRAY": "idle",
 	"CARRYING": "carry", "PLAY": "play", "DANCE": "play",
-	"GUARD": "guard", "COMMUNE": "guard", "SOOTHE": "idle",
+	"GUARD": "guard", "COMMUNE": "guard", "SOOTHE": "idle", "HEED": "idle",
 	"CATCH": "run", "FLEE": "run", "RUN": "run", "SHUN": "run", "DEPART": "run",
 	"SMASH": "attack", "LEASHED": "walk", "MIMIC": "walk",
 }
@@ -69,6 +69,7 @@ const DOING := {
 	"SHUN": "keeping away from you",
 	"DEPART": "walking away from you, for good",
 	"SOOTHE": "sitting with someone who is frightened",
+	"HEED": "stopped, looking up at you",
 }
 
 ## The little word that floats over its head.
@@ -78,7 +79,8 @@ const SAYS := {
 	"GO_GATHER": "for you!", "PLAY": "wheee!", "GUARD": "grrr", "SULK": ":(",
 	"SMASH": "RAAWR", "FLEE": "!!!", "CAST": "***", "LEASHED": "yes?",
 	"LOUNGE": "~", "DANCE": "la la", "PRAY": "ommm", "COMMUNE": "behold",
-	"RUN": "whoosh", "MIMIC": "like this?", "SHUN": "...", "DEPART": "goodbye", "SOOTHE": "there, there",
+	"RUN": "whoosh", "MIMIC": "like this?", "SHUN": "...", "DEPART": "goodbye",
+	"SOOTHE": "there, there", "HEED": "...?",
 }
 
 

@@ -222,6 +222,8 @@ func _on_creed() -> void:
 	creed.append("feels %s" % " and ".join(creature.heart.account()))
 	creed.append("understands %d kinds of circumstance from the inside (empathy %d%%)"
 		% [creature.heart.wisdom(), int(creature.heart.empathy * 100.0)])
+	creed.append("the device is %s (%.1fms a frame)" % [
+		Quality.heat_word(), Quality.frame_ms()])
 	var said := "  ·  ".join(creed) if not creed.is_empty() \
 		else "It has learned nothing it can put into words yet."
 	GameState.announce("%s (%s, %s) — %s" % [

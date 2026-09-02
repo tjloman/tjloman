@@ -579,6 +579,43 @@ or *obese*.
 - **Lightning is lethal** at the point of impact. The evil path is real.
 - **Sheep** wander, breed slowly, get hunted, and are 100% throwable.
 
+## When the device gets hot, the creature looks up at you
+
+Godot exposes **no thermal sensor** on any platform, so nothing here pretends to
+read a temperature. It watches its own **frame times** instead, which is both
+honest and the thing that actually matters: when a phone's SoC pulls its clocks
+back, frames get longer and *stay* longer. A device that has been in a warm hand
+for twenty minutes and one that simply has too much on screen both arrive here,
+and both want the same answer — do less.
+
+Three bands, and a condition has to hold for **four seconds** before anything
+moves, so a chunk streaming in, a scene reload or a tornado is never mistaken
+for a hot phone. Simulated against real frame-time traces:
+
+| What the device does | What happens |
+|---|---|
+| a steady 60fps for five minutes | nothing |
+| 60fps with a one-second hitch every 30s | nothing |
+| two chunk-streaming stalls | nothing |
+| sustained 40fps | eases off after ~5s |
+| sustained 28fps | eases right off after ~5s |
+| 28fps, then recovers | steps back up one band at a time |
+| hovering right on the threshold | settles once and stays — no flapping |
+
+A struggling device is simply treated as a **lesser tier**, which means one line
+turns off shadows, glow and MSAA, pulls in the draw distances and thickens the
+fog — through exactly the paths that already existed for a budget phone. Distant
+villagers and beasts are simulated two or three times less often, and each town's
+crowd mind thinks less often too.
+
+**And your creature stops and looks up at you.** Its own miracles are by a long
+way the most expensive thing in the game — an orb, its particles, its weather,
+and everything the weather then touches — so they are the first thing to go, and
+it drops whatever it was reaching for. Doing it *visibly* rather than silently is
+the point: a creature that halts and turns to face you is not a glitch, it is the
+most legible thing on screen, and the player reads "it noticed something". It
+did. It goes back to what it was doing the moment the frames recover.
+
 ## Saving looks after itself, and you can raise more than one
 
 **There is nothing to remember.** The world writes itself down every couple of

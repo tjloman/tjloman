@@ -17,7 +17,7 @@ enum State {
 	IDLE, WANDER, SEEK_FOOD, EATING, SLEEPING, GO_TEND, TENDING,
 	WATCH, GO_GATHER, CARRYING, PLAY, GUARD, SULK, CATCH,
 	GO_FISH, FISHING, GO_STORE, SMASH, FLEE, CAST, LEASHED,
-	LOUNGE, DANCE, PRAY, COMMUNE, RUN, MIMIC, SHUN, DEPART, SOOTHE,
+	LOUNGE, DANCE, PRAY, COMMUNE, RUN, MIMIC, SHUN, DEPART, SOOTHE, HEED,
 }
 
 const WALK_SPEED := 3.5
@@ -372,6 +372,8 @@ func _physics_process(delta: float) -> void:
 			_process_commune(delta)
 		State.SOOTHE:
 			_process_soothe(delta)
+		State.HEED:
+			_process_heed(delta)
 		State.RUN:
 			_process_run(delta)
 		State.MIMIC:
@@ -418,6 +420,7 @@ func _physics_process(delta: float) -> void:
 ## Feelings drift every frame: hunger gnaws, idleness bores, mood follows.
 func _tick_feelings(delta: float) -> void:
 	_tick_exile(delta)
+	_tick_heat(delta)
 	hunger = minf(hunger + 1.0 * delta, 100.0)
 	if state != State.SLEEPING:
 		energy = maxf(energy - 0.4 * delta, 0.0)
@@ -704,9 +707,12 @@ func _perceive() -> Array:
 		_offer(opts, "eat", "store", store)
 	if GameState.is_night():
 		_offer(opts, "guard", "village", null)
-	# Miracles it has watched often enough to try itself.
-	for m: String in mind.known_miracles():
-		_offer(opts, "cast", m, null)
+	# Miracles it has watched often enough to try itself — but not while the
+	# device underneath is labouring. A creature's own miracle is by a long way
+	# the most expensive thing in the game, and it is the first thing to go.
+	if not Quality.struggling():
+		for m: String in mind.known_miracles():
+			_offer(opts, "cast", m, null)
 	_offer_quiet_life(opts)
 	return opts.values()
 
@@ -1174,7 +1180,7 @@ func _process_carrying(delta: float) -> void:
 			if _action_time <= 0.0:
 				if _carried is Villager:
 					(_carried as Villager).witness_horror(2.0)
-				mind.judge(-0.20)
+				mind.shape({"mercy": -0.5, "fellowship": -0.2, "daring": 0.3})
 				morality = mind.temperament
 				mood = minf(mood + 6.0, 100.0)
 				_release_carried(false)
@@ -1200,7 +1206,7 @@ func _process_carrying(delta: float) -> void:
 			if _action_time <= 0.0:
 				_hurl_carried()
 				_last_deed = "rampage"
-				mind.judge(-0.40)
+				mind.shape({"mercy": -0.6, "order": -0.7, "daring": 0.5})
 				morality = mind.temperament
 				mood = minf(mood + 8.0, 100.0)
 				boredom = maxf(boredom - 25.0, 0.0)
@@ -1228,7 +1234,8 @@ func _eat_from_store(store: FoodStore) -> void:
 		got = store.take(FoodItem.FoodType.MEAT, 1)
 	if got > 0:
 		_swallow_units(1.0)
-		mind.judge(-0.10)  # that was somebody's dinner
+		# Somebody's dinner: it takes rather than brings, and leaves a mess.
+		mind.shape({"bounty": -0.6, "order": -0.2})
 		morality = mind.temperament
 		state = State.EATING
 		_action_time = 1.5
@@ -1260,7 +1267,7 @@ func _eat_carried() -> void:
 		_action_time = 2.0
 		return
 	if _carried is Corpse:
-		mind.judge(-0.60)
+		mind.shape({"mercy": -0.5, "bounty": -0.4, "fellowship": -0.3})
 		morality = mind.temperament
 		_swallow_units(1.6)
 		GameState.announce("Your creature feeds on the dead. The villagers look away.")
@@ -1284,14 +1291,16 @@ func _eat_carried() -> void:
 		_decide()
 		return
 	if animal.tamed_by != null:
-		mind.judge(-0.60)
+		mind.shape({"mercy": -0.8, "bounty": -0.6})
 		morality = mind.temperament
 		GameState.announce("Your creature has eaten a penned %s. The herders grieve." % animal.species)
 	elif animal.spec.get("predator", false):
-		mind.judge(0.20)  # culling wolves is a service
+		# Bloody, protective and brave at once — exactly the sort of deed a
+		# single good-and-evil number could never describe.
+		mind.shape({"mercy": -0.2, "order": 0.8, "fellowship": 0.3, "daring": 0.5})
 		morality = mind.temperament
 	else:
-		mind.judge(-0.10)
+		mind.shape({"mercy": -0.3, "bounty": -0.2})
 		morality = mind.temperament
 	_swallow_units(1.0 + animal.meat_yield() * 0.7)
 	_last_deed = "hunt"
@@ -1602,7 +1611,7 @@ func _pick_guard_waypoint() -> void:
 
 func _consume_food_target() -> void:
 	if _target_food is Corpse:
-		mind.judge(-0.60)
+		mind.shape({"mercy": -0.5, "bounty": -0.4, "fellowship": -0.3})
 		morality = mind.temperament
 		GameState.announce("Your creature feeds on the dead. The villagers pretend not to see.")
 		_swallow_units(1.6)
@@ -1625,7 +1634,7 @@ func _devour_villager(victim: Villager) -> void:
 		victim.village.grudge = minf(victim.village.grudge + 30.0, 100.0)
 	victim.queue_free()
 	_swallow_units(3.0)
-	mind.judge(-1.00)
+	mind.judge("eat_kin")
 	morality = mind.temperament
 	_last_deed = "hunt"
 	GameState.announce("Your creature has eaten %s. The village will not forget this." % victim_name)
@@ -1955,6 +1964,38 @@ func _process_commune(delta: float) -> void:
 	if _action_time <= 0.0:
 		_last_deed = "commune"
 		_finish_choice(0.4 + audience * 0.3)
+
+
+## IT LOOKS UP AT YOU, AND STOPS.
+##
+## When the device underneath is genuinely struggling — sustained slow frames,
+## which is what a throttling phone actually does to you — the creature quits
+## whatever it was doing, turns to face the camera, and waits. Nothing else it
+## does costs anything like a miracle of its own: an orb, its particles, its
+## weather and everything the weather then touches. Dropping that one behaviour
+## buys back more than every graphics knob put together.
+##
+## The point of doing it THIS way rather than silently is that a creature that
+## stops and looks at you is not a glitch. It is the most legible thing in the
+## game. The player reads "it noticed something" — and it did.
+func _process_heed(delta: float) -> void:
+	_apply_gravity_only(delta)
+	_face(GameState.camera_focus)
+	if not Quality.hot():
+		_decide()
+
+
+## The device has started or stopped struggling. Called from the tick, cheaply.
+func _tick_heat(_delta: float) -> void:
+	if Quality.hot():
+		if state != State.HEED and state != State.SLEEPING and leash_target == Vector3.INF:
+			if state == State.CAST:
+				_cast_miracle = ""      # whatever it was reaching for, it lets go
+			state = State.HEED
+			_action_time = 3.0
+			feel("wonder", 0.4, 2.0)
+	elif state == State.HEED:
+		_decide()
 
 
 ## GOING TO SOMEBODY WHO IS IN TROUBLE — and doing nothing but being there.

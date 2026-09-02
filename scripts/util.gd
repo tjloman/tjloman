@@ -280,11 +280,15 @@ static func sim_stride(pos: Vector3) -> int:
 	var dx := pos.x - f.x
 	var dz := pos.z - f.z
 	var d2 := dx * dx + dz * dz
+	# A struggling device thins the far half of the world further still. Distant
+	# villagers and beasts are the cheapest thing to slow down and the least
+	# noticeable, so they take the first cut (see Quality.sim_relief).
+	var relief := Quality.sim_relief()
 	if d2 > 260.0 * 260.0:
-		return 10
+		return 10 * relief
 	if d2 > 130.0 * 130.0:
-		return 4
-	return 1
+		return 4 * relief
+	return 1 if relief == 1 else 2
 
 
 ## Simple billboard status label used above villagers/creature heads.

@@ -97,9 +97,12 @@ func _ready() -> void:
 	# being moved into a new land — is unpacked now that the world stands.
 	SaveGame.apply_pending(world_gen, creature)
 
-	# F2 (or the settings cycle) re-tunes what can change live; the world's
-	# stream radius and water rebuild on the next reload.
+	# F2, the settings cycle, and the device getting hot all re-tune what can
+	# change live; the world's stream radius and water rebuild on the next
+	# reload. The grace period restarts here because a freshly built world is
+	# slow for reasons that have nothing to do with a warm phone.
 	Quality.quality_changed.connect(_on_quality_changed)
+	Quality.settle()
 
 	GameState.announce("A new god stirs over an endless world. Elsmere awaits your influence.")
 
@@ -607,6 +610,20 @@ func _run_smoke_test() -> void:
 		String(jogged.get("felt", "nothing")), float(jogged.get("strength", 0.0)),
 		lived.episodes.size()])
 
+	# THERMAL EASING. There is no thermal sensor to read, so the proxy is
+	# sustained frame time — which is what a throttling chip actually does to
+	# you. A struggling device is treated as a lesser one, through exactly the
+	# paths that already existed for a budget phone.
+	var was := Quality.heat
+	var knobs := PackedStringArray()
+	for level: int in [Quality.Heat.EASY, Quality.Heat.WARM, Quality.Heat.HOT]:
+		Quality.heat = level
+		knobs.append("%s: tier %d, shadows %s, actors %.0fm, sim x%d" % [
+			Quality.heat_word(), Quality.effective_tier(), Quality.shadows(),
+			Quality.actor_distance(), Quality.sim_relief()])
+	Quality.heat = was
+	print("SMOKE TEST: heat — %s" % "  |  ".join(knobs))
+
 	# THE LONG ARC. Growth used to be a percentage, and a percentage ran out: a
 	# well-fed creature crossed the whole thing in an afternoon and then had
 	# nowhere left to go. Stature is 1..65,535, size is its square root, and the
@@ -629,15 +646,15 @@ func _run_smoke_test() -> void:
 	# in, and asks its own heart how a moment like that would feel. So a creature
 	# that has never been mobbed cannot picture being mobbed — and walks in.
 	var seer := CreatureForesight.new()
-	var quiet := {"in_village": 1.0, "crowd": 0.4, "hungry": 0.7}
+	var settled := {"in_village": 1.0, "crowd": 0.4, "hungry": 0.7}
 	var after_smashing := {"in_village": 1.0, "crowd": 0.4, "hungry": 0.7,
 		"kin_afraid": 1.0, "armed": 0.9}
 	for i in 12:
-		seer.expect("smash|house", quiet)
+		seer.expect("smash|house", settled)
 		seer.settle(after_smashing)
-		seer.expect("tend|farm", quiet)
+		seer.expect("tend|farm", settled)
 		seer.settle({"in_village": 1.0, "crowd": 0.4, "hungry": 0.7, "kin_glad": 0.9})
-	var pictured := seer.imagine("smash|house", quiet)
+	var pictured := seer.imagine("smash|house", settled)
 	print("SMOKE TEST: foresight — it pictures smashing a house leaving kin_afraid %.2f, armed %.2f" % [
 		float(pictured.get("kin_afraid", 0.0)), float(pictured.get("armed", 0.0))])
 	print("SMOKE TEST: foresight — %s" % str(seer.expectations(2)))
@@ -651,10 +668,10 @@ func _run_smoke_test() -> void:
 		burnt.learn({"kin_afraid": 1.0, "armed": 1.0})
 	print(("SMOKE TEST: foresight — smashing looks like %+.2f to a sheltered creature, "
 		+ "%+.2f to one that has been mobbed for it") % [
-			seer.prospect("smash|house", quiet, naive, null),
-			seer.prospect("smash|house", quiet, burnt, null)])
+			seer.prospect("smash|house", settled, naive, null),
+			seer.prospect("smash|house", settled, burnt, null)])
 	# And being wrong is worth something: a failed prediction widens its search.
-	seer.expect("tend|farm", quiet)
+	seer.expect("tend|farm", settled)
 	seer.settle({"in_village": 1.0, "predator": 1.0, "afraid": 1.0, "hurt": 1.0})
 	print(("SMOKE TEST: foresight — the world confounds it: surprise %.2f, "
 		+ "exploration widened by %d%%, it can see %d%% of its deeds coming") % [
