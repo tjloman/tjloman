@@ -374,6 +374,48 @@ def check_format_precedence(files):
     return problems
 
 
+def check_shadowed_vars(files):
+    """Find `var x` declared twice where the first is still in scope.
+
+    GDScript rejects it outright ("There is already a variable named x declared
+    in this scope"), and gdparse does not, so it takes the whole class down at
+    load time. It happens when a long function grows a second helper variable
+    with an obvious name -- `quiet`, `folk` -- and it has cost this project two
+    failed launches.
+
+    Scope is tracked by indentation, which is all GDScript has: any line at a
+    shallower indent than a declaration ends the block that declaration lived
+    in, so two sibling `for` loops may each have their own `var up` and only a
+    genuine redeclaration is reported.
+    """
+    problems = []
+    var_line = re.compile(r"^(\s*)var\s+(\w+)")
+    func_line = re.compile(r"^(?:static\s+)?func\s")
+    for path in files:
+        live = []      # [(indent, name, lineno)] still in scope, outermost first
+        with open(path, encoding="utf-8") as fh:
+            for lineno, line in enumerate(fh, 1):
+                if func_line.match(line):
+                    live = []                      # a new function is a new scope
+                    continue
+                bare = line.rstrip()
+                if not bare.strip() or bare.lstrip().startswith("#"):
+                    continue
+                indent = len(bare[:len(bare) - len(bare.lstrip())].expandtabs(4))
+                # Anything at this indent has closed every deeper block.
+                live = [e for e in live if e[0] <= indent]
+                m = var_line.match(line)
+                if not m or indent == 0:
+                    continue                       # indent 0 is a class member
+                name = m.group(2)
+                clash = next((e for e in live if e[1] == name), None)
+                if clash:
+                    problems.append((path, lineno, name, clash[2], line.strip()))
+                else:
+                    live.append((indent, name, lineno))
+    return problems
+
+
 def main():
     root = "scripts"
     targets = sys.argv[1:] or [root]
@@ -393,12 +435,16 @@ def main():
     for path, lineno, seq, line in escapes:
         print("%s:%d: invalid string escape '%s' (Godot rejects it; gdparse does not)"
               "\n    %s" % (path, lineno, seq, line))
+    shadowed = check_shadowed_vars(files)
+    for path, lineno, name, first, line in shadowed:
+        print("%s:%d: '%s' is already declared in this scope (line %d) — Godot "
+              "rejects this at load time\n    %s" % (path, lineno, name, first, line))
     formats = check_format_precedence(files)
     for path, lineno, line in formats:
         print("%s:%d: '%%' binds tighter than '+', so only the LAST piece of this "
               "string is formatted — wrap the whole concatenation in parentheses"
               "\n    %s" % (path, lineno, line))
-    total = len(problems) + len(escapes) + len(formats)
+    total = len(problems) + len(escapes) + len(formats) + len(shadowed)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

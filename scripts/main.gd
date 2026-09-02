@@ -610,6 +610,26 @@ func _run_smoke_test() -> void:
 		String(jogged.get("felt", "nothing")), float(jogged.get("strength", 0.0)),
 		lived.episodes.size()])
 
+	# THE COST OF WEATHER. A default SphereMesh is 64 segments by 32 rings —
+	# 4,224 triangles — and every particle mesh here set only its radius, so a
+	# 400-droplet shower drew 1.7 MILLION triangles for a spray of specks two
+	# pixels across. They are billboarded quads now: two triangles each.
+	var drop: Mesh = miracles._drop_mesh()
+	var faces := int(drop.get_faces().size() / 3.0)
+	var per_cloud := Quality.particles(MiracleManager.RAIN_DROPS)
+	print("SMOKE TEST: rain — %d triangles a droplet, %d droplets = %d tris a cloud, "
+		% [faces, per_cloud, faces * per_cloud]
+		+ "at most %d clouds (was 4224 x 400 = 1,689,600 each, uncapped)"
+		% MiracleManager.RAIN_CLOUDS)
+	var budget := PackedStringArray()
+	var heat_was := Quality.heat
+	for level: int in [Quality.Heat.EASY, Quality.Heat.WARM, Quality.Heat.HOT]:
+		Quality.heat = level
+		budget.append("%s %d drops" % [
+			Quality.heat_word(), Quality.particles(MiracleManager.RAIN_DROPS)])
+	Quality.heat = heat_was
+	print("SMOKE TEST: rain — thins with the device: %s" % "  ·  ".join(budget))
+
 	# THERMAL EASING. There is no thermal sensor to read, so the proxy is
 	# sustained frame time — which is what a throttling chip actually does to
 	# you. A struggling device is treated as a lesser one, through exactly the
@@ -855,9 +875,9 @@ func _run_smoke_test() -> void:
 	# (in a band) fights back. A lone villager must NOT dare to stand.
 	village.store.add_lumber(12)
 	village.store.add_stone(9)
-	var folk := village.my_villagers()
-	if folk.size() >= 2:
-		var victim2 := folk[0]
+	var townsfolk := village.my_villagers()
+	if townsfolk.size() >= 2:
+		var victim2 := townsfolk[0]
 		var wolf := Animal.create("wolf")
 		add_child(wolf)
 		wolf.global_position = victim2.global_position + Vector3(2, 0, 0)

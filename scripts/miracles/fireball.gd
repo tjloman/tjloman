@@ -47,7 +47,7 @@ func _ready() -> void:
 	add_child(light)
 
 	var embers := CPUParticles3D.new()
-	embers.amount = 40
+	embers.amount = Quality.particles(40)
 	embers.lifetime = 0.7
 	embers.mesh = _ember_mesh()
 	embers.direction = Vector3.UP
@@ -59,12 +59,9 @@ func _ready() -> void:
 	get_tree().create_timer(FUSE_SECONDS).timeout.connect(_explode)
 
 
-func _ember_mesh() -> SphereMesh:
-	var m := SphereMesh.new()
-	m.radius = 0.05
-	m.height = 0.1
-	m.material = Util.mat(Color(1.0, 0.7, 0.2), true)
-	return m
+## Two triangles, glowing, always facing you. It was a full 64x32 UV sphere.
+func _ember_mesh() -> QuadMesh:
+	return Util.speck_mesh(0.1, 0.1, Color(1.0, 0.7, 0.2), true)
 
 
 func _physics_process(delta: float) -> void:

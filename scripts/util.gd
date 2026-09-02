@@ -102,6 +102,41 @@ static func shared_mat(color: Color, emission := false) -> StandardMaterial3D:
 	return m
 
 
+## A SPECK, for particles: two triangles that always face the camera.
+##
+## This exists because of a bug worth remembering. `SphereMesh.new()` defaults
+## to 64 radial segments by 32 rings — 4,224 triangles — and every particle mesh
+## in this project set only its radius and material, leaving those defaults in
+## place. A rain cloud of 400 droplets was therefore drawing 1,689,600 triangles
+## for a shower of four-centimetre specks, each of them a couple of pixels
+## across. Three overlapping showers came to five million. That is many times a
+## mid-range phone's entire per-frame budget, spent entirely on geometry no one
+## can see.
+##
+## A billboarded quad is two triangles and looks better, because it always
+## faces the camera and can be stretched into a streak. The mesh and its
+## material are both pooled, so casting rain a hundred times allocates nothing.
+static func speck_mesh(width: float, height: float, color: Color,
+		emission := false) -> QuadMesh:
+	var key := "speck|%.3f|%.3f|%s|%s" % [width, height, color, emission]
+	var m: QuadMesh = _mesh_pool.get(key)
+	if m != null:
+		return m
+	m = QuadMesh.new()
+	m.size = Vector2(width, height)
+	var skin := mat(color, emission)
+	# Unshaded and billboarded: a raindrop needs no lighting, and turning to
+	# face the camera is what makes two triangles read as a droplet at all.
+	skin.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	skin.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	skin.billboard_keep_scale = true
+	skin.cull_mode = BaseMaterial3D.CULL_DISABLED
+	skin.disable_receive_shadows = true
+	m.material = skin
+	_mesh_pool[key] = m
+	return m
+
+
 ## Radius is bucketed to 5cm so a spread of near-identical sizes still shares
 ## one mesh; segments stay low because these are always small and distant-ish.
 static func _pooled_sphere_mesh(radius: float, segs: int) -> SphereMesh:

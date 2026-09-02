@@ -231,6 +231,20 @@ func actor_distance() -> float:
 	return [95.0, 150.0, 220.0][effective_tier()]
 
 
+## HOW MANY PARTICLES a burst is allowed. Reads the effective tier, so a
+## struggling device thins the rain along with everything else — and because
+## particles are the one thing here that can run to hundreds at once, this is
+## the knob with the most give in it.
+func particle_scale() -> float:
+	return [0.4, 0.7, 1.0][effective_tier()]
+
+
+## How many of a burst to actually spawn, never fewer than a handful — a
+## four-droplet shower is worse than none.
+func particles(most: int) -> int:
+	return maxi(int(most * particle_scale()), 6)
+
+
 func fog_density() -> float:
 	# A leaner world (LOW) needs thicker fog to hide the near horizon.
 	return [0.008, 0.006, 0.004][effective_tier()]

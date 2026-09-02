@@ -74,12 +74,23 @@ const LIGHTNING_KILL_RADIUS := 3.0
 const LIGHTNING_BURN_RADIUS := 8.0
 const CREATURE_SIGHT_RANGE := 45.0
 
+## HOW MUCH RAIN IS ALLOWED IN THE SKY AT ONCE.
+##
+## A cloud lives twelve seconds, and the storms are built by stacking casts —
+## a hurricane is rain and wind and strikes together — so without a ceiling a
+## few seconds of enthusiasm puts half a dozen showers over the same field and
+## multiplies the whole cost by six. Three is plenty to look like weather.
+const RAIN_DROPS := 400
+const RAIN_CLOUDS := 3
+
 var divine_hand: DivineHand = null  # wired by main; orbs land in the grip
 ## What the PLAYER has cast, and how many runes went into the last one. Only
 ## `cast_runes` touches these, so the creature's own casting never counts —
 ## the tutorial watches them to know a lesson actually landed.
 var casts_made := 0
 var last_rune_count := 0
+## The showers currently in the sky, oldest first.
+var _clouds: Array[Node3D] = []
 
 
 ## Your reach: 1.0 alone, rising with converted villages and their belief.
@@ -323,7 +334,7 @@ func _cast_rain(pos: Vector3, potency := 1.0) -> void:
 		cloud.add_child(puff)
 
 	var drops := CPUParticles3D.new()
-	drops.amount = 400
+	drops.amount = Quality.particles(RAIN_DROPS)
 	drops.lifetime = 1.4
 	drops.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
 	drops.emission_box_extents = Vector3(5, 0.2, 5)
@@ -362,15 +373,26 @@ func _cast_rain(pos: Vector3, potency := 1.0) -> void:
 					and body.global_position.distance_to(pos) < reach:
 				body.call("extinguish")
 
+	_hold_cloud(cloud)
 	get_tree().create_timer(12.0).timeout.connect(cloud.queue_free)
 
 
-func _drop_mesh() -> SphereMesh:
-	var m := SphereMesh.new()
-	m.radius = 0.04
-	m.height = 0.12
-	m.material = Util.mat(Color(0.5, 0.7, 1.0, 0.8))
-	return m
+## Keep the sky to a few showers. A new one over a crowded sky retires the
+## oldest, which is both cheaper and better weather — rain that stacks six deep
+## over one field looks like a bug, not a downpour.
+func _hold_cloud(cloud: Node3D) -> void:
+	_clouds = _clouds.filter(func(c: Node3D) -> bool: return is_instance_valid(c))
+	_clouds.append(cloud)
+	while _clouds.size() > RAIN_CLOUDS:
+		var oldest: Node3D = _clouds.pop_front()
+		if is_instance_valid(oldest):
+			oldest.queue_free()
+
+
+## A raindrop: two triangles, billboarded, stretched into a streak. It used to
+## be a default SphereMesh — 4,224 triangles apiece, four hundred at a time.
+func _drop_mesh() -> QuadMesh:
+	return Util.speck_mesh(0.03, 0.22, Color(0.5, 0.7, 1.0, 0.8))
 
 
 ## Lightning is now lethal at the point of impact. An evil god's bread
@@ -658,8 +680,11 @@ func _cast_flight(pos: Vector3, potency := 1.0) -> void:
 		return
 	creature.grant_flight(35.0 + potency * 25.0)
 	var swirl := CPUParticles3D.new()
-	swirl.amount = 60
+	swirl.amount = Quality.particles(60)
 	swirl.lifetime = 1.6
+	# It had no mesh at all, which in Godot 4 means it drew nothing: the gust
+	# that lifts your creature has been invisible this whole time.
+	swirl.mesh = Util.speck_mesh(0.14, 0.14, Color(0.85, 0.92, 1.0, 0.55))
 	swirl.one_shot = true
 	swirl.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
 	swirl.emission_sphere_radius = 3.0
@@ -713,8 +738,9 @@ func _cast_strength(pos: Vector3, potency := 1.0) -> void:
 		return
 	creature.grant_strength(30.0 + potency * 20.0)
 	var flare := CPUParticles3D.new()
-	flare.amount = 40
+	flare.amount = Quality.particles(40)
 	flare.lifetime = 1.2
+	flare.mesh = Util.speck_mesh(0.16, 0.16, Color(1.0, 0.85, 0.4), true)
 	flare.one_shot = true
 	flare.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
 	flare.emission_sphere_radius = 2.5
