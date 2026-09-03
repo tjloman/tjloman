@@ -284,7 +284,11 @@ func sea_reaches(x: float, z: float) -> bool:
 		if queue.size() >= SEA_CELLS:
 			found = true             # a sunken region this big IS the sea
 			break
-		for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		# Typed on the `for`: an untyped array literal holds Variants, and
+		# `cell + step` would then infer a Variant, which this project builds
+		# as an error that takes every dependent script down with it.
+		for step: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0),
+				Vector2i(0, 1), Vector2i(0, -1)]:
 			var next := cell + step
 			if not seen.has(next):
 				seen[next] = true

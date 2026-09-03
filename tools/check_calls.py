@@ -527,6 +527,67 @@ def check_inferred_variant(files):
     return problems
 
 
+## THE SAME BUILD ERROR, ARRIVING A THIRD WAY.
+##
+## `check_inferred_variant` above catches `var x := thing.pop_back()`. It does
+## not catch this, which shipped twice in one commit:
+##
+##     for step in [Vector2i(1, 0), Vector2i(-1, 0)]:
+##         var next := cell + step        # step is Variant, so next is Variant
+##
+## An untyped array literal has element type Variant, so the loop variable is a
+## Variant, so anything inferred from it is a Variant — and this project builds
+## that as an ERROR that takes every dependent script down with it. `gdparse`
+## does not catch it and `gdlint` does not either; only Godot does, at load.
+##
+## The fix is always the same and always trivial: name the element type on the
+## `for`, as `for step: Vector2i in [...]`.
+def check_untyped_loop_vars(files):
+    loop = re.compile(r"^(\s*)for\s+(\w+)\s+in\s+\[")
+    typed = re.compile(r"^\s*for\s+\w+\s*:")
+    infer = re.compile(r"^(\s*)var\s+(\w+)\s*:=\s*(.+?)\s*(?:#.*)?$")
+    problems = []
+    for path in files:
+        with open(path, encoding="utf-8") as fh:
+            lines = fh.read().split("\n")
+        open_loops = []          # (indent of the `for`, loop variable name)
+        for lineno, line in enumerate(lines, 1):
+            if not line.strip() or line.strip().startswith("#"):
+                continue
+            indent = len(line) - len(line.lstrip())
+            open_loops = [(d, n) for d, n in open_loops if indent > d]
+            m = loop.match(line)
+            if m and not typed.match(line):
+                open_loops.append((len(m.group(1)), m.group(2)))
+                continue
+            m = infer.match(line)
+            if not m or not open_loops:
+                continue
+            bare = _outside_calls(m.group(3))
+            for _d, name in open_loops:
+                if re.search(r"\b%s\b" % re.escape(name), bare):
+                    problems.append((path, lineno, name, line.strip()))
+                    break
+    return problems
+
+
+## What is left of an expression once every call and constructor argument list
+## is taken out of it — which is precisely where a Variant does NOT leak.
+##
+## This distinction is the whole rule. `var cell := center + Vector2i(dx, dz)`
+## is FINE however Variant `dx` is, because `Vector2i(...)` is a Vector2i
+## whatever you feed it, and so is `Util.sphere(0.12, ..., 0.18 * side)`. It is
+## only when the loop variable is out in the open — `var next := cell + step` —
+## that the inferred type becomes Variant and the build stops. Without this the
+## rule fired on six lines that have compiled happily for months.
+def _outside_calls(expr):
+    while True:
+        stripped = re.sub(r"\([^()]*\)", "()", expr)
+        if stripped == expr:
+            return expr
+        expr = stripped
+
+
 # Members of Godot's own node classes that scripts here plausibly name a local
 # or a parameter after. Godot warns on the shadow but the build does not fail,
 # so it reaches the player as noise — and worse, a later edit that MEANT the
@@ -674,8 +735,16 @@ def main():
               "Variant here — this project builds that as an ERROR and it stops "
               "every dependent script loading. Declare the type, or wrap the "
               "call.\n    %s" % (path, lineno, call, line))
+    loop_vars = check_untyped_loop_vars(files)
+    for path, lineno, name, line in loop_vars:
+        print("%s:%d: '%s' comes from an UNTYPED array literal, so it is a "
+              "Variant and ':=' infers a Variant here — Godot builds that as an "
+              "error that stops every dependent script loading. Name the element "
+              "type: `for %s: <Type> in [...]`.\n    %s"
+              % (path, lineno, name, name, line))
     total = len(problems) + len(escapes) + len(formats) + len(shadowed) \
-        + len(loose_arrays) + len(variants) + len(shadowed_members)
+        + len(loose_arrays) + len(variants) + len(shadowed_members) \
+        + len(loop_vars)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

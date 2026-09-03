@@ -191,8 +191,10 @@ static func _outline(img: Image) -> void:
 			if img.get_pixel(x, y).a > 0.35:
 				continue
 			var near := false
-			for dy in [-1, 0, 1]:
-				for dx in [-1, 0, 1]:
+			# Typed, or `x + dx` infers a Variant off the untyped literal and
+			# the build stops. See tools/check_calls.py.
+			for dy: int in [-1, 0, 1]:
+				for dx: int in [-1, 0, 1]:
 					var px := x + dx
 					var py := y + dy
 					if px < 0 or py < 0 or px >= SIZE or py >= SIZE:
