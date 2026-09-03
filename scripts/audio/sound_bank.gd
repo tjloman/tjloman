@@ -5,9 +5,16 @@ extends Node
 
 const SAMPLE_RATE := 22050
 const MAX_CONCURRENT := 24
+## How much of a looping voice is folded back over its own head to hide the
+## join, in seconds. A loop that clicks is worse than no loop. See `_make_loop`.
+const SPLICE := 0.25
 
 var _bank := {}
 var _active := 0
+## The looping voices, kept apart from the one-shots because they are used
+## completely differently: a caller HOLDS one of these in a player of its own
+## and rides its volume, rather than firing and forgetting. See `voice`.
+var _loops := {}
 
 
 func _ready() -> void:
@@ -29,6 +36,14 @@ func _ready() -> void:
 	_bank["screech"] = _make_screech()
 	_bank["drum"] = _make_drum()
 	_bank["whisper"] = _make_whisper()
+	# THE SMALL VOICES. Everything above is a one-shot; these are LOOPS, because
+	# a cricket is not an event. See `_make_loop` and `voice`.
+	_loops["crickets"] = _make_crickets()
+	_loops["bees"] = _make_bees()
+	_loops["flies"] = _make_flies()
+	_loops["peepers"] = _make_peepers()
+	_loops["chitter"] = _make_chitter()
+	_loops["rustle"] = _make_rustle()
 
 
 ## Plays a named sound at a world position, then cleans itself up.
@@ -51,6 +66,18 @@ func play_at(sound: String, pos: Vector3, volume_db := 0.0, pitch_jitter := 0.12
 		_active -= 1
 		p.queue_free())
 	p.play()
+
+
+## A LOOPING VOICE, for something that is always making its noise — a cricket,
+## a hive, flies over meat. The caller owns the player and rides its volume,
+## which is what lets a chorus go from intermittent to continuous as the player
+## draws a rune. Null for an unknown name.
+func voice(voice_name: String) -> AudioStreamWAV:
+	return _loops.get(voice_name)
+
+
+func has_voice(voice_name: String) -> bool:
+	return _loops.has(voice_name)
 
 
 ## Synthesis core ------------------------------------------------------------
@@ -380,3 +407,170 @@ func _make_whisper() -> AudioStreamWAV:
 		prev = low
 		samples[i] = breath * syllable * _env(t, dur, 0.35, 0.6) * 0.9
 	return _make_wav(samples)
+
+
+## The small voices -----------------------------------------------------------
+##
+## These are LOOPS, and a loop that clicks is worse than no loop at all, so
+## every one of them is built to a whole number of cycles of its own rhythm and
+## crossfaded head-to-tail by `_make_loop`. They are deliberately quiet and
+## deliberately dull on their own: they are meant to be noticed only when you
+## bring the hand down close, and to be almost subliminal otherwise.
+
+## Wrap a generator into a seamless loop: the last SPLICE seconds are crossfaded
+## back over the first, so the join has no edge. The returned stream is marked
+## LOOP_FORWARD over the surviving length.
+func _make_loop(samples: PackedFloat32Array) -> AudioStreamWAV:
+	var fade := int(SPLICE * SAMPLE_RATE)
+	var keep := samples.size() - fade
+	if keep <= fade:
+		return _make_wav(samples)
+	var out := PackedFloat32Array()
+	out.resize(keep)
+	for i in keep:
+		out[i] = samples[i]
+	# The tail is folded back over the head, rising as the head falls.
+	for i in fade:
+		var k := i / float(fade)
+		out[i] = out[i] * k + samples[keep + i] * (1.0 - k)
+	var wav := _make_wav(out)
+	wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	wav.loop_begin = 0
+	wav.loop_end = out.size()
+	return wav
+
+
+## CRICKETS. A field of them, not one: several stridulators at slightly
+## different rates, each a fast burst of a high tone, so they drift in and out
+## of phase the way a real field does and never sound like a sample.
+func _make_crickets() -> AudioStreamWAV:
+	var dur := 4.0
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var rates := [2.9, 3.3, 3.7, 4.3]
+	var tones := [4200.0, 4600.0, 3900.0, 5100.0]
+	var phases := [0.0, 1.7, 3.1, 4.9]
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var sum := 0.0
+		for k in rates.size():
+			var rate: float = rates[k]
+			var chirp: float = fmod(t * rate + phases[k], 1.0)
+			# Three quick pulses, then a long gap: that is the shape of a chirp.
+			if chirp > 0.16:
+				continue
+			var pulse := pow(maxf(sin(chirp / 0.16 * PI * 3.0), 0.0), 2.0)
+			sum += sin(t * float(tones[k]) * TAU) * pulse * 0.2
+		samples[i] = sum
+	return _make_loop(samples)
+
+
+## BEES over flowers. A warm, thick drone — two close tones beating against
+## each other, which is what makes a hive sound like many rather than one — with
+## the odd one passing by nearer.
+func _make_bees() -> AudioStreamWAV:
+	var dur := 3.0
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var low := 0.0
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var drone := sin(t * 214.0 * TAU) * 0.5 + sin(t * 227.0 * TAU) * 0.45
+		# A body that wanders, so the swarm breathes.
+		drone *= 0.7 + 0.3 * sin(t * 0.7 * TAU)
+		# One bee passing close: a swell every second or so, higher and louder.
+		var pass_by := pow(maxf(sin(t * 1.1 * TAU), 0.0), 6.0)
+		drone += sin(t * 340.0 * TAU) * pass_by * 0.5
+		# Softened, so it is a hum and not a buzzer.
+		low = low * 0.55 + drone * 0.45
+		samples[i] = low * 0.32
+	return _make_loop(samples)
+
+
+## FLIES over something dead. Thinner and more irritable than the bees, and
+## never steady: it comes and goes as they land and lift.
+func _make_flies() -> AudioStreamWAV:
+	var dur := 2.5
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var low := 0.0
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		# The pitch itself wobbles — a fly never holds a note.
+		var wob := 1.0 + 0.09 * sin(t * 5.3 * TAU) + 0.05 * sin(t * 11.7 * TAU)
+		var buzz := sin(t * 168.0 * wob * TAU) * 0.6 + sin(t * 249.0 * wob * TAU) * 0.3
+		# Landing and lifting: mostly on, sometimes gone.
+		var settled := 0.45 + 0.55 * pow(maxf(sin(t * 0.83 * TAU + 1.2), 0.0), 0.6)
+		low = low * 0.45 + buzz * 0.55
+		samples[i] = low * settled * 0.26
+	return _make_loop(samples)
+
+
+## SPRING PEEPERS. The frogs by the water — a chorus of short rising whistles at
+## a rate that speeds and slows, which is the sound of standing water at dusk.
+func _make_peepers() -> AudioStreamWAV:
+	var dur := 4.5
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var voices := [1.55, 1.9, 2.4]
+	var pitches := [1180.0, 1420.0, 980.0]
+	var offs := [0.0, 0.9, 2.2]
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var sum := 0.0
+		for k in voices.size():
+			var peep: float = fmod(t * float(voices[k]) + offs[k], 1.0)
+			if peep > 0.22:
+				continue
+			var k2 := peep / 0.22
+			# Each note bends UP as it sounds, which is the whole character.
+			var f: float = float(pitches[k]) * (1.0 + 0.16 * k2)
+			sum += sin(t * f * TAU) * sin(k2 * PI) * 0.28
+		samples[i] = sum
+	return _make_loop(samples)
+
+
+## A SQUIRREL SCOLDING. Dry, clattering, indignant — bursts of hard little
+## clicks with a rasp under them, which is what they do when you get too near
+## a tree they are working.
+func _make_chitter() -> AudioStreamWAV:
+	var dur := 3.2
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var low := 0.0
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		# Bursts, with real silence between them.
+		var burst := pow(maxf(sin(t * 0.62 * TAU), 0.0), 3.0)
+		# Inside a burst, a fast clatter of individual ticks.
+		var tick := pow(maxf(sin(t * 17.0 * TAU), 0.0), 8.0)
+		var rasp := randf_range(-1, 1)
+		low = low * 0.3 + rasp * 0.7
+		var body := sin(t * 620.0 * TAU) * 0.4 + low * 0.6
+		samples[i] = body * tick * burst * 0.4
+	return _make_loop(samples)
+
+
+## LEAVES. Not an animal at all — the sound a thing MAKES in a tree, used when
+## something small moves in the canopy. Filtered noise that swells and falls.
+func _make_rustle() -> AudioStreamWAV:
+	var dur := 2.8
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var low := 0.0
+	var prev := 0.0
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var noise := randf_range(-1, 1)
+		low = low * 0.6 + noise * 0.4
+		var hiss := low - prev      # take the rumble out: leaves, not wind
+		prev = low
+		var gust := 0.25 + 0.75 * pow(maxf(sin(t * 0.71 * TAU), 0.0), 1.5)
+		samples[i] = hiss * gust * 0.5
+	return _make_loop(samples)

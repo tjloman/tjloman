@@ -76,6 +76,10 @@ const PEEK_EVERY := 0.08
 
 const OPEN_SLOP := 16.0      # move further than this first and you meant to pan
 const IDLE_TO_CAST := 2.6    # quiet seconds that end the session
+## HOW FAR THE WORLD LEANS IN while a rune is being drawn. See `_tick_focus`.
+const FOCUS_TIME_SCALE := 0.75
+const FOCUS_IN := 0.30            # seconds to lean in
+const FOCUS_OUT := 0.55           # and rather longer to come back out
 const MAX_RUNES := 5
 
 ## THE DRUMS AND THE WHISPERS. A rune committed is a drum struck, pitched down
@@ -879,11 +883,34 @@ func _end_stroke() -> void:
 ## go if they drew nothing.
 func _tick_casting(delta: float) -> void:
 	_tick_whispers(delta)
+	_tick_focus(delta)
 	if not casting or state == HandState.GESTURING:
 		return
 	_idle_time += delta
 	if _idle_time >= IDLE_TO_CAST:
 		_close_casting(true)
+
+
+## THE WORLD LEANS IN WHILE YOU DRAW.
+##
+## Two things move together and they are the same gesture. Time slows a little
+## — not to a crawl, just enough that the drawing hand feels unhurried and the
+## thrown fireball you are about to answer hangs a moment longer. And the small
+## noises come forward: every critter's voice stops being intermittent and goes
+## continuous (see Critter._tick_voice), so a wood that was a scatter of
+## far-off chirping becomes a solid ring of it around you.
+##
+## The audio does NOT slow with the world — Godot's time scale does not touch
+## playback — which is exactly right. The world goes quiet and slow; the small
+## things get louder and keep their pitch.
+##
+## Timed in UNSCALED seconds, or the ramp would slow itself down as it worked.
+func _tick_focus(delta: float) -> void:
+	var want := 1.0 if casting else 0.0
+	var real := delta / maxf(Engine.time_scale, 0.01)
+	var rate := real / (FOCUS_IN if want > GameState.focus else FOCUS_OUT)
+	GameState.focus = move_toward(GameState.focus, want, rate)
+	Engine.time_scale = lerpf(1.0, FOCUS_TIME_SCALE, GameState.focus)
 
 
 ## The runes on the slate, for the readout that draws them.

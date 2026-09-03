@@ -23,6 +23,9 @@ var _deepest := Vector2.ZERO
 ## ground without re-measuring it. About 2.5 KB at a 24x24 grid, 122 KB across
 ## a loaded 7x7 — which buys burns that visibly cool.
 var _heights := PackedFloat32Array()
+## Every bloom scattered here, in world space — read by TreeFriends so bees and
+## moths can be over the flowers instead of near them.
+var _blooms: PackedVector3Array = PackedVector3Array()
 ## Everything scattered here that has to be set back down on the new ground.
 var _standing: Array[Node3D] = []
 
@@ -205,6 +208,11 @@ func recolor() -> void:
 	if _heights.is_empty() or _ground == null or not is_instance_valid(_ground):
 		return
 	_cut_mesh(_tint_grid(_heights))
+
+
+## The flowers on this chunk, in world space. Empty on anything but a meadow.
+func blooms() -> PackedVector3Array:
+	return _blooms
 
 
 func _build_water() -> void:
@@ -390,6 +398,11 @@ func _scatter_flowers(rng: RandomNumberGenerator, count: int) -> void:
 			bloom = bloom.scaled(Vector3.ONE * rng.randf_range(2.4, 4.0))
 		xforms.append(Transform3D(bloom, spot))
 		colors.append(Color.from_hsv(rng.randf(), rng.randf_range(0.5, 0.85), 0.98))
+		# WHERE THE FLOWERS ACTUALLY ARE. A MultiMesh has no nodes to find, so
+		# the meadow would otherwise be invisible to everything but the camera —
+		# and the bees have to be over real blooms rather than over grass that
+		# happens to be the right biome. Kept in world space, a Vector3 each.
+		_blooms.append(Vector3(position.x + spot.x, spot.y, position.z + spot.z))
 	if xforms.is_empty():
 		return
 	var mm := MultiMesh.new()

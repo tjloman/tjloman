@@ -523,6 +523,26 @@ func rebuild_all() -> void:
 			chunk.rebuild_terrain()
 
 
+## EVERY FLOWER WITHIN REACH, in world space. Chunks keep the spots they
+## scattered their meadows on precisely so this can exist: a MultiMesh has no
+## nodes, so without it the blooms are invisible to everything but the camera
+## and the bees would have to settle for "somewhere grassy".
+func blooms_near(at: Vector3, within: float) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	var reach := within * within
+	var lo := Vector2i(floori((at.x - within) / CHUNK_SIZE), floori((at.z - within) / CHUNK_SIZE))
+	var hi := Vector2i(floori((at.x + within) / CHUNK_SIZE), floori((at.z + within) / CHUNK_SIZE))
+	for cz in range(lo.y, hi.y + 1):
+		for cx in range(lo.x, hi.x + 1):
+			var chunk: Chunk = _chunks.get(Vector2i(cx, cz))
+			if chunk == null or not is_instance_valid(chunk):
+				continue
+			for spot: Vector3 in chunk.blooms():
+				if spot.distance_squared_to(at) < reach:
+					out.append(spot)
+	return out
+
+
 ## Chunk streaming ------------------------------------------------------------
 
 func _stream_chunks() -> void:

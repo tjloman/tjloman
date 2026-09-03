@@ -22,7 +22,8 @@ import sys
 BUILTIN = {
     "queue_free", "free", "is_queued_for_deletion", "get_instance_id",
     "add_child", "remove_child", "get_parent", "get_children", "get_child",
-    "get_tree", "get_node", "find_children", "is_inside_tree", "set_meta",
+    "get_tree", "get_node", "get_node_or_null", "find_children",
+    "is_inside_tree", "set_meta",
     "get_meta", "has_meta", "remove_meta", "add_to_group", "is_in_group",
     "remove_from_group", "connect", "disconnect", "emit_signal", "call",
     "call_deferred", "has_method", "get", "set", "duplicate", "to_local",

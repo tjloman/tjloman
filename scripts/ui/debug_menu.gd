@@ -19,6 +19,8 @@ var tutorial: Tutorial
 var profiles: ProfileMenu
 
 var _panel: PanelContainer
+var _friends_button: Button = null
+var _supporter_button: Button = null
 var _armed: Button = null
 var _arm_time := 0.0
 var _armed_label := ""
@@ -73,6 +75,20 @@ func _build() -> void:
 		+ "habit, belief and pound of fat it has earned.", true))
 	box.add_child(_gap())
 
+	# THE ONE PLAYER-FACING SETTING so far, and it lives here because there is
+	# no options screen yet. When there is, this row moves there unchanged; the
+	# entitlement toggle under it stays in the workshop, where it belongs.
+	box.add_child(_heading("THE WOOD"))
+	_friends_button = _button("", _on_friends,
+		"Bees over the flowers, crickets after dark, squirrels working the\n"
+		+ "limbs. None of it changes the game — it is there to be listened to.")
+	box.add_child(_friends_button)
+	_supporter_button = _button("", _on_supporter,
+		"Stands in for the purchase, until there is one to check. The tree\n"
+		+ "friends are the supporters' build; nothing else is gated.")
+	box.add_child(_supporter_button)
+	box.add_child(_gap())
+
 	box.add_child(_heading("CHEATS"))
 	box.add_child(_button("+500 prayer", _on_prayer, "Fill the reservoir."))
 	box.add_child(_button("Grow creature", _on_grow,
@@ -86,6 +102,33 @@ func _build() -> void:
 
 	_panel.add_child(box)
 	add_child(_panel)
+	_show_settings()
+
+
+## The two toggles say what they ARE, not what they would do — a button reading
+## "Tree friends: on" cannot be misread the way "Turn off tree friends" can.
+func _show_settings() -> void:
+	if _friends_button == null or not is_instance_valid(_friends_button):
+		return
+	_friends_button.text = "Tree friends: %s" % (
+		"on" if GameState.tree_friends else
+		"off (supporters)" if not GameState.supporter else "off")
+	_friends_button.disabled = not GameState.supporter
+	_supporter_button.text = "Supporter: %s" % ("yes" if GameState.supporter else "no")
+
+
+func _on_friends() -> void:
+	GameState.tree_friends = not GameState.tree_friends
+	_show_settings()
+	GameState.announce("The small things %s." % (
+		"stir in the trees" if GameState.tree_friends else "go quiet"))
+
+
+## STANDING IN FOR A RECEIPT. There is no store yet; when there is, it sets
+## GameState.supporter at boot and this row is the only thing that changes.
+func _on_supporter() -> void:
+	GameState.supporter = not GameState.supporter
+	_show_settings()
 
 
 func _heading(text: String) -> Label:

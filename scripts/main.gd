@@ -116,6 +116,14 @@ func _ready() -> void:
 	var profiles := ProfileMenu.new()
 	add_child(profiles)
 
+	# THE LUSHNESS. Bees, crickets, squirrels and the rest — see TreeFriends.
+	# Added whatever the setting says: it polls it itself, so switching it on
+	# mid-game populates the wood around you within a second and switching it
+	# off empties it, with no reload either way.
+	var friends := TreeFriends.new()
+	friends.world = world_gen
+	add_child(friends)
+
 	var debug_menu := DebugMenu.new()
 	debug_menu.world_gen = world_gen
 	debug_menu.creature = creature
@@ -360,6 +368,7 @@ func _touch_creature(kindly: bool) -> void:
 func _run_smoke_test() -> void:
 	print("SMOKE TEST: starting")
 	_smoke_test_gestures()
+	_smoke_test_tree_friends()
 	await get_tree().create_timer(1.5).timeout
 	print("SMOKE TEST: chunks=%d biome(0,0)=%s height(0,0)=%.2f water(200,200)=%s" % [
 		world_gen.get_child_count(),
@@ -1041,6 +1050,52 @@ func _run_smoke_test() -> void:
 
 	print("SMOKE TEST OK")
 	get_tree().quit(0)
+
+
+## THE LUSHNESS, and the two things that could quietly go wrong with it: that it
+## appears for someone who has not paid, and that it costs the simulation
+## anything. Both are checked rather than asserted in a comment.
+func _smoke_test_tree_friends() -> void:
+	var friends := get_tree().get_first_node_in_group("tree_friends") as TreeFriends
+	if friends == null:
+		print("SMOKE TEST: tree friends — MANAGER MISSING")
+		return
+	# The plates, which are the whole art budget of the feature.
+	var plates := 0
+	for kind: String in CritterArt.PLATES:
+		plates += CritterArt.frames_for(kind).size()
+	var bytes := plates * CritterArt.SIZE * CritterArt.SIZE * 4
+	print("SMOKE TEST: tree friends — %d kinds, %d plates, %.1f KB of stand-in art" % [
+		CritterArt.PLATES.size(), plates, bytes / 1024.0])
+
+	# LOCKED IS LOCKED. The setting reads false without the entitlement however
+	# it was stored, so a hand-edited save cannot switch the feature on.
+	GameState.supporter = false
+	GameState.tree_friends = true
+	var sneaked := GameState.tree_friends
+	GameState.supporter = true
+	GameState.tree_friends = true
+	print("SMOKE TEST: tree friends — without the entitlement reads %s, with it %s" % [
+		sneaked, GameState.tree_friends])
+	assert(not sneaked, "the wood must stay shut to anyone who has not paid")
+	assert(GameState.tree_friends, "and open to anyone who has")
+
+	await get_tree().create_timer(2.5).timeout
+	var alive := friends.population()
+	var voices := 0
+	for c in get_tree().get_nodes_in_group("critters"):
+		if (c as Critter).has_voice():
+			voices += 1
+	print("SMOKE TEST: tree friends — %d alive (budget %d), voices capped at %d, night=%s" % [
+		alive, Quality.critters(), TreeFriends.VOICES, GameState.is_night()])
+	assert(alive <= Quality.critters(), "the wood must respect its budget")
+
+	# SWITCHED OFF MEANS GONE, not hidden — no nodes, no players, no ticking.
+	GameState.tree_friends = false
+	await get_tree().create_timer(1.2).timeout
+	print("SMOKE TEST: tree friends — switched off, %d remain" % friends.population())
+	assert(friends.population() == 0, "off must mean gone, not merely invisible")
+	GameState.tree_friends = true
 
 
 ## LAND THAT REMEMBERS. The terrain is derived from the seed, so the whole

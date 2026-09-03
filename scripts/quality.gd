@@ -245,6 +245,14 @@ func chunk_cells() -> int:
 	return [16, 24, 24][effective_tier()]
 
 
+## HOW MANY TREE FRIENDS may be alive at once. Each is one billboarded quad
+## with a shared texture, so the plates are nearly free; what this really
+## bounds is the per-frame work of moving and startling them. Voices are
+## capped separately and far lower (TreeFriends.VOICES).
+func critters() -> int:
+	return [10, 22, 34][effective_tier()]
+
+
 func load_radius() -> int:
 	return [2, 3, 3][effective_tier()]
 

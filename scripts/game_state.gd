@@ -9,6 +9,8 @@ signal announcement(text: String)
 ## Kept OUT of the announcement stream so the busy world can't overwrite the
 ## step you're mid-way through — the HUD gives it its own quiet corner.
 signal cast_hint(text: String)
+## A player-facing option changed — the tree friends being switched on or off.
+signal settings_changed
 
 ## One full day/night cycle, in real seconds. (The pace of the sun is the
 ## heartbeat of the game — tuned once, everything else derives from it.)
@@ -60,6 +62,40 @@ var camera_focus := Vector3.ZERO
 ## message is announced. One line, total coverage, and a message written the
 ## natural way keeps working.
 var creature_name := ""
+
+## THE TREE FRIENDS, and who has them ------------------------------------------
+##
+## The ambient wildlife (see TreeFriends) is the supporters' build. It changes
+## no number in the simulation — critters have no needs, eat nothing, and cannot
+## be picked up — which is the only honest way to sell an ornament: the game
+## underneath is identical, and nobody who did not pay is at a disadvantage.
+##
+## `supporter` is set from the entitlement at boot. There is no store here yet,
+## so it is a flag on the profile that the workshop drawer can flip for testing;
+## when a real receipt check exists it sets this and nothing else changes.
+var supporter := false
+
+
+## The setting the player sees. Reads false for anyone without the entitlement
+## however it was stored, so a hand-edited save cannot switch it on.
+var tree_friends: bool:
+	get:
+		return _tree_friends and supporter
+	set(value):
+		if _tree_friends == value:
+			return
+		_tree_friends = value
+		settings_changed.emit()
+
+
+## HOW HARD THE PLAYER IS CONCENTRATING, 0..1. Driven by the divine hand while
+## a rune is being drawn, and read by two things: the engine's time scale (the
+## world slows a little) and every critter's voice (the chorus stops being
+## intermittent and comes forward). See DivineHand._tick_focus.
+var focus := 0.0
+
+## What the player last chose, before the entitlement is taken into account.
+var _tree_friends := true
 
 
 func _process(delta: float) -> void:
