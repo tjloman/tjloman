@@ -206,24 +206,51 @@ static func _build_templates() -> void:
 			return Vector2(t * 200.0, flip * sin(t * TAU) * 80.0))
 		_add("wave", func(t: float) -> Vector2:
 			return Vector2(flip * sin(t * TAU) * 80.0, t * 200.0))
-	# ZIGZAGS BY TOOTH COUNT. Nobody counts the teeth in their own scrawl, and
-	# point-wise distance is merciless about it: with only a five-tooth
-	# reference, a three- or six-toothed zigzag read as a plain straight line
-	# -- which is force, or earth. Fury was very nearly uncastable. Two
-	# depths as well, since a lazy zigzag is shallower than a furious one.
-	for teeth: float in [3.0, 4.0, 5.0, 6.0, 7.0]:
-		for depth: float in [60.0, 95.0]:
-			for flip: float in [1.0, -1.0]:
-				_add("zigzag", func(t: float) -> Vector2:
-					var n := t * teeth
-					var up := 1.0 if int(n) % 2 == 1 else -1.0
-					return Vector2(t * 200.0,
-						flip * up * absf(fmod(n, 1.0) * 2.0 - 1.0) * depth))
-				_add("zigzag", func(t: float) -> Vector2:
-					var n := t * teeth
-					var up := 1.0 if int(n) % 2 == 1 else -1.0
-					return Vector2(flip * up * absf(fmod(n, 1.0) * 2.0 - 1.0) * depth,
-						t * 200.0))
+	# FURY IS A SHARP Z NOW, not a zigzag. The zigzag was the one rune that
+	# broke thermally: a five-toothed scrawl needs its teeth SAMPLED, and a
+	# phone that has pulled its touch scan rate back reports a dozen points for
+	# the whole stroke — at which point the teeth are gone and it reads as a
+	# plain horizontal line, which is EARTH. On a hot phone earth+fury (the
+	# earthquake) was quietly becoming earth+earth, which plants a wood.
+	#
+	# Two corners survive what five teeth cannot. Offered wide, square and tall,
+	# since nobody writes a Z at one aspect ratio; both bearings come free,
+	# because every stroke is tried reversed as well.
+	for tall: float in [0.62, 1.0, 1.55]:
+		_add("zed", func(t: float) -> Vector2:
+			var run := 200.0 / maxf(tall, 0.4)
+			var drop := 200.0 * tall
+			if t < 1.0 / 3.0:
+				return Vector2(t * 3.0 * run, 0.0)
+			if t < 2.0 / 3.0:
+				var k := (t - 1.0 / 3.0) * 3.0
+				return Vector2(run - k * run, k * drop)
+			return Vector2((t - 2.0 / 3.0) * 3.0 * run, drop))
+	# CANCEL — A SWEEP, and NOT a rune. It means "never mind": the casting
+	# session ends and nothing is cast (see DivineHand._end_stroke).
+	# Deliberately absent from Spellbook, so it can never be an ingredient in a
+	# working or turn up in the reference table as one.
+	#
+	# It was an X first, which was wrong for a reason worth writing down: you
+	# CANNOT LIFT THE FINGER in this system, and nobody on earth draws an X
+	# without lifting. Reading a retraced X perfectly is no use if no hand will
+	# ever produce one — the same mistake as scoring ideal shapes against ideal
+	# shapes. So it is now one unbroken motion a thumb actually makes: straight
+	# down, then hooked away, like sweeping something off a table.
+	#
+	# A scribbling-out was the other obvious candidate and was measured and
+	# rejected: many small teeth are exactly what a throttled digitizer stops
+	# sampling, and it collapsed to 75%, which is the failure that took the old
+	# zigzag off fury in the first place.
+	for hook: float in [0.55, 0.8, 1.05]:
+		_add("sweep", func(t: float) -> Vector2:
+			if t < 0.62:
+				return Vector2(0.0, t / 0.62 * 200.0)
+			var k := (t - 0.62) / 0.38
+			# The hook: a quarter turn away, never back over the stem.
+			var a := -PI * 0.5 * k
+			return Vector2(-sin(a * -1.0) * 95.0 * hook,
+				200.0 + (1.0 - cos(a)) * 55.0 * hook))
 	# And on the slant, which is how a hurried S usually comes out.
 	for slant: float in [PI / 4.0, -PI / 4.0]:
 		for flip: float in [1.0, -1.0]:

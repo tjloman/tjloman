@@ -37,7 +37,7 @@ const RUNE_OF := {
 	"circle": "life",       # a seed, a womb, a gathering
 	"spiral": "air",        # a whirl
 	"rev_spiral": "calm",   # a whirl unwinding
-	"zigzag": "fury",       # jagged: the amplifier
+	"zed": "fury",          # a sharp Z: two corners, and they survive a hot phone
 	"caret": "sky",         # a peak, a wing
 	"arc": "ward",          # a shelter held over something
 }

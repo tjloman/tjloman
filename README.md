@@ -726,6 +726,52 @@ And the first rebuild grew the affected area by a whole chunk on every side,
 tripling the cost of every quake to prevent a seam that a metre of slack
 already prevents.
 
+## The alphabet, settled
+
+Two glyphs changed and one gesture was added, all three decided by measurement
+rather than taste.
+
+**`life` keeps its circle.** It is the alphabet's only closed shape and it does
+fail when a hand does not quite close the loop — but every closed replacement
+inherits exactly that (an 85%-drawn box reads as a *circle*), and none of the
+open shapes carry "a seed, a womb, a gathering". The meaning won.
+
+**`fury` is a sharp Z, not a zigzag.** The zigzag was the one rune that broke
+thermally: five teeth need five teeth *sampled*, and a phone that has pulled its
+touch scan rate back reports a dozen points for the whole stroke, at which point
+they are gone and it reads as a flat line — which is `earth`. On a hot phone
+`earth + fury` (the earthquake) was quietly becoming `earth + earth`, which
+plants a wood. Two corners survive what five teeth cannot.
+
+**A SWEEP cancels.** Straight down, then hooked away, like brushing something
+off a table — the casting session ends and nothing is cast. It is deliberately
+**not a rune**: absent from the spellbook, so it can never be an ingredient in a
+working or appear in the reference table as one.
+
+Two things were tried for cancel and rejected, both for reasons worth keeping:
+
+- **An X, and a plus.** Both read beautifully — and both are impossible. *You
+  cannot lift the finger in this system*, and nobody draws an X without
+  lifting. Scoring a retraced X against the alphabet measures whether the
+  recognizer can read a motion no hand will ever make. Every candidate is now
+  screened for whether the pen ever goes back over its own path.
+- **A scribbling-out.** The obvious "erase" gesture, and it collapses to 75%
+  under throttling, degrading into `hline` — the identical failure that took the
+  zigzag off fury. Many small teeth are precisely what a struggling digitizer
+  stops sampling.
+
+**There is far more room than I first claimed.** An earlier pass concluded the
+alphabet was "full". That was wrong: it was full of *smooth closed curves*.
+Screened for single-stroke shapes only, **ten** clear 100% with high confidence
+against the settled alphabet — ell, squared-S, crook, double chevron, J-hook,
+squared coil, bolt, wide C, staple, sigma — and they still hold apart when added
+all at once. Room for a dozen more runes exists whenever the grammar wants them.
+
+The alphabet now reads at **100% across healthy, warm, hot and throttled
+screens, with no fragile rune**, and it costs less than it did: dropping the
+zigzag's twenty variants took the reference set from 84 drawings to 50, so every
+live reading is about 40% cheaper.
+
 ## Casting, felt
 
 Drawing a rune used to be silent and mute: no sound at all, and no reading of

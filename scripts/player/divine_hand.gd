@@ -847,6 +847,16 @@ func _end_stroke() -> void:
 	_clear_trail()
 	state = HandState.IDLE
 	_idle_time = 0.0
+	# NEVER MIND. A SWEEP — straight down and hooked away — ends the session and
+	# casts nothing. It is the one thing the player could not say before except
+	# by pressing Escape, which a thumb does not have. Checked BEFORE the
+	# spellbook, and deliberately not a rune, so it can never end up as an
+	# ingredient in a working.
+	if gesture == "sweep":
+		SoundBank.play_at("pick", global_position, -8.0, 0.1)
+		_close_casting(false)
+		GameState.hint("Cast aside.")
+		return
 	var rune := Spellbook.rune_for(gesture) if gesture != "none" else ""
 	if rune == "":
 		# A botched stroke must never throw away the runes before it.
