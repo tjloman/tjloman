@@ -551,8 +551,12 @@ func _tick_hazards(delta: float) -> void:
 		return
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	if world != null:
-		var depth := WorldGen.WATER_LEVEL - world.height_at(global_position.x, global_position.z)
-		if depth > 1.0 and global_position.y < WorldGen.WATER_LEVEL + 0.4:
+		# Against whatever water is ACTUALLY here, the same as the villagers:
+		# the sea, or a pond standing in a flooded crater — and NOT a dry pit
+		# dug below sea level, which the sea's bare constant called deep water.
+		var surface := world.water_level_at(global_position.x, global_position.z)
+		var depth := surface - world.height_at(global_position.x, global_position.z)
+		if depth > 1.0 and global_position.y < surface + 0.4:
 			if burning:
 				extinguish()
 			health -= 10.0 * delta

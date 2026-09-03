@@ -108,8 +108,7 @@ func _brake(delta: float) -> void:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	if world == null:
 		return
-	var ground := maxf(world.height_at(global_position.x, global_position.z),
-		WorldGen.WATER_LEVEL)
+	var ground := world.surface_at(global_position.x, global_position.z)
 	if global_position.y > ground + TOUCHING:
 		return                       # still flying: leave the arc alone
 	_rolling += delta
@@ -133,7 +132,7 @@ func _lay_trail(delta: float) -> void:
 	var ground_y := gp.y
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	if world != null:
-		ground_y = maxf(world.height_at(gp.x, gp.z), WorldGen.WATER_LEVEL)
+		ground_y = world.surface_at(gp.x, gp.z)
 	var flame := Util.small_flame(0.4)
 	flame.scale = Vector3.ONE * 0.5
 	flame.position = Vector3(gp.x, ground_y, gp.z)
@@ -224,7 +223,7 @@ func _gouge(pos: Vector3) -> void:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	if world == null or world.is_underwater(pos.x, pos.z):
 		return
-	var before := world.height_at(pos.x, pos.z)
+	# Dry when we got here — the guard above already turned back over water.
 	world.deform(TerrainScars.Kind.CRATER, Vector2(pos.x, pos.z),
 		BLAST_RADIUS * 0.8, -GOUGE_DEPTH, 3.0, GOUGE_CHAR)
 	# THE WATERLINE IS A THING YOU CAN DIG THROUGH, and craters stack: the
@@ -232,8 +231,11 @@ func _gouge(pos: Vector3) -> void:
 	# so the SECOND one on a spot opens the ground to the water. That is a fair
 	# consequence and it stays — but it should be a choice, not a discovery
 	# made by counting bodies afterwards.
-	var after := world.height_at(pos.x, pos.z)
-	if before >= WorldGen.WATER_LEVEL and after < WorldGen.WATER_LEVEL:
+	#
+	# Asked of the WATER and not of the number: digging below sea level well
+	# inland leaves a dry pit, because the sea is not everywhere at once (see
+	# WorldGen.sea_reaches). Only say the water came in when it did.
+	if world.is_underwater(pos.x, pos.z):
 		GameState.announce("The crater breaks below the waterline, and the water comes in.")
 
 

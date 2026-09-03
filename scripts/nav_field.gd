@@ -283,7 +283,10 @@ func _terrain_of(cell: Vector2i) -> Dictionary:
 	var x := (float(cell.x) + 0.5) * ROUTE_CELL
 	var z := (float(cell.y) + 0.5) * ROUTE_CELL
 	var h := world.height_at(x, z) if world != null else 0.0
-	var known := {"h": h, "wet": maxf(WorldGen.WATER_LEVEL - h, 0.0)}
+	# How deep the water is here, if there is any: the sea, or a pond — but not
+	# a dry crater floor below sea level, which routing used to swim around.
+	var surface := world.water_level_at(x, z) if world != null else -INF
+	var known := {"h": h, "wet": maxf(surface - h, 0.0) if surface > -INF else 0.0}
 	_terrain[cell] = known
 	return known
 

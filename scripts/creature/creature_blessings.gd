@@ -71,9 +71,7 @@ func tick(who: Creature, delta: float) -> String:
 		return ended
 	if _height > 0.05:
 		# Aloft: it rides above whatever is below, water and hill alike.
-		var ground := maxf(
-			world.height_at(who.global_position.x, who.global_position.z),
-			WorldGen.WATER_LEVEL)
+		var ground := world.surface_at(who.global_position.x, who.global_position.z)
 		who.global_position.y = ground + _height
 		who.velocity.y = 0.0
 		return ended
@@ -82,7 +80,8 @@ func tick(who: Creature, delta: float) -> String:
 	# along the lake bed, which looks like a bug rather than a blessing.
 	if walks_on_water \
 			and world.is_underwater(who.global_position.x, who.global_position.z):
-		who.global_position.y = maxf(who.global_position.y, WorldGen.WATER_LEVEL)
+		who.global_position.y = maxf(who.global_position.y,
+			world.water_level_at(who.global_position.x, who.global_position.z))
 		if who.velocity.y < 0.0:
 			who.velocity.y = 0.0
 	return ended

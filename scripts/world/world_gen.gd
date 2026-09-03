@@ -20,6 +20,10 @@ const WATER_LEVEL := 0.0
 const CHUNKS_PER_FRAME := 1      # one chunk a frame: gentle, no startup stall
 const VILLAGE_CELL_CHANCE := 0.05
 const VILLAGE_MIN_CELL_DIST := 3  # chunks from origin before rivals appear
+## The grid the sea's flood fill walks, and how far it walks before it gives up
+## and calls a sunken region the sea anyway. See `sea_reaches`.
+const SEA_STEP := 2.0
+const SEA_CELLS := 240            # ~30m of connected water
 
 ## How much world stays live around the focus. Set from the graphics tier
 ## at boot: a budget phone keeps a tight 5x5 so it doesn't drown in
@@ -40,6 +44,11 @@ var scars := TerrainScars.new()
 
 ## Standing water that is not the sea — rain caught in a hollow. See `flood`.
 var _ponds: Array[Dictionary] = []
+
+## Which 2m cells the sea can get to, once the land has been broken open.
+## Answered by a flood fill (see `sea_reaches`) and thrown away whole every
+## time the earth moves, because moving it is exactly what changes the answer.
+var _sea_cache := {}
 
 var _height_noise := FastNoiseLite.new()
 var _detail_noise := FastNoiseLite.new()
@@ -75,6 +84,17 @@ func _process(delta: float) -> void:
 ## Terrain queries ------------------------------------------------------------
 
 func height_at(x: float, z: float) -> float:
+	# The seed, and then whatever has been DONE to the land since. Scars ride on
+	# top of the seed rather than replacing it, so a crater in a hillside is
+	# still a hillside. Costs one is_empty() check on an untouched world.
+	return seeded_height_at(x, z) + scars.offset_at(x, z)
+
+
+## THE LAND AS IT WAS MADE, before any miracle touched it. Kept apart from
+## `height_at` because the difference between the two is the whole question of
+## where the sea is: ground that was ALWAYS below the waterline is seabed, and
+## a hole dug below it by a fireball is a hole. See `sea_reaches`.
+func seeded_height_at(x: float, z: float) -> float:
 	var biome := biome_at(x, z)
 	var amp := 11.0
 	match biome:
@@ -89,11 +109,7 @@ func height_at(x: float, z: float) -> float:
 	# The cradle: land near the origin is gently flattened so the player's
 	# village always has room to breathe.
 	var d := Vector2(x, z).length()
-	var seeded := lerpf(2.0, h, smoothstep(28.0, 80.0, d))
-	# ...and then whatever has been DONE to the land since. Scars ride on top of
-	# the seed rather than replacing it, so a crater in a hillside is still a
-	# hillside. Costs one is_empty() check on an untouched world.
-	return seeded + scars.offset_at(x, z)
+	return lerpf(2.0, h, smoothstep(28.0, 80.0, d))
 
 
 func biome_at(x: float, z: float) -> String:
@@ -111,24 +127,60 @@ func biome_at(x: float, z: float) -> String:
 
 
 func is_underwater(x: float, z: float) -> bool:
-	return height_at(x, z) < water_level_at(x, z) + 0.25
+	# Written out rather than calling `water_level_at` so the seeded height is
+	# evaluated once and reused: this is on every routing, placement, drowning
+	# and grazing path in the game, and it used to cost two.
+	var seeded := seeded_height_at(x, z)
+	var ground := seeded + scars.offset_at(x, z)
+	if ground < _pond_level_at(x, z) + 0.25:
+		return true
+	if ground >= WATER_LEVEL + 0.25:
+		return false
+	# Below the waterline. Seabed, or a hole the sea cannot get into?
+	if seeded < WATER_LEVEL + 0.25:
+		return true
+	return sea_reaches(x, z)
 
 
-## THE SURFACE OF THE WATER HERE — the sea, or a pond caught in a hollow.
+## THE SURFACE OF THE WATER HERE — the sea, or a pond caught in a hollow, or
+## nothing at all.
 ##
 ## The sea is a single global plane, which is all an unbroken world needs. Once
 ## the land can be cratered, it needs more: rain falling into a hole should
 ## stand in it, and a flooded crater has a surface of its own, well above sea
 ## level. So every pond is a disc with its own height, and this returns the
-## highest surface covering the point.
-##
-## Costs one `is_empty()` on a world nobody has flooded, which is the same
-## bargain the scars make — and this is called by `is_underwater`, which is on
-## every routing and placement path in the game.
+## highest surface covering the point — or -INF where the ground is dry, which
+## compares correctly against any height without a special case at the callers.
 func water_level_at(x: float, z: float) -> float:
+	var top := _pond_level_at(x, z)
+	if top > -INF:
+		return top
+	# Laid out so the flood fill is only ever reached for ground that has
+	# actually been dug below the waterline: this is called every frame for
+	# every villager, animal and route cell, and most of them are on dry land
+	# nowhere near the sea.
+	var seeded := seeded_height_at(x, z)
+	if seeded < WATER_LEVEL + 0.25:
+		return WATER_LEVEL                   # seabed, always was
+	if seeded + scars.offset_at(x, z) >= WATER_LEVEL + 0.25:
+		return -INF                          # dry ground: no water here at all
+	return WATER_LEVEL if sea_reaches(x, z) else -INF
+
+
+## WHAT YOU WOULD STAND ON HERE — the ground, or the water covering it. Written
+## `maxf(height_at(), WATER_LEVEL)` all over the game, which was right while the
+## sea was the only water and everywhere: it floats things at y=0 over a dry pit
+## dug below sea level, and sinks them to the bed of a pond.
+func surface_at(x: float, z: float) -> float:
+	return maxf(height_at(x, z), water_level_at(x, z))
+
+
+## The highest pond covering the point, or -INF. One `is_empty()` on a world
+## nobody has flooded.
+func _pond_level_at(x: float, z: float) -> float:
 	if _ponds.is_empty():
-		return WATER_LEVEL
-	var top := WATER_LEVEL
+		return -INF
+	var top := -INF
 	for pond in _ponds:
 		var dx: float = x - float(pond["x"])
 		var dz: float = z - float(pond["z"])
@@ -136,6 +188,61 @@ func water_level_at(x: float, z: float) -> float:
 		if dx * dx + dz * dz < r * r:
 			top = maxf(top, float(pond["level"]))
 	return top
+
+
+## DOES THE SEA ACTUALLY GET HERE?
+##
+## For most of the game's life this question did not exist: the world was made
+## of unbroken seeded terrain, "below the waterline" and "sea" meant the same
+## thing, and one global plane at y=0 drew all of it. Craters ended that. A
+## fireball digs 1.7m, they stack, and the village cradle sits 2m above the sea
+## — so the second fireball on a spot opened a pit whose floor read as
+## underwater. The pit then filled with ocean that had no way of getting to it,
+## a hundred and fifty metres inland, and the villagers walked in and drowned.
+##
+## So: ground that was ALWAYS below the waterline is seabed and always wet.
+## Ground dug below it is wet only if there is a continuous below-waterline
+## path from it OUT to real seabed — which is what a flood fill answers, and
+## which also means a channel dug from the shore inland really does let the sea
+## in, exactly as you would hope.
+##
+## The fill walks a 2m grid, and the whole connected component it explores
+## shares one answer, so it is cached for all of them at once and the cost is
+## paid once per hole rather than once per villager per frame.
+func sea_reaches(x: float, z: float) -> bool:
+	if scars.is_empty():
+		return seeded_height_at(x, z) < WATER_LEVEL + 0.25
+	var start := Vector2i(roundi(x / SEA_STEP), roundi(z / SEA_STEP))
+	if _sea_cache.has(start):
+		return bool(_sea_cache[start])
+	if _sea_cache.size() > 20000:
+		_sea_cache.clear()      # a long session's worth: start it over
+	var seen := {start: true}
+	var queue: Array[Vector2i] = [start]
+	var head := 0
+	var found := false
+	while head < queue.size():
+		var cell: Vector2i = queue[head]
+		head += 1
+		var cx := cell.x * SEA_STEP
+		var cz := cell.y * SEA_STEP
+		var seeded := seeded_height_at(cx, cz)
+		if seeded + scars.offset_at(cx, cz) >= WATER_LEVEL + 0.25:
+			continue                 # dry ground: the water stops at it
+		if seeded < WATER_LEVEL + 0.25:
+			found = true             # real seabed — connected, so the sea is in
+			break
+		if queue.size() >= SEA_CELLS:
+			found = true             # a sunken region this big IS the sea
+			break
+		for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var next := cell + step
+			if not seen.has(next):
+				seen[next] = true
+				queue.append(next)
+	for cell: Vector2i in seen:
+		_sea_cache[cell] = found
+	return found
 
 
 ## IS THIS A HOLLOW, and how deep? Returns the height of the lowest point of
@@ -303,6 +410,7 @@ func ground_color(x: float, z: float, h: float) -> Color:
 func deform(kind: int, at: Vector2, radius: float, amount: float,
 		rings := 3.0, char_amount := 0.0) -> Dictionary:
 	var scar := scars.add(kind, at, radius, amount, rings, char_amount)
+	_sea_cache.clear()
 	rebuild_around(TerrainScars.reach_of(scar))
 	return scar
 
@@ -313,6 +421,7 @@ func deform(kind: int, at: Vector2, radius: float, amount: float,
 ## piled there — and rebuild what stands on it. See TerrainScars.deposit.
 func pour(kind: int, at: Vector2, radius: float, amount: float) -> Dictionary:
 	var scar := scars.deposit(kind, at, radius, amount)
+	_sea_cache.clear()
 	rebuild_around(TerrainScars.reach_of(scar))
 	return scar
 
@@ -321,6 +430,7 @@ func pour(kind: int, at: Vector2, radius: float, amount: float) -> Dictionary:
 func reshape(scar: Dictionary, amount: float, radius := -1.0) -> void:
 	var was := TerrainScars.reach_of(scar)
 	scars.reshape(scar, amount, radius)
+	_sea_cache.clear()
 	rebuild_around(was.merge(TerrainScars.reach_of(scar)))
 
 
@@ -345,6 +455,7 @@ func rebuild_around(area: Rect2) -> void:
 ## Every loaded chunk rebuilt — for restoring a save full of scars, where the
 ## land under the player has already been built from an unscarred seed.
 func rebuild_all() -> void:
+	_sea_cache.clear()
 	for cell: Vector2i in _chunks:
 		var chunk: Chunk = _chunks[cell]
 		if is_instance_valid(chunk):

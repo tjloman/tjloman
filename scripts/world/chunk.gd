@@ -12,9 +12,13 @@ var cell := Vector2i.ZERO
 var _ground: MeshInstance3D = null
 var _body: StaticBody3D = null
 var _water: MeshInstance3D = null
-## The lowest ground in this chunk, measured while the mesh is built. What
-## decides whether any water is drawn here at all.
+## The lowest ground in this chunk, measured while the mesh is built, and where
+## it is. Together with the lowest SEEDED ground — the land as it was made,
+## before any miracle cut into it — this is what decides whether the sea is
+## drawn here at all. See `_build_water`.
 var _lowest := INF
+var _lowest_seeded := INF
+var _deepest := Vector2.ZERO
 ## Everything scattered here that has to be set back down on the new ground.
 var _standing: Array[Node3D] = []
 
@@ -71,11 +75,21 @@ func _build_terrain() -> void:
 	# Sample the height grid (in world space; chunk origin is our position),
 	# keeping the lowest — the water pass needs it and it is free here.
 	_lowest = INF
+	_lowest_seeded = INF
 	for z in cells + 1:
 		for x in cells + 1:
-			var h := world.height_at(position.x + x * step, position.z + z * step)
+			var wx := position.x + x * step
+			var wz := position.z + z * step
+			# Split rather than one `height_at` call: the seeded height is the
+			# same work either way, and having it lets the water pass tell a bay
+			# from a bomb crater without measuring the chunk twice.
+			var seeded := world.seeded_height_at(wx, wz)
+			var h := seeded + world.scars.offset_at(wx, wz)
 			heights[z * (cells + 1) + x] = h
-			_lowest = minf(_lowest, h)
+			_lowest_seeded = minf(_lowest_seeded, seeded)
+			if h < _lowest:
+				_lowest = h
+				_deepest = Vector2(wx, wz)
 
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -134,6 +148,21 @@ func _build_water() -> void:
 	# The terrain pass already measured all 169 heights to build the mesh, so
 	# the true minimum is free and exact.
 	if _lowest >= WorldGen.WATER_LEVEL + 0.5:
+		return
+	# ...AND THE SEA HAS TO BE ABLE TO GET HERE.
+	#
+	# Measuring the true minimum fixed one bug and uncovered a worse one. The
+	# plane is 48m of ocean at y=0, and it was drawn for the whole chunk the
+	# moment ANY of its ground dipped below the waterline — including a fireball
+	# crater a hundred and fifty metres inland, which then filled with sea that
+	# had no way of reaching it. Villagers walked into it and drowned.
+	#
+	# So a chunk whose land was ALWAYS above the waterline only gets the sea if
+	# the hole someone dug in it actually connects to open water; the seeded
+	# minimum is measured alongside the real one above, and answers that for
+	# free in every ordinary case.
+	if _lowest_seeded >= WorldGen.WATER_LEVEL + 0.5 \
+			and not world.sea_reaches(_deepest.x, _deepest.y):
 		return
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(WorldGen.CHUNK_SIZE, WorldGen.CHUNK_SIZE)

@@ -1074,6 +1074,30 @@ func _smoke_test_earth() -> void:
 		dug, pooled, "A POOL STANDS" if pooled > dug else "nothing stood"])
 	assert(pooled > dug, "a deluge must leave water standing in a crater")
 
+	# AND A HOLE THE SEA CANNOT REACH MUST STAY DRY. The other half of the same
+	# rule, and the one that killed Elsmere: the chunk drew 48 metres of ocean
+	# the moment any of its ground dipped below y=0, so a crater dug well
+	# inland filled with sea that had no way of getting to it, and the
+	# villagers walked in and drowned. Dig deep, far from any coast, and check
+	# nothing floods.
+	var inland := Vector2.ZERO
+	for probe: Vector2 in [Vector2(300, 300), Vector2(-320, 260), Vector2(280, -340),
+			Vector2(-260, -300), Vector2(360, 120)]:
+		# Wanted: high ground with high ground all round it, so the fill has
+		# somewhere to look and finds nothing.
+		if world_gen.seeded_height_at(probe.x, probe.y) > 3.0:
+			inland = probe
+			break
+	if inland != Vector2.ZERO:
+		world_gen.deform(TerrainScars.Kind.CRATER, inland, 6.0, -9.0)
+		var floor_y := world_gen.height_at(inland.x, inland.y)
+		var wet := world_gen.is_underwater(inland.x, inland.y)
+		print("SMOKE TEST: inland pit — floor %.2f (%.1fm below the sea), %s" % [
+			floor_y, WorldGen.WATER_LEVEL - floor_y,
+			"FLOODED" if wet else "stayed dry"])
+		assert(floor_y < WorldGen.WATER_LEVEL, "the test pit must break the waterline")
+		assert(not wet, "the sea must not appear in a pit it cannot reach")
+
 	# NOTHING A WORKING CONJURES MAY FALL ON THE ORIGIN. A blend makes one orb
 	# per part and the hand can only take one, so every spare orb used to be
 	# dropped at the miracle manager's own position — which is (0,0,0), which
