@@ -709,9 +709,37 @@ find the new ground themselves, which looks far better than teleporting.)
 | Runes | Miracle | What it does to the land |
 |---|---|---|
 | earth + fury | **earthquake** | a ripple of standing waves grows outward in three passes, and everything on it is thrown about |
-| earth + fire + fury | **volcano** | one scar grown over a full minute, spilling lava the whole way, into a mountain with a crater bitten out of its summit |
+| earth + fire + fury | **volcano** | hurls thirty globs of lava out of a vent over a full minute; the mountain grows from where they land |
 | ward + water | **water walk** | *(no terrain)* the creature crosses lakes at a full stride |
 | calm + life + water | **healing shower** | *(no terrain)* ten seconds of green rain that douses every fire and mends what stands in it |
+
+**A lavaball is a truckful, not a hill.** A handful of molten earth: it lands,
+it spreads, and it cools into a mound about knee height and a few paces across
+— **0.55 m** for one. A mountain is what you get from throwing thirty of them,
+and the arithmetic is deliberately honest about that:
+
+| thrown by hand at one spot | height |
+|---|---|
+| 1 lavaball | 0.3 m |
+| 10 | 5.1 m |
+| 30 | ~16 m |
+| 60 | 32.7 m — the ceiling |
+
+**And the volcano is exactly that, done for you.** It is no longer a scripted
+cone that inflates; it is a *lava fountain*. It hurls thirty globs of the same
+molten rock straight up out of the vent over a full minute, and the mountain
+grows from **where they land** — 11 m tall and 21 m wide, with nothing shaping
+the cone but the spread of the throws. The vent rises with its own mountain, so
+later globs are thrown from higher up. Landing spots use the *square* of a
+random, which puts most loads near the middle and a scattering on the flanks;
+an even spread would build a plateau instead of a cone.
+
+Thirty separate scars would have been a quiet disaster — `offset_at` walks
+every scar in the nine buckets around a point, on every routing, placement and
+meshing query in the game. So a load landing near an earlier one **merges into
+it**: the amount adds, the footprint widens, and the centre creeps toward the
+new load. Thirty globs settle into **six scars**, the mountain still comes from
+where they actually fell, and `height_at` stays cheap.
 
 **Nothing may pile up forever.** Scars *add*, which is what makes a lavaball
 fill a crater exactly — and also what made the first volcano Olympus Mons: it

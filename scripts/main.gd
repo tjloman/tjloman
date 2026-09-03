@@ -1074,18 +1074,28 @@ func _smoke_test_earth() -> void:
 		dug, pooled, "A POOL STANDS" if pooled > dug else "nothing stood"])
 	assert(pooled > dug, "a deluge must leave water standing in a crater")
 
-	# NO MOUNTAIN MAY RUN AWAY. Volcanoes grow one scar rather than stacking
-	# scars, and the total relief is capped — cast three on one spot and the
-	# third must not treble the first, which is exactly what Olympus Mons was.
+	# A LAVABALL IS A TRUCKFUL, AND A MOUNTAIN IS SIXTY OF THEM. The volcano
+	# now takes a full minute of thrown globs, so what is asserted here is the
+	# thing both it and the player's own arm go through: pouring molten rock
+	# piles up, merges rather than multiplying the scar count, and stops dead
+	# at the ceiling instead of becoming Olympus Mons.
 	var peak := Vector3(150, 0, 330)
 	var virgin := world_gen.height_at(peak.x, peak.z)
-	for again in 3:
-		miracles.resolve("volcano", peak)
-		await get_tree().create_timer(0.6).timeout
+	miracles.resolve("lavaball", peak)
+	await get_tree().create_timer(0.2).timeout
+	var one := world_gen.height_at(peak.x, peak.z) - virgin
+	var scars_before := world_gen.scars.count()
+	for again in 90:
+		miracles.resolve("lavaball", peak + Vector3(
+			randf_range(-2.0, 2.0), 0, randf_range(-2.0, 2.0)))
 	var raised := world_gen.height_at(peak.x, peak.z) - virgin
-	print("SMOKE TEST: three volcanoes on one spot — relief %.1f m (ceiling %.0f)" % [
-		raised, TerrainScars.MOST_RELIEF])
+	print("SMOKE TEST: lava — one truckful %.2f m, ninety of them %.1f m (ceiling %.0f), merged into %d scars not 90" % [
+		one, raised, TerrainScars.MOST_RELIEF,
+		world_gen.scars.count() - scars_before + 1])
+	assert(one < 1.2, "one lavaball is a truckful, not a hill")
 	assert(raised <= TerrainScars.MOST_RELIEF + 0.01, "relief must never pass its ceiling")
+	assert(world_gen.scars.count() - scars_before < 20,
+		"poured loads must MERGE, or height_at walks a scar per throw forever")
 
 	# And the new workings themselves, resolved directly (the unlock ladder is
 	# the player's problem, not the test's).

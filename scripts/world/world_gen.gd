@@ -309,10 +309,12 @@ func deform(kind: int, at: Vector2, radius: float, amount: float,
 
 ## Rebuild every LOADED chunk overlapping a patch of world. Chunks not loaded
 ## need nothing: they read the scars when they are next built.
-## HOW HIGH THE GROUND ALREADY STANDS ABOVE ITS SURROUNDINGS HERE — what a
-## mountain has to check before it grows any further.
-func relief_at(x: float, z: float) -> float:
-	return scars.offset_at(x, z)
+## Pour a load of something onto the ground — merging into whatever is already
+## piled there — and rebuild what stands on it. See TerrainScars.deposit.
+func pour(kind: int, at: Vector2, radius: float, amount: float) -> Dictionary:
+	var scar := scars.deposit(kind, at, radius, amount)
+	rebuild_around(TerrainScars.reach_of(scar))
+	return scar
 
 
 ## Grow a scar already cut into the world, and rebuild what stands on it.

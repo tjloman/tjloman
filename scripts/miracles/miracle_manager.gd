@@ -111,9 +111,29 @@ const NATURAL_HOLLOW := 7.0
 ## second cast on the same spot doubled it. It now grows ONE scar over a full
 ## minute, spilling lava the whole way, and is capped both by its own height
 ## and by how much relief already stands there.
-const VOLCANO_HEIGHT := 18.0
+## A LAVABALL IS A TRUCKFUL, not a hill. A handful of molten earth: it lands,
+## it spreads, it cools into a low mound about knee height and a few paces
+## across. Anyone who wants a mountain out of these has to stand there and
+## throw them, which is the point — the volcano is the shortcut, and it works by
+## throwing thirty of them itself.
+const LAVA_RISE := 0.55
+const LAVA_REACH := 3.4
+
+## A VOLCANO IS A LAVA FOUNTAIN. It hurls globs straight up out of the vent and
+## the mountain GROWS FROM WHERE THEY LAND, over a full minute — rather than a
+## scripted cone that simply inflates. Everything about its shape comes from the
+## spread of the throws.
+const VOLCANO_GLOBS := 30
 const VOLCANO_SECONDS := 60.0
-const VOLCANO_STEPS := 24
+## How far from the vent a glob may fall. Biased hard toward the middle (see
+## `_glob_landing`), which is what makes a heap of random throws a CONE.
+const VOLCANO_SPREAD := 11.0
+## How long one glob spends in the air.
+const GLOB_FLIGHT := 1.7
+## How much of a poured load goes into filling a hole rather than piling up.
+## Above 1 so a crater takes fewer loads to level than a hill takes to build —
+## pouring into a bowl is easier than stacking on flat ground.
+const FILL_RATE := 1.6
 ## Where a dug crater's rim actually sits, as a fraction of its radius — the
 ## ring of spoil it threw up around itself. See `_maybe_flood`.
 const LIP_OF := 0.82
@@ -683,51 +703,37 @@ func _quake_everything(pos: Vector3, reach: float, potency: float) -> void:
 ## who overdoes it builds a hill instead — which is the right kind of mistake to
 ## be able to make.
 func _cast_lavaball(pos: Vector3, potency := 1.0) -> void:
+	SoundBank.play_at("boom", pos, -2.0)
+	_pour_lava(pos, LAVA_RISE * lerpf(0.85, 1.3, clampf(potency / 3.0, 0.0, 1.0)),
+		LAVA_REACH, true)
+
+
+## ONE TRUCKFUL OF MOLTEN ROCK, landing. Shared by the lavaball and by every
+## glob a volcano throws, so a mountain is made of exactly the same stuff as
+## the thing you can throw by hand — it is only a question of how many.
+##
+## Into a HOLE it fills rather than piles: the hollow's own scar is shrunk
+## toward flat by this load's worth. A crater takes several to level, which is
+## the same bargain as building a hill.
+func _pour_lava(pos: Vector3, rise: float, reach: float, loud := false) -> void:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-	var reach := minf(5.0 + 3.0 * potency, TerrainScars.BUCKET)
-	SoundBank.play_at("boom", pos, 2.0)
-	if world != null and not world.is_underwater(pos.x, pos.z):
-		var hollow := world.scars.hollow_near(Vector2(pos.x, pos.z))
-		if hollow.is_empty():
-			# OPEN GROUND: a smooth dome of cooled lava. A new hill.
-			world.deform(TerrainScars.Kind.BASIN, Vector2(pos.x, pos.z),
-				reach, 1.4 + 0.9 * potency, 3.0, 0.55)
-		else:
-			# INTO A HOLE: lay that hole's OWN profile back with the sign
-			# flipped, at its own centre and its own radius, so the two cancel
-			# to nothing everywhere rather than only in the middle.
-			#
-			# A wide dome over a narrow crater fills the centre and leaves a
-			# ring of spoil standing around it — measurably a 1.3m donut on a
-			# 1.7m hole, which is a worse landscape than the hole was.
-			world.deform(int(hollow["kind"]), Vector2(float(hollow["x"]), float(hollow["z"])),
-				float(hollow["radius"]), -float(hollow["amount"]),
-				float(hollow.get("rings", 3.0)), 0.5)
-			GameState.announce("Molten rock pours into the crater, and the ground is whole again.")
-
-	var glow := OmniLight3D.new()
-	glow.light_color = Color(1.0, 0.4, 0.1)
-	glow.light_energy = 5.0
-	glow.omni_range = reach * 2.5
-	glow.shadow_enabled = false
-	glow.position = pos + Vector3(0, 2.0, 0)
-	add_child(glow)
-	var splash := CPUParticles3D.new()
-	splash.amount = Quality.particles(90)
-	splash.lifetime = 1.8
-	splash.one_shot = true
-	splash.mesh = Util.speck_mesh(0.35, 0.35, Color(1.0, 0.6, 0.15, 0.95), true)
-	splash.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
-	splash.emission_sphere_radius = reach * 0.4
-	splash.direction = Vector3.UP
-	splash.spread = 45.0
-	splash.initial_velocity_min = 6.0
-	splash.initial_velocity_max = 13.0
-	splash.gravity = Vector3(0, -16.0, 0)
-	splash.position = pos
-	add_child(splash)
-
-	# Molten rock sets alight whatever it touches, but only where it lands.
+	if world == null or world.is_underwater(pos.x, pos.z):
+		return
+	var here := Vector2(pos.x, pos.z)
+	var hollow := world.scars.hollow_near(here, reach + 2.0)
+	if hollow.is_empty():
+		world.pour(TerrainScars.Kind.BASIN, here, reach, rise)
+	else:
+		# Filling: move the hole's own amount toward zero by what was poured,
+		# never past it, so the ground levels off rather than becoming a mound
+		# in the middle of the old crater.
+		var left := float(hollow["amount"])
+		var filled := minf(left + rise * FILL_RATE, 0.0)
+		world.reshape(hollow, filled)
+		if filled >= -0.05 and loud:
+			GameState.announce("The crater is level again.")
+	_lava_splash(pos, reach, loud)
+	# It burns what it lands on, and only that.
 	for t in get_tree().get_nodes_in_group("trees"):
 		var tree := t as WildTree
 		if is_instance_valid(tree) and tree.global_position.distance_to(pos) < reach:
@@ -740,10 +746,34 @@ func _cast_lavaball(pos: Vector3, potency := 1.0) -> void:
 					and body.has_method("ignite"):
 				body.call("ignite")
 
+
+## The look of a load landing: a brief spatter and a glow that cools.
+func _lava_splash(pos: Vector3, reach: float, loud: bool) -> void:
+	var glow := OmniLight3D.new()
+	glow.light_color = Color(1.0, 0.4, 0.1)
+	glow.light_energy = 3.0 if not loud else 4.5
+	glow.omni_range = reach * 3.0
+	glow.shadow_enabled = false
+	glow.position = pos + Vector3(0, 1.2, 0)
+	add_child(glow)
+	var spatter := CPUParticles3D.new()
+	spatter.amount = Quality.particles(34)
+	spatter.lifetime = 1.3
+	spatter.one_shot = true
+	spatter.mesh = Util.speck_mesh(0.22, 0.22, Color(1.0, 0.62, 0.18, 0.95), true)
+	spatter.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	spatter.emission_sphere_radius = reach * 0.35
+	spatter.direction = Vector3.UP
+	spatter.spread = 55.0
+	spatter.initial_velocity_min = 3.0
+	spatter.initial_velocity_max = 7.0
+	spatter.gravity = Vector3(0, -14.0, 0)
+	spatter.position = pos
+	add_child(spatter)
 	var cool := create_tween()
-	cool.tween_property(glow, "light_energy", 0.0, 6.0)
+	cool.tween_property(glow, "light_energy", 0.0, 4.0)
 	cool.tween_callback(glow.queue_free)
-	cool.tween_callback(splash.queue_free)
+	cool.tween_callback(spatter.queue_free)
 
 
 ## THE EARTH SPLITS OPEN. A mountain is raised where the miracle lands, with a
@@ -752,58 +782,98 @@ func _cast_lavaball(pos: Vector3, potency := 1.0) -> void:
 ##
 ## The single most destructive thing a god can do here, and the terrain it
 ## leaves behind is permanent — a volcano is a landmark, not an event.
+## A VOLCANO IS A LAVA FOUNTAIN, and the mountain is what its throws pile up.
+##
+## It was a scripted cone that inflated, which is why it read as a spire
+## appearing rather than a mountain building. It now hurls thirty globs of the
+## same molten rock a lavaball is made of, straight up out of the vent, over a
+## full minute — and the mountain grows from WHERE THEY LAND. Nothing shapes
+## the cone but the spread of the throws, and anyone patient enough could build
+## the same hill by hand, one lavaball at a time.
 func _cast_volcano(pos: Vector3, potency := 1.0) -> void:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-	var reach := minf(15.0 + 6.0 * potency, TerrainScars.BUCKET)
-	SoundBank.play_at("boom", pos, 6.0)
 	if world == null:
 		return
-	# HOW TALL THIS ONE GETS, decided once and then never exceeded. Capped
-	# against the ceiling on all relief AND against what is already standing
-	# here, so a second volcano on the same spot finishes the first rather
-	# than doubling it — which is how the first one became Olympus Mons.
-	var standing := world.relief_at(pos.x, pos.z)
-	var summit := minf(VOLCANO_HEIGHT * lerpf(0.8, 1.25, clampf(potency / 3.0, 0.0, 1.0)),
-		TerrainScars.MOST_RELIEF - standing)
-	if summit < 3.0:
-		GameState.announce("The ground here is already as high as it will go.")
-		return
+	SoundBank.play_at("boom", pos, 6.0)
+	GameState.announce("The ground splits, and the earth begins to throw itself into the sky.")
+	var vent := pos
+	vent.y = world.height_at(pos.x, pos.z)
+	var glare := _lava_glare(vent, VOLCANO_SPREAD)
+	var thrown := int(VOLCANO_GLOBS * lerpf(0.7, 1.3, clampf(potency / 3.0, 0.0, 1.0)))
 
-	# IT RISES. One scar, grown over a minute — not a stack of scars, which
-	# sum, and not one deform, which simply appears. The mountain is SEEN to
-	# push up out of the ground, spilling lava the whole way.
-	var scar := world.deform(TerrainScars.Kind.CONE, Vector2(pos.x, pos.z),
-		reach * 0.35, summit * 0.12, 3.0, 0.3)
-	var molten := _lava_fountain(pos, reach, 0.35)
-	var glare := _lava_glare(pos, reach)
-	for step in range(1, VOLCANO_STEPS + 1):
-		await get_tree().create_timer(VOLCANO_SECONDS / VOLCANO_STEPS).timeout
+	for i in thrown:
+		await get_tree().create_timer(VOLCANO_SECONDS / float(thrown)).timeout
 		if not is_instance_valid(self) or not is_instance_valid(world):
 			return
-		# Eased so it surges early and settles late, the way a dome actually
-		# grows, rather than climbing at a constant rate.
-		var t := float(step) / VOLCANO_STEPS
-		var swell := 1.0 - pow(1.0 - t, 2.2)
-		world.reshape(scar, summit * lerpf(0.12, 1.0, swell), reach * lerpf(0.35, 1.0, swell))
-		var top := pos
-		top.y = world.height_at(pos.x, pos.z)
-		if is_instance_valid(molten):
-			molten.position = top + Vector3(0, 1.5, 0)
-			molten.emission_sphere_radius = reach * lerpf(0.06, 0.15, swell)
+		# The vent rises with its own mountain, so later globs are thrown from
+		# higher up and the cone keeps its shape instead of drowning its source.
+		vent.y = world.height_at(pos.x, pos.z)
 		if is_instance_valid(glare):
-			glare.position = top + Vector3(0, 3.0, 0)
-		_shake_camera(0.5 + swell * 0.9)
-		# It sets the country alight as it goes, not only at the end.
-		if step % 3 == 0:
-			_scorch_around(top, reach * lerpf(0.7, 1.8, swell), potency)
+			glare.position = vent + Vector3(0, 3.0, 0)
+			glare.light_energy = 4.0 + sin(float(i)) * 1.5
+		_hurl_glob(vent, _glob_landing(pos))
+		if i % 4 == 0:
+			_shake_camera(0.7)
+			_scorch_around(vent, VOLCANO_SPREAD * 1.6, potency)
 
-	var crest := pos
-	crest.y = world.height_at(pos.x, pos.z)
-	GameState.announce("A mountain stands where there was none, and it is burning.")
-	_erupt(crest, reach, potency, molten, glare)
+	await get_tree().create_timer(4.0).timeout
+	if not is_instance_valid(self):
+		return
+	GameState.announce("The mountain stands, and the fires begin to cool.")
+	if is_instance_valid(glare):
+		var cool := create_tween()
+		cool.tween_property(glare, "light_energy", 0.0, 6.0)
+		cool.tween_callback(glare.queue_free)
 
 
-## Everything within reach catches, called repeatedly as the mountain climbs.
+## WHERE A GLOB COMES DOWN. Biased hard toward the vent — the square of a
+## random gives most of the loads to the middle and a scattering to the flanks,
+## which is precisely the distribution that makes a heap into a CONE. An even
+## spread would build a plateau.
+func _glob_landing(vent: Vector3) -> Vector3:
+	var away := randf() * TAU
+	var out := VOLCANO_SPREAD * randf() * randf()
+	return Vector3(vent.x + cos(away) * out, 0.0, vent.z + sin(away) * out)
+
+
+## Throw one glob out of the vent and let it fall. It arcs, it glows, and when
+## it lands it pours exactly what a lavaball pours.
+func _hurl_glob(from: Vector3, to: Vector3) -> void:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world == null:
+		return
+	to.y = world.height_at(to.x, to.z)
+	var glob := Util.sphere(randf_range(0.5, 0.95), Color(1.0, 0.55, 0.12), from, true)
+	add_child(glob)
+	# High and slow: the arc is most of what sells this, so it is thrown well
+	# clear of the summit rather than lobbed.
+	var apex := (from + to) * 0.5 + Vector3(0, randf_range(14.0, 26.0), 0)
+	var arc := create_tween()
+	arc.tween_method(func(t: float) -> void:
+		if is_instance_valid(glob):
+			# One quadratic Bezier: vent, high point, landing.
+			var a := from.lerp(apex, t)
+			var b := apex.lerp(to, t)
+			glob.position = a.lerp(b, t),
+		0.0, 1.0, GLOB_FLIGHT).set_trans(Tween.TRANS_LINEAR)
+	arc.tween_callback(func() -> void:
+		if is_instance_valid(glob):
+			glob.queue_free()
+		_pour_lava(to, LAVA_RISE * randf_range(0.7, 1.1), LAVA_REACH * randf_range(0.9, 1.3)))
+
+
+func _lava_glare(at: Vector3, reach: float) -> OmniLight3D:
+	var glare := OmniLight3D.new()
+	glare.light_color = Color(1.0, 0.42, 0.12)
+	glare.light_energy = 5.0
+	glare.omni_range = reach * 3.0
+	glare.shadow_enabled = false
+	glare.position = at + Vector3(0, 3.0, 0)
+	add_child(glare)
+	return glare
+
+
+## Everything within reach catches, called now and then as the mountain climbs.
 func _scorch_around(at: Vector3, reach: float, potency: float) -> void:
 	for t in get_tree().get_nodes_in_group("trees"):
 		var tree := t as WildTree
@@ -824,54 +894,6 @@ func _scorch_around(at: Vector3, reach: float, potency: float) -> void:
 			if d < reach * 1.5 and body.has_method("scare"):
 				body.call("scare", at)
 	_quake_everything(at, reach, potency * 0.4)
-
-
-## The lava itself, thrown from the mouth for as long as the mountain grows.
-func _lava_fountain(at: Vector3, reach: float, wide: float) -> CPUParticles3D:
-	var molten := CPUParticles3D.new()
-	molten.amount = Quality.particles(180)
-	molten.lifetime = 2.8
-	molten.mesh = Util.speck_mesh(0.45, 0.45, Color(1.0, 0.5, 0.1, 0.95), true)
-	molten.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
-	molten.emission_sphere_radius = reach * wide * 0.4
-	molten.direction = Vector3.UP
-	molten.spread = 34.0
-	molten.initial_velocity_min = 9.0
-	molten.initial_velocity_max = 19.0
-	molten.gravity = Vector3(0, -13.0, 0)
-	molten.position = at + Vector3(0, 1.5, 0)
-	add_child(molten)
-	return molten
-
-
-func _lava_glare(at: Vector3, reach: float) -> OmniLight3D:
-	var glare := OmniLight3D.new()
-	glare.light_color = Color(1.0, 0.42, 0.12)
-	glare.light_energy = 6.0
-	glare.omni_range = reach * 3.0
-	glare.shadow_enabled = false
-	glare.position = at + Vector3(0, 3.0, 0)
-	add_child(glare)
-	return glare
-
-
-## The eruption winding down. The fountain and the glare have been burning
-## since the mountain began to rise; this lets them run on for a while and then
-## fade, leaving the mountain behind.
-func _erupt(summit: Vector3, reach: float, potency: float,
-		molten: CPUParticles3D, glare: OmniLight3D) -> void:
-	_scorch_around(summit, reach * 1.8, potency)
-	var over := get_tree().create_tween()
-	over.tween_interval(10.0)
-	over.tween_callback(func() -> void:
-		if is_instance_valid(molten):
-			molten.emitting = false)
-	if is_instance_valid(glare):
-		over.tween_property(glare, "light_energy", 0.0, 4.0)
-		over.tween_callback(glare.queue_free)
-	over.tween_callback(func() -> void:
-		if is_instance_valid(molten):
-			molten.queue_free())
 
 
 func _shake_camera(strength: float) -> void:

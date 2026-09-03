@@ -48,6 +48,11 @@ const BUCKET := 32.0
 ## trees plus half again — a landmark, not an orbital feature.
 const MOST_RELIEF := 34.0
 
+## How near a new deposit has to land to merge into an existing one, as a
+## fraction of the larger footprint. Keeps a volcano's thirty globs down to a
+## handful of scars — see `deposit`.
+const MERGE_WITHIN := 0.75
+
 ## Every scar cut into the world, and the buckets that index them.
 var _scars: Array[Dictionary] = []
 var _buckets := {}
@@ -172,6 +177,41 @@ func _contribution(scar: Dictionary, x: float, z: float) -> float:
 		_:
 			# BASIN: a plain smooth sink, no lip, no ringing.
 			return amount * pow(cos(t * PI * 0.5), 2.0)
+
+
+## POUR SOMETHING ONTO THE GROUND, merging with what is already there.
+##
+## A lavaball is a truckful of molten rock, and a mountain is what you get from
+## throwing thirty of them at one spot. Laying thirty separate scars would work
+## and would also be a quiet disaster: `offset_at` walks every scar in the nine
+## buckets around a point, and it is called on every routing, placement and
+## meshing query in the game, so thirty overlapping scars means thirty distance
+## computations on a hot path forever after.
+##
+## So a deposit landing near an existing one of the same kind GROWS it instead:
+## the amount adds, the footprint widens a little, and the centre creeps toward
+## where the new load fell. Thirty globs settle into a handful of scars, the
+## mountain still emerges from where they actually landed, and `height_at` stays
+## cheap. Returns the scar that ended up holding it.
+func deposit(kind: int, at: Vector2, radius: float, amount: float) -> Dictionary:
+	for scar in _scars:
+		if int(scar["kind"]) != kind:
+			continue
+		var centre := Vector2(float(scar["x"]), float(scar["z"]))
+		var gap := centre.distance_to(at)
+		if gap > maxf(float(scar["radius"]), radius) * MERGE_WITHIN:
+			continue
+		# How much of the pile is already this scar's decides how far the centre
+		# moves: a big mound barely shifts for one more truckload.
+		var had: float = absf(float(scar["amount"]))
+		var pull := clampf(absf(amount) / maxf(had + absf(amount), 0.001), 0.0, 0.5)
+		var moved := centre.lerp(at, pull)
+		scar["x"] = moved.x
+		scar["z"] = moved.y
+		reshape(scar, float(scar["amount"]) + amount,
+			maxf(float(scar["radius"]), radius) + gap * 0.35)
+		return scar
+	return add(kind, at, radius, amount)
 
 
 ## GROW A SCAR THAT IS ALREADY THERE, rather than laying another on top of it.
