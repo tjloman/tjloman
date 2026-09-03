@@ -224,8 +224,17 @@ func _gouge(pos: Vector3) -> void:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	if world == null or world.is_underwater(pos.x, pos.z):
 		return
+	var before := world.height_at(pos.x, pos.z)
 	world.deform(TerrainScars.Kind.CRATER, Vector2(pos.x, pos.z),
 		BLAST_RADIUS * 0.8, -GOUGE_DEPTH, 3.0, GOUGE_CHAR)
+	# THE WATERLINE IS A THING YOU CAN DIG THROUGH, and craters stack: the
+	# village cradle sits two metres above the sea, and a fireball takes 1.7,
+	# so the SECOND one on a spot opens the ground to the water. That is a fair
+	# consequence and it stays — but it should be a choice, not a discovery
+	# made by counting bodies afterwards.
+	var after := world.height_at(pos.x, pos.z)
+	if before >= WorldGen.WATER_LEVEL and after < WorldGen.WATER_LEVEL:
+		GameState.announce("The crater breaks below the waterline, and the water comes in.")
 
 
 func _blast_visuals(pos: Vector3) -> void:

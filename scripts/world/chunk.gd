@@ -12,6 +12,9 @@ var cell := Vector2i.ZERO
 var _ground: MeshInstance3D = null
 var _body: StaticBody3D = null
 var _water: MeshInstance3D = null
+## The lowest ground in this chunk, measured while the mesh is built. What
+## decides whether any water is drawn here at all.
+var _lowest := INF
 ## Everything scattered here that has to be set back down on the new ground.
 var _standing: Array[Node3D] = []
 
@@ -65,11 +68,14 @@ func _build_terrain() -> void:
 	var heights := PackedFloat32Array()
 	heights.resize((cells + 1) * (cells + 1))
 
-	# Sample the height grid (in world space; chunk origin is our position).
+	# Sample the height grid (in world space; chunk origin is our position),
+	# keeping the lowest — the water pass needs it and it is free here.
+	_lowest = INF
 	for z in cells + 1:
 		for x in cells + 1:
-			heights[z * (cells + 1) + x] = world.height_at(
-				position.x + x * step, position.z + z * step)
+			var h := world.height_at(position.x + x * step, position.z + z * step)
+			heights[z * (cells + 1) + x] = h
+			_lowest = minf(_lowest, h)
 
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -116,15 +122,18 @@ func _build_terrain() -> void:
 
 
 func _build_water() -> void:
-	# Only bother if any corner/center of the chunk is below the water table.
-	var has_water := false
-	for probe in [Vector2(0, 0), Vector2(1, 0), Vector2(0, 1), Vector2(1, 1), Vector2(0.5, 0.5)]:
-		if world.height_at(
-				position.x + probe.x * WorldGen.CHUNK_SIZE,
-				position.z + probe.y * WorldGen.CHUNK_SIZE) < WorldGen.WATER_LEVEL + 0.5:
-			has_water = true
-			break
-	if not has_water:
+	# THE LOWEST POINT OF THE MESH, not five scattered probes.
+	#
+	# This used to sample the four corners and the centre of a 48-metre chunk,
+	# which a fireball crater falls straight between: the ground genuinely went
+	# below the water table and no water was drawn at all. Everything that
+	# SAMPLES a point — is_underwater, the router, the drowning check — knew
+	# there was water there; only the player could not see it, so villagers
+	# walked into a dry-looking pit and drowned in nothing.
+	#
+	# The terrain pass already measured all 169 heights to build the mesh, so
+	# the true minimum is free and exact.
+	if _lowest >= WorldGen.WATER_LEVEL + 0.5:
 		return
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(WorldGen.CHUNK_SIZE, WorldGen.CHUNK_SIZE)
