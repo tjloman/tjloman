@@ -38,4 +38,15 @@ window/stretch/aspect="expand"
 ; Mobile renderer: looks good on a phone, needs no advanced GPU. MSAA is
 ; near-free on tiled mobile GPUs and smooths our primitive-shape world.
 renderer/rendering_method="mobile"
-anti_aliasing/quality/msaa_3d=2
+; Both of these are OVERRIDDEN at boot from the detected graphics tier — see
+; Quality.msaa_3d and Quality.render_scale, applied in Main._build_world. They
+; are set to the MEDIUM tier's values here so the common device allocates its
+; render targets once instead of allocating and then reallocating them. This
+; said msaa_3d=2 (4x), which the game never actually ran at.
+anti_aliasing/quality/msaa_3d=1
+; The 3D pass renders at 85% of the panel and is upscaled. `canvas_items`
+; stretch scales the UI only, so without this the world is drawn at every
+; physical pixel — 2.6 million on an ordinary 1080p phone. Fragment cost goes
+; with the square, so this is 72% of the shading and bandwidth for a blur our
+; untextured, flat-coloured primitives have nothing to lose to.
+scaling_3d/scale=0.85

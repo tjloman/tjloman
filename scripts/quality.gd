@@ -203,6 +203,27 @@ func msaa_3d() -> Viewport.MSAA:
 	return Viewport.MSAA_2X if effective_tier() >= Tier.MEDIUM else Viewport.MSAA_DISABLED
 
 
+## HOW MANY PIXELS THE 3D PASS ACTUALLY DRAWS, as a share of the panel's.
+##
+## The one knob nobody had touched, and by a distance the biggest. The window
+## stretch mode is `canvas_items`, which scales the UI and NOTHING else: the 3D
+## pass was rendering at the phone's full native resolution, which on a 1080p
+## panel is 2.6 megapixels a frame and on a 1.5K one is 3.3.
+##
+## Memory is not the reason to turn it down — 0.8 saves about 7 MB, which is
+## noise. FRAGMENT WORK is: cost goes with the square, so 0.8 is 64% of the
+## shading, the overdraw, and the bandwidth, and bandwidth is what makes a
+## phone hot, and heat is what makes it throttle its touch digitizer, which is
+## the failure this whole project keeps designing around.
+##
+## And it costs this art style almost nothing. Everything on screen is an
+## untextured primitive in a flat colour; there is no texture detail for the
+## upscale to smear, and the MSAA above already softens the edges that are the
+## only high-frequency thing in the frame.
+func render_scale() -> float:
+	return [0.75, 0.85, 1.0][effective_tier()]
+
+
 ## HOW FINE THE GROUND IS CUT, in quads along a 48m chunk. The mesh and the
 ## collision heightmap are both built from this grid, so it is the resolution of
 ## the world you can see AND the one you walk on and dig into.

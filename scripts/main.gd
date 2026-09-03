@@ -149,6 +149,7 @@ func _ready() -> void:
 ## wait for a reload — the cycle() announcement says as much.
 func _on_quality_changed() -> void:
 	get_viewport().msaa_3d = Quality.msaa_3d()
+	get_viewport().scaling_3d_scale = Quality.render_scale()
 	_sun.shadow_enabled = Quality.shadows()
 	_sun.directional_shadow_max_distance = Quality.shadow_distance()
 	_environment.glow_enabled = Quality.glow()
@@ -258,6 +259,11 @@ func _build_environment() -> void:
 	# of the pretty-but-heavy features are on — a flagship gets them all, a
 	# budget Adreno gets a plain-but-stable look.
 	get_viewport().msaa_3d = Quality.msaa_3d()
+	# ...and how many pixels the 3D pass draws at all. `canvas_items` stretch
+	# scales the UI only, so without this the world was rendered at every
+	# physical pixel of the panel — 2.6 million of them on an ordinary 1080p
+	# phone. See Quality.render_scale: it is a heat knob, not a memory one.
+	get_viewport().scaling_3d_scale = Quality.render_scale()
 
 	_sun = DirectionalLight3D.new()
 	_sun.shadow_enabled = Quality.shadows()
@@ -370,6 +376,17 @@ func _run_smoke_test() -> void:
 		world_gen.chunk_cells, world_gen.chunk_cells, span,
 		world_gen.chunk_cells * world_gen.chunk_cells * 2,
 		(world_gen.load_radius * 2 + 1) ** 2])
+	# WHAT THE RENDERER IS ACTUALLY HOLDING, from the device rather than from
+	# an estimate — the one line to check against `adb shell dumpsys meminfo`,
+	# and against tools/gpu_budget.py, which counts the same things on paper.
+	var panel := get_viewport().get_visible_rect().size
+	var drawn := panel * Quality.render_scale()
+	print("SMOKE TEST: panel %dx%d, 3D drawn at %dx%d (%.0f%%, %.2f Mpx) | video mem %.1f MB | %d draws, %d prims" % [
+		int(panel.x), int(panel.y), int(drawn.x), int(drawn.y),
+		Quality.render_scale() * 100.0, drawn.x * drawn.y / 1000000.0,
+		Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0,
+		int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+		int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))])
 	# Two-step casting: open each menu, conjure a selection, and resolve it.
 	GameState.set_max_prayer_power(400.0)
 	# RUDIMENTS OPEN COMBINATIONS: a handful of runes is a whole spellbook.
