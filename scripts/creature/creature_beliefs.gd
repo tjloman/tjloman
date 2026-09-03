@@ -331,12 +331,25 @@ func patch(where: Vector3) -> String:
 	return "%d,%d" % [floori(where.x / PLACE_SIZE), floori(where.z / PLACE_SIZE)]
 
 
+## Note how somewhere FELT, by world position. The public way in to the memory
+## of ground — everything else here works in patch keys.
+func remember_place(where: Vector3, reward: float) -> void:
+	_mark_place(patch(where), reward)
+
+
 func _mark_place(place: String, reward: float) -> void:
 	if place == "":
 		return
 	if not places.has(place):
+		# ROOM IS MADE BEFORE THE PLACE IS PUT IN, not after.
+		#
+		# This used to insert and then evict, and the entry it had just made had
+		# ZERO visits — which is the fewest possible, so it was the likeliest
+		# thing in the whole memory to be thrown straight back out. The very
+		# next line then read the key that had just been erased and the creature
+		# crashed mid-thought, somewhere new, at random.
+		_make_room_for_a_place()
 		places[place] = {"feel": 0.0, "visits": 0}
-		_forget_a_place()
 	var known: Dictionary = places[place]
 	known["visits"] = int(known["visits"]) + 1
 	known["feel"] = clampf(
@@ -345,9 +358,10 @@ func _mark_place(place: String, reward: float) -> void:
 
 
 ## Full up: drop wherever it has been least, since a place visited once is a
-## place it has barely learned anything about.
-func _forget_a_place() -> void:
-	if places.size() <= PLACE_MEMORY:
+## place it has barely learned anything about. Called BEFORE a new place is
+## added, so it clears room rather than evicting the newcomer.
+func _make_room_for_a_place() -> void:
+	if places.size() < PLACE_MEMORY:
 		return
 	var dullest := ""
 	var fewest := 1 << 30

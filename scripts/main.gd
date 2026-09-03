@@ -1074,6 +1074,20 @@ func _smoke_test_earth() -> void:
 		dug, pooled, "A POOL STANDS" if pooled > dug else "nothing stood"])
 	assert(pooled > dug, "a deluge must leave water standing in a crater")
 
+	# A PLACE IT HAS JUST FOUND MUST NOT BE FORGOTTEN BEFORE IT IS USED. The
+	# memory of ground evicts its least-visited patch when full — and a patch
+	# discovered a moment ago has zero visits, so inserting first and pruning
+	# second threw the newcomer straight back out and then read the key it had
+	# just erased. The creature crashed mid-thought, somewhere new, after
+	# roughly a hundred and twenty patches of exploring.
+	var lore := creature.mind.beliefs
+	var patches := lore.places.size()
+	for far in 400:
+		lore.remember_place(Vector3(far * 40.0, 0.0, far * 27.0), 0.4)
+	print("SMOKE TEST: ground remembered — %d patches before, %d after 400 new ones" % [
+		patches, lore.places.size()])
+	assert(lore.places.size() > 0, "a creature must remember somewhere it has been")
+
 	# A LAVABALL IS A TRUCKFUL, AND A MOUNTAIN IS SIXTY OF THEM. The volcano
 	# now takes a full minute of thrown globs, so what is asserted here is the
 	# thing both it and the player's own arm go through: pouring molten rock
