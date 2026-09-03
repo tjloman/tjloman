@@ -123,13 +123,34 @@ const LAVA_REACH := 3.4
 ## the mountain GROWS FROM WHERE THEY LAND, over a full minute — rather than a
 ## scripted cone that simply inflates. Everything about its shape comes from the
 ## spread of the throws.
+## A VOLCANO'S OWN CEILING, in creatures. Measured against how big the beast
+## will ever be, because that is the thing on screen you judge a mountain
+## against — and hard, so a second cast on a finished mountain adds nothing.
+##
+## Two creatures is about 76 m, which is well over the ceiling on all terrain
+## relief (TerrainScars.MOST_RELIEF), so in practice the tighter of the two
+## wins and nothing here is taller than it was. Raise MOST_RELIEF if the
+## seventy-six is meant to be real.
+const MOUNTAIN_IN_CREATURES := 2.0
+## What the fountain actually AIMS for, as a share of that ceiling. It stops
+## throwing once the mountain reaches it, however many globs are left.
+const VOLCANO_AIM := 0.28
+
 const VOLCANO_GLOBS := 30
 const VOLCANO_SECONDS := 60.0
 ## How far from the vent a glob may fall. Biased hard toward the middle (see
 ## `_glob_landing`), which is what makes a heap of random throws a CONE.
 const VOLCANO_SPREAD := 11.0
-## How long one glob spends in the air.
-const GLOB_FLIGHT := 1.7
+## How long the LOWEST throw spends in the air; taller ones hang longer.
+const GLOB_FLIGHT := 1.6
+## How high a glob is thrown, and how far its apex leans toward where it lands.
+## BOTH are drawn per throw, which is what makes thirty of them look like a
+## fountain instead of a machine — a near-vertical spout and a flat arc slung
+## over the flank come out of the same two numbers.
+const GLOB_LIFT_MIN := 12.0
+const GLOB_LIFT_MAX := 55.0
+const GLOB_LEAN_MIN := 0.15
+const GLOB_LEAN_MAX := 0.62
 ## How much of a poured load goes into filling a hole rather than piling up.
 ## Above 1 so a crater takes fewer loads to level than a hill takes to build —
 ## pouring into a bowl is easier than stacking on flat ground.
@@ -794,6 +815,16 @@ func _cast_volcano(pos: Vector3, potency := 1.0) -> void:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	if world == null:
 		return
+	# HOW HIGH THIS ONE IS ALLOWED TO STAND, and whether there is any point.
+	# A mountain already at its ceiling is finished: casting again does not
+	# improve it, and saying so is better than silently doing nothing.
+	var ceiling := minf(MOUNTAIN_IN_CREATURES * CreatureBody.FULL_HEIGHT,
+		TerrainScars.MOST_RELIEF)
+	var aim := ceiling * VOLCANO_AIM
+	var already := world.scars.offset_at(pos.x, pos.z)
+	if already >= aim - 0.5:
+		GameState.announce("There is already a mountain here, and it will grow no further.")
+		return
 	SoundBank.play_at("boom", pos, 6.0)
 	GameState.announce("The ground splits, and the earth begins to throw itself into the sky.")
 	var vent := pos
@@ -808,6 +839,11 @@ func _cast_volcano(pos: Vector3, potency := 1.0) -> void:
 		# The vent rises with its own mountain, so later globs are thrown from
 		# higher up and the cone keeps its shape instead of drowning its source.
 		vent.y = world.height_at(pos.x, pos.z)
+		# ITS OWN CEILING, checked every throw. The fountain simply stops when
+		# the mountain is as tall as this volcano is allowed to make it, so the
+		# glob count sets how LONG it erupts and never how high it ends up.
+		if world.scars.offset_at(pos.x, pos.z) >= aim:
+			break
 		if is_instance_valid(glare):
 			glare.position = vent + Vector3(0, 3.0, 0)
 			glare.light_energy = 4.0 + sin(float(i)) * 1.5
@@ -838,6 +874,14 @@ func _glob_landing(vent: Vector3) -> Vector3:
 
 ## Throw one glob out of the vent and let it fall. It arcs, it glows, and when
 ## it lands it pours exactly what a lavaball pours.
+##
+## EVERY THROW A DIFFERENT ARC. The first version gave every glob the same lob
+## to the same sort of height, so thirty of them read as a machine rather than
+## a mountain. Both halves of the trajectory are now drawn fresh each time: how
+## HIGH it is thrown, across a wide range, and how far the apex LEANS toward
+## where it will land. A low lean and a high lift is a near-vertical spout that
+## drops back beside the vent; a long lean and a low lift is a flat arc slung
+## out over the flank. Most throws land between the two.
 func _hurl_glob(from: Vector3, to: Vector3) -> void:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	if world == null:
@@ -845,9 +889,16 @@ func _hurl_glob(from: Vector3, to: Vector3) -> void:
 	to.y = world.height_at(to.x, to.z)
 	var glob := Util.sphere(randf_range(0.5, 0.95), Color(1.0, 0.55, 0.12), from, true)
 	add_child(glob)
-	# High and slow: the arc is most of what sells this, so it is thrown well
-	# clear of the summit rather than lobbed.
-	var apex := (from + to) * 0.5 + Vector3(0, randf_range(14.0, 26.0), 0)
+	# The apex leans only a little toward the landing, so the climb is steep and
+	# the fall is what carries it out. Squared, so most throws are modest and a
+	# few are enormous, rather than every throw being average.
+	# Squared, so most throws are modest and a few are enormous, rather than
+	# every throw being average.
+	var lift := lerpf(GLOB_LIFT_MIN, GLOB_LIFT_MAX, randf() * randf())
+	var lean := randf_range(GLOB_LEAN_MIN, GLOB_LEAN_MAX)
+	var apex := from.lerp(to, lean) + Vector3(0, lift, 0)
+	# A taller throw hangs longer, which is the whole reason it reads as height.
+	var flight := GLOB_FLIGHT * sqrt(lift / GLOB_LIFT_MIN)
 	var arc := create_tween()
 	arc.tween_method(func(t: float) -> void:
 		if is_instance_valid(glob):
@@ -855,7 +906,7 @@ func _hurl_glob(from: Vector3, to: Vector3) -> void:
 			var a := from.lerp(apex, t)
 			var b := apex.lerp(to, t)
 			glob.position = a.lerp(b, t),
-		0.0, 1.0, GLOB_FLIGHT).set_trans(Tween.TRANS_LINEAR)
+		0.0, 1.0, flight).set_trans(Tween.TRANS_LINEAR)
 	arc.tween_callback(func() -> void:
 		if is_instance_valid(glob):
 			glob.queue_free()

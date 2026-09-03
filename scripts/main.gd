@@ -721,7 +721,7 @@ func _run_smoke_test() -> void:
 		arc.stature = clampf(hours * earned, 1.0, Creature.FULL_STATURE)
 		shown.append("%gh %s %d%% %.1fm" % [
 			hours, arc.stature_text().split(" ")[-1], int(arc.growth * 100.0),
-			lerpf(Creature.MIN_SCALE, Creature.MAX_SCALE, arc.growth) * 2.5])
+			lerpf(CreatureBody.MIN_SCALE, CreatureBody.MAX_SCALE, arc.growth) * 2.5])
 	print("SMOKE TEST: stature — %.0f a hour, %.0f hours to FFFF | %s" % [
 		earned, Creature.FULL_STATURE / earned, "  ·  ".join(shown)])
 	arc.free()

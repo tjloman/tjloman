@@ -725,6 +725,14 @@ and the arithmetic is deliberately honest about that:
 | 30 | ~16 m |
 | 60 | 32.7 m — the ceiling |
 
+**A volcano has a hard ceiling, measured in creatures.** It is capped at
+`MOUNTAIN_IN_CREATURES` (2) times how tall the beast will ever be — 38.2 m at
+stature FFFF, so 76.5 m — but the ceiling on *all* terrain relief is 34 m, and
+the tighter of the two wins. It aims for 28% of that, **stops throwing the
+moment it reaches it** however many globs are left, and a second cast on a
+finished mountain is refused outright rather than silently doing nothing. One
+volcano throws about 27 of its 30 globs and settles at **9.7 m**.
+
 **And the volcano is exactly that, done for you.** It is no longer a scripted
 cone that inflates; it is a *lava fountain*. It hurls thirty globs of the same
 molten rock straight up out of the vent over a full minute, and the mountain
@@ -733,6 +741,14 @@ the cone but the spread of the throws. The vent rises with its own mountain, so
 later globs are thrown from higher up. Landing spots use the *square* of a
 random, which puts most loads near the middle and a scattering on the flanks;
 an even spread would build a plateau instead of a cone.
+
+**Every throw gets its own arc.** Both halves of the trajectory are drawn fresh
+each time — how *high* the glob is thrown (12–55 m, squared, so most are modest
+and the occasional one leaves the frame) and how far its apex *leans* toward
+where it will land (0.15–0.62). A low lean with a high lift is a near-vertical
+spout dropping back beside the vent; a long lean with a low lift is a flat arc
+slung out over the flank. Giving every glob the same lob made thirty of them
+read as a machine rather than a mountain.
 
 Thirty separate scars would have been a quiet disaster — `offset_at` walks
 every scar in the nine buckets around a point, on every routing, placement and

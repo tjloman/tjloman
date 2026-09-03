@@ -24,10 +24,9 @@ const WALK_SPEED := 3.5
 const GRAVITY := 20.0
 ## The growth arc: at 1% grown the creature stands about twice a villager's
 ## height; at 100% it towers over the tallest trees.
-const MIN_SCALE := 1.1
-## At full growth the creature stands ~38m — a clear head above the tallest
-## ~30m trees, the towering B&W silhouette over the land.
-const MAX_SCALE := 15.0
+## How big it gets, crown to feet — the numbers live with the body itself now
+## (CreatureBody), because other things are measured against the beast and it
+## should not be this file they have to reach into.
 ## THE TOP OF THE ARC, and the shape of the climb to it. 0xFFFF because it is a
 ## number worth seeing in the readout, and because a creature should be able to
 ## keep growing for as long as anyone keeps playing with it.
@@ -1783,7 +1782,7 @@ func gain_stature(steps: float) -> void:
 
 ## Height from size. (Size from stature is the `growth` property above.)
 func _apply_stature() -> void:
-	scale = Vector3.ONE * lerpf(MIN_SCALE, MAX_SCALE, growth)
+	scale = Vector3.ONE * lerpf(CreatureBody.MIN_SCALE, CreatureBody.MAX_SCALE, growth)
 
 
 ## The whole number a player sees, and the same in the hexadecimal it was

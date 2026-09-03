@@ -16,6 +16,19 @@ extends RefCounted
 
 ## Stomach room, in food units, from hatchling to full grown. A chicken or a
 ## sheaf is 1 unit; a cow is several.
+## HOW BIG THE BEAST GETS. At 1% grown it stands about twice a villager's
+## height; at full growth ~38m, a clear head above the tallest ~30m trees —
+## the towering B&W silhouette over the land.
+##
+## STANDING is its height in its OWN units, before scale. FULL_HEIGHT is the
+## ~38m itself, and it is named because other things are measured against the
+## creature — a volcano is capped at a multiple of how big it will ever be —
+## and those should follow from the model rather than a number typed twice.
+const MIN_SCALE := 1.1
+const MAX_SCALE := 15.0
+const STANDING := 2.55
+const FULL_HEIGHT := MAX_SCALE * STANDING
+
 const BASE_CAPACITY := 2.0
 const CAPACITY_PER_GROWTH := 20.0
 
