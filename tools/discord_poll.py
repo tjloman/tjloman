@@ -30,10 +30,17 @@ DISCORD'S LIMITS, which this enforces rather than discovers at 400:
 Anything over the answer limit is truncated with an ellipsis and reported;
 anything past ten answers is dropped, best-seconded kept.
 
+READING THE VOTES BACK. Posting records a ledger of message ids beside the
+input; `--results` reads each poll's running tally through Get Webhook Message
+and writes it as JSON. Discord counts approximately while a poll is open and
+does one exact tally after it closes — `is_finalized` says which you have, and
+the report says so too, because it matters to anyone deciding from the number.
+
 Usage:
     python3 tools/discord_poll.py suggestions.json --dry-run
     python3 tools/discord_poll.py suggestions.json --webhook "$DISCORD_WEBHOOK"
     python3 tools/discord_poll.py suggestions.json --hours 72 --multi
+    python3 tools/discord_poll.py suggestions.posted.json --results
 """
 import argparse
 import json
@@ -152,6 +159,75 @@ def post(webhook, payload, retries=4):
     return {}
 
 
+def fetch(webhook, message_id):
+    """Get Webhook Message — the poll comes back with its running tally in
+    `poll.results.answer_counts`. Apps cannot vote and cannot close a poll, so
+    reading is all there is to do from here."""
+    url = "%s/messages/%s" % (webhook.rstrip("/"), message_id)
+    req = urllib.request.Request(
+        url, headers={"User-Agent": "hand-of-the-heavens-poll/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return json.loads(r.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")[:200]
+        print("  could not read %s (HTTP %d): %s" % (message_id, e.code, detail),
+              file=sys.stderr)
+        return None
+    except urllib.error.URLError as e:
+        print("  could not reach Discord: %s" % e.reason, file=sys.stderr)
+        return None
+
+
+def show_results(webhook, ledger_path):
+    """Read every poll named in a ledger and print the tally.
+
+    Discord counts approximately while a poll runs and does a final exact
+    tally after it closes; `is_finalized` says which you are looking at, and
+    that distinction is worth keeping in front of anyone about to make a
+    decision from these numbers.
+    """
+    with open(ledger_path, encoding="utf-8") as fh:
+        ledger = json.load(fh)
+    out = []
+    for entry in ledger:
+        msg = fetch(webhook, entry["message_id"])
+        if msg is None:
+            # NOT the same as no votes, and must never be printed as if it
+            # were: nobody should read a failed request as a result of zero.
+            print("\n  %s — could not be read; no tally for it here"
+                  % entry["key"])
+            out.append({"key": entry["key"], "message_id": entry["message_id"],
+                        "read": False})
+            continue
+        poll = msg.get("poll") or {}
+        results = poll.get("results") or {}
+        counts = {int(c["id"]): int(c["count"])
+                  for c in results.get("answer_counts", [])}
+        answers = poll.get("answers", [])
+        rows = []
+        for a in answers:
+            aid = int(a.get("answer_id", 0))
+            rows.append({"answer": (a.get("poll_media") or {}).get("text", ""),
+                         "votes": counts.get(aid, 0)})
+        rows.sort(key=lambda r: -r["votes"])
+        total = sum(r["votes"] for r in rows)
+        final = bool(results.get("is_finalized"))
+
+        print("\n  %s" % (poll.get("question") or {}).get("text", entry["key"]))
+        print("  %s, %d vote(s)%s" % (
+            entry["key"], total,
+            "" if final else "  — still open, counted approximately"))
+        for r in rows:
+            share = (100.0 * r["votes"] / total) if total else 0.0
+            bar = "#" * int(round(share / 4))
+            print("    %5d  %3.0f%%  %-22s %s" % (r["votes"], share, bar, r["answer"]))
+        out.append({"key": entry["key"], "message_id": entry["message_id"],
+                    "read": True, "finalized": final, "total": total,
+                    "answers": rows})
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__,
@@ -169,7 +245,31 @@ def main():
                     help="post just this drawing, e.g. --only fire+water")
     ap.add_argument("--no-notes", action="store_true",
                     help="post the polls without the message of reasoning")
+    ap.add_argument("--ledger", default="",
+                    help="where the posted message ids are written"
+                         " (default: alongside the input, .posted.json)")
+    ap.add_argument("--results", action="store_true",
+                    help="read the votes back for polls in the ledger and stop")
     args = ap.parse_args()
+
+    ledger_path = args.ledger or (args.file.rsplit(".", 1)[0] + ".posted.json")
+
+    # READING THE VOTES BACK. The file argument is the ledger in this mode.
+    if args.results:
+        if not args.webhook:
+            raise SystemExit("Reading votes needs the webhook too:"
+                             " --webhook or DISCORD_WEBHOOK.")
+        path = args.file if args.file.endswith(".posted.json") else ledger_path
+        try:
+            tally = show_results(args.webhook, path)
+        except FileNotFoundError:
+            raise SystemExit("No ledger at %s — post the polls first." % path)
+        with open(path.replace(".posted.json", ".results.json"), "w",
+                  encoding="utf-8") as fh:
+            json.dump(tally, fh, indent=1)
+        print("\n  written to %s"
+              % path.replace(".posted.json", ".results.json"))
+        return 0
 
     with open(args.file, encoding="utf-8") as fh:
         groups = json.load(fh)
@@ -189,6 +289,7 @@ def main():
             "Treat the URL as a password — anyone holding it can post to that\n"
             "channel. Use --dry-run first to see exactly what would be sent.")
 
+    posted = []
     print("%d drawing(s), %d poll(s) to post, %d hours each%s\n"
           % (len(groups), len(groups), args.hours,
              ", multiselect" if args.multi else ""))
@@ -216,10 +317,21 @@ def main():
             continue
         msg = post(args.webhook, payload)
         print("    posted, message %s\n" % msg.get("id", "?"))
+        if msg.get("id"):
+            posted.append({"key": g.get("key", ""), "message_id": msg["id"]})
         time.sleep(1.0)          # gentle with the channel's rate limit
 
     if args.dry_run:
         print("Dry run — nothing was posted. Add --webhook to send it.")
+        return 0
+    if posted:
+        # The ledger is the only record of which message holds which drawing's
+        # poll, and --results cannot find the votes again without it.
+        with open(ledger_path, "w", encoding="utf-8") as fh:
+            json.dump(posted, fh, indent=1)
+        print("Message ids written to %s — read the votes back later with\n"
+              "  python3 tools/discord_poll.py %s --results --webhook ..."
+              % (ledger_path, ledger_path))
     return 0
 
 
