@@ -351,10 +351,36 @@ func _make_orb(miracle: String, potency: float) -> bool:
 		body = orb
 	add_child(body)
 	if divine_hand == null or not divine_hand.force_hold(body):
-		body.global_position = global_position + Vector3(0, 4.0, 0)
+		# AT THE HAND, not at the manager.
+		#
+		# This dropped an orb it could not hand over at `global_position` —
+		# which is the MIRACLE MANAGER'S position, and main.gd adds it with no
+		# position at all, so it is the world origin. Which is the middle of
+		# Elsmere. Every orb that would not fit in the hand fell on the starting
+		# village, rolled, and (if it was a fireball) gouged a crater in the
+		# town square from a working cast half a map away.
+		#
+		# A BLEND makes one orb per part and the hand takes one, so any unnamed
+		# combination with fire in it bombed the village every single time it
+		# was cast. Two of them dug below the waterline, and that is what
+		# drowned the town — not the player's aim.
+		body.global_position = _spare_orb_spot()
 	GameState.hint("%s conjured — now THROW it where you want it."
 		% miracle.capitalize().replace("_", " "))
 	return true
+
+
+## Where a conjured thing goes when the hand is already full: in the air just
+## over the hand, where the player is looking and can pick it up — never at the
+## world origin, and never on a village.
+func _spare_orb_spot() -> Vector3:
+	if divine_hand != null and is_instance_valid(divine_hand):
+		return divine_hand.global_position + Vector3(
+			randf_range(-1.2, 1.2), 3.0, randf_range(-1.2, 1.2))
+	var creature := get_tree().get_first_node_in_group("creature") as Creature
+	if creature != null and is_instance_valid(creature):
+		return creature.global_position + Vector3(0, 6.0, 0)
+	return global_position + Vector3(0, 4.0, 0)
 
 
 ## Called by a thrown orb when it lands: unleash the effect at that spot,

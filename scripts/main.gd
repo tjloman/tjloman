@@ -1074,6 +1074,26 @@ func _smoke_test_earth() -> void:
 		dug, pooled, "A POOL STANDS" if pooled > dug else "nothing stood"])
 	assert(pooled > dug, "a deluge must leave water standing in a crater")
 
+	# NOTHING A WORKING CONJURES MAY FALL ON THE ORIGIN. A blend makes one orb
+	# per part and the hand can only take one, so every spare orb used to be
+	# dropped at the miracle manager's own position — which is (0,0,0), which
+	# is the middle of the starting village. Cast an unnamed combination with
+	# fire in it from anywhere on the map and Elsmere got bombed.
+	var home := Vector3.ZERO
+	GameState.set_max_prayer_power(4000.0)
+	GameState.add_prayer_power(4000.0)
+	divine_hand.force_hold(Fireball.new())        # hand full: every orb is spare
+	for tries in 6:
+		miracles.cast_runes(["fire", "life", "sky"])   # a blend: several orbs
+	var near_home := 0
+	for n in miracles.get_children():
+		var orb := n as Node3D
+		if orb != null and Vector2(orb.global_position.x, orb.global_position.z) \
+				.distance_to(Vector2(home.x, home.z)) < 12.0:
+			near_home += 1
+	print("SMOKE TEST: spare orbs from a blend — %d landed on the village" % near_home)
+	assert(near_home == 0, "a conjured orb must never fall on the origin")
+
 	# A PLACE IT HAS JUST FOUND MUST NOT BE FORGOTTEN BEFORE IT IS USED. The
 	# memory of ground evicts its least-visited patch when full — and a patch
 	# discovered a moment ago has zero visits, so inserting first and pruning
