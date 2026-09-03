@@ -44,6 +44,70 @@ const MIN_PATH_LENGTH := 60.0
 static var _templates := {}
 
 
+## BUILD THE TEMPLATES NOW, rather than on the first stroke a player draws.
+##
+## Eighty-four reference drawings, each resampled and normalised, is a few
+## milliseconds — nothing at all during world generation, and a visible hitch
+## if it lands on the first flick of a finger instead. Called at boot.
+static func warm() -> void:
+	_build_templates()
+
+
+## THE REFERENCE DRAWING for a shape, as points in a 100x100 box — what the
+## recognizer is actually comparing against, handed back so the interface can
+## DRAW it. The glyph shown on screen is therefore never a separate hand-drawn
+## picture that could drift from what the matcher believes; it is the matcher's
+## own idea of the shape.
+static func outline(shape: String) -> PackedVector2Array:
+	_build_templates()
+	var out := PackedVector2Array()
+	if not _templates.has(shape):
+		return out
+	# The first variant is the plainest one — the others are bearings and
+	# tooth-counts that only exist to be forgiving.
+	var pts: PackedVector2Array = _templates[shape][0]
+	for p in pts:
+		out.append(Vector2(50.0 + p.x * 0.22, 50.0 + p.y * 0.22))
+	return out
+
+
+## THE READING SO FAR, for a stroke still being drawn. Same matcher, but it
+## reports how sure it is, because a half-drawn shape genuinely IS a different
+## shape — a circle is an arc until the moment it closes — and the readout has
+## to be able to show that it has not made its mind up yet.
+##
+## Nothing is ever COMMITTED from this: the rune that goes on the slate comes
+## from `classify` on the finished stroke, when the finger comes up. This is
+## only what the player is shown while they draw.
+static func peek(points: PackedVector2Array) -> Dictionary:
+	if points.size() < 6 or _path_length(points) < MIN_PATH_LENGTH:
+		return {"shape": "none", "confidence": 0.0}
+	_build_templates()
+	var drawn := _normalize(points)
+	var backwards := _reversed(drawn)
+	var best := MATCH_LIMIT * 2.0
+	var second := MATCH_LIMIT * 2.0
+	var name := "none"
+	for shape: String in _templates:
+		var near := MATCH_LIMIT * 2.0
+		for template: PackedVector2Array in _templates[shape]:
+			near = minf(near, minf(_distance(drawn, template), _distance(backwards, template)))
+		if near < best:
+			second = best
+			best = near
+			name = shape
+		elif near < second:
+			second = near
+	if best >= MATCH_LIMIT:
+		return {"shape": "none", "confidence": 0.0}
+	# Two things have to hold for a reading to look settled: it must FIT, and it
+	# must fit better than whatever is second. A stroke sitting between two
+	# shapes is exactly the moment to show a player that it is still undecided.
+	var fit := 1.0 - best / MATCH_LIMIT
+	var lead := clampf((second - best) / 22.0, 0.0, 1.0)
+	return {"shape": name, "confidence": clampf(fit * 0.45 + lead * 0.55, 0.0, 1.0)}
+
+
 ## The rune-shape this stroke most resembles, or "none".
 static func classify(points: PackedVector2Array) -> String:
 	if points.size() < 6 or _path_length(points) < MIN_PATH_LENGTH:

@@ -726,6 +726,53 @@ And the first rebuild grew the affected area by a whole chunk on every side,
 tripling the cost of every quake to prevent a seam that a metre of slack
 already prevents.
 
+## Casting, felt
+
+Drawing a rune used to be silent and mute: no sound at all, and no reading of
+the shape until the finger came up, at which point one line of text appeared at
+the bottom of the screen. The most consequential thing in the game was its
+quietest and least legible.
+
+**The stroke is read as it is drawn.** Twelve times a second (four on a hot
+device — it backs off with the thermal band like everything else), the
+half-finished stroke is matched and shown as a glyph underneath it, faint while
+ambiguous and firming up as it resolves. A half-drawn circle honestly *is* an
+arc, and it is allowed to look undecided; watching it settle is the point.
+
+**Nothing live is ever committed.** The rune that lands on the slate is still
+read from the *finished* stroke when the finger lifts. Casting what a shape
+looked like on the way past would be indefensible, and the two paths are
+deliberately separate functions — `peek` for the picture, `classify` for the
+commitment.
+
+**The runes already drawn stand above it**, glowing, each breathing on its own
+phase so the row never pulses as one block, brightening as the working grows,
+with the newest swelling for a moment as it lands. The glyphs are the
+*recognizer's own reference drawings*, asked for by name — so what you are
+shown cannot drift from what the matcher will actually accept, which a
+hand-drawn set of icons certainly would have.
+
+**A drum on every rune**, pitched down and struck harder as the working grows,
+so a three-rune miracle is audibly heavier than a one-rune one before anything
+has been cast. **Whispers** come and go out past the edge of what you are
+doing — placed around the hand at nine to twenty metres, never on it, so they
+read as coming from the trees rather than from you. Both are synthesized in
+code like every other sound here: the drum is a hard dry knock over a membrane
+tone bending down as the skin relaxes, and the whisper is breath pinched into
+syllables and bandpassed to sit where speech sits, so the ear insists it almost
+understood something.
+
+Two honest notes on the performance of this. Templates are now built at world
+load rather than on the first flick of a finger, which removes a real hitch.
+The stroke is also thinned as it is captured — a pointer reports every frame it
+moves, and a slow rune arrived as six hundred points where forty describe the
+same shape — but **measured, that is a 1.1x saving on a normal stroke** and
+only reaches 1.5x on a six-second scrawl; it is worth doing because it is free
+(recognition is identical, 300/300 either way), not because it was the
+bottleneck. The live reading is the genuine new cost, at 0.78ms per match
+against 84 reference drawings, which is why it runs on a clock and backs off
+when the device is hot.
+
 ## Night you can actually see
 
 On a phone, in daylight, night was a black screen. You could not find your own
@@ -1138,6 +1185,8 @@ scripts/miracles/
 scripts/ui/hud.gd             Bars, legend, tooltips, help
 scripts/ui/debug_menu.gd      The F3 workshop: save/load/regenerate + cheats
 scripts/ui/cast_overlay.gd    The casting ring and countdown — what the mode looks like
+scripts/ui/rune_readout.gd    What you are drawing, drawn: the live glyph and
+                              the runes already on the slate, glowing
 scripts/ui/tutorial.gd        The opening lessons: data-driven, completed by doing
 scripts/ui/profile_menu.gd    The creatures you have raised: switch, name, begin
 scripts/ui/touch_controls.gd  Touchscreen-only buttons: Cast/Move mode,

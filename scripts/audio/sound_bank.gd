@@ -27,6 +27,8 @@ func _ready() -> void:
 	_bank["coo"] = _make_coo()
 	_bank["caw"] = _make_caw()
 	_bank["screech"] = _make_screech()
+	_bank["drum"] = _make_drum()
+	_bank["whisper"] = _make_whisper()
 
 
 ## Plays a named sound at a world position, then cleans itself up.
@@ -319,4 +321,62 @@ func _make_chatter() -> AudioStreamWAV:
 		last = last * 0.85 + randf_range(-1, 1) * 0.15
 		var syllables := 0.4 + 0.6 * absf(sin(t * 7.0 * TAU))
 		samples[i] = (vowel + last * 0.5) * syllables * _env(t, dur, 0.1, 0.25) * 0.45
+	return _make_wav(samples)
+
+
+## THE SOUND OF CASTING ---------------------------------------------------------
+##
+## Drawing a rune used to be silent, which made the most consequential thing in
+## the game the quietest. These two are what the casting session beats and
+## breathes to (see DivineHand): a drum on every rune committed, and whispers
+## flitting past somewhere out in the dark while the session is open.
+
+## A WOODY DRUM. A hollow log, not a kit tom: the wood is the point, so it is a
+## sharp knock over a low membrane tone whose pitch drops as the skin relaxes,
+## and it is gone in a fifth of a second. Struck harder for each rune already
+## on the slate — the caller does that with volume and pitch.
+func _make_drum() -> AudioStreamWAV:
+	var dur := 0.42
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var body := 0.0
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		# The skin: a low tone bending down as it loses tension.
+		var pitch := 96.0 - 34.0 * (1.0 - exp(-t * 11.0))
+		var skin := sin(t * pitch * TAU) * exp(-t * 7.5)
+		# The wood: a hard, dry knock, mostly gone within a few milliseconds.
+		var knock := randf_range(-1, 1) * exp(-t * 130.0) * 0.55
+		# A hollow resonance under it, low-passed so it reads as a log and not
+		# as a click over a sine.
+		body = body * 0.86 + skin * 0.14
+		samples[i] = (skin * 0.62 + body * 0.8 + knock) * _env(t, dur, 0.001, 0.12)
+	return _make_wav(samples)
+
+
+## WHISPERS. Not words — the shape of words: breathy noise pinched into three
+## or four syllables and bandpassed to sit where speech sits, so the ear insists
+## it almost understood something. Quiet on purpose; it is meant to be caught
+## rather than heard.
+func _make_whisper() -> AudioStreamWAV:
+	var dur := 1.4
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var low := 0.0
+	var prev := 0.0
+	var wander := randf_range(0.0, TAU)
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		# Syllables: an uneven pulse, so it never reads as a machine.
+		var beat := t * 3.4 * TAU + sin(t * 1.15 * TAU + wander) * 1.6
+		var syllable := pow(maxf(sin(beat), 0.0), 1.7)
+		var noise := randf_range(-1, 1)
+		# Bandpass by hand: a one-pole low-pass, then subtract the previous
+		# sample to take the rumble out. What is left is breath.
+		low = low * 0.72 + noise * 0.28
+		var breath := low - prev
+		prev = low
+		samples[i] = breath * syllable * _env(t, dur, 0.35, 0.6) * 0.9
 	return _make_wav(samples)

@@ -88,6 +88,12 @@ func _ready() -> void:
 	hud.camera_rig = camera_rig
 	add_child(hud)
 
+	# WHAT YOU ARE DRAWING, drawn. Above the HUD so the glyphs sit over the
+	# world, below the tutorial so a lesson card still wins.
+	var readout := RuneReadout.new()
+	readout.divine_hand = divine_hand
+	add_child(readout)
+
 	var touch := TouchControls.new()
 	touch.divine_hand = divine_hand
 	touch.camera_rig = camera_rig
@@ -125,6 +131,10 @@ func _ready() -> void:
 	# change live; the world's stream radius and water rebuild on the next
 	# reload. The grace period restarts here because a freshly built world is
 	# slow for reasons that have nothing to do with a warm phone.
+	# Build the rune templates now, while the world is being raised and a few
+	# milliseconds are free, rather than on the first flick of a finger.
+	GestureRecognizer.warm()
+
 	Quality.quality_changed.connect(_on_quality_changed)
 	Quality.settle()
 

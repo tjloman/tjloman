@@ -63,9 +63,26 @@ const BUNDLE_TOPUP := 0.06          # seconds between pulling each extra unit (h
 ## what you have drawn is cast; stop having drawn nothing, and it simply lets
 ## you go again.
 const OPEN_HOLD := 0.45      # seconds of firm press to open casting, on touch
+
+## HOW A STROKE IS CAPTURED. A pointer reports every frame it moves; a rune
+## does not change every frame. MIN_STEP drops points a finger has not really
+## travelled to, and STROKE_CAP is the backstop. See `_add_stroke_point`.
+const MIN_STEP := 3.5
+const STROKE_CAP := 220
+## How often the half-drawn stroke is read back, in seconds. Twelve times a
+## second is faster than an eye notices and a twentieth of the work of doing it
+## every frame.
+const PEEK_EVERY := 0.08
+
 const OPEN_SLOP := 16.0      # move further than this first and you meant to pan
 const IDLE_TO_CAST := 2.6    # quiet seconds that end the session
 const MAX_RUNES := 5
+
+## THE DRUMS AND THE WHISPERS. A rune committed is a drum struck, pitched down
+## and hit harder as the working grows; whispers come and go somewhere out in
+## the dark for as long as the session is open.
+const WHISPER_MIN := 1.6
+const WHISPER_MAX := 4.2
 
 var camera_rig: CameraRig
 var miracles: MiracleManager
@@ -85,6 +102,13 @@ var last_thrown: Node3D = null
 var drag_anchor := Vector3.ZERO
 var gesture_points := PackedVector2Array()
 var ground_point := Vector3.ZERO
+
+## WHAT THE HALF-DRAWN STROKE LOOKS LIKE SO FAR — read continuously while the
+## finger is down, shown by RuneReadout, and never committed to the working.
+## The rune that goes on the slate is read from the finished stroke when the
+## finger comes up, exactly as it always was.
+var live_shape := "none"
+var live_confidence := 0.0
 
 # Recent hand positions, for computing throw velocity on release.
 var _pos_history: Array[Vector3] = []
@@ -111,6 +135,8 @@ var _charging := false
 ## what cast a half-made miracle out of the player's hand.
 var _runes: Array = []
 var _idle_time := 0.0
+var _peek_time := 0.0
+var _whisper_time := 0.0
 
 var _hand_material: StandardMaterial3D
 var _glow: OmniLight3D
@@ -287,6 +313,7 @@ func _physics_process(delta: float) -> void:
 		HandState.GESTURING:
 			trail.points = gesture_points
 			trail.queue_redraw()
+			_tick_peek(delta)
 
 
 func _update_hover(mouse_pos: Vector2) -> void:
@@ -402,7 +429,7 @@ func _on_pointer_button(event: InputEventMouseButton) -> void:
 
 func _on_pointer_motion(event: InputEventMouseMotion) -> void:
 	if state == HandState.GESTURING:
-		gesture_points.append(event.position)
+		_add_stroke_point(event.position)
 	elif _charging:
 		# Moved before the press matured: that was a pan, not a summons.
 		if event.position.distance_to(_press_at) > OPEN_SLOP:
@@ -703,6 +730,9 @@ func _open_casting() -> void:
 	if is_instance_valid(held_body):
 		return                       # not while your hand is full
 	casting = true
+	_whisper_time = 0.6
+	live_shape = "none"
+	live_confidence = 0.0
 	_runes.clear()
 	_idle_time = 0.0
 	state = HandState.IDLE
@@ -717,6 +747,8 @@ func _open_casting() -> void:
 func _close_casting(cast: bool) -> void:
 	var runes := _runes.duplicate()
 	casting = false
+	live_shape = "none"
+	live_confidence = 0.0
 	_runes.clear()
 	_idle_time = 0.0
 	_charging = false
@@ -730,6 +762,42 @@ func _close_casting(cast: bool) -> void:
 		GameState.hint("")
 
 
+## READ THE STROKE AS IT IS DRAWN. Twelve times a second, not every frame —
+## and NOTHING here is committed. The reading exists so the player can see the
+## shape being understood while there is still time to change it; the rune that
+## lands on the slate is read from the finished stroke in `_end_stroke`.
+func _tick_peek(delta: float) -> void:
+	_peek_time -= delta
+	if _peek_time > 0.0:
+		return
+	# A reading is a full match against every reference drawing — measurably the
+	# most expensive thing that happens while a finger is down. So it backs off
+	# with the thermal band, like the rest of the game: twelve times a second on
+	# a cool device, four on a hot one. The stroke is unaffected either way; only
+	# how often the picture under it refreshes.
+	_peek_time = PEEK_EVERY * Quality.sim_relief()
+	var reading := GestureRecognizer.peek(gesture_points)
+	live_shape = String(reading["shape"])
+	live_confidence = float(reading["confidence"])
+
+
+## Whispers, somewhere out past the edge of what you are doing. They are placed
+## around the hand rather than on it, at a distance, so they read as coming
+## from the trees and the dark rather than from the player.
+func _tick_whispers(delta: float) -> void:
+	if not casting:
+		return
+	_whisper_time -= delta
+	if _whisper_time > 0.0:
+		return
+	_whisper_time = randf_range(WHISPER_MIN, WHISPER_MAX)
+	var away := randf() * TAU
+	var out := randf_range(9.0, 20.0)
+	SoundBank.play_at("whisper",
+		global_position + Vector3(cos(away) * out, randf_range(0.5, 4.0), sin(away) * out),
+		-13.0, 0.28)
+
+
 func _clear_trail() -> void:
 	if trail != null:
 		trail.points = PackedVector2Array()
@@ -740,13 +808,41 @@ func _begin_stroke(at: Vector2) -> void:
 	state = HandState.GESTURING
 	gesture_points = PackedVector2Array([at])
 	_idle_time = 0.0
+	live_shape = "none"
+	live_confidence = 0.0
+	_peek_time = 0.0
+
+
+## TAKE A POINT INTO THE STROKE — but only if it says something new.
+##
+## A pointer reports every frame it moves, so a slow, careful rune arrived as
+## six hundred points where forty would have described the same shape. That is
+## pure cost twice over: the recognizer resamples the whole array (inserting as
+## it goes, so it is superlinear), and it does it again on every live reading.
+##
+## A finger that has not travelled MIN_STEP has not drawn anything, so the
+## point is dropped. The cap behind it is a backstop for a genuinely enormous
+## scrawl. Neither loses shape: the matcher resamples to 48 points regardless,
+## so the only thing thrown away here is duplication.
+func _add_stroke_point(at: Vector2) -> void:
+	if gesture_points.size() >= STROKE_CAP:
+		return
+	if gesture_points.size() > 0 \
+			and gesture_points[gesture_points.size() - 1].distance_to(at) < MIN_STEP:
+		return
+	gesture_points.append(at)
 
 
 ## The stroke is finished: read it and add it to the working. The quiet clock
 ## starts again from here — and, crucially, does NOT run while a stroke is in
 ## progress, which is what used to cast a half-drawn working out of your hand.
 func _end_stroke() -> void:
+	# THE COMMITTED READING. Taken from the whole finished stroke, never from
+	# the live one — a half-drawn circle is honestly an arc, and casting what
+	# the shape looked like on the way past would be indefensible.
 	var gesture := GestureRecognizer.classify(gesture_points)
+	live_shape = "none"
+	live_confidence = 0.0
 	gesture_points = PackedVector2Array()
 	_clear_trail()
 	state = HandState.IDLE
@@ -761,17 +857,28 @@ func _end_stroke() -> void:
 		GameState.hint("Your hands are full at %d runes." % MAX_RUNES)
 		return
 	_runes.append(rune)
+	# THE DRUM. Struck once per rune, pitched down and hit harder as the working
+	# grows, so a three-rune miracle is audibly heavier than a one-rune one
+	# before anything has been cast at all.
+	var depth := float(_runes.size() - 1) / float(maxi(MAX_RUNES - 1, 1))
+	SoundBank.play_at("drum", global_position, -4.0 + depth * 5.0, 0.02)
 	GameState.hint(Spellbook.describe(_runes))
 
 
 ## Quiet for long enough: cast what is on the slate, or simply let the player
 ## go if they drew nothing.
 func _tick_casting(delta: float) -> void:
+	_tick_whispers(delta)
 	if not casting or state == HandState.GESTURING:
 		return
 	_idle_time += delta
 	if _idle_time >= IDLE_TO_CAST:
 		_close_casting(true)
+
+
+## The runes on the slate, for the readout that draws them.
+func runes_drawn() -> Array:
+	return _runes
 
 
 ## Seconds left before the session resolves itself, 0..1 — for the HUD's bar.
