@@ -8,3 +8,14 @@
 # OS junk
 .DS_Store
 Thumbs.db
+
+# What the focus group actually said. The bot and the suggestion page write
+# these; they are session data, not source, and one of them may hold names.
+tools/suggestions.json
+tools/suggestions.json.tmp
+*.posted.json
+*.results.json
+
+# Python bytecode from the tools
+__pycache__/
+*.pyc
