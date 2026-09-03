@@ -34,6 +34,15 @@ func _build() -> void:
 	_panel.visible = false
 	_panel.set_anchors_and_offsets_preset(
 		Control.PRESET_CENTER_RIGHT, Control.PRESET_MODE_MINSIZE, 16)
+	# WHICH WAY IT GROWS, and it has to be said out loud. The preset is applied
+	# before the buttons exist, so the panel's minimum size is still zero and it
+	# comes out as a hairline pinned to the right edge; every control then grows
+	# to fit its contents in whatever direction `grow_*` names. The default is
+	# GROW_DIRECTION_END — outwards, off the right of the screen — so the whole
+	# 274-pixel drawer opened just past the edge of the window and could not be
+	# seen or clicked. It has to grow INWARD from the edge it is anchored to,
+	# which is what the touch controls and the praise/scold pair already say.
+	_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 	_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	var style := StyleBoxFlat.new()

@@ -558,6 +558,10 @@ func _build_roster() -> void:
 	_roster_panel.visible = false
 	_roster_panel.set_anchors_and_offsets_preset(
 		Control.PRESET_CENTER_LEFT, Control.PRESET_MODE_MINSIZE, 16)
+	# Inward from the left edge. Right by luck until now — the default grows
+	# END, which from the LEFT edge happens to point onto the screen; the same
+	# omission on a right-anchored panel put the workshop drawer off it.
+	_roster_panel.grow_horizontal = Control.GROW_DIRECTION_END
 	_roster_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 	_roster_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	_roster_panel.add_theme_stylebox_override("panel", _dim_panel_style())
