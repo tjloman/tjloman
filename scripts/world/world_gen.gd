@@ -15,7 +15,6 @@ extends Node3D
 ## as yours but believe in nothing — until your miracles convince them.
 
 const CHUNK_SIZE := 48.0
-const CHUNK_CELLS := 12          # 12x12 quads, 13x13 height samples
 const WATER_LEVEL := 0.0
 const CHUNKS_PER_FRAME := 1      # one chunk a frame: gentle, no startup stall
 const VILLAGE_CELL_CHANCE := 0.05
@@ -31,6 +30,12 @@ const SEA_CELLS := 240            # ~30m of connected water
 ## horizon); a capable device streams a wider 7x7. Rebuilds on world reload.
 var load_radius := 2
 var unload_radius := 3
+
+## Quads along one edge of a chunk, so (chunk_cells + 1)^2 height samples. Also
+## from the tier: 24 on a capable device is a two-metre triangle, 16 on a budget
+## one is three. Both the mesh and the collision heightmap are cut on this grid,
+## so it is the resolution of the world you see AND the one you walk on.
+var chunk_cells := 12
 
 var world_seed := 20260714
 
@@ -63,6 +68,7 @@ func _ready() -> void:
 	add_to_group("world_gen")
 	load_radius = Quality.load_radius()
 	unload_radius = Quality.unload_radius()
+	chunk_cells = Quality.chunk_cells()
 	_height_noise.seed = world_seed
 	_height_noise.fractal_octaves = 4
 	_height_noise.frequency = 0.007
@@ -369,7 +375,15 @@ func slope_at(x: float, z: float) -> float:
 		absf(height_at(x, z + 2.0) - h))
 
 
-func ground_color(x: float, z: float, h: float) -> Color:
+## THE COLOUR OF THE GROUND HERE — biome, then sand at the waterline, snow up
+## high, bare rock on anything steep, and soot wherever it has burned.
+##
+## `slope` is the rise over two metres at this point. Pass it if you already
+## know it: working it out costs three more `height_at` calls, which is twelve
+## noise evaluations, and it is by far the most expensive thing in here. A
+## caller walking a grid (Chunk._build_terrain) has the neighbouring heights in
+## hand already and can difference them for nothing.
+func ground_color(x: float, z: float, h: float, slope := -1.0) -> Color:
 	var base: Color
 	match biome_at(x, z):
 		"savanna":
@@ -386,7 +400,7 @@ func ground_color(x: float, z: float, h: float) -> Color:
 		base = base.lerp(Color(0.74, 0.68, 0.5), clampf((WATER_LEVEL + 0.5 - h), 0.0, 1.0))
 	if h > 14.0:
 		base = base.lerp(Color(0.92, 0.92, 0.95), clampf((h - 14.0) / 6.0, 0.0, 0.85))
-	var s := slope_at(x, z)
+	var s := slope_at(x, z) if slope < 0.0 else slope
 	if s > 1.0:
 		base = base.lerp(Color(0.48, 0.45, 0.42), clampf((s - 1.0) / 1.5, 0.0, 0.9))
 	# BURNED GROUND stays burned. A fireball does not only dent the earth, it

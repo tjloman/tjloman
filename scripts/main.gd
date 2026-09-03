@@ -361,6 +361,15 @@ func _run_smoke_test() -> void:
 		world_gen.height_at(0, 0),
 		world_gen.is_underwater(200, 200),
 	])
+	# How finely the land is actually cut, on THIS device. The grid sets the
+	# mesh and the collision heightmap together, so it is the size of the
+	# smallest thing the world can hold a shape for — a 2.4m fireball divot is
+	# invisible on a 4m grid and reads as a dish on a 2m one.
+	var span := WorldGen.CHUNK_SIZE / world_gen.chunk_cells
+	print("SMOKE TEST: terrain grid %dx%d — %.2fm cells, %d tris a chunk, %d loaded" % [
+		world_gen.chunk_cells, world_gen.chunk_cells, span,
+		world_gen.chunk_cells * world_gen.chunk_cells * 2,
+		(world_gen.load_radius * 2 + 1) ** 2])
 	# Two-step casting: open each menu, conjure a selection, and resolve it.
 	GameState.set_max_prayer_power(400.0)
 	# RUDIMENTS OPEN COMBINATIONS: a handful of runes is a whole spellbook.

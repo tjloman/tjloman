@@ -120,19 +120,28 @@ def build_templates():
         add("wave", lambda t, f=flip: (f * math.sin(t * TAU) * 70.0, t * 200.0))
         add("wave", lambda t, f=flip: (t * 200.0, f * math.sin(t * TAU) * 80.0))
         add("wave", lambda t, f=flip: (f * math.sin(t * TAU) * 80.0, t * 200.0))
-    for teeth in (3.0, 4.0, 5.0, 6.0, 7.0):
-        for depth in (60.0, 95.0):
-            for flip in (1.0, -1.0):
-                def zz(t, T=teeth, D=depth, F=flip):
-                    n = t * T
-                    up = 1.0 if int(n) % 2 == 1 else -1.0
-                    return (t * 200.0, F * up * abs((n % 1.0) * 2.0 - 1.0) * D)
-                add("zigzag", zz)
-                def zz2(t, T=teeth, D=depth, F=flip):
-                    n = t * T
-                    up = 1.0 if int(n) % 2 == 1 else -1.0
-                    return (F * up * abs((n % 1.0) * 2.0 - 1.0) * D, t * 200.0)
-                add("zigzag", zz2)
+    # FURY IS A SHARP Z, and CANCEL IS A SWEEP — mirroring GestureRecognizer,
+    # which dropped the twenty zigzag templates for these six. The harness had
+    # drifted back to the old alphabet, which meant every candidate above was
+    # being scored against a set the game no longer has.
+    for tall in (0.62, 1.0, 1.55):
+        def zed(t, T=tall):
+            run = 200.0 / max(T, 0.4)
+            drop = 200.0 * T
+            if t < 1.0 / 3.0:
+                return (t * 3.0 * run, 0.0)
+            if t < 2.0 / 3.0:
+                k = (t - 1.0 / 3.0) * 3.0
+                return (run - k * run, k * drop)
+            return ((t - 2.0 / 3.0) * 3.0 * run, drop)
+        add("zed", zed)
+    for hook in (0.55, 0.8, 1.05):
+        def sweep(t, H=hook):
+            if t < 0.62:
+                return (0.0, t / 0.62 * 200.0)
+            a = -math.pi * 0.5 * ((t - 0.62) / 0.38)
+            return (-math.sin(-a) * 95.0 * H, 200.0 + (1.0 - math.cos(a)) * 55.0 * H)
+        add("sweep", sweep)
     for slant in (math.pi / 4.0, -math.pi / 4.0):
         for flip in (1.0, -1.0):
             def sl(t, S=slant, F=flip):
@@ -210,9 +219,14 @@ SHAPES = {
     "rev_spiral": lambda t: (400 + math.cos(-t * TAU * 2.5) * (20 + t * 130),
                              300 + math.sin(-t * TAU * 2.5) * (20 + t * 130)),
     "wave": lambda t: (120 + t * 300, 300 + math.sin(t * TAU) * 90),
-    "zigzag": lambda t: (120 + t * 300,
-                         300 - (1.0 if int(t * 5.0) % 2 == 1 else -1.0)
-                         * abs((t * 5.0 % 1.0) * 2.0 - 1.0) * 80.0),
+    "zed": lambda t: ((120 + t * 3.0 * 300, 180) if t < 1 / 3 else
+                      ((420 - (t - 1 / 3) * 3.0 * 300, 180 + (t - 1 / 3) * 3.0 * 240)
+                       if t < 2 / 3 else
+                       (120 + (t - 2 / 3) * 3.0 * 300, 420))),
+    "sweep": lambda t: ((330, 160 + t / 0.62 * 220) if t < 0.62 else
+                        (330 - math.sin(math.pi * 0.5 * ((t - 0.62) / 0.38)) * 95.0,
+                         380 + (1.0 - math.cos(math.pi * 0.5 * ((t - 0.62) / 0.38)))
+                         * 55.0)),
     "caret": lambda t: (120 + t * 240, 330 - 170.0 * (1.0 - abs(2.0 * t - 1.0))),
     "arc": lambda t: (400 + math.cos(-math.pi / 2 - math.pi * 0.45 + math.pi * 0.9 * t) * 130.0,
                       300 + math.sin(-math.pi / 2 - math.pi * 0.45 + math.pi * 0.9 * t) * 130.0),
@@ -400,7 +414,88 @@ def _poly(pts, closed=False):
     return f
 
 
+def _heart(t, off=0.0):
+    """One closed stroke from the top notch, down the left lobe, round."""
+    a = ((t + off) % 1.0) * TAU - math.pi / 2.0
+    x = 16.0 * math.sin(a) ** 3
+    y = -(13.0 * math.cos(a) - 5.0 * math.cos(2 * a)
+          - 2.0 * math.cos(3 * a) - math.cos(4 * a))
+    return (400.0 + x * 6.2, 300.0 + y * 6.2)
+
+
+def _bee(t, off=0.0):
+    """Printed b: stem down, back UP the stem, then the bowl."""
+    pts = [(330, 175), (330, 425), (330, 300)]
+    for i in range(13):
+        a = -math.pi / 2.0 + math.pi * (i / 12.0)
+        pts.append((330 + math.sin(a) * 95.0, 362 - math.cos(a) * 62.0))
+    pts.append((330, 425))
+    return _poly(pts)(t)
+
+
+def _bee_open(t, off=0.0):
+    """b in one pass: the whole stem down, then a bowl swung off its FOOT, out
+    to the right, and closed against the stem's middle. Same silhouette, no
+    doubling back."""
+    pts = [(330, 175), (330, 430)]
+    for i in range(1, 17):
+        a = math.pi * 0.5 - math.pi * (i / 16.0)
+        pts.append((330 + math.cos(a) * 100.0, 365 + math.sin(a) * 65.0))
+    return _poly(pts)(t)
+
+
+def _cue(t, off=0.0):
+    """q, and it needs no adjusting: the bowl anticlockwise from its top-right
+    back to where it started, then straight down the tail."""
+    pts = [(395 + math.cos(-math.pi / 4.0 - TAU * (i / 18.0)) * 82.0,
+            265 + math.sin(-math.pi / 4.0 - TAU * (i / 18.0)) * 82.0)
+           for i in range(19)]
+    pts.append((453, 430))
+    return _poly(pts)(t)
+
+
+## HOW MUCH OF THE PATH IS DRAWN TWICE — the question that comes BEFORE
+## legibility, and the one this tool used to get wrong.
+##
+## There is no pen lift here: one contact down, one path, one contact up. So a
+## glyph whose ordinary construction needs the pen picked up (X, +) is out, and
+## so is one that JOINS its parts by running back along a line it has already
+## drawn (4, b, d, p). The second is the subtler failure and it is not merely
+## cosmetic: `normalize` spreads its 48 points evenly along the PATH, so a stem
+## drawn twice claims twice its share of them and drags the whole normalised
+## shape toward the stem.
+##
+## The RUN is what tells a retrace from a cusp. A heart's two lobes meet at the
+## notch and a circle closes on itself; both touch briefly and neither is a
+## retrace. A `b` spends a sixth of its length in a row on a line it already
+## drew. Measured on an arc-length-even resample, because that is what the
+## recognizer sees.
+def retrace_share(shape, n=160):
+    try:
+        raw = [shape(i / (n * 3 - 1), 0.0) for i in range(n * 3)]
+    except TypeError:
+        raw = [shape(i / (n * 3 - 1)) for i in range(n * 3)]
+    pts = resample(raw, n)
+    lox = min(p[0] for p in pts); hix = max(p[0] for p in pts)
+    loy = min(p[1] for p in pts); hiy = max(p[1] for p in pts)
+    near = math.hypot(hix - lox, hiy - loy) * 0.035
+    on_top = [any(abs(i - j) > 8 and math.dist(pts[i], pts[j]) < near
+                  for j in range(n)) for i in range(n)]
+    run = best = 0
+    for flag in on_top:
+        run = run + 1 if flag else 0
+        best = max(best, run)
+    return sum(on_top) / n, best / n
+
+
 CANDIDATES = {
+    "heart": (_heart, True),
+    "4": (_poly([(430, 190), (320, 330), (500, 330),
+                 (455, 330), (455, 190), (455, 420)]), False),
+    "4 open": (_poly([(430, 185), (315, 330), (495, 330), (495, 425)]), False),
+    "b": (_bee, False),
+    "b open": (_bee_open, False),
+    "q": (_cue, False),
     "box": (_poly([(320, 220), (480, 220), (480, 380), (320, 380)], True), True),
     "triangle": (_poly([(400, 195), (487, 365), (313, 365)], True), True),
     "diamond": (_poly([(400, 190), (495, 300), (400, 410), (305, 300)], True), True),
@@ -424,10 +519,13 @@ CLOSED_SLOPS = [("as intended", 1.0), ("lifted early", 0.82), ("overshot", 1.16)
 def swap_report():
     build_templates()
     print("SWAPPING A CANDIDATE INTO THE ALPHABET")
-    print("  Added to the real 84 reference drawings, then drawn by a hand.\n")
-    print("  %-11s %-7s %-6s  %s" % ("candidate", "closed", "conf", "how it reads when drawn"))
+    print("  Added to the %d reference drawings the game ships, then drawn by a hand.\n"
+          % sum(len(v) for v in TEMPLATES.values()) + "")
+    print("  %-11s %-7s %-8s %-6s  %s" % (
+        "candidate", "closed", "retrace", "conf", "how it reads when drawn"))
     rows = []
     for name, (shape, closed) in CANDIDATES.items():
+        _touch, doubled = retrace_share(shape)
         offs = (0.0, 0.25, 0.5, 0.75) if closed else (0.0,)
         TEMPLATES["_c"] = [normalize([shape(i / (SAMPLES - 1), o)
                                       for i in range(SAMPLES)]) for o in offs]
@@ -450,14 +548,23 @@ def swap_report():
         rate = 100 * hits / tries
         med = sorted(confs)[len(confs) // 2] if confs else 0.0
         top = max(lost.items(), key=lambda kv: kv[1])[0] if lost else ""
-        rows.append((rate, med, name, closed, top))
-    for rate, med, name, closed, top in sorted(rows, reverse=True):
-        print("  %-11s %-7s %.2f   %3.0f%%%s" % (
-            name, "yes" if closed else "no", med, rate,
+        rows.append((rate, med, name, closed, top, doubled))
+    for rate, med, name, closed, top, doubled in sorted(rows, reverse=True):
+        mark = "%3.0f%%%s" % (doubled * 100, "!" if doubled > 0.15 else " ")
+        print("  %-11s %-7s %-8s %.2f   %3.0f%%%s" % (
+            name, "yes" if closed else "no", mark, med, rate,
             ("   drawn loosely it becomes %s" % top) if top else ""))
-    print("\n  CLOSURE IS THE PROBLEM, NOT CURVATURE. `life` is the alphabet's only")
-    print("  closed shape, and not-quite-closing is what hands do without noticing.")
-    print("  Every closed candidate inherits it: an open box reads as a circle.")
+    print("\n  TWO WAYS TO FAIL, and the read rate only shows one of them.")
+    print("  RETRACE (marked !) is a glyph that cannot be DRAWN in one pass: a `4`")
+    print("  spends a fifth of its length running back up the stem to reach the")
+    print("  top, and a `b` a sixth. Both score 100% here, because the template")
+    print("  was built from the same doubled path — which is exactly the trap. No")
+    print("  player draws the join the same way twice. Open them up (`4 open`,")
+    print("  `b open`) and the shape survives with nothing to reproduce.")
+    print("  CLOSURE is the other, and it is not curvature. `life` is the")
+    print("  alphabet's only closed shape, and not-quite-closing is what hands do")
+    print("  without noticing. Every closed candidate inherits it: an open box")
+    print("  reads as a circle, and a heart reads as a reverse spiral.")
 
 
 def main():

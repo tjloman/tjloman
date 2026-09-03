@@ -203,6 +203,24 @@ func msaa_3d() -> Viewport.MSAA:
 	return Viewport.MSAA_2X if effective_tier() >= Tier.MEDIUM else Viewport.MSAA_DISABLED
 
 
+## HOW FINE THE GROUND IS CUT, in quads along a 48m chunk. The mesh and the
+## collision heightmap are both built from this grid, so it is the resolution of
+## the world you can see AND the one you walk on and dig into.
+##
+## It was a flat 12 — four-metre triangles — because building a chunk was
+## expensive. It was expensive because it was doing the same work five times
+## over (see Chunk._build_terrain), and it is not any more, so this can be what
+## the shape of the land deserves rather than what the noise budget allowed.
+## Triangles were never the constraint: even 24 is 1,152 a chunk, and a phone
+## draws a million a frame without noticing.
+## Counted, not guessed: a 24x24 chunk costs 3,750 noise evaluations to build
+## against the old 12x12's 12,772, and 32x32 costs 6,534 — so even the finest
+## of these is half the price of what shipped. Memory across a 7x7 of loaded
+## chunks runs 4.7 MB at 24 and 8.4 MB at 32, which on a phone is nothing.
+func chunk_cells() -> int:
+	return [16, 24, 32][effective_tier()]
+
+
 func load_radius() -> int:
 	return [2, 3, 3][effective_tier()]
 

@@ -66,18 +66,34 @@ func _reground() -> void:
 	_standing = kept
 
 
+## CUT THE LAND. A grid of heights, a colour for each corner of it, and two
+## triangles per cell — plus the same grid handed straight to the collision
+## heightmap, so what you see and what you walk on cannot disagree.
+##
+## THE COST IS ALL IN THE COLOURS, and it used to be spent five times over.
+## `ground_color` was called once per EMITTED vertex — six per quad, 864 for a
+## 12x12 chunk — when the grid only has 169 distinct corners, and each call ran
+## `slope_at`, which is three more `height_at`. That came to about 12,800 noise
+## evaluations for one chunk, of which roughly nine tenths were the same
+## question asked again.
+##
+## Now the colour is worked out once per grid corner and looked up six times,
+## and the slope is differenced from the heights already sampled instead of
+## being re-derived from the noise. About 1,000 evaluations for the same
+## 12x12 chunk — which is what pays for the grid being 24x24 instead.
 func _build_terrain() -> void:
-	var cells := WorldGen.CHUNK_CELLS
+	var cells := world.chunk_cells
 	var step := WorldGen.CHUNK_SIZE / cells
+	var wide := cells + 1
 	var heights := PackedFloat32Array()
-	heights.resize((cells + 1) * (cells + 1))
+	heights.resize(wide * wide)
 
 	# Sample the height grid (in world space; chunk origin is our position),
 	# keeping the lowest — the water pass needs it and it is free here.
 	_lowest = INF
 	_lowest_seeded = INF
-	for z in cells + 1:
-		for x in cells + 1:
+	for z in wide:
+		for x in wide:
 			var wx := position.x + x * step
 			var wz := position.z + z * step
 			# Split rather than one `height_at` call: the seeded height is the
@@ -85,11 +101,28 @@ func _build_terrain() -> void:
 			# from a bomb crater without measuring the chunk twice.
 			var seeded := world.seeded_height_at(wx, wz)
 			var h := seeded + world.scars.offset_at(wx, wz)
-			heights[z * (cells + 1) + x] = h
+			heights[z * wide + x] = h
 			_lowest_seeded = minf(_lowest_seeded, seeded)
 			if h < _lowest:
 				_lowest = h
 				_deepest = Vector2(wx, wz)
+
+	# One colour per corner, with the slope DIFFERENCED from the grid rather
+	# than sampled afresh. `ground_color` wants the rise over two metres, so the
+	# step difference is scaled to that — otherwise a four-metre grid reports
+	# half the true steepness and every cliff comes out green.
+	var tint := PackedColorArray()
+	tint.resize(wide * wide)
+	var per_two := 2.0 / step
+	for z in wide:
+		for x in wide:
+			var i := z * wide + x
+			var h: float = heights[i]
+			var ax: int = i + 1 if x < cells else i - 1
+			var az: int = i + wide if z < cells else i - wide
+			var slope := maxf(absf(heights[ax] - h), absf(heights[az] - h)) * per_two
+			tint[i] = world.ground_color(
+				position.x + x * step, position.z + z * step, h, slope)
 
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -97,16 +130,17 @@ func _build_terrain() -> void:
 		for x in cells:
 			var x0 := x * step
 			var z0 := z * step
+			var at := [z * wide + x, z * wide + x + 1,
+				(z + 1) * wide + x + 1, (z + 1) * wide + x]
 			var corners := [
-				Vector3(x0, heights[z * (cells + 1) + x], z0),
-				Vector3(x0 + step, heights[z * (cells + 1) + x + 1], z0),
-				Vector3(x0 + step, heights[(z + 1) * (cells + 1) + x + 1], z0 + step),
-				Vector3(x0, heights[(z + 1) * (cells + 1) + x], z0 + step),
+				Vector3(x0, heights[at[0]], z0),
+				Vector3(x0 + step, heights[at[1]], z0),
+				Vector3(x0 + step, heights[at[2]], z0 + step),
+				Vector3(x0, heights[at[3]], z0 + step),
 			]
 			for idx in [0, 1, 2, 0, 2, 3]:
-				var v: Vector3 = corners[idx]
-				st.set_color(world.ground_color(position.x + v.x, position.z + v.z, v.y))
-				st.add_vertex(v)
+				st.set_color(tint[at[idx]])
+				st.add_vertex(corners[idx])
 	st.generate_normals()
 
 	_ground = MeshInstance3D.new()
@@ -125,8 +159,8 @@ func _build_terrain() -> void:
 	body.add_to_group("ground")
 	var shape := CollisionShape3D.new()
 	var hshape := HeightMapShape3D.new()
-	hshape.map_width = cells + 1
-	hshape.map_depth = cells + 1
+	hshape.map_width = wide
+	hshape.map_depth = wide
 	hshape.map_data = heights
 	shape.shape = hshape
 	shape.scale = Vector3(step, 1.0, step)
