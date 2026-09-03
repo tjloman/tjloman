@@ -169,6 +169,35 @@ def classify(points, want_margin=False):
     return order[0][0]
 
 
+def peek(points, templates=None):
+    """Mirrors `GestureRecognizer.peek`: the reading, AND how sure it is.
+
+    Confidence is two things multiplied out — how well the best template FITS,
+    and how far it LEADS whatever came second. A stroke sitting between two
+    shapes reads as uncertain even when its nearest match is close, which is
+    what lets the on-screen readout show indecision instead of flickering
+    between confident wrong answers.
+    """
+    T = templates if templates is not None else TEMPLATES
+    if len(points) < 6 or path_length(points) < MIN_PATH_LENGTH:
+        return "none", 0.0
+    drawn = normalize(points)
+    backwards = drawn[::-1]
+    best = second = MATCH_LIMIT * 2.0
+    name = "none"
+    for shape, tpls in T.items():
+        near = min(min(distance(drawn, t), distance(backwards, t)) for t in tpls)
+        if near < best:
+            second, best, name = best, near, shape
+        elif near < second:
+            second = near
+    if best >= MATCH_LIMIT:
+        return "none", 0.0
+    fit = 1.0 - best / MATCH_LIMIT
+    lead = max(0.0, min((second - best) / 22.0, 1.0))
+    return name, max(0.0, min(fit * 0.45 + lead * 0.55, 1.0))
+
+
 # ---- how a person draws, and what a struggling phone does to it -------------
 
 SHAPES = {
@@ -347,11 +376,100 @@ def thermal_report():
     return fragile
 
 
+# ---- WHAT HAPPENS IF WE SWAP A GLYPH IN -------------------------------------
+#
+# The first version of this scored a candidate by its DISTANCE to the nearest
+# existing template — a static, geometric question. That ranked a closed box
+# first and a sharp Z last, and it was wrong, because it never asked what
+# happens when a PLAYER draws the thing.
+#
+# This asks that instead: add the candidate to the alphabet, have a hand draw
+# it (including the ways a hand gets it wrong), and read it back with the same
+# confidence measure the game now shows on screen. The ranking inverts.
+
+def _poly(pts, closed=False):
+    p = list(pts) + ([pts[0]] if closed else [])
+
+    def f(t, off=0.0):
+        u = (t + off) % 1.0 if closed else t
+        n = len(p) - 1
+        seg = min(int(u * n), n - 1)
+        k = u * n - seg
+        a, b = p[seg], p[seg + 1]
+        return (a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k)
+    return f
+
+
+CANDIDATES = {
+    "box": (_poly([(320, 220), (480, 220), (480, 380), (320, 380)], True), True),
+    "triangle": (_poly([(400, 195), (487, 365), (313, 365)], True), True),
+    "diamond": (_poly([(400, 190), (495, 300), (400, 410), (305, 300)], True), True),
+    "zed": (_poly([(290, 190), (510, 190), (290, 405), (510, 405)]), False),
+    "ell": (_poly([(330, 185), (330, 395), (505, 395)]), False),
+    "tee": (_poly([(300, 205), (500, 205), (400, 205), (400, 410)]), False),
+    "cross": (_poly([(400, 180), (400, 420), (400, 300), (275, 300), (525, 300)]), False),
+    "staple": (_poly([(320, 200), (320, 390), (480, 390), (480, 200)]), False),
+    "bolt": (_poly([(445, 165), (335, 300), (420, 300), (300, 440)]), False),
+    "sq_spiral": (_poly([(430, 240), (340, 240), (340, 360), (460, 360),
+                         (460, 220), (320, 220)]), False),
+}
+
+## How a hand gets a shape wrong. For a CLOSED shape the sloppiness is
+## involuntary — nobody notices they did not quite meet the start — which is
+## exactly why closure is the dangerous property. Truncating an open shape by a
+## quarter removes a whole limb, and a player would know they had done it.
+CLOSED_SLOPS = [("as intended", 1.0), ("lifted early", 0.82), ("overshot", 1.16)]
+
+
+def swap_report():
+    build_templates()
+    print("SWAPPING A CANDIDATE INTO THE ALPHABET")
+    print("  Added to the real 84 reference drawings, then drawn by a hand.\n")
+    print("  %-11s %-7s %-6s  %s" % ("candidate", "closed", "conf", "how it reads when drawn"))
+    rows = []
+    for name, (shape, closed) in CANDIDATES.items():
+        offs = (0.0, 0.25, 0.5, 0.75) if closed else (0.0,)
+        TEMPLATES["_c"] = [normalize([shape(i / (SAMPLES - 1), o)
+                                      for i in range(SAMPLES)]) for o in offs]
+        slops = CLOSED_SLOPS if closed else [("as intended", 1.0)]
+        hits = tries = 0
+        confs = []
+        lost = {}
+        for _lbl, sweep in slops:
+            for cond in [c[1] for c in CONDITIONS[:4]]:
+                for s in range(8):
+                    got, conf = peek(stroke(
+                        lambda t, sw=sweep: shape(t * sw, 0.0), s, **cond))
+                    tries += 1
+                    if got == "_c":
+                        hits += 1
+                        confs.append(conf)
+                    else:
+                        lost[got] = lost.get(got, 0) + 1
+        del TEMPLATES["_c"]
+        rate = 100 * hits / tries
+        med = sorted(confs)[len(confs) // 2] if confs else 0.0
+        top = max(lost.items(), key=lambda kv: kv[1])[0] if lost else ""
+        rows.append((rate, med, name, closed, top))
+    for rate, med, name, closed, top in sorted(rows, reverse=True):
+        print("  %-11s %-7s %.2f   %3.0f%%%s" % (
+            name, "yes" if closed else "no", med, rate,
+            ("   drawn loosely it becomes %s" % top) if top else ""))
+    print("\n  CLOSURE IS THE PROBLEM, NOT CURVATURE. `life` is the alphabet's only")
+    print("  closed shape, and not-quite-closing is what hands do without noticing.")
+    print("  Every closed candidate inherits it: an open box reads as a circle.")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Rune legibility under stress")
     ap.add_argument("--hand", action="store_true", help="only the loop test")
     ap.add_argument("--thermal", action="store_true", help="only the degradation test")
+    ap.add_argument("--swap", action="store_true",
+                    help="score candidate glyphs by swapping them in")
     args = ap.parse_args()
+    if args.swap:
+        swap_report()
+        return 0
     if not args.thermal:
         hand_report()
         print()
