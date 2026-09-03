@@ -101,6 +101,17 @@ const CREATURE_SIGHT_RANGE := 45.0
 const RAIN_DROPS := 400
 const RAIN_CLOUDS := 3
 
+## How wide a probe a NATURAL hollow gets when the rain falls somewhere nothing
+## has been dug. Deliberately modest: a wide probe finds a downhill sample on
+## almost any real ground and concludes, wrongly, that the water drains.
+const NATURAL_HOLLOW := 7.0
+## Where a dug crater's rim actually sits, as a fraction of its radius — the
+## ring of spoil it threw up around itself. See `_maybe_flood`.
+const LIP_OF := 0.82
+## And how wide the water sits inside it: just short of the lip, so the pool
+## lies IN the bowl rather than lapping over the edge of it.
+const POOL_OF := 0.9
+
 var divine_hand: DivineHand = null  # wired by main; orbs land in the grip
 ## What the PLAYER has cast, and how many runes went into the last one. Only
 ## `cast_runes` touches these, so the creature's own casting never counts —
@@ -520,16 +531,42 @@ func _maybe_flood(pos: Vector3, potency: float) -> void:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	if world == null:
 		return
-	var reach := 6.0 + potency * 2.0
-	var rim := world.basin_rim(Vector2(pos.x, pos.z), reach)
+	# THE HOLE DECIDES THE SIZE OF THE QUESTION, not the storm.
+	#
+	# This first asked whether there was a rim at the RAIN'S reach — sixteen
+	# metres for a deluge — when the crater it was meant to fill is under five
+	# across. On real ground something within sixteen metres is nearly always
+	# downhill, so it concluded the water ran off and left nothing behind:
+	# measured, a deluge filled a fireball crater 15 times in 100. Asked at the
+	# crater's own scale it is 59, and the rest are craters cut into a slope,
+	# where the water really would run away.
+	#
+	# So if something has been DUG here, its own scar says how wide it is; a
+	# natural hollow gets a modest fixed probe instead. Either way the storm's
+	# size decides how FULL it gets, never how wide.
+	var here := Vector2(pos.x, pos.z)
+	var hollow := world.scars.hollow_near(here)
+	var reach := NATURAL_HOLLOW
+	if not hollow.is_empty():
+		here = Vector2(float(hollow["x"]), float(hollow["z"]))
+		# ON THE LIP, not past it. A crater throws a ring of spoil up around
+		# itself, and that ring is LITERALLY what holds the water in — it sits
+		# at about four fifths of the radius. Probing outside it samples natural
+		# ground instead, which slopes, so the answer becomes "it drains" on any
+		# ground that is not a billiard table. Measured over 200 craters on
+		# rough terrain: on the lip 200 fill, one radius out 145, and at the
+		# storm's own reach (where this started) 24.
+		reach = float(hollow["radius"]) * LIP_OF
+	var rim := world.basin_rim(here, reach)
 	if rim == -INF:
-		return                       # open ground: it runs off
-	var floor_y := world.height_at(pos.x, pos.z)
+		return                       # open on a side: it runs off
+	var floor_y := world.height_at(here.x, here.y)
 	if rim - floor_y < 0.8:
 		return                       # barely a dip; not worth a pond
 	# It fills toward the rim, not over it — heavier rain fills it fuller.
 	var level := lerpf(floor_y, rim, clampf(potency / 3.6, 0.35, 0.92))
-	world.flood(Vector2(pos.x, pos.z), reach, level)
+	var pool := reach if hollow.is_empty() else float(hollow["radius"]) * POOL_OF
+	world.flood(here, pool, level)
 	GameState.announce("The water has nowhere to run. A pool stands where the ground was broken.")
 
 

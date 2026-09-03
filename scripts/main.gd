@@ -1057,6 +1057,22 @@ func _smoke_test_earth() -> void:
 	assert(is_equal_approx(world_gen.scars.offset_at(spot.x, spot.y),
 		echo.offset_at(spot.x, spot.y)), "a saved world must come back the same shape")
 
+	# RAIN INTO A HOLE MUST STAND IN IT. This shipped broken: the flood probe
+	# was sized to the STORM (sixteen metres for a deluge) rather than to the
+	# crater (under five), so on any real ground it found a downhill sample and
+	# concluded the water drained away. Asserted here because the failure is
+	# silent — the rain falls, looks right, and simply leaves nothing.
+	var dry := Vector3(150, 0, 250)
+	miracles.resolve("fireball", dry)
+	await get_tree().create_timer(0.3).timeout
+	var dug := world_gen.height_at(dry.x, dry.z)
+	miracles.resolve("deluge", dry)
+	await get_tree().create_timer(0.3).timeout
+	var pooled := world_gen.water_level_at(dry.x, dry.z)
+	print("SMOKE TEST: deluge into a crater — floor %.2f, water %.2f, %s" % [
+		dug, pooled, "A POOL STANDS" if pooled > dug else "nothing stood"])
+	assert(pooled > dug, "a deluge must leave water standing in a crater")
+
 	# And the new workings themselves, resolved directly (the unlock ladder is
 	# the player's problem, not the test's).
 	for miracle: String in ["earthquake", "volcano", "water_walk", "healing_shower"]:
