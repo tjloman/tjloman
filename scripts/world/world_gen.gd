@@ -309,6 +309,19 @@ func deform(kind: int, at: Vector2, radius: float, amount: float,
 
 ## Rebuild every LOADED chunk overlapping a patch of world. Chunks not loaded
 ## need nothing: they read the scars when they are next built.
+## HOW HIGH THE GROUND ALREADY STANDS ABOVE ITS SURROUNDINGS HERE — what a
+## mountain has to check before it grows any further.
+func relief_at(x: float, z: float) -> float:
+	return scars.offset_at(x, z)
+
+
+## Grow a scar already cut into the world, and rebuild what stands on it.
+func reshape(scar: Dictionary, amount: float, radius := -1.0) -> void:
+	var was := TerrainScars.reach_of(scar)
+	scars.reshape(scar, amount, radius)
+	rebuild_around(was.merge(TerrainScars.reach_of(scar)))
+
+
 func rebuild_around(area: Rect2) -> void:
 	# Grown by a metre, which is exactly what the shared edges need and no more.
 	# A chunk's rim vertices sit at the same world points as its neighbour's, so

@@ -1659,8 +1659,13 @@ func _tick_hazards(delta: float) -> void:
 		return
 	var world := _world()
 	if world != null:
-		var depth := WorldGen.WATER_LEVEL - world.height_at(global_position.x, global_position.z)
-		if depth > DROWN_DEPTH and global_position.y < WorldGen.WATER_LEVEL + 0.4:
+		# Against whatever water is ACTUALLY here — the sea, or a pond standing
+		# in a flooded crater. This read the sea's constant, so a pond was
+		# "underwater" for farming, pathing and catching fire, but not for
+		# drowning: one rule for the ground, another for the people on it.
+		var surface := world.water_level_at(global_position.x, global_position.z)
+		var depth := surface - world.height_at(global_position.x, global_position.z)
+		if depth > DROWN_DEPTH and global_position.y < surface + 0.4:
 			if burning:
 				extinguish()  # water douses the flames, but the drowning goes on
 			health -= HAZARD_RATE * delta

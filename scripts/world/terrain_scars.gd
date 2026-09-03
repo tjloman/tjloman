@@ -41,6 +41,13 @@ enum Kind {
 ## fixed nine buckets no matter how much of the world has been cratered.
 const BUCKET := 32.0
 
+## NOTHING MAY PILE UP FOREVER. The ceiling on how far one scar can push the
+## ground, in metres. Scars ADD, so without this two casts on one spot make a
+## tower twice as tall as either, three make it three times, and a volcano cast
+## a few times over becomes Olympus Mons. Roughly the height of the tallest
+## trees plus half again — a landmark, not an orbital feature.
+const MOST_RELIEF := 34.0
+
 ## Every scar cut into the world, and the buckets that index them.
 var _scars: Array[Dictionary] = []
 var _buckets := {}
@@ -67,8 +74,8 @@ func add(kind: int, at: Vector2, radius: float, amount: float, rings := 3.0,
 	radius = clampf(radius, 1.0, BUCKET)
 	var scar := {
 		"kind": kind, "x": at.x, "z": at.y,
-		"radius": radius, "amount": amount, "rings": rings,
-		"char": char_amount,
+		"radius": radius, "amount": clampf(amount, -MOST_RELIEF, MOST_RELIEF),
+		"rings": rings, "char": char_amount,
 	}
 	_scars.append(scar)
 	_index(scar)
@@ -165,6 +172,32 @@ func _contribution(scar: Dictionary, x: float, z: float) -> float:
 		_:
 			# BASIN: a plain smooth sink, no lip, no ringing.
 			return amount * pow(cos(t * PI * 0.5), 2.0)
+
+
+## GROW A SCAR THAT IS ALREADY THERE, rather than laying another on top of it.
+##
+## This is what makes a mountain RISE instead of appearing: a volcano keeps one
+## scar and widens and heightens it over a minute. Adding a fresh scar each time
+## would sum, which is exactly how the first volcano ended up a spire.
+##
+## The height is capped here rather than at the call site, so no caller can
+## reach past the ceiling by accident.
+func reshape(scar: Dictionary, amount: float, radius := -1.0) -> void:
+	if radius > 0.0:
+		# Re-filed under its new footprint, since a wider scar touches more
+		# buckets than it did.
+		_drop_from_buckets(scar)
+		scar["radius"] = clampf(radius, 1.0, BUCKET)
+		_index(scar)
+		_grow_bounds(Vector2(float(scar["x"]), float(scar["z"])), float(scar["radius"]))
+	scar["amount"] = clampf(amount, -MOST_RELIEF, MOST_RELIEF)
+
+
+func _drop_from_buckets(scar: Dictionary) -> void:
+	for key: Vector2i in _buckets:
+		var here: Array = _buckets[key]
+		if scar in here:
+			here.erase(scar)
 
 
 ## THE HOLE NEAREST THIS POINT, if there is one — the scar that dug it, whole.

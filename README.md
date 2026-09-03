@@ -709,9 +709,23 @@ find the new ground themselves, which looks far better than teleporting.)
 | Runes | Miracle | What it does to the land |
 |---|---|---|
 | earth + fury | **earthquake** | a ripple of standing waves grows outward in three passes, and everything on it is thrown about |
-| earth + fire + fury | **volcano** | raises a mountain with a crater bitten out of its summit, then erupts |
+| earth + fire + fury | **volcano** | one scar grown over a full minute, spilling lava the whole way, into a mountain with a crater bitten out of its summit |
 | ward + water | **water walk** | *(no terrain)* the creature crosses lakes at a full stride |
 | calm + life + water | **healing shower** | *(no terrain)* ten seconds of green rain that douses every fire and mends what stands in it |
+
+**Nothing may pile up forever.** Scars *add*, which is what makes a lavaball
+fill a crater exactly — and also what made the first volcano Olympus Mons: it
+laid two cones half a second apart and kept both, and a second cast on the same
+spot doubled the result again. Total relief is now capped at **34 m** (the
+tallest trees plus half again), a volcano grows *one* scar rather than stacking
+them, and each new one is capped against what already stands there — so the
+third cast on a spot is refused rather than trebling the first.
+
+**Standing water keeps off the land people live on.** A pond makes its ground
+"underwater", and underwater ground is not workable: a village quietly starves
+around a pretty blue disc. Rain now refuses to pool within a town's influence,
+and a pond's surface is held a clear margin *below* its rim, since water level
+with the rim spills over and flags plainly dry ground as flooded.
 
 Plus **fireballs now gouge**: a bowl 1.7m deep with a lip of thrown spoil
 around it, burned black, and it stays. The old version laid a dark disc on the

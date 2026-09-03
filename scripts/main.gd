@@ -1074,6 +1074,19 @@ func _smoke_test_earth() -> void:
 		dug, pooled, "A POOL STANDS" if pooled > dug else "nothing stood"])
 	assert(pooled > dug, "a deluge must leave water standing in a crater")
 
+	# NO MOUNTAIN MAY RUN AWAY. Volcanoes grow one scar rather than stacking
+	# scars, and the total relief is capped — cast three on one spot and the
+	# third must not treble the first, which is exactly what Olympus Mons was.
+	var peak := Vector3(150, 0, 330)
+	var virgin := world_gen.height_at(peak.x, peak.z)
+	for again in 3:
+		miracles.resolve("volcano", peak)
+		await get_tree().create_timer(0.6).timeout
+	var raised := world_gen.height_at(peak.x, peak.z) - virgin
+	print("SMOKE TEST: three volcanoes on one spot — relief %.1f m (ceiling %.0f)" % [
+		raised, TerrainScars.MOST_RELIEF])
+	assert(raised <= TerrainScars.MOST_RELIEF + 0.01, "relief must never pass its ceiling")
+
 	# And the new workings themselves, resolved directly (the unlock ladder is
 	# the player's problem, not the test's).
 	for miracle: String in ["earthquake", "volcano", "water_walk", "healing_shower"]:

@@ -105,12 +105,26 @@ const RAIN_CLOUDS := 3
 ## has been dug. Deliberately modest: a wide probe finds a downhill sample on
 ## almost any real ground and concludes, wrongly, that the water drains.
 const NATURAL_HOLLOW := 7.0
+
+## A VOLCANO, and how slowly it arrives. It used to be two deforms half a
+## second apart, which read as a spire appearing — and because scars ADD, a
+## second cast on the same spot doubled it. It now grows ONE scar over a full
+## minute, spilling lava the whole way, and is capped both by its own height
+## and by how much relief already stands there.
+const VOLCANO_HEIGHT := 18.0
+const VOLCANO_SECONDS := 60.0
+const VOLCANO_STEPS := 24
 ## Where a dug crater's rim actually sits, as a fraction of its radius — the
 ## ring of spoil it threw up around itself. See `_maybe_flood`.
 const LIP_OF := 0.82
 ## And how wide the water sits inside it: just short of the lip, so the pool
 ## lies IN the bowl rather than lapping over the edge of it.
 const POOL_OF := 0.9
+## How far below the rim a pond's surface must sit. Level with the rim, the
+## water spills and every point out to the pond's radius reads as underwater.
+const FREEBOARD := 0.4
+## And how clear of a town's edge standing water must keep.
+const TOWN_CLEARANCE := 8.0
 
 var divine_hand: DivineHand = null  # wired by main; orbs land in the grip
 ## What the PLAYER has cast, and how many runes went into the last one. Only
@@ -557,17 +571,41 @@ func _maybe_flood(pos: Vector3, potency: float) -> void:
 		# rough terrain: on the lip 200 fill, one radius out 145, and at the
 		# storm's own reach (where this started) 24.
 		reach = float(hollow["radius"]) * LIP_OF
+	# NEVER ON A TOWN. A pond makes its ground "underwater", and underwater
+	# ground is not workable: the farms stop, and a village quietly starves
+	# around a pretty blue disc. Whatever else rain may do, it does not drown
+	# your own people while your back is turned.
+	if _settled_near(here):
+		return
 	var rim := world.basin_rim(here, reach)
 	if rim == -INF:
 		return                       # open on a side: it runs off
 	var floor_y := world.height_at(here.x, here.y)
 	if rim - floor_y < 0.8:
 		return                       # barely a dip; not worth a pond
-	# It fills toward the rim, not over it — heavier rain fills it fuller.
-	var level := lerpf(floor_y, rim, clampf(potency / 3.6, 0.35, 0.92))
+	# It fills toward the rim and STOPS SHORT OF IT. A surface level with the
+	# rim spills over the edge, and every point out to the pond's radius then
+	# reads as underwater — including ground that is plainly dry. Held a clear
+	# margin below, the water sits in the bowl where it belongs.
+	var level := lerpf(floor_y, rim - FREEBOARD, clampf(potency / 3.6, 0.35, 0.92))
+	if level <= floor_y + 0.25:
+		return                       # not enough to be worth calling a pond
 	var pool := reach if hollow.is_empty() else float(hollow["radius"]) * POOL_OF
 	world.flood(here, pool, level)
 	GameState.announce("The water has nowhere to run. A pool stands where the ground was broken.")
+
+
+## Is there a settlement here? Ponds and other standing water keep away from
+## the ground people live and farm on.
+func _settled_near(at: Vector2) -> bool:
+	for v in get_tree().get_nodes_in_group("village"):
+		var town := v as Village
+		if not is_instance_valid(town):
+			continue
+		var flat := Vector2(town.global_position.x, town.global_position.z)
+		if flat.distance_to(at) < town.influence_radius + TOWN_CLEARANCE:
+			return true
+	return false
 
 
 ## Moving the earth -----------------------------------------------------------
@@ -716,81 +754,124 @@ func _cast_lavaball(pos: Vector3, potency := 1.0) -> void:
 ## leaves behind is permanent — a volcano is a landmark, not an event.
 func _cast_volcano(pos: Vector3, potency := 1.0) -> void:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-	var reach := minf(13.0 + 5.0 * potency, TerrainScars.BUCKET)
+	var reach := minf(15.0 + 6.0 * potency, TerrainScars.BUCKET)
 	SoundBank.play_at("boom", pos, 6.0)
-	if world != null:
-		# The mountain rises in two bites so it is seen to GROW out of the land.
-		world.deform(TerrainScars.Kind.CONE, Vector2(pos.x, pos.z),
-			reach * 0.6, 5.0 + 3.0 * potency, 3.0, 0.35)
-		_shake_camera(1.4)
-		await get_tree().create_timer(0.7).timeout
-		if not is_instance_valid(self):
+	if world == null:
+		return
+	# HOW TALL THIS ONE GETS, decided once and then never exceeded. Capped
+	# against the ceiling on all relief AND against what is already standing
+	# here, so a second volcano on the same spot finishes the first rather
+	# than doubling it — which is how the first one became Olympus Mons.
+	var standing := world.relief_at(pos.x, pos.z)
+	var summit := minf(VOLCANO_HEIGHT * lerpf(0.8, 1.25, clampf(potency / 3.0, 0.0, 1.0)),
+		TerrainScars.MOST_RELIEF - standing)
+	if summit < 3.0:
+		GameState.announce("The ground here is already as high as it will go.")
+		return
+
+	# IT RISES. One scar, grown over a minute — not a stack of scars, which
+	# sum, and not one deform, which simply appears. The mountain is SEEN to
+	# push up out of the ground, spilling lava the whole way.
+	var scar := world.deform(TerrainScars.Kind.CONE, Vector2(pos.x, pos.z),
+		reach * 0.35, summit * 0.12, 3.0, 0.3)
+	var molten := _lava_fountain(pos, reach, 0.35)
+	var glare := _lava_glare(pos, reach)
+	for step in range(1, VOLCANO_STEPS + 1):
+		await get_tree().create_timer(VOLCANO_SECONDS / VOLCANO_STEPS).timeout
+		if not is_instance_valid(self) or not is_instance_valid(world):
 			return
-		world.deform(TerrainScars.Kind.CONE, Vector2(pos.x, pos.z),
-			reach, 7.0 + 5.0 * potency, 3.0, 0.6)
-		_shake_camera(1.8)
-	var summit := pos
-	if world != null:
-		summit.y = world.height_at(pos.x, pos.z)
-	_erupt(summit, reach, potency)
+		# Eased so it surges early and settles late, the way a dome actually
+		# grows, rather than climbing at a constant rate.
+		var t := float(step) / VOLCANO_STEPS
+		var swell := 1.0 - pow(1.0 - t, 2.2)
+		world.reshape(scar, summit * lerpf(0.12, 1.0, swell), reach * lerpf(0.35, 1.0, swell))
+		var top := pos
+		top.y = world.height_at(pos.x, pos.z)
+		if is_instance_valid(molten):
+			molten.position = top + Vector3(0, 1.5, 0)
+			molten.emission_sphere_radius = reach * lerpf(0.06, 0.15, swell)
+		if is_instance_valid(glare):
+			glare.position = top + Vector3(0, 3.0, 0)
+		_shake_camera(0.5 + swell * 0.9)
+		# It sets the country alight as it goes, not only at the end.
+		if step % 3 == 0:
+			_scorch_around(top, reach * lerpf(0.7, 1.8, swell), potency)
+
+	var crest := pos
+	crest.y = world.height_at(pos.x, pos.z)
+	GameState.announce("A mountain stands where there was none, and it is burning.")
+	_erupt(crest, reach, potency, molten, glare)
 
 
-## The eruption itself: a column of fire from the mouth, a glow that lights the
-## whole valley, and the country around it catching alight.
-func _erupt(summit: Vector3, reach: float, potency: float) -> void:
-	var fountain := CPUParticles3D.new()
-	fountain.amount = Quality.particles(220)
-	fountain.lifetime = 3.2
-	fountain.mesh = Util.speck_mesh(0.5, 0.5, Color(1.0, 0.55, 0.12, 0.95), true)
-	fountain.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
-	fountain.emission_sphere_radius = reach * 0.15
-	fountain.direction = Vector3.UP
-	fountain.spread = 32.0
-	fountain.initial_velocity_min = 14.0
-	fountain.initial_velocity_max = 26.0
-	fountain.gravity = Vector3(0, -14.0, 0)
-	fountain.position = summit + Vector3(0, 1.5, 0)
-	add_child(fountain)
-
-	var glare := OmniLight3D.new()
-	glare.light_color = Color(1.0, 0.42, 0.12)
-	glare.light_energy = 7.0
-	glare.omni_range = reach * 3.5
-	glare.shadow_enabled = false
-	glare.position = summit + Vector3(0, 3.0, 0)
-	add_child(glare)
-
-	# Everything in the country around it burns.
-	var burn := reach * 1.8
+## Everything within reach catches, called repeatedly as the mountain climbs.
+func _scorch_around(at: Vector3, reach: float, potency: float) -> void:
 	for t in get_tree().get_nodes_in_group("trees"):
 		var tree := t as WildTree
-		if is_instance_valid(tree) and tree.global_position.distance_to(summit) < burn:
+		if is_instance_valid(tree) and tree.global_position.distance_to(at) < reach:
 			tree.ignite()
 	for f in get_tree().get_nodes_in_group("farms"):
 		var farm := f as Farm
-		if is_instance_valid(farm) and farm.global_position.distance_to(summit) < burn:
+		if is_instance_valid(farm) and farm.global_position.distance_to(at) < reach:
 			farm.ignite()
 	for grp in ["villagers", "animals"]:
 		for n in get_tree().get_nodes_in_group(grp):
 			var body := n as Node3D
 			if not is_instance_valid(body):
 				continue
-			var d := body.global_position.distance_to(summit)
-			if d < burn and body.has_method("ignite"):
+			var d := body.global_position.distance_to(at)
+			if d < reach and body.has_method("ignite"):
 				body.call("ignite")
-			if d < burn * 1.6 and body.has_method("scare"):
-				body.call("scare", summit)
-	_quake_everything(summit, burn, potency)
+			if d < reach * 1.5 and body.has_method("scare"):
+				body.call("scare", at)
+	_quake_everything(at, reach, potency * 0.4)
 
-	# It burns itself out, and the mountain it built stays. The fountain stops
-	# EMITTING rather than being faded out, so the last thrown embers finish
-	# their arc instead of blinking away mid-air.
+
+## The lava itself, thrown from the mouth for as long as the mountain grows.
+func _lava_fountain(at: Vector3, reach: float, wide: float) -> CPUParticles3D:
+	var molten := CPUParticles3D.new()
+	molten.amount = Quality.particles(180)
+	molten.lifetime = 2.8
+	molten.mesh = Util.speck_mesh(0.45, 0.45, Color(1.0, 0.5, 0.1, 0.95), true)
+	molten.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	molten.emission_sphere_radius = reach * wide * 0.4
+	molten.direction = Vector3.UP
+	molten.spread = 34.0
+	molten.initial_velocity_min = 9.0
+	molten.initial_velocity_max = 19.0
+	molten.gravity = Vector3(0, -13.0, 0)
+	molten.position = at + Vector3(0, 1.5, 0)
+	add_child(molten)
+	return molten
+
+
+func _lava_glare(at: Vector3, reach: float) -> OmniLight3D:
+	var glare := OmniLight3D.new()
+	glare.light_color = Color(1.0, 0.42, 0.12)
+	glare.light_energy = 6.0
+	glare.omni_range = reach * 3.0
+	glare.shadow_enabled = false
+	glare.position = at + Vector3(0, 3.0, 0)
+	add_child(glare)
+	return glare
+
+
+## The eruption winding down. The fountain and the glare have been burning
+## since the mountain began to rise; this lets them run on for a while and then
+## fade, leaving the mountain behind.
+func _erupt(summit: Vector3, reach: float, potency: float,
+		molten: CPUParticles3D, glare: OmniLight3D) -> void:
+	_scorch_around(summit, reach * 1.8, potency)
 	var over := get_tree().create_tween()
-	over.tween_interval(9.0)
-	over.tween_callback(func() -> void: fountain.emitting = false)
-	over.tween_property(glare, "light_energy", 0.0, 3.0)
-	over.tween_callback(glare.queue_free)
-	over.tween_callback(fountain.queue_free)
+	over.tween_interval(10.0)
+	over.tween_callback(func() -> void:
+		if is_instance_valid(molten):
+			molten.emitting = false)
+	if is_instance_valid(glare):
+		over.tween_property(glare, "light_energy", 0.0, 4.0)
+		over.tween_callback(glare.queue_free)
+	over.tween_callback(func() -> void:
+		if is_instance_valid(molten):
+			molten.queue_free())
 
 
 func _shake_camera(strength: float) -> void:
