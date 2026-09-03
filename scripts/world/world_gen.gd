@@ -419,8 +419,9 @@ func deform(kind: int, at: Vector2, radius: float, amount: float,
 ## need nothing: they read the scars when they are next built.
 ## Pour a load of something onto the ground — merging into whatever is already
 ## piled there — and rebuild what stands on it. See TerrainScars.deposit.
-func pour(kind: int, at: Vector2, radius: float, amount: float) -> Dictionary:
-	var scar := scars.deposit(kind, at, radius, amount)
+func pour(kind: int, at: Vector2, radius: float, amount: float,
+		char_amount := 0.0) -> Dictionary:
+	var scar := scars.deposit(kind, at, radius, amount, char_amount)
 	_sea_cache.clear()
 	rebuild_around(TerrainScars.reach_of(scar))
 	return scar

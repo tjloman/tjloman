@@ -193,7 +193,11 @@ func _contribution(scar: Dictionary, x: float, z: float) -> float:
 ## where the new load fell. Thirty globs settle into a handful of scars, the
 ## mountain still emerges from where they actually landed, and `height_at` stays
 ## cheap. Returns the scar that ended up holding it.
-func deposit(kind: int, at: Vector2, radius: float, amount: float) -> Dictionary:
+## `char_amount` blackens as `add` does, and on a merge the darker of the two
+## wins — so a spot shelled over and over is one scar, burned black, rather than
+## a growing pile of them.
+func deposit(kind: int, at: Vector2, radius: float, amount: float,
+		char_amount := 0.0) -> Dictionary:
 	for scar in _scars:
 		if int(scar["kind"]) != kind:
 			continue
@@ -208,10 +212,11 @@ func deposit(kind: int, at: Vector2, radius: float, amount: float) -> Dictionary
 		var moved := centre.lerp(at, pull)
 		scar["x"] = moved.x
 		scar["z"] = moved.y
+		scar["char"] = maxf(float(scar.get("char", 0.0)), char_amount)
 		reshape(scar, float(scar["amount"]) + amount,
 			maxf(float(scar["radius"]), radius) + gap * 0.35)
 		return scar
-	return add(kind, at, radius, amount)
+	return add(kind, at, radius, amount, 3.0, char_amount)
 
 
 ## GROW A SCAR THAT IS ALREADY THERE, rather than laying another on top of it.

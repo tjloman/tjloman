@@ -106,6 +106,41 @@ const RAIN_CLOUDS := 3
 ## almost any real ground and concludes, wrongly, that the water drains.
 const NATURAL_HOLLOW := 7.0
 
+## AN EARTHQUAKE BUCKLES THE GROUND. It does not excavate it.
+##
+## It used to cut three concentric RIPPLE scars at nearly the same centre —
+## radii 0.45, 0.725 and 1.0 of an eleven-metre reach, amounts stacking to 2.34
+## times a lift that started at 1.6m. A ripple's profile is 1.0 at its own
+## centre, so all three peaks landed on top of each other: a 3.7m circular
+## welt with concentric moats round it, from one cast, on the cheapest
+## earth-moving miracle in the game. It read as an impact crater rather than as
+## shaken ground, and it compounded viciously when cast twice.
+##
+## So it is a FAULT now: a handful of small separate domes strung out along one
+## heading, some pushed up and some dropped, growing outward from the blow.
+## Bumps and ridges — the ground rucked up like a rug, which is what you
+## actually see after a quake.
+const QUAKE_BUMPS := 3            # at potency 1, plus one per point of potency
+const QUAKE_BUMPS_MOST := 7
+const QUAKE_LIFT := 0.35          # metres, plus a tenth per point of potency
+const QUAKE_BUMP_RADIUS := 4.6
+const QUAKE_SPACING := 1.45       # of a bump's radius, so they read separately
+## How far off the heading one bump may sit, in radians. Small, and NOT
+## multiplied by how far along the fault the bump is: scaling it by the step
+## index let the far end stray three quarters of a radian, so a seven-bump
+## fault at full power bent through seventy-six degrees and came out round
+## again — measured at 1.3 long-to-short against 3.9 for a four-bump one.
+const QUAKE_WANDER := 0.16
+
+## HOW MUCH BUCKLING ONE PATCH OF GROUND WILL TAKE. The quake and the fireball
+## are both meant to be spammable, and scars ADD, so without a ceiling on the
+## TOTAL relief already standing at a point the twentieth cast on one spot is
+## still moving twenty metres of earth. Past this, a bump laid here simply does
+## not happen — quaking fresh ground always works, quaking the same rubble
+## again does nothing. TerrainScars.MOST_RELIEF is the other, far higher
+## ceiling, and it is per scar; this one is about the land as a whole.
+const QUAKE_RELIEF := 2.4
+
 ## A VOLCANO, and how slowly it arrives. It used to be two deforms half a
 ## second apart, which read as a spire appearing — and because scars ADD, a
 ## second cast on the same spot doubled it. It now grows ONE scar over a full
@@ -683,31 +718,79 @@ func _settled_near(at: Vector2) -> bool:
 ## the water, the collision, the routing and where villagers may build all
 ## agree with the new ground without any of them being told.
 
-## THE GROUND CONVULSES. A ripple of standing waves grows outward from the
-## point of the blow — the land itself still ringing — and everything on it is
-## thrown about.
+## THE GROUND CONVULSES ALONG A LINE. A fault opens under the blow and runs
+## outward in both directions, rucking the land up into a string of low domes —
+## some heaved up, some dropped — while everything standing on it is thrown
+## about.
 ##
-## The ripple GROWS: three passes over a second and a half, each wider than the
-## last, so you watch it spread rather than finding a finished pattern. Each
-## pass re-cuts the land, which is why there are three of them and not thirty.
+## The rip is what you watch: the pair of bumps nearest the blow appear first
+## and the fault travels outward from there over about a second, so the quake
+## reads as something propagating rather than a pattern that was simply already
+## finished when you looked.
+##
+## Nothing here excavates. See QUAKE_LIFT for the sizes and QUAKE_RELIEF for
+## why casting it twenty times on one spot does not build a mountain.
 func _cast_earthquake(pos: Vector3, potency := 1.0) -> void:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-	var reach := minf(11.0 + 5.0 * potency, TerrainScars.BUCKET)
-	var lift := 1.1 + 0.5 * potency
+	var lift := QUAKE_LIFT + 0.1 * potency
+	var bumps := mini(QUAKE_BUMPS + int(potency), QUAKE_BUMPS_MOST)
+	var span := QUAKE_BUMP_RADIUS * QUAKE_SPACING
 	SoundBank.play_at("boom", pos, 2.0)
-	_quake_everything(pos, reach * 1.6, potency)
+	_quake_everything(pos, span * bumps * 0.8, potency)
 	if world == null:
 		return
-	for pass_no in 3:
-		var grown := reach * lerpf(0.45, 1.0, pass_no / 2.0)
-		var here := pos + Vector3(randf_range(-2.5, 2.5), 0, randf_range(-2.5, 2.5))
-		world.deform(TerrainScars.Kind.RIPPLE, Vector2(here.x, here.z),
-			grown, lift * (1.0 - pass_no * 0.22), 3.0 + pass_no)
-		_shake_camera(1.1 - pass_no * 0.25)
-		if pass_no < 2:
-			await get_tree().create_timer(0.55).timeout
-			if not is_instance_valid(self):
-				return
+	# One heading for the whole fault, wandering a little as it goes so the line
+	# is a line and not a ruler.
+	var heading := randf() * TAU
+	var here := Vector2(pos.x, pos.z)
+	for step in bumps:
+		# Under the blow first, then out in ALTERNATE directions — so the pairs
+		# fall at 0, -1, +1, -2, +2 spans and the fault opens from the middle
+		# instead of trailing off one side of it.
+		var out := float((step + 1) / 2) * span * (-1.0 if step % 2 == 1 else 1.0)
+		var drift := heading + randf_range(-QUAKE_WANDER, QUAKE_WANDER)
+		var at := here + Vector2(cos(drift), sin(drift)) * out \
+			+ Vector2(randf_range(-1.2, 1.2), randf_range(-1.2, 1.2))
+		_buckle(world, at, lift, step)
+		# One shake and one beat per pair, which is what makes it read as a rip
+		# travelling rather than a shape appearing.
+		if step % 2 == 0:
+			_shake_camera(0.9 - step * 0.12)
+			if step + 1 < bumps:
+				await get_tree().create_timer(0.24).timeout
+				if not is_instance_valid(self):
+					return
+
+
+## ONE BUMP OF THE FAULT — a smooth dome, up or down, and nothing at all where
+## the ground has already taken all the buckling it will take.
+##
+## BASIN and not RIPPLE: a basin is a plain dome that fades to zero at its rim
+## with no rings and no lip, which is what a bump is. A ripple's concentric
+## troughs are what made the old quake read as a bullseye.
+func _buckle(world: WorldGen, at: Vector2, lift: float, step: int) -> void:
+	# ASKED OVER THE BUMP'S FOOTPRINT, not at one point in the middle of it.
+	# A deposit landing on an existing one widens it (deposit adds `gap * 0.35`
+	# to the radius every merge), so on the twenty-fifth cast the domes overlap
+	# heavily and their peaks sum between the centres — where a single centre
+	# probe never looks. Five samples put the ceiling back where it belongs.
+	var standing := absf(world.scars.offset_at(at.x, at.y))
+	for i in 4:
+		var a := TAU * i / 4.0 + PI * 0.25
+		var out := at + Vector2(cos(a), sin(a)) * QUAKE_BUMP_RADIUS * 0.5
+		standing = maxf(standing, absf(world.scars.offset_at(out.x, out.y)))
+	var room := QUAKE_RELIEF - standing
+	if room < 0.08:
+		return                       # already rucked up: this patch is spent
+	# Roughly two up for every one down, and the far end of the fault is fainter
+	# than the near end. Trimmed to whatever room is left, so the bump that
+	# reaches the ceiling shrinks into it rather than stepping over it.
+	var down := randf() < 0.34
+	var fade := 1.0 - 0.09 * float(step)
+	var amount := lift * randf_range(0.75, 1.25) * fade * (-0.7 if down else 1.0)
+	amount = signf(amount) * minf(absf(amount), room)
+	world.pour(TerrainScars.Kind.BASIN, at,
+		QUAKE_BUMP_RADIUS * randf_range(0.8, 1.2), amount)
 
 
 ## Everyone and everything within reach is thrown about: people and beasts

@@ -1020,6 +1020,19 @@ func _run_smoke_test() -> void:
 ## LAND THAT REMEMBERS. The terrain is derived from the seed, so the whole
 ## claim of deformation is that a scar RIDES ON TOP of it and every other
 ## system agrees — this checks that claim rather than the look of a crater.
+## The furthest the land has been pushed from the seed anywhere within `reach`
+## of a point, up or down. A grid rather than a ring, because the whole
+## question about the earthquake is where along a line the bumps landed.
+func _worst_relief(around: Vector2, reach: float) -> float:
+	var worst := 0.0
+	for gz in 25:
+		for gx in 25:
+			var at := around + Vector2(
+				(gx / 24.0 - 0.5) * reach * 2.0, (gz / 24.0 - 0.5) * reach * 2.0)
+			worst = maxf(worst, absf(world_gen.scars.offset_at(at.x, at.y)))
+	return worst
+
+
 func _smoke_test_earth() -> void:
 	var spot := Vector2(150.0, -150.0)     # well clear of the village cradle
 	var before := world_gen.height_at(spot.x, spot.y)
@@ -1039,6 +1052,30 @@ func _smoke_test_earth() -> void:
 	print("SMOKE TEST: past the rim, ground %.2f, offset=%.4f (must be 0 — no seam)"
 		% [rim, unscarred])
 	assert(is_zero_approx(unscarred), "a scar must fade to nothing at its rim")
+
+	# AN EARTHQUAKE IS A FAULT, NOT A BULLSEYE — and it has to survive being
+	# spammed. It used to cut three concentric ripples at one centre, whose
+	# peaks are all 1.0 at t=0, so they stacked into a 3.7m welt with moats
+	# round it from a single cast. It is now a string of low separate domes
+	# along one heading. What matters and is checked: how far the ground is
+	# pushed, that the bumps are SEPARATE scars, and that the tenth cast on one
+	# spot has stopped moving anything (QUAKE_RELIEF).
+	var fault := Vector2(-150.0, 150.0)
+	var quiet := world_gen.scars.count()
+	miracles.resolve("earthquake", Vector3(fault.x, 0.0, fault.y))
+	await get_tree().create_timer(1.0).timeout
+	var once := _worst_relief(fault, 30.0)
+	var bumps := world_gen.scars.count() - quiet
+	for again in 9:
+		miracles.resolve("earthquake", Vector3(fault.x, 0.0, fault.y))
+		await get_tree().create_timer(0.6).timeout
+	var ten := _worst_relief(fault, 30.0)
+	print("SMOKE TEST: earthquake — %d bumps, worst relief %.2fm; after ten casts %.2fm (cap %.1fm)"
+		% [bumps, once, ten, MiracleManager.QUAKE_RELIEF])
+	assert(bumps >= 3, "a quake must leave a line of separate bumps")
+	assert(once < 1.4, "one quake must only ruck the ground, not excavate it")
+	assert(ten < MiracleManager.QUAKE_RELIEF * 2.0,
+		"quaking one spot ten times must stop mattering")
 
 	# A cone, a ripple, and everything downstream of height_at agreeing.
 	world_gen.deform(TerrainScars.Kind.CONE, Vector2(190.0, -150.0), 12.0, 9.0)
@@ -1063,16 +1100,45 @@ func _smoke_test_earth() -> void:
 	# crater (under five), so on any real ground it found a downhill sample and
 	# concluded the water drained away. Asserted here because the failure is
 	# silent — the rain falls, looks right, and simply leaves nothing.
+	#
+	# It takes SEVERAL throws now, and that is the point of doing it this way: a
+	# fireball leaves a 0.45m divot, which is a scuff and holds nothing. Throws
+	# on one spot merge into a single deepening dish (TerrainScars.deposit), and
+	# somewhere past half a metre of relief it becomes a thing rain can stand
+	# in. So this also measures the merge and the DIG_FLOOR: four throws, one
+	# scar, and a floor it cannot dig past.
 	var dry := Vector3(150, 0, 250)
-	miracles.resolve("fireball", dry)
-	await get_tree().create_timer(0.3).timeout
+	var before_shelling := world_gen.scars.count()
+	for throws in 5:
+		miracles.resolve("fireball", dry)
+		await get_tree().create_timer(0.2).timeout
 	var dug := world_gen.height_at(dry.x, dry.z)
+	var cut := world_gen.scars.count() - before_shelling
 	miracles.resolve("deluge", dry)
 	await get_tree().create_timer(0.3).timeout
 	var pooled := world_gen.water_level_at(dry.x, dry.z)
-	print("SMOKE TEST: deluge into a crater — floor %.2f, water %.2f, %s" % [
-		dug, pooled, "A POOL STANDS" if pooled > dug else "nothing stood"])
-	assert(pooled > dug, "a deluge must leave water standing in a crater")
+	print("SMOKE TEST: deluge into a shelled dish — 5 throws cut %d scar(s), floor %.2f, water %.2f, %s"
+		% [cut, dug, pooled, "A POOL STANDS" if pooled > dug else "nothing stood"])
+	assert(cut <= 2, "throws on one spot must merge, not pile up scars")
+	assert(pooled > dug, "a deluge must leave water standing in a dug dish")
+
+	# A DOZEN MUST NOT DIG A MINE SHAFT. The floor under the gouging is what
+	# makes the fireball spammable: past DIG_FLOOR it still burns and still
+	# kills, and takes no more earth out. Its own patch of ground, well away
+	# from the pond above — standing water turns `_gouge` back at the door, so
+	# shelling the pool would have proved nothing.
+	var shelled := Vector3(150, 0, 190)
+	for throws in 16:
+		miracles.resolve("fireball", shelled)
+		await get_tree().create_timer(0.12).timeout
+	var sunk := world_gen.scars.offset_at(shelled.x, shelled.z)
+	print("SMOKE TEST: sixteen throws on one spot — dug %.2fm (floor %.1fm), %d scar(s) in all, burn %.2f"
+		% [-sunk, Fireball.DIG_FLOOR, world_gen.scars.count(),
+			world_gen.scars.scorch_at(shelled.x, shelled.z)])
+	assert(sunk > -Fireball.DIG_FLOOR - 0.5,
+		"the gouging must stop at its floor however many land on the spot")
+	assert(world_gen.scars.scorch_at(shelled.x, shelled.z) > 0.5,
+		"a spot shelled sixteen times must still be burned black")
 
 	# AND A HOLE THE SEA CANNOT REACH MUST STAY DRY. The other half of the same
 	# rule, and the one that killed Elsmere: the chunk drew 48 metres of ocean

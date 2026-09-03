@@ -30,10 +30,26 @@ const TOUCHING := 0.7
 ## ground. Nothing rolls out of the shot the player actually took.
 const ROLL_SECONDS := 2.5
 
-## HOW DEEP IT DIGS. A fireball does not only scorch — it gouges a bowl out of
+## HOW DEEP IT DIGS. A fireball does not only scorch — it takes a divot out of
 ## the earth and blackens what is left, and the mark stays in the world.
-const GOUGE_DEPTH := 1.7
+##
+## A DIVOT, not an excavation. It was 1.7m deep across 4.8m, which is a bomb
+## crater: two of them on a spot dug through the two metres of freeboard under
+## the village and let the sea in, and a handful of them turned a field into
+## the Somme. A fireball is the cheapest thing in the spellbook and it is meant
+## to be thrown by the dozen, so what it leaves has to be something a landscape
+## can absorb by the dozen — a scorched dish you could stand in, ankle deep.
+const GOUGE_DEPTH := 0.45
+const GOUGE_RADIUS := 2.4
 const GOUGE_CHAR := 0.9
+
+## And a FLOOR under the digging. Scars add, so however shallow one divot is,
+## the twentieth on the same spot is still twenty of them; past this much
+## hollowing the ground here simply stops giving. Deliberately under the two
+## metres the village cradle stands above the sea, so no amount of shelling a
+## town can open it to the water — that consequence is left to the miracles
+## that are actually about moving earth.
+const DIG_FLOOR := 1.6
 
 var _armed := false
 var _exploded := false
@@ -217,26 +233,36 @@ func _explode() -> void:
 	queue_free()
 
 
-## Dig the crater. Skipped over open water, where there is no ground to dig and
-## a bowl in the lake bed would only be a bigger lake.
+## Take the divot, and blacken it. Skipped over open water, where there is no
+## ground to dig and a dish in the lake bed would only be a bigger lake.
+##
+## The BURNING is not rationed and never has been: a spot shelled a dozen times
+## is scorched earth (see TerrainScars.scorch_at, which saturates rather than
+## sums). Only the digging has a floor.
 func _gouge(pos: Vector3) -> void:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	if world == null or world.is_underwater(pos.x, pos.z):
 		return
-	# Dry when we got here — the guard above already turned back over water.
-	world.deform(TerrainScars.Kind.CRATER, Vector2(pos.x, pos.z),
-		BLAST_RADIUS * 0.8, -GOUGE_DEPTH, 3.0, GOUGE_CHAR)
-	# THE WATERLINE IS A THING YOU CAN DIG THROUGH, and craters stack: the
-	# village cradle sits two metres above the sea, and a fireball takes 1.7,
-	# so the SECOND one on a spot opens the ground to the water. That is a fair
-	# consequence and it stays — but it should be a choice, not a discovery
-	# made by counting bodies afterwards.
-	#
-	# Asked of the WATER and not of the number: digging below sea level well
-	# inland leaves a dry pit, because the sea is not everywhere at once (see
-	# WorldGen.sea_reaches). Only say the water came in when it did.
-	if world.is_underwater(pos.x, pos.z):
-		GameState.announce("The crater breaks below the waterline, and the water comes in.")
+	var here := Vector2(pos.x, pos.z)
+	# How much hollowing is left in this ground. Eases into the floor rather
+	# than snapping at it, so the last throw that reaches it still does a
+	# little rather than nothing.
+	var depth := minf(GOUGE_DEPTH,
+		maxf(0.0, DIG_FLOOR + world.scars.offset_at(here.x, here.y)))
+	# POURED, not cut afresh. A divot laid near one already there GROWS it (see
+	# TerrainScars.deposit): shelling one field a hundred times leaves a
+	# handful of scars rather than a hundred, which matters because `offset_at`
+	# walks every scar near a point on every routing and meshing query in the
+	# game. Dry ground — the guard above already turned back over water.
+	world.pour(TerrainScars.Kind.CRATER, here, GOUGE_RADIUS, -depth, GOUGE_CHAR)
+	# THE WATERLINE IS A THING YOU CAN DIG THROUGH, and it stays that way — but
+	# not with fireballs any more. At 0.45m a throw against a 1.6m floor, the
+	# ground never opens under a village standing two metres clear of the sea;
+	# somewhere already near the waterline it still can, which is the right
+	# place for it. Asked of the WATER and not of the number, because inland a
+	# hole below sea level stays dry (see WorldGen.sea_reaches).
+	if world.is_underwater(here.x, here.y):
+		GameState.announce("The ground breaks below the waterline, and the water comes in.")
 
 
 func _blast_visuals(pos: Vector3) -> void:
