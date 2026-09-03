@@ -52,6 +52,11 @@ because it shipped a broken build at least once:
 - **A `:=` inferring Variant** from `pop_back()`, `front()`, `get()` and
   friends, which this project builds as an *error* — one such line stops every
   dependent script loading.
+- **A local or parameter named after a base-class property** — `scale` in a
+  `Control`, `basis` in a `Node3D`, `show` as a parameter. Godot warns and the
+  build still runs, so these reach the player as log noise; worse, the next
+  edit that means the node's own `scale` silently gets the local instead.
+  Three have shipped, which is what earned the rule.
 
 The last three share a shape worth internalising: **Godot rejects it, gdparse
 does not.** Syntax checking cannot see any of them.

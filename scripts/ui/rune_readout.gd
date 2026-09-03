@@ -119,16 +119,19 @@ func _draw_live() -> void:
 	var tint := GameState.alignment_color() if settled else Color(0.72, 0.80, 1.0)
 	# It grows very slightly as it firms up, which reads as the shape being
 	# recognised rather than merely appearing.
-	var scale := LIVE_SIZE * lerpf(0.88, 1.0, sure)
-	_stroke(_outline(shape), at, scale * 1.15, tint, sure * 0.20, 12.0)
-	_stroke(_outline(shape), at, scale, tint, lerpf(0.22, 0.95, sure), 5.0)
+	# Named `across`, not `scale`: Control already has a `scale` property, and
+	# shadowing it silently would mean any later edit that meant the node's own
+	# scale quietly got this number instead.
+	var across := LIVE_SIZE * lerpf(0.88, 1.0, sure)
+	_stroke(_outline(shape), at, across * 1.15, tint, sure * 0.20, 12.0)
+	_stroke(_outline(shape), at, across, tint, lerpf(0.22, 0.95, sure), 5.0)
 
 	var rune := Spellbook.rune_for(shape)
 	if rune != "" and settled:
 		var font := ThemeDB.fallback_font
 		var label := rune.to_upper()
 		var wide := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
-		draw_string(font, Vector2(at.x - wide * 0.5, at.y + scale * 0.62 + 15.0),
+		draw_string(font, Vector2(at.x - wide * 0.5, at.y + across * 0.62 + 15.0),
 			label, HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
 			Color(tint.r, tint.g, tint.b, 0.85))
 

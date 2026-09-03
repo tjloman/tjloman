@@ -1036,7 +1036,8 @@ func _smoke_test_earth() -> void:
 	# The edge of a scar must reach exactly zero, or the world gets a cliff.
 	var rim := world_gen.height_at(spot.x + 9.2, spot.y)
 	var unscarred := world_gen.scars.offset_at(spot.x + 9.2, spot.y)
-	print("SMOKE TEST: past the rim, offset=%.4f (must be 0 — no seam)" % unscarred)
+	print("SMOKE TEST: past the rim, ground %.2f, offset=%.4f (must be 0 — no seam)"
+		% [rim, unscarred])
 	assert(is_zero_approx(unscarred), "a scar must fade to nothing at its rim")
 
 	# A cone, a ripple, and everything downstream of height_at agreeing.

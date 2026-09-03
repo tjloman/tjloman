@@ -526,6 +526,109 @@ def check_inferred_variant(files):
     return problems
 
 
+# Members of Godot's own node classes that scripts here plausibly name a local
+# or a parameter after. Godot warns on the shadow but the build does not fail,
+# so it reaches the player as noise — and worse, a later edit that MEANT the
+# node's own property silently gets the local instead.
+#
+# Curated rather than exhaustive: this is the set of names a person actually
+# reaches for. `show`, `basis` and `scale` have each shipped.
+BASE_MEMBERS = {
+    "Object": {"free", "name"},
+    "Node": {"name", "owner", "process_mode", "scene_file_path", "multiplayer"},
+    "CanvasItem": {"visible", "modulate", "self_modulate", "material", "show",
+                   "hide", "z_index", "top_level", "draw", "light_mask"},
+    "Node2D": {"position", "rotation", "scale", "skew", "transform",
+               "global_position", "global_rotation"},
+    "Control": {"position", "size", "scale", "rotation", "pivot_offset", "theme",
+                "tooltip_text", "focus_mode", "mouse_filter", "anchor_left",
+                "custom_minimum_size", "clip_contents"},
+    # `show` and `hide` are on Node3D as well as CanvasItem — leaving them off
+    # here is why the first run of this rule missed the `show` parameter that
+    # actually shipped.
+    "Node3D": {"position", "rotation", "scale", "basis", "transform", "visible",
+               "global_position", "global_transform", "global_rotation",
+               "quaternion", "top_level", "show", "hide"},
+    "CollisionObject3D": {"collision_layer", "collision_mask", "input_ray_pickable"},
+    "PhysicsBody3D": {"axis_lock_linear_x"},
+    "RigidBody3D": {"mass", "freeze", "linear_velocity", "angular_velocity",
+                    "gravity_scale", "physics_material_override", "inertia"},
+    "CharacterBody3D": {"velocity", "motion_mode", "up_direction", "floor_snap_length"},
+    "GeometryInstance3D": {"transparency", "cast_shadow", "material_override"},
+    "MeshInstance3D": {"mesh", "skeleton", "skin"},
+    "Light3D": {"light_color", "light_energy", "shadow_enabled", "light_specular"},
+    "Camera3D": {"far", "near", "fov", "projection"},
+    "CanvasLayer": {"layer", "offset", "follow_viewport_enabled"},
+}
+
+# What each base pulls in from above it.
+INHERITS = {
+    "Node": ["Object"],
+    "CanvasItem": ["Node", "Object"],
+    "Node2D": ["CanvasItem", "Node", "Object"],
+    "Control": ["CanvasItem", "Node", "Object"],
+    "CanvasLayer": ["Node", "Object"],
+    "Node3D": ["Node", "Object"],
+    "GeometryInstance3D": ["Node3D", "Node", "Object"],
+    "MeshInstance3D": ["GeometryInstance3D", "Node3D", "Node", "Object"],
+    "Light3D": ["Node3D", "Node", "Object"],
+    "OmniLight3D": ["Light3D", "Node3D", "Node", "Object"],
+    "SpotLight3D": ["Light3D", "Node3D", "Node", "Object"],
+    "Camera3D": ["Node3D", "Node", "Object"],
+    "CollisionObject3D": ["Node3D", "Node", "Object"],
+    "PhysicsBody3D": ["CollisionObject3D", "Node3D", "Node", "Object"],
+    "RigidBody3D": ["PhysicsBody3D", "CollisionObject3D", "Node3D", "Node", "Object"],
+    "CharacterBody3D": ["PhysicsBody3D", "CollisionObject3D", "Node3D", "Node", "Object"],
+    "StaticBody3D": ["PhysicsBody3D", "CollisionObject3D", "Node3D", "Node", "Object"],
+    "Area3D": ["CollisionObject3D", "Node3D", "Node", "Object"],
+}
+
+
+def _inherited_members(base):
+    names = set(BASE_MEMBERS.get(base, ()))
+    for parent in INHERITS.get(base, []):
+        names |= set(BASE_MEMBERS.get(parent, ()))
+    return names
+
+
+def check_shadowed_members(files):
+    """Find locals and parameters named after a property of the node's base.
+
+    A script that `extends Node3D` and declares `var scale` shadows the node's
+    own scale. Godot warns; the project still runs; and the next person to
+    write `scale.y = 2` in that function silently sets a float they meant to
+    read. Three of these have shipped.
+
+    Only names the base class ACTUALLY has are flagged, resolved through the
+    file's own `extends` — a plain RefCounted helper may call a local `name`
+    all it likes.
+    """
+    problems = []
+    var_line = re.compile(r"^(\s+)var\s+(\w+)")
+    func_line = re.compile(r"^(?:static\s+)?func\s+\w+\(([^)]*)")
+    for path in files:
+        with open(path, encoding="utf-8") as fh:
+            src = fh.read()
+        m = re.search(r"^extends\s+(\w+)", src, re.M)
+        if not m:
+            continue
+        members = _inherited_members(m.group(1))
+        if not members:
+            continue
+        for lineno, line in enumerate(src.splitlines(), 1):
+            hit = var_line.match(line)
+            if hit and hit.group(2) in members:
+                problems.append((path, lineno, hit.group(2), m.group(1), line.strip()))
+                continue
+            sig = func_line.match(line)
+            if sig:
+                for part in sig.group(1).split(","):
+                    arg = part.strip().split(":")[0].split("=")[0].strip()
+                    if arg in members:
+                        problems.append((path, lineno, arg, m.group(1), line.strip()))
+    return problems
+
+
 def main():
     root = "scripts"
     targets = sys.argv[1:] or [root]
@@ -554,6 +657,11 @@ def main():
         print("%s:%d: '%%' binds tighter than '+', so only the LAST piece of this "
               "string is formatted — wrap the whole concatenation in parentheses"
               "\n    %s" % (path, lineno, line))
+    shadowed_members = check_shadowed_members(files)
+    for path, lineno, nm, base, line in shadowed_members:
+        print("%s:%d: '%s' shadows a property of the base class %s — Godot warns, and "
+              "a later edit meaning the node's own '%s' would silently get this "
+              "instead\n    %s" % (path, lineno, nm, base, nm, line))
     loose_arrays = check_untyped_array_results(files)
     for path, lineno, name, call, line in loose_arrays:
         print("%s:%d: %s() returns a plain Array, and '%s' is a TYPED array — this "
@@ -566,7 +674,7 @@ def main():
               "every dependent script loading. Declare the type, or wrap the "
               "call.\n    %s" % (path, lineno, call, line))
     total = len(problems) + len(escapes) + len(formats) + len(shadowed) \
-        + len(loose_arrays) + len(variants)
+        + len(loose_arrays) + len(variants) + len(shadowed_members)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0
