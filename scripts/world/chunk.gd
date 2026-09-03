@@ -19,6 +19,10 @@ var _water: MeshInstance3D = null
 var _lowest := INF
 var _lowest_seeded := INF
 var _deepest := Vector2.ZERO
+## The height grid this chunk was cut from, kept so `recolor` can re-tint the
+## ground without re-measuring it. About 2.5 KB at a 24x24 grid, 122 KB across
+## a loaded 7x7 — which buys burns that visibly cool.
+var _heights := PackedFloat32Array()
 ## Everything scattered here that has to be set back down on the new ground.
 var _standing: Array[Node3D] = []
 
@@ -107,49 +111,10 @@ func _build_terrain() -> void:
 				_lowest = h
 				_deepest = Vector2(wx, wz)
 
-	# One colour per corner, with the slope DIFFERENCED from the grid rather
-	# than sampled afresh. `ground_color` wants the rise over two metres, so the
-	# step difference is scaled to that — otherwise a four-metre grid reports
-	# half the true steepness and every cliff comes out green.
-	var tint := PackedColorArray()
-	tint.resize(wide * wide)
-	var per_two := 2.0 / step
-	for z in wide:
-		for x in wide:
-			var i := z * wide + x
-			var h: float = heights[i]
-			var ax: int = i + 1 if x < cells else i - 1
-			var az: int = i + wide if z < cells else i - wide
-			var slope := maxf(absf(heights[ax] - h), absf(heights[az] - h)) * per_two
-			tint[i] = world.ground_color(
-				position.x + x * step, position.z + z * step, h, slope)
+	var tint := _tint_grid(heights)
 
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for z in cells:
-		for x in cells:
-			var x0 := x * step
-			var z0 := z * step
-			var at := [z * wide + x, z * wide + x + 1,
-				(z + 1) * wide + x + 1, (z + 1) * wide + x]
-			var corners := [
-				Vector3(x0, heights[at[0]], z0),
-				Vector3(x0 + step, heights[at[1]], z0),
-				Vector3(x0 + step, heights[at[2]], z0 + step),
-				Vector3(x0, heights[at[3]], z0 + step),
-			]
-			for idx in [0, 1, 2, 0, 2, 3]:
-				st.set_color(tint[at[idx]])
-				st.add_vertex(corners[idx])
-	st.generate_normals()
-
-	_ground = MeshInstance3D.new()
-	_ground.mesh = st.commit()
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.roughness = 1.0
-	_ground.material_override = mat
-	add_child(_ground)
+	_heights = heights
+	_cut_mesh(tint)
 
 	# Heightmap collision (layer 1 = ground).
 	var body := StaticBody3D.new()
@@ -167,6 +132,79 @@ func _build_terrain() -> void:
 	shape.position = Vector3(WorldGen.CHUNK_SIZE / 2.0, 0, WorldGen.CHUNK_SIZE / 2.0)
 	body.add_child(shape)
 	add_child(body)
+
+
+## ONE COLOUR PER GRID CORNER, with the slope DIFFERENCED from the heights
+## rather than sampled afresh. `ground_color` wants the rise over two metres, so
+## the step difference is scaled to that — otherwise a four-metre grid reports
+## half the true steepness and every cliff comes out green.
+func _tint_grid(heights: PackedFloat32Array) -> PackedColorArray:
+	var cells := world.chunk_cells
+	var wide := cells + 1
+	var step := WorldGen.CHUNK_SIZE / cells
+	var per_two := 2.0 / step
+	var tint := PackedColorArray()
+	tint.resize(wide * wide)
+	for z in wide:
+		for x in wide:
+			var i := z * wide + x
+			var h: float = heights[i]
+			var ax: int = i + 1 if x < cells else i - 1
+			var az: int = i + wide if z < cells else i - wide
+			var slope := maxf(absf(heights[ax] - h), absf(heights[az] - h)) * per_two
+			tint[i] = world.ground_color(
+				position.x + x * step, position.z + z * step, h, slope)
+	return tint
+
+
+## Two triangles a cell, unindexed — six vertices a quad, because
+## `generate_normals` without an index buffer is what gives the land its facets.
+func _cut_mesh(tint: PackedColorArray) -> void:
+	var cells := world.chunk_cells
+	var wide := cells + 1
+	var step := WorldGen.CHUNK_SIZE / cells
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for z in cells:
+		for x in cells:
+			var x0 := x * step
+			var z0 := z * step
+			var at := [z * wide + x, z * wide + x + 1,
+				(z + 1) * wide + x + 1, (z + 1) * wide + x]
+			var corners := [
+				Vector3(x0, _heights[at[0]], z0),
+				Vector3(x0 + step, _heights[at[1]], z0),
+				Vector3(x0 + step, _heights[at[2]], z0 + step),
+				Vector3(x0, _heights[at[3]], z0 + step),
+			]
+			for idx in [0, 1, 2, 0, 2, 3]:
+				st.set_color(tint[at[idx]])
+				st.add_vertex(corners[idx])
+	st.generate_normals()
+
+	if _ground != null and is_instance_valid(_ground):
+		_ground.queue_free()
+	_ground = MeshInstance3D.new()
+	_ground.mesh = st.commit()
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.roughness = 1.0
+	_ground.material_override = mat
+	add_child(_ground)
+
+
+## THE COLOURS CHANGED, THE LAND DID NOT — a burn cooling from ember to char to
+## scrub, which happens for eight minutes after every fireball.
+##
+## The whole point is what it does NOT do: no height sampling (the grid is the
+## one already measured), no collision, no putting the trees back down. Just the
+## per-corner colour and a new surface. That is about 1,250 noise evaluations
+## for a 24x24 chunk against the 3,750 a full rebuild costs, and it is why the
+## ground can be allowed to keep changing at all.
+func recolor() -> void:
+	if _heights.is_empty() or _ground == null or not is_instance_valid(_ground):
+		return
+	_cut_mesh(_tint_grid(_heights))
 
 
 func _build_water() -> void:

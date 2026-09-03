@@ -153,6 +153,8 @@ const QUAKE_RELIEF := 2.4
 ## throwing thirty of them itself.
 const LAVA_RISE := 0.55
 const LAVA_REACH := 3.4
+## How black molten rock leaves the ground. Full: nothing in the game is hotter.
+const LAVA_CHAR := 1.0
 
 ## A VOLCANO IS A LAVA FOUNTAIN. It hurls globs straight up out of the vent and
 ## the mountain GROWS FROM WHERE THEY LAND, over a full minute — rather than a
@@ -852,7 +854,12 @@ func _pour_lava(pos: Vector3, rise: float, reach: float, loud := false) -> void:
 	var here := Vector2(pos.x, pos.z)
 	var hollow := world.scars.hollow_near(here, reach + 2.0)
 	if hollow.is_empty():
-		world.pour(TerrainScars.Kind.BASIN, here, reach, rise)
+		# LAVA BURNS THE GROUND IT LANDS ON, and glows while it does. Molten
+		# rock is the hottest thing in the game, so it goes down at full char
+		# and cools through the same ember-char-scrub life a fireball's mark
+		# does (TerrainScars.weathered) — which is what makes a volcano's flanks
+		# red while it is erupting and black an hour later.
+		world.pour(TerrainScars.Kind.BASIN, here, reach, rise, LAVA_CHAR)
 	else:
 		# Filling: move the hole's own amount toward zero by what was poured,
 		# never past it, so the ground levels off rather than becoming a mound
@@ -860,6 +867,7 @@ func _pour_lava(pos: Vector3, rise: float, reach: float, loud := false) -> void:
 		var left := float(hollow["amount"])
 		var filled := minf(left + rise * FILL_RATE, 0.0)
 		world.reshape(hollow, filled)
+		world.scars.scorch(hollow, LAVA_CHAR)
 		if filled >= -0.05 and loud:
 			GameState.announce("The crater is level again.")
 	_lava_splash(pos, reach, loud)

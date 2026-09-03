@@ -23,6 +23,11 @@ const VILLAGE_MIN_CELL_DIST := 3  # chunks from origin before rivals appear
 ## and calls a sunken region the sea anyway. See `sea_reaches`.
 const SEA_STEP := 2.0
 const SEA_CELLS := 240            # ~30m of connected water
+## How often burned ground is re-tinted as it cools. Tight while a burn is
+## going out — that is the one fast stretch of the curve — and lazy for the
+## four-minute weathering that follows. See `_tick_burns`.
+const BURN_REFRESH := 2.0
+const BURN_REFRESH_HOT := 0.5
 
 ## How much world stays live around the focus. Set from the graphics tier
 ## at boot: a budget phone keeps a tight 5x5 so it doesn't drown in
@@ -62,6 +67,7 @@ var _wet_noise := FastNoiseLite.new()
 var _chunks := {}                 # Vector2i -> Chunk
 var _village_cells := {}          # Vector2i -> Village (spawned, persistent)
 var _wolf_raid_cooldown := 0.0
+var _burn_tick := 0.0
 
 
 func _ready() -> void:
@@ -81,10 +87,47 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	_tick_burns(delta)
 	if focus_node == null:
 		return
 	_stream_chunks()
 	_tick_wolf_raids(delta)
+
+
+## BURNED GROUND, COOLING IN PLACE.
+##
+## The ground's colour is baked into the terrain mesh — one vertex colour per
+## grid corner — so a burn that changes colour over eight minutes means re-
+## cutting the chunks it touches as it goes. That is only affordable because
+## `Chunk.recolor` keeps the height grid it already measured and redoes nothing
+## but the colours: no noise for the heights, no collision, no re-grounding of
+## anything standing there.
+##
+## Every BURN_REFRESH seconds, and ONLY while something is actually still
+## cooling. `still_cooling` goes false once every burn has weathered out to
+## scrub, and from then on this costs one walk of the scar list per frame.
+func _tick_burns(delta: float) -> void:
+	if scars.is_empty():
+		return
+	scars.clock += delta
+	if not scars.still_cooling():
+		return
+	_burn_tick += delta
+	if _burn_tick < (BURN_REFRESH_HOT if scars.cooling_fast() else BURN_REFRESH):
+		return
+	_burn_tick = 0.0
+	var touched := {}
+	for area: Rect2 in scars.cooling_areas():
+		var grown := area.grow(1.0)
+		for cz in range(floori(grown.position.y / CHUNK_SIZE),
+				floori(grown.end.y / CHUNK_SIZE) + 1):
+			for cx in range(floori(grown.position.x / CHUNK_SIZE),
+					floori(grown.end.x / CHUNK_SIZE) + 1):
+				touched[Vector2i(cx, cz)] = true
+	for cell: Vector2i in touched:
+		var chunk: Chunk = _chunks.get(cell)
+		if chunk != null and is_instance_valid(chunk):
+			chunk.recolor()
 
 
 ## Terrain queries ------------------------------------------------------------
@@ -403,11 +446,14 @@ func ground_color(x: float, z: float, h: float, slope := -1.0) -> Color:
 	var s := slope_at(x, z) if slope < 0.0 else slope
 	if s > 1.0:
 		base = base.lerp(Color(0.48, 0.45, 0.42), clampf((s - 1.0) / 1.5, 0.0, 0.9))
-	# BURNED GROUND stays burned. A fireball does not only dent the earth, it
-	# blackens it, and the mark is part of the world from then on.
-	var burn := scars.scorch_at(x, z)
-	if burn > 0.0:
-		base = base.lerp(Color(0.09, 0.07, 0.06), burn * 0.85)
+	# BURNED GROUND COOLS. A fireball does not only dent the earth, it sets it
+	# alight — and what it leaves changes: embers for half a minute, then black,
+	# then weathering out to dusty scrub, which it stays. The colour AND the
+	# strength both come from how old the burn is (TerrainScars.weathered), so
+	# there is nothing to decide here beyond mixing it in.
+	var burn := scars.burn_at(x, z)
+	if burn.a > 0.0:
+		base = base.lerp(Color(burn.r, burn.g, burn.b), burn.a)
 	return base
 
 

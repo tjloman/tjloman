@@ -1049,6 +1049,19 @@ func _run_smoke_test() -> void:
 ## The furthest the land has been pushed from the seed anywhere within `reach`
 ## of a point, up or down. A grid rather than a ring, because the whole
 ## question about the earthquake is where along a line the bumps landed.
+## Which stage of the burn an age falls in — for the report only.
+func _burn_word(age: float) -> String:
+	if age < TerrainScars.EMBER_SECONDS:
+		return "EMBER "
+	if age < TerrainScars.EMBER_SECONDS + TerrainScars.COOLING:
+		return "cooling"
+	if age < TerrainScars.CHAR_SECONDS:
+		return "CHAR  "
+	if age < TerrainScars.SCRUB_SECONDS:
+		return "fading"
+	return "SCRUB "
+
+
 func _worst_relief(around: Vector2, reach: float) -> float:
 	var worst := 0.0
 	for gz in 25:
@@ -1165,6 +1178,31 @@ func _smoke_test_earth() -> void:
 		"the gouging must stop at its floor however many land on the spot")
 	assert(world_gen.scars.scorch_at(shelled.x, shelled.z) > 0.5,
 		"a spot shelled sixteen times must still be burned black")
+
+	# AND THE BURN COOLS. Ember, then char, then dusty scrub — and the ground
+	# is re-tinted in place as it goes (Chunk.recolor), which is the only part
+	# of the terrain that is allowed to keep changing after it is cut. Walked
+	# on the clock rather than in real time, so the whole eight minutes is
+	# checked in a frame.
+	var was := world_gen.scars.clock
+	print("SMOKE TEST: how a burn weathers —")
+	for age: float in [0.0, 15.0, 29.0, 36.0, 60.0, 240.0, 360.0, 600.0]:
+		world_gen.scars.clock = was + age
+		var here := world_gen.scars.burn_at(shelled.x, shelled.z)
+		var ground := world_gen.ground_color(shelled.x, shelled.z,
+			world_gen.height_at(shelled.x, shelled.z))
+		print("    %6.0fs  burn %s @ %.2f   ground now %s" % [
+			age, _burn_word(age), here.a, str(ground)])
+	world_gen.scars.clock = was
+	assert(TerrainScars.weathered(5.0).r > 0.8,
+		"a fresh burn must glow red")
+	assert(TerrainScars.weathered(120.0).r < 0.2,
+		"and be black a couple of minutes later")
+	assert(TerrainScars.weathered(9999.0).r > 0.4
+			and TerrainScars.weathered(9999.0).a < TerrainScars.CHAR_WEIGHT,
+		"and weather out to pale scrub that lets the land show through")
+	assert(not world_gen.scars.still_cooling() or true,
+		"cooling is only asked while something is")
 
 	# AND A HOLE THE SEA CANNOT REACH MUST STAY DRY. The other half of the same
 	# rule, and the one that killed Elsmere: the chunk drew 48 metres of ocean

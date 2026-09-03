@@ -53,6 +53,46 @@ const MOST_RELIEF := 34.0
 ## handful of scars — see `deposit`.
 const MERGE_WITHIN := 0.75
 
+## BURNED GROUND COOLS. A fireball's mark was one flat near-black colour that
+## never changed, which made the world read as a scrapbook of everything that
+## had ever happened to it, all equally recent. Fire has a life: it glows, it
+## goes out, and what is left weathers.
+##
+##   0-30s      EMBER   still hot, red and orange, the mark of a fresh strike
+##   30-50s             cooling through to charcoal
+##   50s-4min   CHAR    black, and this is what "burned" looks like
+##   4-8min             weathering out
+##   past 8min  SCRUB   dusty pale ground, and it stays that way
+##
+## The COOLING window was twelve seconds first, and simulating the ramp against
+## the refresh rate caught it: the red-to-black step is a colour distance of
+## about 0.9, so over twelve seconds a two-second refresh SNAPS through it in
+## six visible jumps of 0.17 each. Twenty seconds and a half-second refresh
+## while anything is in that window puts the step at 0.023, which is smooth.
+##
+## It does not go back to grass. Scars are the world's memory, and a burned
+## field that becomes indistinguishable from one that never burned has
+## forgotten. Scrub IS the end state — it is just no longer smoking about it.
+const EMBER_SECONDS := 30.0
+const COOLING := 20.0
+const CHAR_SECONDS := 240.0
+const SCRUB_SECONDS := 480.0
+
+const EMBER_COLOR := Color(1.0, 0.34, 0.07)
+const CHAR_COLOR := Color(0.09, 0.07, 0.06)
+const SCRUB_COLOR := Color(0.66, 0.58, 0.42)
+## How strongly each stage takes over the ground under it. Scrub settles well
+## short of full so the biome still shows through: old burn is a tint on the
+## land, not a coat of paint over it.
+const EMBER_WEIGHT := 0.95
+const CHAR_WEIGHT := 0.85
+const SCRUB_WEIGHT := 0.72
+
+## Seconds of world time since this scar layer began. Advanced by WorldGen and
+## saved with the scars, so a fire left burning when you quit is exactly as old
+## when you come back — and an hour-old crater loads as scrub, not as embers.
+var clock := 0.0
+
 ## Every scar cut into the world, and the buckets that index them.
 var _scars: Array[Dictionary] = []
 var _buckets := {}
@@ -81,6 +121,9 @@ func add(kind: int, at: Vector2, radius: float, amount: float, rings := 3.0,
 		"kind": kind, "x": at.x, "z": at.y,
 		"radius": radius, "amount": clampf(amount, -MOST_RELIEF, MOST_RELIEF),
 		"rings": rings, "char": char_amount,
+		# WHEN IT BURNED, on the scar layer's own clock — which is what lets the
+		# mark cool from ember to char to scrub. See `weathered`.
+		"burned": clock,
 	}
 	_scars.append(scar)
 	_index(scar)
@@ -105,18 +148,28 @@ func offset_at(x: float, z: float) -> float:
 	return total
 
 
-## HOW BURNED the ground is here, 0..1 — read by `WorldGen.ground_color`, so a
-## fireball leaves a black mark on the world and not just a dent in it. Fades
-## to nothing at the rim like everything else, and saturates rather than sums
-## so a spot hit ten times is scorched earth, not a void.
+## HOW BURNED the ground is here, 0..1 — the raw strength of the mark, with no
+## regard for how long ago it happened. `burn_at` is what the ground colour
+## wants; this stays for anything only asking whether a spot has ever burned.
 func scorch_at(x: float, z: float) -> float:
+	return burn_at(x, z).a
+
+
+## WHAT THE FIRE HAS LEFT HERE — a colour, with its strength in the alpha.
+##
+## One walk of the nine buckets answers both the intensity and the STAGE, and
+## the strongest mark wins rather than summing, so a spot hit ten times is
+## scorched earth and not a void. A fresh strike on old char re-reddens it,
+## because `deposit` carries the newer burn time through the merge.
+func burn_at(x: float, z: float) -> Color:
 	if _scars.is_empty():
-		return 0.0
+		return Color(0, 0, 0, 0)
 	if x < _min.x or x > _max.x or z < _min.y or z > _max.y:
-		return 0.0
+		return Color(0, 0, 0, 0)
 	var bx := floori(x / BUCKET)
 	var bz := floori(z / BUCKET)
 	var worst := 0.0
+	var tint := CHAR_COLOR
 	for dz in [-1, 0, 1]:
 		for dx in [-1, 0, 1]:
 			var here: Array = _buckets.get(Vector2i(bx + dx, bz + dz), [])
@@ -132,8 +185,81 @@ func scorch_at(x: float, z: float) -> float:
 					continue
 				# Hottest in the middle, gone by the rim.
 				var t := sqrt(d2) / radius
-				worst = maxf(worst, burn * pow(1.0 - t, 0.8))
-	return minf(worst, 1.0)
+				var stage := weathered(clock - float(scar.get("burned", 0.0)))
+				var strength := burn * pow(1.0 - t, 0.8) * stage.a
+				if strength > worst:
+					worst = strength
+					tint = Color(stage.r, stage.g, stage.b)
+	tint.a = minf(worst, 1.0)
+	return tint
+
+
+## THE COLOUR OF A BURN THIS OLD, with its weight in the alpha. Pure arithmetic
+## on the age in seconds — no state, so it gives the same answer to the mesh,
+## to a test, and to anything that wants to ask ahead of time.
+static func weathered(age: float) -> Color:
+	if age < EMBER_SECONDS:
+		return Color(EMBER_COLOR, EMBER_WEIGHT)
+	if age < EMBER_SECONDS + COOLING:
+		var k := (age - EMBER_SECONDS) / COOLING
+		return Color(EMBER_COLOR.lerp(CHAR_COLOR, k),
+			lerpf(EMBER_WEIGHT, CHAR_WEIGHT, k))
+	if age < CHAR_SECONDS:
+		return Color(CHAR_COLOR, CHAR_WEIGHT)
+	if age < SCRUB_SECONDS:
+		var k := (age - CHAR_SECONDS) / (SCRUB_SECONDS - CHAR_SECONDS)
+		return Color(CHAR_COLOR.lerp(SCRUB_COLOR, k),
+			lerpf(CHAR_WEIGHT, SCRUB_WEIGHT, k))
+	return Color(SCRUB_COLOR, SCRUB_WEIGHT)
+
+
+## SET AN EXISTING SCAR ALIGHT — for the case where the ground was reshaped
+## rather than newly cut, so there is no `add` or `deposit` to carry a char in.
+## Filling a crater with lava is the one that needs it: the hole's own scar is
+## shrunk toward flat, and it should come out glowing.
+func scorch(scar: Dictionary, char_amount: float) -> void:
+	if char_amount <= 0.0:
+		return
+	scar["char"] = maxf(float(scar.get("char", 0.0)), char_amount)
+	scar["burned"] = clock
+
+
+## Is anything in the FAST part of the curve — the red-to-black cool, which is
+## the only stretch that moves quickly enough to need a tight refresh? The long
+## char-to-scrub fade covers about 0.5 of colour over four minutes, which is
+## invisible at any refresh rate worth having.
+func cooling_fast() -> bool:
+	for scar in _scars:
+		if float(scar.get("char", 0.0)) <= 0.0:
+			continue
+		var age := clock - float(scar.get("burned", 0.0))
+		if age > EMBER_SECONDS - 1.0 and age < EMBER_SECONDS + COOLING + 1.0:
+			return true
+	return false
+
+
+## Is anything here still changing colour? Once every burn has weathered out to
+## scrub the ground is settled and needs re-colouring never again — which is
+## what stops WorldGen's refresh running for the rest of the session.
+func still_cooling() -> bool:
+	for scar in _scars:
+		if float(scar.get("char", 0.0)) <= 0.0:
+			continue
+		if clock - float(scar.get("burned", 0.0)) < SCRUB_SECONDS:
+			return true
+	return false
+
+
+## The footprints of every scar still changing colour, so the caller can re-cut
+## exactly the chunks whose ground has moved on and no others.
+func cooling_areas() -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	for scar in _scars:
+		if float(scar.get("char", 0.0)) <= 0.0:
+			continue
+		if clock - float(scar.get("burned", 0.0)) < SCRUB_SECONDS:
+			out.append(reach_of(scar))
+	return out
 
 
 ## One scar's push at a point. Everything is a radial profile times a falloff
@@ -213,6 +339,8 @@ func deposit(kind: int, at: Vector2, radius: float, amount: float,
 		scar["x"] = moved.x
 		scar["z"] = moved.y
 		scar["char"] = maxf(float(scar.get("char", 0.0)), char_amount)
+		if char_amount > 0.0:
+			scar["burned"] = clock      # a fresh strike re-reddens old char
 		reshape(scar, float(scar["amount"]) + amount,
 			maxf(float(scar["radius"]), radius) + gap * 0.35)
 		return scar
@@ -303,19 +431,32 @@ func _grow_bounds(at: Vector2, radius: float) -> void:
 ## Scars are the one part of the terrain that is NOT recoverable from the seed,
 ## so they are the one part that has to be written down.
 
-func to_save() -> Array:
+## The clock rides along with the scars, so ages survive the trip: a fire left
+## burning when you quit is exactly as old when you come back, and a crater cut
+## an hour ago loads as scrub rather than re-igniting.
+func to_save() -> Dictionary:
 	var out := []
 	for scar in _scars:
 		out.append(scar.duplicate())
-	return out
+	return {"clock": clock, "scars": out}
 
 
-func from_save(data: Array) -> void:
+func from_save(data: Variant) -> void:
 	_scars.clear()
 	_buckets.clear()
-	for entry in data:
+	# An older save is a bare Array of scars with no clock and no burn times;
+	# those load with `burned` 0 against a clock of 0, which puts them at age
+	# zero — glowing. So the clock is wound past the whole weathering instead,
+	# and everything already in the ground comes back settled, which is what a
+	# world you left an hour ago should look like.
+	var rows: Array = data if data is Array else (data as Dictionary).get("scars", [])
+	clock = 0.0 if data is Array else float((data as Dictionary).get("clock", 0.0))
+	if data is Array:
+		clock = SCRUB_SECONDS + 1.0
+	for entry in rows:
 		var scar: Dictionary = entry
-		add(int(scar.get("kind", Kind.CRATER)),
+		var made := add(int(scar.get("kind", Kind.CRATER)),
 			Vector2(float(scar.get("x", 0.0)), float(scar.get("z", 0.0))),
 			float(scar.get("radius", 8.0)), float(scar.get("amount", -2.0)),
 			float(scar.get("rings", 3.0)), float(scar.get("char", 0.0)))
+		made["burned"] = float(scar.get("burned", 0.0))

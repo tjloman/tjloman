@@ -448,8 +448,12 @@ func apply_pending(world: WorldGen, creature: Creature) -> void:
 		# The land as the player left it, not as the seed made it. The chunks
 		# under them were already raised from an unscarred seed, so every one
 		# of them is re-cut now that the scars are known.
-		var scars := pending_world.get("scars", []) as Array
-		if not scars.is_empty():
+		# A Dictionary since burns learned to cool — {clock, scars} — but an
+		# older save is a bare Array, and TerrainScars.from_save takes either.
+		var scars: Variant = pending_world.get("scars", [])
+		var any: bool = (scars as Array).size() > 0 if scars is Array \
+			else ((scars as Dictionary).get("scars", []) as Array).size() > 0
+		if any:
 			world.scars.from_save(scars)
 			world.rebuild_all()
 		world.ponds_from_save(pending_world.get("ponds", []) as Array)
