@@ -12,10 +12,20 @@ extends CanvasLayer
 ## It had no width at all: a Label in a PanelContainer sizes to its longest
 ## line, and the miracle list is one comma-joined string that grows every time
 ## the beast watches you cast something new. One line eventually covered the
-## screen. Both numbers are needed — the character wrap is what actually breaks
-## the text, and the pixel cap is the backstop for a long unbroken word.
+## screen.
+##
+## The cap is enforced in CHARACTERS ONLY. The first attempt also forced a pixel
+## width onto the panel and turned autowrap on, which meant a container that
+## wanted to size itself to its label was being told a size at the same time as
+## the label was refusing to name one until it had been given a width — and on a
+## CanvasLayer there is no parent to arbitrate between them. The whole readout
+## went off the screen. Characters need no arbitration: the longest line is
+## known before the label is ever measured. How many characters fit is asked of
+## the real font each update, in `_wrap_width`, so a narrow phone still gets its
+## third of the screen rather than a number that only suited a desktop.
 const PANEL_SHARE := 1.0 / 3.0
-const WRAP_AT := 46          # characters of a value per line
+const WRAP_AT := 46          # the most characters of a value on one line
+const WRAP_LEAST := 24       # ...and the fewest, on a narrow phone
 const LABEL_PAD := "          "   # the hanging indent, matching "Miracles: "
 
 
@@ -154,27 +164,48 @@ func _build_creature_panel() -> void:
 	_creature_label = Label.new()
 	_creature_label.add_theme_font_size_override("font_size", 16)
 	_creature_label.add_theme_color_override("font_color", Color.WHITE)
-	# Wrapped by hand to WRAP_AT (see `_field`) so the hanging indent survives;
-	# this is the backstop for anything that still will not fit, and the reason
-	# the panel can never grow past its third of the screen.
-	_creature_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	# NO AUTOWRAP, deliberately. Every value is already broken to a fixed number
+	# of characters by `_field`, so the label's size is a plain function of its
+	# text. Autowrap makes it a NEGOTIATION instead: the label reports a minimum
+	# width of nothing and a height that depends on the width it is eventually
+	# handed, and a PanelContainer sitting straight on a CanvasLayer — which is
+	# what this HUD is — has no layout parent to settle that against. It is the
+	# same shape of bug as the runes drawing at x=0, and it took the whole
+	# readout off the screen. Hand-wrapping was already doing the real work;
+	# autowrap was only ever the backstop, and `_field` now covers that case
+	# itself by breaking a word too long to fit.
+	_creature_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_creature_panel.add_child(_creature_label)
 	add_child(_creature_panel)
 	_make_click_through(_creature_panel)
 
 
-## One "Label:   value" row, wrapped to WRAP_AT characters with every line after
+## One "Label:   value" row, wrapped to `wrap` characters with every line after
 ## the first indented under the value rather than under the label.
-func _field(label: String, value: String) -> String:
+func _field(label: String, value: String, wrap: int) -> String:
 	var lines: Array[String] = []
 	for para: String in value.split("\n"):
 		var line := ""
-		for word: String in para.split(" "):
+		for raw: String in para.split(" "):
+			if raw == "":
+				continue
+			var word := raw
+			# A WORD TOO LONG FOR THE LINE is broken across lines rather than
+			# left to run off the edge. This is the one case autowrap used to
+			# cover, and covering it here is what lets autowrap stay off — with
+			# it off, the label's size follows from its text and nothing has to
+			# be negotiated with a container that has no parent to ask.
+			while word.length() > wrap:
+				if line != "":
+					lines.append(line)
+					line = ""
+				lines.append(word.substr(0, wrap))
+				word = word.substr(wrap)
 			if word == "":
 				continue
 			if line == "":
 				line = word
-			elif line.length() + 1 + word.length() <= WRAP_AT:
+			elif line.length() + 1 + word.length() <= wrap:
 				line += " " + word
 			else:
 				lines.append(line)
@@ -186,6 +217,27 @@ func _field(label: String, value: String) -> String:
 	for i in range(1, lines.size()):
 		out += "\n" + LABEL_PAD + lines[i]
 	return out
+
+
+## HOW MANY CHARACTERS FIT in a third of THIS screen, measured against the font
+## the panel is actually using rather than assumed. Average lowercase width is
+## the right yardstick for prose — measuring an "M" would cramp every line to
+## suit a letter that barely appears.
+func _wrap_width() -> int:
+	var font := _creature_label.get_theme_font("font")
+	var size := _creature_label.get_theme_font_size("font_size")
+	if font == null or size <= 0:
+		return WRAP_AT
+	var alphabet := "abcdefghijklmnopqrstuvwxyz"
+	var em := font.get_string_size(
+		alphabet, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x / float(alphabet.length())
+	var cap := get_viewport().get_visible_rect().size.x * PANEL_SHARE
+	# The label column is spent before any of the value is: every rendered line
+	# is the wrap plus the ten characters of "Miracles: " or of the hanging
+	# indent under it. Budgeting without that made the panel a fifth wider than
+	# the third it is supposed to keep to.
+	var room := int(cap / maxf(em, 1.0)) - LABEL_PAD.length()
+	return clampi(room, WRAP_LEAST, WRAP_AT)
 
 
 func _miracle_list(spells: Array) -> String:
@@ -583,36 +635,32 @@ func _update_creature_panel() -> void:
 	var habits: Array = creature.mind.character_account()
 	var character := "nothing settled yet" if habits.is_empty() \
 		else "\n          ".join(habits)
+	var wrap := _wrap_width()
 	var rows: Array[String] = [
 		"YOUR CREATURE",
-		_field("Doing", creature.activity_word()),
-		_field("Nature", creature.morality_word()),
-		_field("Habits", character),
-		_field("Feeling", " and ".join(creature.heart.account())),
-		_field("Mood", creature.mood_word()),
-		_field("Bond", "%d / 100" % int(creature.bond)),
-		_field("Hunger", "%d / 100" % int(creature.hunger)),
-		_field("Energy", "%d / 100" % int(creature.energy)),
-		_field("Fear", "%d / 100" % int(creature.fear)),
+		_field("Doing", creature.activity_word(), wrap),
+		_field("Nature", creature.morality_word(), wrap),
+		_field("Habits", character, wrap),
+		_field("Feeling", " and ".join(creature.heart.account()), wrap),
+		_field("Mood", creature.mood_word(), wrap),
+		_field("Bond", "%d / 100" % int(creature.bond), wrap),
+		_field("Hunger", "%d / 100" % int(creature.hunger), wrap),
+		_field("Energy", "%d / 100" % int(creature.energy), wrap),
+		_field("Fear", "%d / 100" % int(creature.fear), wrap),
 		_field("Belly", "%d%% full%s" % [
 			int(creature.body.fullness(creature.growth) * 100.0),
-			"  (digesting)" if creature.body.stomach > 0.05 else ""]),
+			"  (digesting)" if creature.body.stomach > 0.05 else ""], wrap),
 		_field("Body", "%s  (fat %d · strength %d%s)" % [
 			creature.body.condition_word(), int(creature.body.fat),
 			int(creature.body.strength),
-			"  BOOSTED" if creature.body.is_boosted() else ""]),
-		_field("Stature", creature.stature_text()),
-		_field("Learned", learned),
-		_field("Believes", believes),
-		_field("World", world),
-		_field("Miracles", _miracle_list(spells)),
+			"  BOOSTED" if creature.body.is_boosted() else ""], wrap),
+		_field("Stature", creature.stature_text(), wrap),
+		_field("Learned", learned, wrap),
+		_field("Believes", believes, wrap),
+		_field("World", world, wrap),
+		_field("Miracles", _miracle_list(spells), wrap),
 	]
 	_creature_label.text = "\n".join(rows)
-	# A third of the screen, whatever the screen is — checked every update
-	# because the window can be resized under us.
-	var cap := get_viewport().get_visible_rect().size.x * PANEL_SHARE
-	_creature_panel.custom_minimum_size.x = cap
-	_creature_panel.size.x = cap
 
 
 ## Village roster ------------------------------------------------------------
