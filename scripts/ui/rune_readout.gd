@@ -26,12 +26,20 @@ extends Control
 ## matcher will actually accept, which a hand-drawn set of icons certainly
 ## would have.
 
-## Where the row of committed runes sits, and how big each one is.
-const ROW_Y := 118.0
+## WHERE IT ALL SITS, as a share of the screen rather than in pixels from the
+## top-left corner.
+##
+## It used to be `size.x * 0.5` and a fixed y, and it drew in the top-left
+## corner for months. The reason is that this Control is parented to the Node3D
+## scene root rather than to a CanvasLayer, so it never got a layout parent and
+## `size` stayed at (0, 0) — which made `size.x * 0.5` exactly zero, and the
+## row that was carefully centred on it straddled the left edge of the screen.
+## Measured against the VIEWPORT instead, which is a fact about the window and
+## not about who happens to own this node.
+const LIVE_AT := Vector2(0.5, 0.5)     # the live glyph, dead centre
+const ROW_ABOVE := 0.14                # the committed row, this far above it
 const ROW_SIZE := 62.0
 const ROW_GAP := 16.0
-## The live glyph: bigger, lower, and directly under the eye.
-const LIVE_Y := 232.0
 const LIVE_SIZE := 96.0
 
 ## How fast a committed rune breathes, and how far.
@@ -49,6 +57,7 @@ var divine_hand: DivineHand
 var _age := 0.0
 var _shown := 0        # how many runes we had last frame, to catch a new one
 var _landed := 0.0     # seconds left of the newest rune's swell
+var _was_casting := false
 
 
 func _ready() -> void:
@@ -65,8 +74,20 @@ func _process(delta: float) -> void:
 	if now > _shown:
 		_landed = LAND_SECONDS
 	_shown = now
-	if divine_hand.casting:
+	# REDRAWN ON THE WAY OUT AS WELL. This only asked for a redraw WHILE
+	# casting, so when a working was cast — or swept away — nothing ever
+	# repainted the canvas and the glyphs simply stayed on screen until
+	# something else happened to dirty it. One frame on the falling edge
+	# clears them.
+	if divine_hand.casting or _was_casting:
 		queue_redraw()
+	_was_casting = divine_hand.casting
+
+
+## Where the middle of the screen actually is. From the VIEWPORT, because this
+## node's own `size` is not a reliable answer — see LIVE_AT.
+func _centre() -> Vector2:
+	return get_viewport_rect().size
 
 
 func _draw() -> void:
@@ -83,8 +104,10 @@ func _draw_committed(runes: Array) -> void:
 	if runes.is_empty():
 		return
 	var glow := GameState.alignment_color()
+	var screen := _centre()
 	var span := runes.size() * ROW_SIZE + (runes.size() - 1) * ROW_GAP
-	var x := size.x * 0.5 - span * 0.5
+	var x := screen.x * LIVE_AT.x - span * 0.5
+	var row_y := screen.y * (LIVE_AT.y - ROW_ABOVE)
 	for i in runes.size():
 		var shape := _shape_for(String(runes[i]))
 		# Each rune breathes out of step with its neighbours; the newest one
@@ -93,7 +116,7 @@ func _draw_committed(runes: Array) -> void:
 		if i == runes.size() - 1 and _landed > 0.0:
 			breath += LAND_SWELL * (_landed / LAND_SECONDS)
 		var heat := lerpf(0.55, 1.0, float(i + 1) / float(runes.size()))
-		var at := Vector2(x + i * (ROW_SIZE + ROW_GAP) + ROW_SIZE * 0.5, ROW_Y)
+		var at := Vector2(x + i * (ROW_SIZE + ROW_GAP) + ROW_SIZE * 0.5, row_y)
 		_stroke(shape, at, ROW_SIZE * breath, glow, heat)
 		# A thin under-glow, wider and fainter, so the row reads as lit rather
 		# than merely drawn.
@@ -101,7 +124,7 @@ func _draw_committed(runes: Array) -> void:
 			Color(glow.r, glow.g, glow.b), heat * 0.22, 9.0)
 	# The chain between them: what makes a row of marks read as one working.
 	if runes.size() > 1:
-		var y := ROW_Y
+		var y := row_y
 		var link := Color(glow.r, glow.g, glow.b, 0.22)
 		draw_line(Vector2(x + ROW_SIZE * 0.5, y),
 			Vector2(x + span - ROW_SIZE * 0.5, y), link, 2.0, true)
@@ -114,7 +137,8 @@ func _draw_live() -> void:
 	if shape == "none":
 		return
 	var sure: float = divine_hand.live_confidence
-	var at := Vector2(size.x * 0.5, LIVE_Y)
+	var screen := _centre()
+	var at := screen * LIVE_AT
 	var settled := sure >= SURE_ENOUGH
 	var tint := GameState.alignment_color() if settled else Color(0.72, 0.80, 1.0)
 	# It grows very slightly as it firms up, which reads as the shape being

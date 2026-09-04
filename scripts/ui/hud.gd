@@ -6,6 +6,24 @@ extends CanvasLayer
 ## the cast of the sky, and details live on hover. What remains here: the
 ## diet readout, gesture legend, hover tooltip, announcements, F1 help.
 
+## HOW WIDE THE CREATURE PANEL MAY GET, as a share of the screen, and how many
+## characters of a value fit on one line inside it.
+##
+## It had no width at all: a Label in a PanelContainer sizes to its longest
+## line, and the miracle list is one comma-joined string that grows every time
+## the beast watches you cast something new. One line eventually covered the
+## screen. Both numbers are needed — the character wrap is what actually breaks
+## the text, and the pixel cap is the backstop for a long unbroken word.
+const PANEL_SHARE := 1.0 / 3.0
+const WRAP_AT := 46          # characters of a value per line
+const LABEL_PAD := "          "   # the hanging indent, matching "Miracles: "
+
+
+## WHAT IT HAS LEARNED TO CAST, which is the line that used to run off the
+## screen. Wrapped like everything else, and capped: past a dozen the list
+## stops being a thing you read and becomes a count.
+const MIRACLES_SHOWN := 12
+
 var village: Village
 var divine_hand: DivineHand
 var creature: Creature
@@ -133,9 +151,48 @@ func _build_creature_panel() -> void:
 	_creature_label = Label.new()
 	_creature_label.add_theme_font_size_override("font_size", 16)
 	_creature_label.add_theme_color_override("font_color", Color.WHITE)
+	# Wrapped by hand to WRAP_AT (see `_field`) so the hanging indent survives;
+	# this is the backstop for anything that still will not fit, and the reason
+	# the panel can never grow past its third of the screen.
+	_creature_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_creature_panel.add_child(_creature_label)
 	add_child(_creature_panel)
 	_make_click_through(_creature_panel)
+
+
+## One "Label:   value" row, wrapped to WRAP_AT characters with every line after
+## the first indented under the value rather than under the label.
+func _field(label: String, value: String) -> String:
+	var lines: Array[String] = []
+	for para: String in value.split("\n"):
+		var line := ""
+		for word: String in para.split(" "):
+			if word == "":
+				continue
+			if line == "":
+				line = word
+			elif line.length() + 1 + word.length() <= WRAP_AT:
+				line += " " + word
+			else:
+				lines.append(line)
+				line = word
+		lines.append(line)
+	if lines.is_empty():
+		lines.append("")
+	var out := "%-9s %s" % [label + ":", lines[0]]
+	for i in range(1, lines.size()):
+		out += "\n" + LABEL_PAD + lines[i]
+	return out
+
+
+func _miracle_list(spells: Array) -> String:
+	if spells.is_empty():
+		return "none yet"
+	var shown := spells.slice(0, MIRACLES_SHOWN)
+	var text: String = ", ".join(PackedStringArray(shown))
+	if spells.size() > shown.size():
+		text += " … and %d more" % (spells.size() - shown.size())
+	return text
 
 
 ## Praise / Scold — big touch buttons, top-right, only while locked on. They
@@ -502,40 +559,42 @@ func _update_creature_panel() -> void:
 	var picture: Array = creature.mind.world_picture()
 	var world := "no idea yet" if picture.is_empty() else "\n          ".join(picture)
 	var spells: Array = creature.mind.known_miracles()
-	var magic: String = ", ".join(spells) if not spells.is_empty() else "none yet"
 	# ITS CHARACTER, spelled out. The one-word nature above is the compass
 	# named; these are the leanings that name actually stands for, so a player
 	# can see WHY their beast is called what it is called.
 	var habits: Array = creature.mind.character_account()
 	var character := "nothing settled yet" if habits.is_empty() \
 		else "\n          ".join(habits)
-	_creature_label.text = ("YOUR CREATURE\n"
-		+ "Doing:    %s\n"
-		+ "Nature:   %s\n"
-		+ "Habits:   %s\n"
-		+ "Feeling:  %s\n"
-		+ "Mood:     %s\n"
-		+ "Bond:     %d / 100\n"
-		+ "Hunger:   %d / 100\n"
-		+ "Energy:   %d / 100\n"
-		+ "Fear:     %d / 100\n"
-		+ "Belly:    %d%% full%s\n"
-		+ "Body:     %s  (fat %d · strength %d%s)\n"
-		+ "Stature:  %s\n"
-		+ "Learned:  %s\n"
-		+ "Believes: %s\n"
-		+ "World:    %s\n"
-		+ "Miracles: %s") % [
-			creature.activity_word(), creature.morality_word(), character,
-			" and ".join(creature.heart.account()), creature.mood_word(),
-			int(creature.bond), int(creature.hunger), int(creature.energy),
-			int(creature.fear),
+	var rows: Array[String] = [
+		"YOUR CREATURE",
+		_field("Doing", creature.activity_word()),
+		_field("Nature", creature.morality_word()),
+		_field("Habits", character),
+		_field("Feeling", " and ".join(creature.heart.account())),
+		_field("Mood", creature.mood_word()),
+		_field("Bond", "%d / 100" % int(creature.bond)),
+		_field("Hunger", "%d / 100" % int(creature.hunger)),
+		_field("Energy", "%d / 100" % int(creature.energy)),
+		_field("Fear", "%d / 100" % int(creature.fear)),
+		_field("Belly", "%d%% full%s" % [
 			int(creature.body.fullness(creature.growth) * 100.0),
-			"  (digesting)" if creature.body.stomach > 0.05 else "",
+			"  (digesting)" if creature.body.stomach > 0.05 else ""]),
+		_field("Body", "%s  (fat %d · strength %d%s)" % [
 			creature.body.condition_word(), int(creature.body.fat),
-			int(creature.body.strength), "  BOOSTED" if creature.body.is_boosted() else "",
-			creature.stature_text(),
-			learned, believes, world, magic]
+			int(creature.body.strength),
+			"  BOOSTED" if creature.body.is_boosted() else ""]),
+		_field("Stature", creature.stature_text()),
+		_field("Learned", learned),
+		_field("Believes", believes),
+		_field("World", world),
+		_field("Miracles", _miracle_list(spells)),
+	]
+	_creature_label.text = "\n".join(rows)
+	# A third of the screen, whatever the screen is — checked every update
+	# because the window can be resized under us.
+	var cap := get_viewport().get_visible_rect().size.x * PANEL_SHARE
+	_creature_panel.custom_minimum_size.x = cap
+	_creature_panel.size.x = cap
 
 
 ## Village roster ------------------------------------------------------------
