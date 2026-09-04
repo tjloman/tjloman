@@ -12,7 +12,25 @@ const MAX_LUMBER := 10.0
 ## saplings. lumber advances by GROWTH_BASE / (1 + lumber * GROWTH_TAPER).
 const GROWTH_BASE := 0.06
 const GROWTH_TAPER := 0.7
-const RAIN_GROWTH := 1.6    # a rain miracle speeds growth while it lasts
+const RAIN_GROWTH := 1.6    # a rain miracle also improves the growth lottery
+
+## WATERING IS SEVERAL TURNS OF THE CRANK, not a nudge to the odds.
+##
+## Rain used to do nothing but multiply the growth lottery's odds for a few
+## seconds, and the lottery is the whole reason a tree takes two hours: one
+## success adds 0.024 of the ten lumber a tree is, and the odds go from 10% to
+## 16% for the twelve seconds a rain miracle lasts. Measured, that is 0.42% of
+## a sapling and 0.10% of a half-grown tree — a miracle you cannot see happen,
+## which is the same as one that did not.
+##
+## So a watering now ADVANCES the tree directly, by a share of the growth it
+## has left, spread over a few seconds so you watch it take. Sharing the
+## REMAINDER rather than adding lumber means it always shows on a sapling, still
+## means something to a big tree, and can never overshoot.
+const SPURT_PER_SECOND := 0.25   # turns of the crank per second of blessing
+const SPURTS_MOST := 8.0         # what any one blessing can be worth
+const SPURT_ADVANCE := 0.06      # share of the REMAINING lumber, per turn
+const SPURT_RATE := 1.2          # turns a second, so the growth is watchable
 const SAPLING_SCALE := 0.15   # a knee-high seedling
 const MATURE_SCALE := 5.0     # a full-grown giant towers ~30m over the land
 const GROW_LERP := 5.0        # how fast the visible scale eases toward its target
@@ -65,6 +83,7 @@ var _spin_ang := Vector3.ZERO   # aftertouch spin axis*rate while airborne (rad/
 var _plant_yaw := 0.0           # the tree's random facing, restored after a throw
 var _grow_accum := randf() * 0.4   # de-sync the growth tick across trees
 var _rain_time := 0.0              # seconds of lingering rain-blessing
+var _spurts := 0.0                 # turns of the growth crank still owed
 var _neighbours := 0               # nearby trees, cached (counting them is costly)
 var _neighbour_time := 0.0
 var _lean := Vector3.ZERO          # current tilt as an axis*angle vector
@@ -157,6 +176,7 @@ func _process(delta: float) -> void:
 	if _rain_time > 0.0:
 		_rain_time -= d
 	if lumber < MAX_LUMBER:
+		_take_spurt(d)
 		_tick_neighbours(d)
 		# THE GROWTH LOTTERY: most ticks nothing happens at all. Rain improves
 		# the odds; crowding worsens them, so a tree in dense woods creeps.
@@ -204,9 +224,25 @@ func _tick_neighbours(d: float) -> void:
 	_neighbours = n
 
 
-## A passing rain miracle blesses the tree with faster growth for a while.
+## WATERED — by rain, or by a creature that chose this spot to relieve itself.
+## Buys turns of the growth crank, and sweetens the ordinary lottery besides.
 func rain(duration: float) -> void:
 	_rain_time = maxf(_rain_time, duration)
+	_spurts = minf(_spurts + duration * SPURT_PER_SECOND, SPURTS_MOST)
+
+
+## Spend what watering bought, a little at a time — the growth is meant to be
+## seen happening rather than to have already happened.
+func _take_spurt(d: float) -> void:
+	if _spurts <= 0.0:
+		return
+	var turns := minf(_spurts, SPURT_RATE * d)
+	_spurts -= turns
+	lumber = minf(lumber + (MAX_LUMBER - lumber) * SPURT_ADVANCE * turns, MAX_LUMBER)
+	var target := _scale_for_lumber()
+	if not target.is_equal_approx(_target_scale):
+		_target_scale = target
+		_grow_anim = true
 
 
 ## Shoved aside by something wading past (the creature): lean the crown AWAY

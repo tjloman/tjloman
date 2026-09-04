@@ -984,6 +984,51 @@ func _run_smoke_test() -> void:
 	print("SMOKE TEST: relief — %.0f%% of a load, waste now %.0f, ground blessed %ds" % [
 		came_out * 100.0, creature.body.waste, int(Poop.NOURISH_SECONDS * came_out)])
 	assert(is_zero_approx(creature.body.waste), "going must actually empty it")
+
+	# AND WATERING HAS TO BE WORTH SOMETHING. Rain used to do nothing but
+	# multiply a tree's growth lottery for twelve seconds, which measured out
+	# at 0.42% of a sapling and 0.10% of a half-grown tree — a miracle you
+	# could not see happen. It advances the tree directly now, by a share of
+	# what it has left, so this checks the thing that was broken.
+	var sapling := WildTree.new()
+	add_child(sapling)
+	# Well away from the village. A test that spawns things at the origin is
+	# a test that drops them in Elsmere's town square, which this project has
+	# already done once by accident.
+	sapling.global_position = Vector3(420, 0, 420)
+	sapling.lumber = 2.0
+	var before_water := sapling.lumber
+	sapling.rain(12.0)                       # exactly one rain miracle's worth
+	for i in 30:
+		sapling._take_spurt(0.4)             # the crank turning, as _process does
+	var after_rain := sapling.lumber
+	sapling.rain(Poop.NOURISH_SECONDS)       # and a creature's manure
+	for i in 30:
+		sapling._take_spurt(0.4)
+	print("SMOKE TEST: watering a tree — lumber %.2f, after rain %.2f (+%.1f%%), after manure %.2f (+%.1f%%)" % [
+		before_water, after_rain, (after_rain - before_water) / WildTree.MAX_LUMBER * 100.0,
+		sapling.lumber, (sapling.lumber - after_rain) / WildTree.MAX_LUMBER * 100.0])
+	assert(after_rain > before_water + WildTree.MAX_LUMBER * 0.05,
+		"one rain miracle must visibly grow a tree")
+	assert(sapling.lumber > after_rain,
+		"and manure must be worth more again")
+	sapling.queue_free()
+
+	# The fields were already fine — four times growth while it lasts — but
+	# they are measured too, because the same manure feeds both.
+	var field := Farm.new()
+	add_child(field)
+	field.global_position = Vector3(440, 0, 420)
+	field.growth = 0.1
+	var before_field := field.growth
+	field.water(12.0)
+	for i in 24:
+		field._process(0.5)
+	print("SMOKE TEST: watering a field — %.0f%% grown -> %.0f%% after one rain" % [
+		before_field * 100.0, field.growth * 100.0])
+	assert(field.growth > before_field + 0.15,
+		"one rain miracle must visibly ripen a field")
+	field.queue_free()
 	var lift_before := creature.body.lift_limit(creature.growth)
 	creature.grant_strength(20.0)
 	print("SMOKE TEST: strength miracle — lift limit %.1f -> %.1f lumber (boosted=%s)" % [
