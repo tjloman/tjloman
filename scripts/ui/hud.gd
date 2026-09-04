@@ -182,7 +182,7 @@ func _build_creature_panel() -> void:
 
 ## One "Label:   value" row, wrapped to `wrap` characters with every line after
 ## the first indented under the value rather than under the label.
-func _field(label: String, value: String, wrap: int) -> String:
+func _field(label: String, value: String, room: int) -> String:
 	var lines: Array[String] = []
 	for para: String in value.split("\n"):
 		var line := ""
@@ -191,21 +191,21 @@ func _field(label: String, value: String, wrap: int) -> String:
 				continue
 			var word := raw
 			# A WORD TOO LONG FOR THE LINE is broken across lines rather than
-			# left to run off the edge. This is the one case autowrap used to
-			# cover, and covering it here is what lets autowrap stay off — with
+			# left to run off the edge. This is the one case autoroom used to
+			# cover, and covering it here is what lets autoroom stay off — with
 			# it off, the label's size follows from its text and nothing has to
 			# be negotiated with a container that has no parent to ask.
-			while word.length() > wrap:
+			while word.length() > room:
 				if line != "":
 					lines.append(line)
 					line = ""
-				lines.append(word.substr(0, wrap))
-				word = word.substr(wrap)
+				lines.append(word.substr(0, room))
+				word = word.substr(room)
 			if word == "":
 				continue
 			if line == "":
 				line = word
-			elif line.length() + 1 + word.length() <= wrap:
+			elif line.length() + 1 + word.length() <= room:
 				line += " " + word
 			else:
 				lines.append(line)
@@ -635,30 +635,30 @@ func _update_creature_panel() -> void:
 	var habits: Array = creature.mind.character_account()
 	var character := "nothing settled yet" if habits.is_empty() \
 		else "\n          ".join(habits)
-	var wrap := _wrap_width()
+	var room := _wrap_width()
 	var rows: Array[String] = [
 		"YOUR CREATURE",
-		_field("Doing", creature.activity_word(), wrap),
-		_field("Nature", creature.morality_word(), wrap),
-		_field("Habits", character, wrap),
-		_field("Feeling", " and ".join(creature.heart.account()), wrap),
-		_field("Mood", creature.mood_word(), wrap),
-		_field("Bond", "%d / 100" % int(creature.bond), wrap),
-		_field("Hunger", "%d / 100" % int(creature.hunger), wrap),
-		_field("Energy", "%d / 100" % int(creature.energy), wrap),
-		_field("Fear", "%d / 100" % int(creature.fear), wrap),
+		_field("Doing", creature.activity_word(), room),
+		_field("Nature", creature.morality_word(), room),
+		_field("Habits", character, room),
+		_field("Feeling", " and ".join(creature.heart.account()), room),
+		_field("Mood", creature.mood_word(), room),
+		_field("Bond", "%d / 100" % int(creature.bond), room),
+		_field("Hunger", "%d / 100" % int(creature.hunger), room),
+		_field("Energy", "%d / 100" % int(creature.energy), room),
+		_field("Fear", "%d / 100" % int(creature.fear), room),
 		_field("Belly", "%d%% full%s" % [
 			int(creature.body.fullness(creature.growth) * 100.0),
-			"  (digesting)" if creature.body.stomach > 0.05 else ""], wrap),
+			"  (digesting)" if creature.body.stomach > 0.05 else ""], room),
 		_field("Body", "%s  (fat %d · strength %d%s)" % [
 			creature.body.condition_word(), int(creature.body.fat),
 			int(creature.body.strength),
-			"  BOOSTED" if creature.body.is_boosted() else ""], wrap),
-		_field("Stature", creature.stature_text(), wrap),
-		_field("Learned", learned, wrap),
-		_field("Believes", believes, wrap),
-		_field("World", world, wrap),
-		_field("Miracles", _miracle_list(spells), wrap),
+			"  BOOSTED" if creature.body.is_boosted() else ""], room),
+		_field("Stature", creature.stature_text(), room),
+		_field("Learned", learned, room),
+		_field("Believes", believes, room),
+		_field("World", world, room),
+		_field("Miracles", _miracle_list(spells), room),
 	]
 	_creature_label.text = "\n".join(rows)
 

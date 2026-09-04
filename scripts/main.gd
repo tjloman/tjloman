@@ -1207,9 +1207,13 @@ func _smoke_test_tree_friends() -> void:
 	for c in get_tree().get_nodes_in_group("critters"):
 		if (c as Critter).has_voice():
 			voices += 1
-	print("SMOKE TEST: tree friends — %d alive (budget %d), voices capped at %d, night=%s" % [
-		alive, Quality.critters(), TreeFriends.VOICES, GameState.is_night()])
+	# This counted the voices and then printed the CONSTANT, so the one thing it
+	# was written to check — that no more than a handful of critters are ever
+	# audible at once — was never actually checked, and the count sat unused.
+	print("SMOKE TEST: tree friends — %d alive (budget %d), %d voices (cap %d), night=%s" % [
+		alive, Quality.critters(), voices, TreeFriends.VOICES, GameState.is_night()])
 	assert(alive <= Quality.critters(), "the wood must respect its budget")
+	assert(voices <= TreeFriends.VOICES, "only the nearest few may be heard at once")
 
 	# SWITCHED OFF MEANS GONE, not hidden — no nodes, no players, no ticking.
 	GameState.tree_friends = false

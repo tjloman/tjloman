@@ -177,9 +177,9 @@ func bursting() -> bool:
 ## And it goes. Returns how much came out, 0..1 of a full load, which is what
 ## decides how much good it does the ground it lands on.
 func relieve() -> float:
-	var load := waste / 100.0
+	var came_out := waste / 100.0
 	waste = 0.0
-	return load
+	return came_out
 
 
 ## Effort builds muscle and burns fat. Called when the creature does something

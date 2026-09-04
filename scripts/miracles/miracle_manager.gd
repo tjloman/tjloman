@@ -749,7 +749,11 @@ func _cast_earthquake(pos: Vector3, potency := 1.0) -> void:
 		# Under the blow first, then out in ALTERNATE directions — so the pairs
 		# fall at 0, -1, +1, -2, +2 spans and the fault opens from the middle
 		# instead of trailing off one side of it.
-		var out := float((step + 1) / 2) * span * (-1.0 if step % 2 == 1 else 1.0)
+		# The halving is MEANT to discard the remainder: steps 0,1,2,3,4 must
+		# give spans 0,1,1,2,2 so the bumps pair off either side of the middle.
+		@warning_ignore("integer_division")
+		var pair := (step + 1) / 2
+		var out := float(pair) * span * (-1.0 if step % 2 == 1 else 1.0)
 		var drift := heading + randf_range(-QUAKE_WANDER, QUAKE_WANDER)
 		var at := here + Vector2(cos(drift), sin(drift)) * out \
 			+ Vector2(randf_range(-1.2, 1.2), randf_range(-1.2, 1.2))

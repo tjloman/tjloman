@@ -23,14 +23,14 @@ const REACH := 7.0
 ## same door rather than inventing a parallel notion of fertility.
 const NOURISH_SECONDS := 150.0
 
-var load := 1.0        # 0..1, how much came out
+var amount := 1.0      # 0..1, how much came out
 var _age := 0.0
 var _pile: Node3D = null
 
 
 func _ready() -> void:
 	add_to_group("poop")
-	var size := lerpf(0.22, 0.5, clampf(load, 0.0, 1.0))
+	var size := lerpf(0.22, 0.5, clampf(amount, 0.0, 1.0))
 	_pile = Util.lite_sphere(size, Color(0.34, 0.24, 0.15), Vector3.ZERO, 6)
 	_pile.scale.y = 0.55
 	add_child(_pile)
@@ -47,12 +47,12 @@ func _feed_the_ground() -> void:
 	for t in get_tree().get_nodes_in_group("trees"):
 		var tree := t as WildTree
 		if is_instance_valid(tree) and tree.global_position.distance_to(global_position) < REACH:
-			tree.rain(NOURISH_SECONDS * load)
+			tree.rain(NOURISH_SECONDS * amount)
 			fed += 1
 	for f in get_tree().get_nodes_in_group("farms"):
 		var farm := f as Farm
 		if is_instance_valid(farm) and farm.global_position.distance_to(global_position) < REACH:
-			farm.water(NOURISH_SECONDS * load)
+			farm.water(NOURISH_SECONDS * amount)
 			fed += 1
 	if fed > 0:
 		GameState.announce(GameState.named(

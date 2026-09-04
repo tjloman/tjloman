@@ -52,12 +52,12 @@ static func offer(who: Creature, opts: Dictionary) -> void:
 
 ## And it goes.
 static func go(who: Creature, place: String) -> void:
-	var load := who.body.relieve()
-	if load <= 0.01:
+	var amount := who.body.relieve()
+	if amount <= 0.01:
 		return
 	var spec: Dictionary = WORTH.get(place, WORTH["open"])
 	var muck := Poop.new()
-	muck.load = load
+	muck.amount = amount
 	var scene := who.get_tree().current_scene
 	if scene == null:
 		return
@@ -73,8 +73,8 @@ static func go(who: Creature, place: String) -> void:
 	# THE LESSON. The deed's own reward teaches the creature whether it liked
 	# doing it here; the karma is yours, because a beast that fouls the store
 	# is a beast the village blames its god for.
-	who.mind.reinforce(float(spec["reward"]) * load)
-	var karma := float(spec["karma"]) * load
+	who.mind.reinforce(float(spec["reward"]) * amount)
+	var karma := float(spec["karma"]) * amount
 	if not is_zero_approx(karma):
 		GameState.shift_alignment(karma)
 	if String(spec["deed"]) == "mischief":

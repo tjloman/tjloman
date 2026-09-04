@@ -706,6 +706,50 @@ def check_shadowed_members(files):
     return problems
 
 
+# GLOBAL FUNCTIONS OF @GlobalScope that read like ordinary nouns, and so get
+# used as variable names without anyone noticing. Godot warns rather than
+# errors, which means the warning scrolls past in a wall of engine output and
+# nobody sees it -- `load`, `wrap` and `range` all shipped in this project that
+# way. Deliberately NOT the whole of @GlobalScope: a name nobody would ever
+# reach for is a name nobody will accidentally shadow, and every entry here is
+# one more chance of a false positive.
+SHADOWABLE = {
+    "abs", "acos", "asin", "atan", "ceil", "char", "clamp", "cos", "ease",
+    "error_string", "exp", "floor", "fmod", "hash", "instance_from_id",
+    "inverse_lerp", "is_instance_valid", "len", "lerp", "load", "log", "max",
+    "min", "move_toward", "nearest_po2", "ord", "pingpong", "posmod", "pow",
+    "print", "printerr", "push_error", "push_warning", "randf", "randi",
+    "randomize", "range", "remap", "rotate_toward", "round", "seed", "sign",
+    "sin", "smoothstep", "snapped", "sqrt", "str", "str_to_var", "tan",
+    "type_convert", "typeof", "var_to_str", "weakref", "wrap",
+}
+var_decl_re = re.compile(r"^\s*(?:@\w+\s+)*var\s+(\w+)", re.M)
+
+
+def check_shadowed_globals(files):
+    """A variable or parameter named after a built-in global function.
+
+    Godot only WARNS about this, so it never stops a build and never gets
+    fixed -- and the day someone inside that scope wants the real `load()` or
+    `wrap()`, they get the local instead, silently.
+    """
+    out = []
+    for path in files:
+        src = open(path, encoding="utf-8").read()
+        for lineno, line in enumerate(src.split("\n"), 1):
+            bare = line.split("#")[0]
+            if not bare.strip():
+                continue
+            for name in var_decl_re.findall(bare):
+                if name in SHADOWABLE:
+                    out.append((path, lineno, name, "variable", line.strip()))
+            for _fname, raw in signature_re.findall(bare + "\n"):
+                for pname, _kind in parse_params(raw):
+                    if pname in SHADOWABLE:
+                        out.append((path, lineno, pname, "parameter", line.strip()))
+    return out
+
+
 def main():
     root = "scripts"
     targets = sys.argv[1:] or [root]
@@ -750,6 +794,12 @@ def main():
               "Variant here — this project builds that as an ERROR and it stops "
               "every dependent script loading. Declare the type, or wrap the "
               "call.\n    %s" % (path, lineno, call, line))
+    shadowed_globals = check_shadowed_globals(files)
+    for path, lineno, name, kind, line in shadowed_globals:
+        print("%s:%d: the %s '%s' has the same name as the built-in function "
+              "%s() — Godot warns and carries on, so this never gets fixed, and "
+              "the real %s() is unreachable from inside this scope"
+              "\n    %s" % (path, lineno, kind, name, name, name, line))
     loop_vars = check_untyped_loop_vars(files)
     for path, lineno, name, line in loop_vars:
         print("%s:%d: '%s' comes from an UNTYPED array literal, so it is a "
@@ -759,7 +809,7 @@ def main():
               % (path, lineno, name, name, line))
     total = len(problems) + len(escapes) + len(formats) + len(shadowed) \
         + len(loose_arrays) + len(variants) + len(shadowed_members) \
-        + len(loop_vars)
+        + len(loop_vars) + len(shadowed_globals)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0
