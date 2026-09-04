@@ -1546,10 +1546,13 @@ func _smoke_test_gestures() -> void:
 		"rev_spiral": func(t: float) -> Vector2:
 			return Vector2(400, 300) + Vector2(cos(-t * TAU * 2.5), sin(-t * TAU * 2.5)) * (20 + t * 130),
 		"wave": func(t: float) -> Vector2: return Vector2(120 + t * 300, 300 + sin(t * TAU) * 90),
-		"zigzag": func(t: float) -> Vector2:
-			var teeth := t * 5.0
-			var up := 1.0 if int(teeth) % 2 == 1 else -1.0
-			return Vector2(120 + t * 300, 300 - up * absf(fmod(teeth, 1.0) * 2.0 - 1.0) * 80.0),
+		"zed": func(t: float) -> Vector2:
+			if t < 1.0 / 3.0:
+				return Vector2(120 + t * 3.0 * 240.0, 160)
+			if t < 2.0 / 3.0:
+				var k := (t - 1.0 / 3.0) * 3.0
+				return Vector2(360 - k * 240.0, 160 + k * 240.0)
+			return Vector2(120 + (t - 2.0 / 3.0) * 3.0 * 240.0, 400),
 		# THE FOUR DIRECTIONS, drawn two sharp and two round on purpose. The
 		# claim this alphabet rests on is that a peak and a bow bending the same
 		# way are the SAME rune, so the smoke test must exercise both forms or
@@ -1590,16 +1593,15 @@ func _smoke_test_gestures() -> void:
 			func(t: float) -> Vector2:
 				return Vector2(200 + t * 220 + sin(t * TAU) * 70, 160 + t * 220 - sin(t * TAU) * 40),
 		],
-		"zigzag": [
-			func(t: float) -> Vector2:
-				var teeth := t * 5.0
-				var up := 1.0 if int(teeth) % 2 == 1 else -1.0
-				return Vector2(120 + t * 300, 300 - up * absf(fmod(teeth, 1.0) * 2.0 - 1.0) * 80.0),
-			func(t: float) -> Vector2:
-				var teeth := t * 5.0
-				var up := 1.0 if int(teeth) % 2 == 1 else -1.0
-				return Vector2(400 - up * absf(fmod(teeth, 1.0) * 2.0 - 1.0) * 80.0, 120 + t * 300),
-		],
+		# FURY IS NOT LISTED HERE, and that is the point of the note. It used to
+		# be, back when it was a zigzag and every bearing of one was a template.
+		# A Z has no rotated templates on purpose: turn one on its side and it
+		# is an N, which is a different mark, and this recognizer has no
+		# rotation normalisation precisely so that such things stay different.
+		# Measured: a Z turned thirty or ninety degrees reads as `wave`, which
+		# is the system working. Turned a full half-circle it reads as fury
+		# again — that is not a rotation surviving, it is the same stroke drawn
+		# backwards, and every stroke is matched reversed as well.
 	}
 	var bear_ok := 0
 	var bear_all := 0
@@ -1613,35 +1615,55 @@ func _smoke_test_gestures() -> void:
 					bear_ok += 1
 				else:
 					bear_miss.append("%s->%s" % [want, read])
-	print("SMOKE TEST: every bearing — %d/%d (upright, lying down, on the slant) %s" % [
+	print("SMOKE TEST: water's bearings — %d/%d (upright, lying down, on the slant) %s" % [
 		bear_ok, bear_all, str(bear_miss)])
 	print("SMOKE TEST: water is castable — an upright S reads as rune '%s'" % [
 		Spellbook.rune_for(GestureRecognizer.classify(_wobbly_stroke(
 			func(t: float) -> Vector2: return Vector2(400 + sin(t * TAU) * 90, 120 + t * 300), 0)))])
 
-	# FURY, BY TOOTH COUNT. Nobody counts the teeth in their own scrawl, so
-	# every plausible count has to read. With one five-tooth reference, three
-	# and six came out as a straight line and fury was nearly uncastable.
-	var teeth_ok := 0
-	var teeth_all := 0
-	var teeth_miss := []
-	for teeth: int in [3, 4, 5, 6, 7]:
-		for upright: bool in [false, true]:
+	# FURY, BY ASPECT RATIO. This counted TEETH until now, from when fury was a
+	# zigzag — and it had gone on asking for a shape called "zigzag" long after
+	# nothing could answer to that name, so it failed every single run and told
+	# nobody anything. A test that cannot pass is worse than no test: it teaches
+	# whoever reads the log to ignore the log.
+	#
+	# Fury became a sharp Z because the zigzag was the one rune a hot phone
+	# could not read. Five teeth have to be SAMPLED, and a phone that has pulled
+	# its touch scan rate back reports a dozen points for the whole stroke — at
+	# which point the teeth are gone and it reads as a flat line, which is
+	# EARTH. So earth+fury, the earthquake, was quietly becoming earth+earth,
+	# which plants a wood.
+	#
+	# What hands actually vary about a Z is how squat or tall they write it, so
+	# that is what is swept here. Both directions go in too: a Z begun at the
+	# bottom is the same stroke reversed, and reversal is free because every
+	# stroke is matched backwards as well — which is worth proving rather than
+	# believing.
+	var zed_ok := 0
+	var zed_all := 0
+	var zed_miss := []
+	for tall: float in [0.5, 0.62, 0.8, 1.0, 1.3, 1.55, 2.0]:
+		for upward: bool in [false, true]:
 			for seed_k in 3:
-				var jag2 := _wobbly_stroke(func(t: float) -> Vector2:
-					var n := t * teeth
-					var up := 1.0 if int(n) % 2 == 1 else -1.0
-					var off := up * absf(fmod(n, 1.0) * 2.0 - 1.0) * 80.0
-					return Vector2(400 + off, 120 + t * 300) if upright \
-						else Vector2(120 + t * 300, 300 - off), seed_k)
-				var read2 := GestureRecognizer.classify(jag2)
-				teeth_all += 1
-				if read2 == "zigzag":
-					teeth_ok += 1
+				var across := 240.0 / tall
+				var down := 240.0 * tall
+				var mark := _wobbly_stroke(func(t: float) -> Vector2:
+					var u := (1.0 - t) if upward else t
+					if u < 1.0 / 3.0:
+						return Vector2(120 + u * 3.0 * across, 120)
+					if u < 2.0 / 3.0:
+						var k := (u - 1.0 / 3.0) * 3.0
+						return Vector2(120 + across - k * across, 120 + k * down)
+					return Vector2(120 + (u - 2.0 / 3.0) * 3.0 * across, 120 + down),
+					seed_k)
+				var read2 := GestureRecognizer.classify(mark)
+				zed_all += 1
+				if read2 == "zed":
+					zed_ok += 1
 				else:
-					teeth_miss.append("%d teeth->%s" % [teeth, read2])
-	print("SMOKE TEST: fury — %d/%d zigzags read (3-7 teeth, both bearings) %s" % [
-		teeth_ok, teeth_all, str(teeth_miss)])
+					zed_miss.append("%.2f tall->%s" % [tall, read2])
+	print("SMOKE TEST: fury — %d/%d Z's read (squat to tall, drawn both ways) %s" % [
+		zed_ok, zed_all, str(zed_miss)])
 
 	# And a scribble must still mean nothing at all.
 	var mess := PackedVector2Array()
