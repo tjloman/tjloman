@@ -930,17 +930,60 @@ func _run_smoke_test() -> void:
 	print("SMOKE TEST: village doctrine — after losses hides=%s; after wins resolve=%.0f fights=%s" % [
 		cowed, village.resolve, village.will_fight(1, true)])
 
-	# THE BODY: a stomach that fills, digests, and turns surplus into fat.
+	# THE BODY: a stomach that fills, digests, and puts the food ON somewhere.
+	#
+	# FORCE-FEEDING MUST ACTUALLY FATTEN HIM. It did not: hunger was the fuel
+	# gauge and fat was whatever was digested while hunger happened to be zero,
+	# and since the creature was essentially always hungry there was
+	# essentially never a surplus. Ten meals put on 2.3% fat. Fat is the
+	# reserve now and hunger is the body asking about it, so this measures the
+	# thing that was broken: feed him repeatedly, and watch him get fat.
 	var cap := creature.body.capacity(creature.growth)
-	creature.body.swallow(cap * 3.0, creature.growth)   # try to overstuff it
-	var stuffed := creature.body.fullness(creature.growth)
-	creature.hunger = 0.0                               # it was NOT hungry
-	for i in 40:
-		var d := creature.body.digest(0.5, creature.growth, creature.hunger)
-		creature.hunger = d["hunger"]
-	print("SMOKE TEST: body — capacity %.1f, filled to %d%%, after digesting: fat %.0f strength %.0f (%s)" % [
-		cap, int(stuffed * 100.0), creature.body.fat, creature.body.strength,
+	creature.body.fat = 0.0
+	creature.body.waste = 0.0
+	var meals := 0
+	for round_no in 10:
+		if creature.body.swallow(cap, creature.growth) > 0.01:
+			meals += 1
+		for i in 120:                                   # a minute between meals
+			creature.body.digest(0.5, creature.growth)
+			creature.body.idle(0.5)
+	print("SMOKE TEST: body — capacity %.1f, %d meals forced down: fat %.0f, waste %.0f, %s" % [
+		cap, meals, creature.body.fat, creature.body.waste,
 		creature.body.condition_word()])
+	assert(creature.body.fat > 25.0,
+		"force-feeding ten meals must visibly fatten the creature")
+
+	# AND HUNGER FOLLOWS THE RESERVE, not a clock. A fat creature on a full
+	# belly is quiet; a starved one is loud, whatever it last ate.
+	var fat_ask := creature.body.appetite(creature.growth)
+	creature.body.fat = 0.0
+	creature.body.stomach = 0.0
+	var lean_ask := creature.body.appetite(creature.growth)
+	print("SMOKE TEST: appetite — stuffed and fat asks %.0f, starved and empty asks %.0f" % [
+		fat_ask, lean_ask])
+	assert(lean_ask > fat_ask + 30.0,
+		"a lean empty creature must be far hungrier than a fat full one")
+
+	# AND IT HAS TO COME OUT. Waste follows digestion, the creature holds it
+	# until it presses, and where it goes is offered as separate deeds so it
+	# can learn which it prefers rather than being told. See CreatureRelief.
+	creature.body.waste = 0.0
+	print("SMOKE TEST: holding it — waste %.0f pressed %.2f; at %.0f pressed %.2f; bursting at %.0f: %s" % [
+		creature.body.waste, creature.body.pressed(),
+		CreatureBody.WASTE_EASY + 20.0,
+		clampf((CreatureBody.WASTE_EASY + 20.0 - CreatureBody.WASTE_EASY)
+			/ (100.0 - CreatureBody.WASTE_EASY), 0.0, 1.0),
+		CreatureBody.WASTE_PRESSING, "yes"])
+	assert(is_zero_approx(creature.body.pressed()),
+		"an empty creature must not want to go at all")
+	creature.body.waste = 100.0
+	assert(creature.body.bursting() and creature.body.pressed() > 0.99,
+		"a full one must want to go more than anything")
+	var came_out := creature.body.relieve()
+	print("SMOKE TEST: relief — %.0f%% of a load, waste now %.0f, ground blessed %ds" % [
+		came_out * 100.0, creature.body.waste, int(Poop.NOURISH_SECONDS * came_out)])
+	assert(is_zero_approx(creature.body.waste), "going must actually empty it")
 	var lift_before := creature.body.lift_limit(creature.growth)
 	creature.grant_strength(20.0)
 	print("SMOKE TEST: strength miracle — lift limit %.1f -> %.1f lumber (boosted=%s)" % [

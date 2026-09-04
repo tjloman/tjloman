@@ -106,6 +106,10 @@ const VERB_TRAITS := {
 	# reaching, failing, and remembering the circumstances (see _process_cast).
 	"cast": {"thrill": 0.5, "heals": 1.0, "effort": 0.5},
 	"wander": {"thrill": 0.25, "calms": 0.2, "effort": 0.3},
+	# GOING. Almost no effort, and it answers exactly one thing — which is why
+	# it needs a trait of its own rather than borrowing "calms": a creature
+	# should not decide to relieve itself because it is tired.
+	"relieve": {"relieves": 1.0, "effort": 0.1},
 	# The quiet life.
 	"lounge": {"calms": 0.85, "social": 0.15},
 	"dance": {"thrill": 0.75, "social": 0.6, "effort": 0.5},
@@ -229,6 +233,7 @@ func _drive_fit(verb: String, drive: Dictionary) -> float:
 	var full: float = drive.get("full", 0.0)      # 0 empty .. 1 stuffed
 	var lazy: float = drive.get("lazy", 0.0)      # how fat, and so how disinclined
 	var lonely: float = drive.get("lonely", 0.0)  # nobody about
+	var pressed: float = drive.get("pressed", 0.0)  # how badly it needs to go
 	# WHAT IT EXPECTS OF THIS MOMENT AND THIS GROUND, before it has done
 	# anything at all — its picture of what the world does on its own, plus how
 	# it feels about where it is standing. Negative is a bad sort of moment.
@@ -247,6 +252,9 @@ func _drive_fit(verb: String, drive: Dictionary) -> float:
 	# expects to go badly.
 	fit -= float(traits.get("thrill", 0.0)) * uneasy * 0.5
 	fit += float(traits.get("heals", 0.0)) * wounded * 2.0
+	# Squared, so it is genuinely ignorable while it can be held and then
+	# rises past everything else — which is how holding it in actually feels.
+	fit += float(traits.get("relieves", 0.0)) * pressed * pressed * 4.5
 	# Effort is what a tired or heavy body flinches from — the one universal cost.
 	fit -= float(traits.get("effort", 0.0)) * (lazy * 0.9 + tired * 0.6)
 	return fit

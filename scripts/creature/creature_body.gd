@@ -32,28 +32,55 @@ const FULL_HEIGHT := MAX_SCALE * STANDING
 const BASE_CAPACITY := 2.0
 const CAPACITY_PER_GROWTH := 20.0
 
-## Digestion, in food units per second. A big body processes more at once, but
-## a full stomach still takes a good while to empty.
-const BASE_DIGESTION := 0.05
-const DIGESTION_PER_GROWTH := 0.16
+## Digestion, in food units per second — and it is SLOW, on purpose. A full gut
+## works harder than an almost-empty one, so how long a meal takes is tied to
+## how much was actually eaten rather than being a flat drip. A hatchling's
+## full belly of 2.2 units takes about two and a half minutes to work through.
+const BASE_DIGESTION := 0.022
+const DIGESTION_PER_GROWTH := 0.07
+const DIGESTION_IDLE := 0.35    # how slowly an almost-empty gut works
 
-## What a digested unit is worth, and where it goes.
-const NOURISHMENT := 26.0      # hunger removed per digested unit
-## STEPS OF STATURE per unit of food the body actually WANTED. Surplus goes to
-## fat and buys nothing, so a creature cannot be force-fed up the arc faster
-## than it can get hungry — which is what keeps a full-grown beast the work of
-## many sessions rather than one determined afternoon.
+## STEPS OF STATURE per unit digested, easing off as the beast gets heavy: a
+## fat creature puts less of its dinner into growing.
+const STATURE_PER_UNIT := 26.0
+
+## FAT IS THE RESERVE, and this is the correction at the heart of this file.
 ##
-## At the game's hunger rate this works out at roughly 2,200 steps an hour of
-## attentive play, so the whole 65,535 is about thirty hours with the creature.
-const STATURE_PER_UNIT := 16.0
-const FAT_PER_UNIT := 7.0      # food the body did NOT need becomes fat
-
-## Fat and muscle both drift back toward nothing when unused.
-const FAT_BURN := 0.35         # per second of real exertion
-const FAT_IDLE_BURN := 0.02    # per second, living costs something
-const STRENGTH_DECAY := 0.05   # per second: muscle unused is muscle lost
+## It used to be the LEFTOVERS: hunger was the fuel gauge, and fat was whatever
+## was digested while hunger happened to be zero. Since hunger climbed a point
+## a second and one unit of food only answered twenty-six of it, the creature
+## was essentially always hungry, so there was essentially never a surplus, so
+## fat essentially never moved. Measured: ten meals thirty seconds apart put on
+## 2.3% fat, which is exactly what force-feeding a beast ten times looked like.
+##
+## Turned around, everything falls out. Fat is the store: digestion fills it,
+## living and working empty it. Hunger is the body ASKING about it (see
+## `appetite`), which is what it was always described as.
+const FAT_PER_UNIT := 3.2
+const FAT_BURN := 0.10          # per second of real exertion
+const FAT_IDLE_BURN := 0.0020   # per second, living costs something
+const STRENGTH_DECAY := 0.05    # per second: muscle unused is muscle lost
 const STRENGTH_PER_EXERTION := 3.5
+
+## WHAT COMES OUT. Every unit digested leaves something behind, and a beast
+## carrying too much fat has a good deal more of it to be rid of — which is how
+## eating past what it needs teaches its own lesson.
+const WASTE_PER_UNIT := 9.0
+const WASTE_WHEN_FAT := 1.7
+const STUFFED := 80.0           # fat past which the waste comes faster
+
+## HOW THE BODY ASKS. Appetite is mostly about the reserve and a little about
+## the belly, so a lean creature is hungry even on a full stomach (it is still
+## digesting its way out of trouble) and a fat one is quiet even on an empty
+## one. HUNGER_SETTLE is how fast the felt hunger follows that.
+## How long it can hold it, and when it stops being fussy about where. See
+## `pressed`.
+const WASTE_EASY := 45.0
+const WASTE_PRESSING := 88.0
+
+const APPETITE_FROM_FAT := 0.7
+const APPETITE_FROM_BELLY := 0.3
+const HUNGER_SETTLE := 0.16     # share of the gap closed per second
 
 ## The Strength miracle: a giant's grip, for a while.
 const BOOST_STRENGTH := 100.0
@@ -68,6 +95,7 @@ const ENERGY_PER_GROWTH := 280.0
 
 var stomach := 0.0        # food units currently being digested
 var fat := 0.0            # 0..100 — sleek to obese
+var waste := 0.0          # 0..100 — how badly it needs to go
 var strength := 15.0      # 0..100 — earned by exertion
 var boost_time := 0.0     # seconds of miracle-granted might left
 
@@ -96,28 +124,62 @@ func swallow(units: float, growth: float) -> float:
 	return taken
 
 
-## Work the stomach for a frame. Returns how much GROWTH this earned, and moves
-## hunger/fat as a side effect through the values handed back.
-## `hunger` is the body's current hunger (0 sated .. 100 starving).
-func digest(delta: float, growth: float, hunger: float) -> Dictionary:
+## Work the stomach for a frame. Returns how much GROWTH this earned; fat and
+## waste move as a side effect, because they are this body's own business.
+##
+## Nothing here consults hunger. That is the point: what food BECOMES does not
+## depend on how the creature happened to feel at the moment it swallowed.
+func digest(delta: float, growth: float) -> Dictionary:
 	if stomach <= 0.0:
-		return {"growth": 0.0, "hunger": hunger, "fattened": false}
-	var rate := (BASE_DIGESTION + growth * DIGESTION_PER_GROWTH) * delta
-	var used := minf(stomach, rate)
+		return {"growth": 0.0, "fattened": false}
+	# A full gut works harder than an almost-empty one, so a big meal takes
+	# proportionally longer to get through than a small one.
+	var rate := (BASE_DIGESTION + growth * DIGESTION_PER_GROWTH) \
+		* lerpf(DIGESTION_IDLE, 1.0, fullness(growth))
+	var used := minf(stomach, rate * delta)
 	stomach -= used
-	# Where does it go? Into the body if it was WANTED; onto the waistline if
-	# the creature was already sated when it ate.
-	var needed := clampf(hunger / NOURISHMENT, 0.0, used)
-	var surplus := used - needed
-	var new_hunger := maxf(hunger - needed * NOURISHMENT, 0.0)
-	if surplus > 0.0:
-		fat = minf(fat + surplus * FAT_PER_UNIT, 100.0)
+	var was := fat
+	fat = minf(fat + used * FAT_PER_UNIT, 100.0)
+	var heavy := WASTE_WHEN_FAT if fat > STUFFED else 1.0
+	waste = minf(waste + used * WASTE_PER_UNIT * heavy, 100.0)
 	return {
-		# Only the food the body NEEDED counts toward growing. The rest is fat.
-		"growth": needed * STATURE_PER_UNIT,
-		"hunger": new_hunger,
-		"fattened": surplus > 0.01,
+		# A heavy beast puts less of its dinner into growing.
+		"growth": used * STATURE_PER_UNIT * (1.0 - fat / 200.0),
+		"fattened": fat > was + 0.01,
 	}
+
+
+## WHAT THE BODY IS ASKING FOR, 0..100 — mostly about the reserve, a little
+## about the belly. This is what hunger settles toward; see `settle_hunger`.
+func appetite(growth: float) -> float:
+	return ((1.0 - fat / 100.0) * APPETITE_FROM_FAT
+		+ (1.0 - fullness(growth)) * APPETITE_FROM_BELLY) * 100.0
+
+
+## Hunger eases toward what the body is asking for, rather than climbing on a
+## clock of its own. So an empty lean creature gets hungry, a stuffed fat one
+## goes quiet, and eating quiets it only as the food actually goes down.
+func settle_hunger(hunger: float, growth: float, delta: float) -> float:
+	return lerpf(hunger, appetite(growth), clampf(HUNGER_SETTLE * delta, 0.0, 1.0))
+
+
+## HOW BADLY IT NEEDS TO GO, 0..1. Nothing at all below WASTE_EASY: it can
+## hold it, and will keep holding it while it looks for somewhere it thinks is
+## right. Past WASTE_PRESSING it stops being fussy about where.
+func pressed() -> float:
+	return clampf((waste - WASTE_EASY) / (100.0 - WASTE_EASY), 0.0, 1.0)
+
+
+func bursting() -> bool:
+	return waste >= WASTE_PRESSING
+
+
+## And it goes. Returns how much came out, 0..1 of a full load, which is what
+## decides how much good it does the ground it lands on.
+func relieve() -> float:
+	var load := waste / 100.0
+	waste = 0.0
+	return load
 
 
 ## Effort builds muscle and burns fat. Called when the creature does something
@@ -173,6 +235,8 @@ func is_boosted() -> bool:
 
 ## A plain-words readout for the dashboard.
 func condition_word() -> String:
+	if bursting():
+		return "desperate"
 	if fat > 70.0:
 		return "obese"
 	if fat > 40.0:
@@ -187,12 +251,14 @@ func condition_word() -> String:
 ## Persistence -----------------------------------------------------------------
 
 func to_dict() -> Dictionary:
-	return {"stomach": stomach, "fat": fat, "strength": strength, "boost": boost_time}
+	return {"stomach": stomach, "fat": fat, "waste": waste,
+		"strength": strength, "boost": boost_time}
 
 
 func from_dict(data: Dictionary) -> void:
 	stomach = float(data.get("stomach", 0.0))
 	fat = float(data.get("fat", 0.0))
+	waste = float(data.get("waste", 0.0))
 	strength = float(data.get("strength", 15.0))
 	boost_time = float(data.get("boost", 0.0))
 

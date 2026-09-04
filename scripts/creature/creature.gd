@@ -444,7 +444,8 @@ func _tick_feelings(delta: float) -> void:
 	_tick_exile(delta)
 	_tick_heat(delta)
 	_tick_radiance(delta)
-	hunger = minf(hunger + 1.0 * delta, 100.0)
+	# HUNGER IS THE BODY ASKING, not a clock — see CreatureBody.appetite.
+	hunger = body.settle_hunger(hunger, growth, delta)
 	if state != State.SLEEPING:
 		energy = maxf(energy - 0.4 * delta, 0.0)
 	if state in [State.IDLE, State.WANDER]:
@@ -469,8 +470,7 @@ func _tick_feelings(delta: float) -> void:
 		heart.stir("dread", (fear - 35.0) / 100.0 * delta)
 	# Digest: the stomach empties over time, and where the food GOES depends on
 	# whether the body wanted it. Eating when sated is what makes it fat.
-	var d := body.digest(delta, growth, hunger)
-	hunger = d["hunger"]
+	var d := body.digest(delta, growth)
 	if d["growth"] > 0.0:
 		_grow_by(d["growth"])
 	body.idle(delta)
@@ -636,6 +636,7 @@ func _decide() -> void:
 		"hunger": hunger, "energy": energy, "boredom": boredom,
 		"mood": mood, "fear": fear, "wounded": _wounded_nearby(),
 		"full": body.fullness(growth), "lazy": body.laziness(),
+		"pressed": body.pressed(),   # how badly it needs to go
 		# Being alone is a need like any other. A creature with nobody about
 		# leans toward whatever brings it near people — which for one creature
 		# means holding court and for another means going and finding someone
@@ -648,69 +649,63 @@ func _decide() -> void:
 	_enact(choice)
 
 
-## THE CIRCUMSTANCES it notices right now — the situation its beliefs are
-## learned against, and the same vocabulary it reads other people's plights in.
-## Gathered by its eyes; see CreatureEyes.circumstances.
+## The situation its beliefs are learned against; see CreatureEyes.
 func _circumstances() -> Dictionary:
 	return CreatureEyes.circumstances(self)
 
 
-## Everything the creature can see worth doing right now, as (verb, type,
-## target) opportunities. This is PERCEPTION ONLY — it expresses what is
-## POSSIBLE, never what is preferable; the mind alone weighs them.
+## Everything worth doing right now, as (verb, type, target) opportunities.
+## PERCEPTION ONLY — what is POSSIBLE, never what is preferable; the mind alone
+## weighs them.
 func _perceive() -> Array:
-	# Keyed by "verb|type" so each distinct ACTION gets exactly ONE ballot. This
-	# matters enormously: listing every villager separately would give "eat a
-	# villager" a dozen entries against a single "cast heal", and the choice
-	# would be decided by how many bodies happen to be standing about rather
-	# than by what the creature actually values. Nearest target wins the slot.
 	var opts := {}
-	_offer(opts, "wander", "none", null)
+	offer_option(opts, "wander", "none", null)
 	if energy < 55.0:
-		_offer(opts, "rest", "none", null)
+		offer_option(opts, "rest", "none", null)
+	CreatureRelief.offer(self, opts)
 
 	# A FULL creature does not hunt. Appetite, not just hunger, decides.
 	var can_eat := _can_eat(1.0)
 	var food := CreatureEyes.nearest_food(get_tree(), global_position, morality)
 	if food != null and can_eat:
-		_offer(opts, "eat", _type_of(food), food)
+		offer_option(opts, "eat", _type_of(food), food)
 	# Things it could carry off — to the granary, or to hurl, or to devour.
 	var carriable := CreatureEyes.nearest_carriable(get_tree(), global_position, 35.0)
 	if carriable != null and not can_lift(carriable):
 		carriable = null   # beyond its strength; it knows better than to try
 	if carriable != null:
-		_offer(opts, "gather", _type_of(carriable), carriable)
-		_offer(opts, "throw", _type_of(carriable), carriable)
+		offer_option(opts, "gather", _type_of(carriable), carriable)
+		offer_option(opts, "throw", _type_of(carriable), carriable)
 	# Every creature, beast and building nearby is something it COULD attack,
 	# carry, hurl or eat. Whether it ever does is entirely learned.
 	for node in _things_around(26.0):
 		var t := _type_of(node)
-		_offer(opts, "smash", t, node)
+		offer_option(opts, "smash", t, node)
 		if node is Animal or node is Villager:
-			_offer(opts, "throw", t, node)
+			offer_option(opts, "throw", t, node)
 			if node is Villager:
 				# Eating people is only ever CONSIDERED by a creature that has not
 				# grown kind. Its conscience does the rest of the work.
 				if mind.temperament < 20.0 and can_eat:
-					_offer(opts, "eat_kin", t, node)
+					offer_option(opts, "eat_kin", t, node)
 			elif (node as Animal).meat_yield() > 0 and can_eat \
 					and not _inedible.has((node as Animal).species):
-				_offer(opts, "eat", t, node)
+				offer_option(opts, "eat", t, node)
 		if node is Villager:
-			_offer(opts, "watch", t, node)
+			offer_option(opts, "watch", t, node)
 			if fear > 25.0:
-				_offer(opts, "flee", t, node)   # only a frightened beast thinks of running
+				offer_option(opts, "flee", t, node)   # only a frightened beast thinks of running
 			if (node as Villager).is_dying():
-				_offer(opts, "rescue", t, node)
+				offer_option(opts, "rescue", t, node)
 		if node is WildTree and can_lift(node):
 			# Only as much tree as its muscle can manage. A hatchling wrestles
 			# saplings; a forest giant needs a grown beast — or the Strength
 			# miracle. Hauling one home is the exercise that builds the muscle.
-			_offer(opts, "gather", t, node)
+			offer_option(opts, "gather", t, node)
 		if node is Animal:
-			_offer(opts, "play", t, node)
+			offer_option(opts, "play", t, node)
 			if (node as Animal).is_tamable():
-				_offer(opts, "gift", t, node)
+				offer_option(opts, "gift", t, node)
 
 	# SOMEBODY IN TROUBLE. On the ballot whenever the plainly worst-off soul
 	# nearby is badly enough off to notice. Whether the creature cares is its
@@ -718,25 +713,25 @@ func _perceive() -> Array:
 	# to recognise their fright WITH (see CreatureHeart.read).
 	var troubled := CreatureEyes.neediest_soul(get_tree(), global_position, 26.0)
 	if troubled != null:
-		_offer(opts, "soothe", "villager", troubled)
+		offer_option(opts, "soothe", "villager", troubled)
 
 	var farm := CreatureEyes.nearest_farm(get_tree(), global_position)
 	if farm != null:
-		_offer(opts, "tend", "farm", farm)
+		offer_option(opts, "tend", "farm", farm)
 	if _find_shore() != Vector3.INF:
-		_offer(opts, "fish", "water", null)
+		offer_option(opts, "fish", "water", null)
 	# The granary: an easy meal it can learn to raid (the villagers notice).
 	var store := CreatureEyes.nearest_store(get_tree(), global_position)
 	if store != null and store.total_food() > 0 and can_eat:
-		_offer(opts, "eat", "store", store)
+		offer_option(opts, "eat", "store", store)
 	if GameState.is_night():
-		_offer(opts, "guard", "village", null)
+		offer_option(opts, "guard", "village", null)
 	# Miracles it has watched often enough to try itself — but not while the
 	# device underneath is labouring. A creature's own miracle is by a long way
 	# the most expensive thing in the game, and it is the first thing to go.
 	if not Quality.struggling():
 		for m: String in mind.known_miracles():
-			_offer(opts, "cast", m, null)
+			offer_option(opts, "cast", m, null)
 	_offer_quiet_life(opts)
 	return opts.values()
 
@@ -748,12 +743,12 @@ func _perceive() -> Array:
 func _offer_quiet_life(opts: Dictionary) -> void:
 	# Doing nothing much, with its eyes open. Not sleep — this is the creature
 	# sprawled in the grass watching the world go by, and it is a real choice.
-	_offer(opts, "lounge", "none", null)
-	_offer(opts, "run", "none", null)
+	offer_option(opts, "lounge", "none", null)
+	offer_option(opts, "run", "none", null)
 	# Running with something heavy is how muscle is actually earned.
 	var load_bearing := CreatureEyes.nearest_carriable(get_tree(), global_position, 30.0)
 	if load_bearing != null and can_lift(load_bearing):
-		_offer(opts, "run", _type_of(load_bearing), load_bearing)
+		offer_option(opts, "run", _type_of(load_bearing), load_bearing)
 
 	# Practices are LEARNED, not innate: it can only dance if it has seen
 	# dancing. A creature raised beside a joyless village never picks them up.
@@ -761,39 +756,43 @@ func _offer_quiet_life(opts: Dictionary) -> void:
 	var near_home := village != null \
 		and global_position.distance_to(village.global_position) < village.influence_radius * 1.6
 	if mind.knows("dance"):
-		_offer(opts, "dance", "village" if near_home else "none", null)
+		offer_option(opts, "dance", "village" if near_home else "none", null)
 	if near_home:
 		if mind.knows("pray"):
-			_offer(opts, "pray", "village", null)
+			offer_option(opts, "pray", "village", null)
 		# Standing before the people and being attended to. It costs them
 		# nothing and wins you belief — the whole non-violent road.
-		_offer(opts, "commune", "village", null)
+		offer_option(opts, "commune", "village", null)
 
 	# COPYING YOU. Only ever on the table while it still thinks you are worth
 	# copying, and only once it has watched you do enough to have a habit of it.
 	if trust > 35.0 and not exiled and mind.knows("mimic") and divine_hand != null \
 			and is_instance_valid(divine_hand):
-		_offer(opts, "mimic", "god", divine_hand)
+		offer_option(opts, "mimic", "god", divine_hand)
 
 	# What a mistreated creature has instead of obedience. These are options,
 	# not fates: a creature can be badly used and still choose to stay.
 	if trust < 40.0 or exiled:
-		_offer(opts, "sulk", "none", null)
+		offer_option(opts, "sulk", "none", null)
 		if divine_hand != null and is_instance_valid(divine_hand) \
 				and (exiled or divine_hand.global_position
 					.distance_to(global_position) < 30.0):
-			_offer(opts, "shun", "god", divine_hand)
+			offer_option(opts, "shun", "god", divine_hand)
 	# LEAVING. Offered only when it has stopped trusting you AND its own heart
 	# has outgrown yours — a good creature with a cruel god. It is still only an
 	# option among many, and a creature that has learned to love you anyway
 	# (bond) will rarely take it.
 	if trust < 20.0 and mind.temperament > 15.0 and not exiled:
-		_offer(opts, "depart", "none", null)
+		offer_option(opts, "depart", "none", null)
 
 
 ## Put an opportunity on the ballot, keeping the NEAREST target for each
 ## distinct (verb, type) — one entry per action, never one per body.
-func _offer(opts: Dictionary, verb: String, type: String, target: Node3D) -> void:
+## ONE BALLOT PER DISTINCT ACTION, keyed "verb|type", nearest target winning.
+## Listing every villager separately would give "eat a villager" a dozen
+## entries against one "cast heal", and the choice would come down to how many
+## bodies are standing about rather than to what the creature values.
+func offer_option(opts: Dictionary, verb: String, type: String, target: Node3D) -> void:
 	var key := verb + "|" + type
 	if opts.has(key) and target != null:
 		var held: Node3D = opts[key]["target"]
@@ -834,6 +833,8 @@ func _enact(choice: Dictionary) -> void:
 		_wander()
 		return
 	match verb:
+		"relieve":
+			CreatureRelief.go(self, String(choice.get("type", "open")))
 		"rest":
 			state = State.SLEEPING
 		"eat":
