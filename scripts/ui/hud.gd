@@ -114,10 +114,13 @@ func _build_miracle_panel() -> void:
 	vbox.add_child(title)
 
 	var ref := Label.new()
-	ref.text = ("S ~ water    | force    — earth    / fire    O life\n"
-		+ "spiral: air    reverse spiral: calm    zigzag: fury\n"
-		+ "caret ^ : sky    bow ( : ward    (zigzag: 3-7 clear teeth)\n"
-		+ "water=rain · water+water=cloudburst · water+force=thunderstorm")
+	# The bent strokes get their own line and their own sentence, because the
+	# thing players most need told is the thing that is no longer true: how
+	# round you draw it does not matter any more, only which way it bends.
+	ref.text = ("S ~ water    | force    / fire    O life    Z fury\n"
+		+ "spiral: air    reverse spiral: calm\n"
+		+ "^ sky   V earth   > ward   < unspoken   (sharp or round alike)\n"
+		+ "— straight across strikes it all out  ·  water+force = thunderstorm")
 	ref.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ref.add_theme_font_size_override("font_size", 13)
 	ref.add_theme_color_override("font_color", Color(1, 1, 0.85, 0.85))
@@ -380,10 +383,25 @@ ONE UNBROKEN STROKE IS ONE RUNE. Lift and draw again to add another to
 the same working.
 
   S or ~ ....... WATER      | tall line ....... FORCE
-  — flat line .. EARTH      / diagonal ....... FIRE
-  O circle ..... LIFE       spiral .......... AIR
-  reverse spiral  CALM      zigzag (3-7 teeth) FURY
-  ^ caret ...... SKY        ( bow ............ WARD
+  O circle ..... LIFE       / diagonal ....... FIRE
+  spiral ....... AIR        reverse spiral ... CALM
+  Z sharp Z .... FURY       (two corners, drawn any size)
+
+A STROKE THAT BENDS MEANS WHICHEVER WAY IT BENDS, and it does not matter
+in the least how sharply. A pointed ^ and a shallow dome are the same
+rune. So are V and a bowl; so are > and a fat ).
+
+  ^ or dome .... SKY        V or bowl ........ EARTH
+  > or ) ....... WARD       < or C ........... nothing yet
+
+That last one is a real sigil with no working bound to it — kept empty
+on purpose, waiting for something worth putting there.
+
+  — straight across ....... STRIKE THE WHOLE WORKING OUT
+
+Struck out, everything you had drawn is thrown away and nothing is cast.
+The old sweep — down and hooked away — still does the same, so if that is
+what your hand already knows, keep it.
 
 One rune alone is its plainest form: water is rain, force is lightning,
 life is food, calm is a healing.

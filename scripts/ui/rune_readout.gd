@@ -151,6 +151,12 @@ func _draw_live() -> void:
 	_stroke(_outline(shape), at, across, tint, lerpf(0.22, 0.95, sure), 5.0)
 
 	var rune := Spellbook.rune_for(shape)
+	# THE UNSPOKEN SIGIL gets named too. It is a shape the game recognises
+	# perfectly well and simply has nothing bound to yet, and a glyph that lit
+	# up with no word under it would read as a stroke that had failed — which
+	# is the opposite of what happened.
+	if shape == Spellbook.UNSPOKEN and settled:
+		rune = "unspoken"
 	if rune != "" and settled:
 		var font := ThemeDB.fallback_font
 		var label := rune.to_upper()
