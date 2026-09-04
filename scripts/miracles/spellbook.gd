@@ -29,18 +29,34 @@ class_name Spellbook
 
 ## Gesture -> rune. One shape per rune, so the alphabet stays learnable while
 ## the vocabulary built out of it does not have to.
+## A BENT STROKE MEANS WHICHEVER WAY IT BENDS, and not how sharply. `^` and a
+## shallow dome are both sky; `V` and a bowl are both earth; a sharp `>` and a
+## fat `)` are both ward. Sharpness used to tell two runes apart, and it was the
+## one thing about their own stroke a player cannot see, so a fat C kept casting
+## sky. Direction is something a hand knows it is doing.
+##
+## The straight line is CANCEL and therefore not in here at all — see
+## DivineHand._finish_stroke. Earth moved onto `V` to make room for it.
 const RUNE_OF := {
 	"wave": "water",        # a flowing S
 	"vline": "force",       # a bolt driven straight down
-	"hline": "earth",       # the line of the ground
 	"dline": "fire",        # a slash of flame
 	"circle": "life",       # a seed, a womb, a gathering
 	"spiral": "air",        # a whirl
 	"rev_spiral": "calm",   # a whirl unwinding
 	"zed": "fury",          # a sharp Z: two corners, and they survive a hot phone
-	"caret": "sky",         # a peak, a wing
-	"arc": "ward",          # a shelter held over something
+	"bend_up": "sky",       # a peak, a wing
+	"bend_down": "earth",   # a valley, the ground dipping
+	"bend_right": "ward",   # a shelter held over something
+	# `bend_left` — the fourth direction — is deliberately UNSPOKEN. It is a
+	# real, reliable sigil with no meaning attached yet, kept empty on purpose
+	# rather than filled with something the grammar does not need. Drawing it
+	# says so, instead of pretending the stroke was a mistake.
 }
+
+## The sigil that is a proper shape but has nothing to say yet. Kept apart from
+## a botched stroke so the readout can tell the player which of the two it was.
+const UNSPOKEN := "bend_left"
 
 ## What one rune means on its own. Everything else is built from these, and an
 ## unnamed combination falls back to casting each of them together.

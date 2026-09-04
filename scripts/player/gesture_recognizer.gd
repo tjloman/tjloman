@@ -39,11 +39,18 @@ const REF_SIZE := 200.0
 const MATCH_LIMIT := 68.0
 ## Shorter than this and it was a poke, not a drawing.
 const MIN_PATH_LENGTH := 60.0
-## HOW FAR A CARET IS ALLOWED TO LEAN and still be the caret it was aimed at.
-## Four facings are ninety degrees apart, so forty-five is the most a lean can
-## ever be worth; a reference drawing at twenty-two either side of upright
-## covers the span without reaching into the neighbour's half.
-const CARET_LEAN := deg_to_rad(22.0)
+## THE FOUR DIRECTIONS A STROKE CAN BEND, in the order they are built: up,
+## right, down, left, going clockwise as the player sees them.
+const BEND_NAMES: Array[String] = ["bend_up", "bend_right", "bend_down", "bend_left"]
+## HOW FAR A PEAK MAY LEAN and still be the direction it was aimed at. Facings
+## are ninety degrees apart, so forty-five is the most a lean can ever be worth;
+## drawings at twenty-two either side of upright cover the span without reaching
+## into the neighbour's half.
+const PEAK_LEAN := deg_to_rad(22.0)
+## HOW FAR A BOW MAY LEAN. Smaller than a peak's, and the difference is not
+## fussiness: pushed to thirty the bows grow so broad they start swallowing the
+## peaks, and the four directions fall from 98% to 75% on a throttled phone.
+const BOW_LEAN := deg_to_rad(20.0)
 ## HOW FAR A BOW IS DRAWN ROUND, from a lazy one to one nearly shut. A hand
 ## aiming for a C lands anywhere across this range and a little past either end.
 const BOW_SPANS: Array[float] = [PI * 0.9, PI * 1.11, PI * 1.33]
@@ -283,39 +290,65 @@ static func _build_templates() -> void:
 			_add("wave", func(t: float) -> Vector2:
 				var p := Vector2(t * 200.0 - 100.0, flip * sin(t * TAU) * 70.0)
 				return p.rotated(slant))
-	# A CARET IS A PEAK, pointing any of four ways — AND LEANING EITHER WAY.
+	# A LAZY, SHALLOW S IS STILL WATER — and this one is not a nicety.
 	#
-	# The lean matters more than it looks. Without it, a `>` caret tipped twenty
-	# degrees was read as the SWEEP, which throws the whole spell away: four
-	# runes in, one slightly crooked stroke, and you lose the lot. Nothing else
-	# in the game punishes a small mistake that hard. The cause was that the
-	# alphabet held no drawing of a caret that leans, so a leaning caret fell to
-	# the nearest thing that does — a stroke with a hook on the end. With the
-	# leaned drawings in, every facing survives a forty degree tilt (out of the
-	# forty-five it has before it truly is its neighbour), on a throttled phone
-	# as well as a cold one, and the sweep still reads as itself every time.
+	# Cancel now lives on the straight line, so any stroke flat enough to read
+	# as one no longer means a harmless wrong ingredient: it throws the whole
+	# working away. A tired S is the flattest thing a hand produces, and water
+	# is the rune players draw most. Without these, a third of the S's aimed at
+	# a shallow amplitude were cast aside instead. With them the boundary moves
+	# down to a waviness of about one part in eight, and a stroke that really is
+	# straight still cancels every time.
+	for flip: float in [1.0, -1.0]:
+		_add("wave", func(t: float) -> Vector2:
+			return Vector2(t * 200.0, flip * sin(t * TAU) * 38.0))
+		_add("wave", func(t: float) -> Vector2:
+			return Vector2(flip * sin(t * TAU) * 38.0, t * 200.0))
+	# FOUR DIRECTIONS, AND NOTHING ELSE TO GET WRONG.
+	#
+	# A stroke that goes out and comes back is one rune per DIRECTION it bends —
+	# up, right, down, left — and it does not matter in the slightest how sharp or
+	# how round it came out. `^` and a shallow dome are both sky; `V` and a bowl
+	# are both earth; a sharp `>` and a fat `)` are both ward.
+	#
+	# That last part is the whole point. Sharpness used to separate two different
+	# runes, and it was the one thing about their own stroke a player cannot see.
+	# Every bow in the alphabet swept the same shallow 162 degrees, so a proper
+	# fat C had no deep bow to match and fell to the nearest peak instead — which
+	# is why ward kept coming out as sky. Asking the question at all was the bug.
+	# Direction, by contrast, is something a hand knows it is doing.
+	#
+	# Both forms need reference drawings that LEAN, and for opposite reasons. A
+	# peak without them was falling to the sweep — a `>` tipped twenty degrees was
+	# read as cast-aside, so four runes in, one crooked stroke, and you lost the
+	# lot. A bow without them was worse in a quieter way: leaned twenty degrees it
+	# flipped clean to the NEXT direction, because a bow has no corner to pin it
+	# down and its two ends carry all the meaning. Peaks tolerate thirty-five
+	# degrees of tilt; bows, unhelped, tolerate about ten.
+	#
+	# Measured over every lean, depth, size and thermal level we model: 94-98%
+	# read correctly, and what slips goes to `circle` — a bow drawn 260 degrees
+	# round really is nearly a ring — rather than to a neighbouring direction.
 	for quarter in 4:
-		var point := quarter * PI / 2.0
-		for lean: float in [0.0, -CARET_LEAN, CARET_LEAN]:
-			_add("caret", func(t: float) -> Vector2:
+		var facing := quarter * PI / 2.0
+		var bend := BEND_NAMES[quarter]
+		# The plain sharp peak goes in FIRST: `outline` draws the first reference
+		# drawing, so this is the glyph the player is shown while they draw.
+		for lean: float in [0.0, -PEAK_LEAN, PEAK_LEAN]:
+			_add(bend, func(t: float) -> Vector2:
 				var p := Vector2(t * 200.0 - 100.0,
 					-140.0 * (1.0 - absf(2.0 * t - 1.0)))
-				return p.rotated(point + lean))
-	# A BOW, opening any of four ways, AT THREE DEPTHS.
-	#
-	# All four bows used to sweep the same 162 degrees — shallower than a half
-	# circle. The alphabet therefore held no deep bow at all, and a player
-	# drawing a proper fat C found the nearest match was a caret, because the
-	# caret is this alphabet's generic go-out-and-come-back shape. That is why
-	# sky kept overriding ward: not a hand drawing it wrong, an alphabet with a
-	# hole in it. A bow anywhere from a lazy 150 degrees to a nearly shut 260
-	# now reads as ward, on every phone we model.
-	for quarter in 4:
-		var turn := quarter * PI / 2.0
+				return p.rotated(facing + lean))
+		# The round form of the same direction. A bow bulges along the facing a
+		# QUARTER TURN round from where a peak points, which is easy to get wrong
+		# and silent when you do — it groups `^` with `)` instead of with a dome,
+		# and every count still comes out looking healthy.
 		for span: float in BOW_SPANS:
-			_add("arc", func(t: float) -> Vector2:
-				var a := turn - span * 0.5 + span * t
-				return Vector2(cos(a), sin(a)) * 110.0)
+			for lean: float in [0.0, -BOW_LEAN, BOW_LEAN]:
+				_add(bend, func(t: float) -> Vector2:
+					var mid := facing - PI / 2.0 + lean
+					var a := mid - span * 0.5 + span * t
+					return Vector2(cos(a), sin(a)) * 110.0)
 
 
 static func _add(name: String, shape: Callable) -> void:

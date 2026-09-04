@@ -41,7 +41,9 @@ SAMPLES = 48
 REF_SIZE = 200.0
 MATCH_LIMIT = 68.0
 MIN_PATH_LENGTH = 60.0
-CARET_LEAN = math.radians(22.0)
+BEND_NAMES = ["bend_up", "bend_right", "bend_down", "bend_left"]
+PEAK_LEAN = math.radians(22.0)
+BOW_LEAN = math.radians(20.0)
 BOW_SPANS = [math.pi * 0.9, math.pi * 1.11, math.pi * 1.33]
 RING_SHUT = [1.0, 0.88, 0.80, 1.12]
 TAU = math.tau
@@ -150,6 +152,9 @@ def build_templates():
             a = -math.pi * 0.5 * ((t - 0.62) / 0.38)
             return (-math.sin(-a) * 95.0 * H, 200.0 + (1.0 - math.cos(a)) * 55.0 * H)
         add("sweep", sweep)
+    for flip in (1.0, -1.0):
+        add("wave", lambda t, F=flip: (t * 200.0, F * math.sin(t * TAU) * 38.0))
+        add("wave", lambda t, F=flip: (F * math.sin(t * TAU) * 38.0, t * 200.0))
     for slant in (math.pi / 4.0, -math.pi / 4.0):
         for flip in (1.0, -1.0):
             def sl(t, S=slant, F=flip):
@@ -157,23 +162,29 @@ def build_templates():
                 y = F * math.sin(t * TAU) * 70.0
                 return (x * math.cos(S) - y * math.sin(S), x * math.sin(S) + y * math.cos(S))
             add("wave", sl)
-    # A caret leans, and a bow is drawn to whatever depth the hand fancies.
-    # Both sets of extra reference drawings mend a real failure — see the long
-    # note in GestureRecognizer._build. Keep these two in step: this harness is
-    # only worth trusting while it holds the same alphabet the game holds.
+    # FOUR DIRECTIONS, SHARP OR ROUND — one rune per way a stroke bends, with
+    # sharpness carrying no meaning at all. Peaks need leaned drawings or they
+    # fall to the sweep; bows need them for a different reason, that a bow has
+    # no corner to pin it down and flips to the NEXT direction at twenty
+    # degrees. And note the quarter turn: a bow bulges along the facing a
+    # quarter round from where a peak points, and getting that wrong groups
+    # `^` with `)` instead of with a dome while every count still looks fine.
+    #
+    # Keep this in step with GestureRecognizer._build_templates — the harness
+    # is only worth trusting while it holds the same alphabet the game holds.
     for quarter in range(4):
-        point = quarter * math.pi / 2.0
-        for lean in (0.0, -CARET_LEAN, CARET_LEAN):
-            def peak(t, A=point + lean):
+        facing = quarter * math.pi / 2.0
+        bend = BEND_NAMES[quarter]
+        for lean in (0.0, -PEAK_LEAN, PEAK_LEAN):
+            def peak(t, A=facing + lean):
                 x, y = t * 200.0 - 100.0, -140.0 * (1.0 - abs(2.0 * t - 1.0))
                 return (x * math.cos(A) - y * math.sin(A), x * math.sin(A) + y * math.cos(A))
-            add("caret", peak)
-    for quarter in range(4):
-        turn = quarter * math.pi / 2.0
+            add(bend, peak)
         for span in BOW_SPANS:
-            add("arc", lambda t, T=turn, S=span: (
-                math.cos(T - S * 0.5 + S * t) * 110.0,
-                math.sin(T - S * 0.5 + S * t) * 110.0))
+            for lean in (0.0, -BOW_LEAN, BOW_LEAN):
+                add(bend, lambda t, M=facing - math.pi / 2.0 + lean, S=span: (
+                    math.cos(M - S * 0.5 + S * t) * 110.0,
+                    math.sin(M - S * 0.5 + S * t) * 110.0))
 
 
 def classify(points, want_margin=False):
@@ -243,9 +254,15 @@ SHAPES = {
                         (330 - math.sin(math.pi * 0.5 * ((t - 0.62) / 0.38)) * 95.0,
                          380 + (1.0 - math.cos(math.pi * 0.5 * ((t - 0.62) / 0.38)))
                          * 55.0)),
-    "caret": lambda t: (120 + t * 240, 330 - 170.0 * (1.0 - abs(2.0 * t - 1.0))),
-    "arc": lambda t: (400 + math.cos(-math.pi / 2 - math.pi * 0.45 + math.pi * 0.9 * t) * 130.0,
-                      300 + math.sin(-math.pi / 2 - math.pi * 0.45 + math.pi * 0.9 * t) * 130.0),
+    # One drawing per direction, and deliberately not all the same KIND: a
+    # sharp peak for two of them and a round bow for the other two, because the
+    # whole claim of this design is that the two forms mean the same thing.
+    "bend_up": lambda t: (120 + t * 240, 330 - 170.0 * (1.0 - abs(2.0 * t - 1.0))),
+    "bend_down": lambda t: (120 + t * 240, 200 + 170.0 * (1.0 - abs(2.0 * t - 1.0))),
+    "bend_right": lambda t: (400 + math.cos(-math.pi * 0.55 + math.pi * 1.11 * t) * 130.0,
+                             300 + math.sin(-math.pi * 0.55 + math.pi * 1.11 * t) * 130.0),
+    "bend_left": lambda t: (400 + math.cos(math.pi * 0.45 + math.pi * 1.11 * t) * 130.0,
+                            300 + math.sin(math.pi * 0.45 + math.pi * 1.11 * t) * 130.0),
 }
 
 

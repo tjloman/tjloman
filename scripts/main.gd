@@ -1513,10 +1513,19 @@ func _smoke_test_gestures() -> void:
 			var teeth := t * 5.0
 			var up := 1.0 if int(teeth) % 2 == 1 else -1.0
 			return Vector2(120 + t * 300, 300 - up * absf(fmod(teeth, 1.0) * 2.0 - 1.0) * 80.0),
-		"caret": func(t: float) -> Vector2:
+		# THE FOUR DIRECTIONS, drawn two sharp and two round on purpose. The
+		# claim this alphabet rests on is that a peak and a bow bending the same
+		# way are the SAME rune, so the smoke test must exercise both forms or
+		# it is not testing the thing that could break.
+		"bend_up": func(t: float) -> Vector2:
 			return Vector2(120 + t * 240, 330 - 170.0 * (1.0 - absf(2.0 * t - 1.0))),
-		"arc": func(t: float) -> Vector2:
-			var a := -PI / 2.0 - PI * 0.45 + PI * 0.9 * t
+		"bend_down": func(t: float) -> Vector2:
+			return Vector2(120 + t * 240, 200 + 170.0 * (1.0 - absf(2.0 * t - 1.0))),
+		"bend_right": func(t: float) -> Vector2:
+			var a := -PI * 0.55 + PI * 1.11 * t
+			return Vector2(400, 300) + Vector2(cos(a), sin(a)) * 130.0,
+		"bend_left": func(t: float) -> Vector2:
+			var a := PI * 0.45 + PI * 1.11 * t
 			return Vector2(400, 300) + Vector2(cos(a), sin(a)) * 130.0,
 	}
 	var hits := 0

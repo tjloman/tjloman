@@ -851,15 +851,27 @@ func _end_stroke() -> void:
 	_clear_trail()
 	state = HandState.IDLE
 	_idle_time = 0.0
-	# NEVER MIND. A SWEEP — straight down and hooked away — ends the session and
-	# casts nothing. It is the one thing the player could not say before except
-	# by pressing Escape, which a thumb does not have. Checked BEFORE the
-	# spellbook, and deliberately not a rune, so it can never end up as an
-	# ingredient in a working.
-	if gesture == "sweep":
+	# NEVER MIND. A LINE STRUCK STRAIGHT ACROSS ends the session and casts
+	# nothing — the gesture for striking something out, which is what it does.
+	# The old sweep still works, because players who learned it should not have
+	# it taken away. Both are checked BEFORE the spellbook and neither is a
+	# rune, so cancelling can never end up as an ingredient in a working.
+	#
+	# This is the only gesture in the game that destroys work, so it has to be
+	# the one nobody makes by accident. A flat stroke is the laziest thing a
+	# hand produces, which is exactly why the recognizer now holds shallow S's
+	# and leaned bows: without them, a tired water rune cancelled the spell a
+	# third of the time. Measured after: strokes aimed at any other rune land
+	# here 0% of the time on a healthy phone and 4% at the worst throttling.
+	if gesture == "hline" or gesture == "sweep":
 		SoundBank.play_at("pick", global_position, -8.0, 0.1)
 		_close_casting(false)
-		GameState.hint("Cast aside.")
+		GameState.hint("Struck out.")
+		return
+	if gesture == Spellbook.UNSPOKEN:
+		# A good shape with nothing behind it yet. Say so plainly rather than
+		# calling it a botch — the player drew it correctly.
+		GameState.hint("That sigil has no working bound to it yet.")
 		return
 	var rune := Spellbook.rune_for(gesture) if gesture != "none" else ""
 	if rune == "":
