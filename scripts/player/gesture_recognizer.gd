@@ -39,6 +39,18 @@ const REF_SIZE := 200.0
 const MATCH_LIMIT := 68.0
 ## Shorter than this and it was a poke, not a drawing.
 const MIN_PATH_LENGTH := 60.0
+## HOW FAR A CARET IS ALLOWED TO LEAN and still be the caret it was aimed at.
+## Four facings are ninety degrees apart, so forty-five is the most a lean can
+## ever be worth; a reference drawing at twenty-two either side of upright
+## covers the span without reaching into the neighbour's half.
+const CARET_LEAN := deg_to_rad(22.0)
+## HOW FAR A BOW IS DRAWN ROUND, from a lazy one to one nearly shut. A hand
+## aiming for a C lands anywhere across this range and a little past either end.
+const BOW_SPANS: Array[float] = [PI * 0.9, PI * 1.11, PI * 1.33]
+## HOW NEARLY SHUT A RING IS, as a share of the whole way round. Four-fifths is
+## as open as a ring gets before it is honestly a bow; a little past one is the
+## overrun of a hand that did not stop on the mark.
+const RING_SHUT: Array[float] = [1.0, 0.88, 0.80, 1.12]
 
 ## Built once, on first use: shape name -> array of normalised point arrays.
 static var _templates := {}
@@ -175,12 +187,26 @@ static func _build_templates() -> void:
 	_add("hline", func(t: float) -> Vector2: return Vector2(t * 200.0, 0.0))
 	_add("dline", func(t: float) -> Vector2: return Vector2(t * 200.0, t * 200.0))
 	_add("dline", func(t: float) -> Vector2: return Vector2(t * 200.0, 200.0 - t * 200.0))
-	# A ring may be begun anywhere on itself, so offer it begun in four places.
+	# A RING may be begun anywhere on itself, so offer it begun in four places —
+	# AND NOT QUITE SHUT, AND OVERSHOT, AND SQUASHED NARROW BY A THUMB.
+	#
+	# Every ring here used to be a perfect one, and a perfect ring is not what a
+	# hand draws. A ring lifted a quarter early was read as WATER; a ring
+	# overrun by a sixth was read as CALM; and once the carets learned to lean,
+	# a ring lifted a sixth early became SKY. All three are the same fault as
+	# the bow's: the shape a player actually makes was missing, so it fell to
+	# whichever neighbour happened to be closest. A ring is now a ring from
+	# four-fifths of the way round to a little past shut, wide or narrow.
 	for start in 4:
 		var phase := start / 4.0
-		_add("circle", func(t: float) -> Vector2:
-			var a := TAU * (t + phase)
-			return Vector2(cos(a), sin(a)) * 100.0)
+		for shut: float in RING_SHUT:
+			_add("circle", func(t: float) -> Vector2:
+				var a := TAU * (t * shut + phase)
+				return Vector2(cos(a), sin(a)) * 100.0)
+		for squash: Vector2 in [Vector2(0.5, 1.0), Vector2(1.0, 0.5)]:
+			_add("circle", func(t: float) -> Vector2:
+				var a := TAU * (t + phase)
+				return Vector2(cos(a), sin(a)) * squash * 100.0)
 	# How many times a person winds a spiral is anyone's guess, and point-wise
 	# distance is very sensitive to it — so offer the whole reasonable range
 	# rather than one opinion. Without this, spirals matched nothing at all.
@@ -257,21 +283,39 @@ static func _build_templates() -> void:
 			_add("wave", func(t: float) -> Vector2:
 				var p := Vector2(t * 200.0 - 100.0, flip * sin(t * TAU) * 70.0)
 				return p.rotated(slant))
-	# A caret is a peak, pointing any of four ways.
-	_add("caret", func(t: float) -> Vector2:
-		return Vector2(t * 200.0, -140.0 * (1.0 - absf(2.0 * t - 1.0))))
-	_add("caret", func(t: float) -> Vector2:
-		return Vector2(t * 200.0, 140.0 * (1.0 - absf(2.0 * t - 1.0))))
-	_add("caret", func(t: float) -> Vector2:
-		return Vector2(-140.0 * (1.0 - absf(2.0 * t - 1.0)), t * 200.0))
-	_add("caret", func(t: float) -> Vector2:
-		return Vector2(140.0 * (1.0 - absf(2.0 * t - 1.0)), t * 200.0))
-	# A bow, opening any of four ways.
+	# A CARET IS A PEAK, pointing any of four ways — AND LEANING EITHER WAY.
+	#
+	# The lean matters more than it looks. Without it, a `>` caret tipped twenty
+	# degrees was read as the SWEEP, which throws the whole spell away: four
+	# runes in, one slightly crooked stroke, and you lose the lot. Nothing else
+	# in the game punishes a small mistake that hard. The cause was that the
+	# alphabet held no drawing of a caret that leans, so a leaning caret fell to
+	# the nearest thing that does — a stroke with a hook on the end. With the
+	# leaned drawings in, every facing survives a forty degree tilt (out of the
+	# forty-five it has before it truly is its neighbour), on a throttled phone
+	# as well as a cold one, and the sweep still reads as itself every time.
+	for quarter in 4:
+		var point := quarter * PI / 2.0
+		for lean: float in [0.0, -CARET_LEAN, CARET_LEAN]:
+			_add("caret", func(t: float) -> Vector2:
+				var p := Vector2(t * 200.0 - 100.0,
+					-140.0 * (1.0 - absf(2.0 * t - 1.0)))
+				return p.rotated(point + lean))
+	# A BOW, opening any of four ways, AT THREE DEPTHS.
+	#
+	# All four bows used to sweep the same 162 degrees — shallower than a half
+	# circle. The alphabet therefore held no deep bow at all, and a player
+	# drawing a proper fat C found the nearest match was a caret, because the
+	# caret is this alphabet's generic go-out-and-come-back shape. That is why
+	# sky kept overriding ward: not a hand drawing it wrong, an alphabet with a
+	# hole in it. A bow anywhere from a lazy 150 degrees to a nearly shut 260
+	# now reads as ward, on every phone we model.
 	for quarter in 4:
 		var turn := quarter * PI / 2.0
-		_add("arc", func(t: float) -> Vector2:
-			var a := -PI / 2.0 - PI * 0.45 + PI * 0.9 * t + turn
-			return Vector2(cos(a), sin(a)) * 110.0)
+		for span: float in BOW_SPANS:
+			_add("arc", func(t: float) -> Vector2:
+				var a := turn - span * 0.5 + span * t
+				return Vector2(cos(a), sin(a)) * 110.0)
 
 
 static func _add(name: String, shape: Callable) -> void:

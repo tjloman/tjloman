@@ -41,6 +41,9 @@ SAMPLES = 48
 REF_SIZE = 200.0
 MATCH_LIMIT = 68.0
 MIN_PATH_LENGTH = 60.0
+CARET_LEAN = math.radians(22.0)
+BOW_SPANS = [math.pi * 0.9, math.pi * 1.11, math.pi * 1.33]
+RING_SHUT = [1.0, 0.88, 0.80, 1.12]
 TAU = math.tau
 
 
@@ -105,8 +108,13 @@ def build_templates():
     add("dline", lambda t: (t * 200.0, 200.0 - t * 200.0))
     for start in range(4):
         ph = start / 4.0
-        add("circle", lambda t, ph=ph: (math.cos(TAU * (t + ph)) * 100.0,
-                                        math.sin(TAU * (t + ph)) * 100.0))
+        for shut in RING_SHUT:
+            add("circle", lambda t, P=ph, S=shut: (math.cos(TAU * (t * S + P)) * 100.0,
+                                                   math.sin(TAU * (t * S + P)) * 100.0))
+        for wide, tall in ((0.5, 1.0), (1.0, 0.5)):
+            add("circle", lambda t, P=ph, W=wide, H=tall: (
+                math.cos(TAU * (t + P)) * 100.0 * W,
+                math.sin(TAU * (t + P)) * 100.0 * H))
     for turns in (1.5, 2.0, 2.5, 3.0):
         for start in (0.0, 0.5):
             add("spiral", lambda t, T=turns, S=start: (
@@ -149,15 +157,23 @@ def build_templates():
                 y = F * math.sin(t * TAU) * 70.0
                 return (x * math.cos(S) - y * math.sin(S), x * math.sin(S) + y * math.cos(S))
             add("wave", sl)
-    add("caret", lambda t: (t * 200.0, -140.0 * (1.0 - abs(2.0 * t - 1.0))))
-    add("caret", lambda t: (t * 200.0, 140.0 * (1.0 - abs(2.0 * t - 1.0))))
-    add("caret", lambda t: (-140.0 * (1.0 - abs(2.0 * t - 1.0)), t * 200.0))
-    add("caret", lambda t: (140.0 * (1.0 - abs(2.0 * t - 1.0)), t * 200.0))
+    # A caret leans, and a bow is drawn to whatever depth the hand fancies.
+    # Both sets of extra reference drawings mend a real failure — see the long
+    # note in GestureRecognizer._build. Keep these two in step: this harness is
+    # only worth trusting while it holds the same alphabet the game holds.
+    for quarter in range(4):
+        point = quarter * math.pi / 2.0
+        for lean in (0.0, -CARET_LEAN, CARET_LEAN):
+            def peak(t, A=point + lean):
+                x, y = t * 200.0 - 100.0, -140.0 * (1.0 - abs(2.0 * t - 1.0))
+                return (x * math.cos(A) - y * math.sin(A), x * math.sin(A) + y * math.cos(A))
+            add("caret", peak)
     for quarter in range(4):
         turn = quarter * math.pi / 2.0
-        add("arc", lambda t, T=turn: (
-            math.cos(-math.pi / 2.0 - math.pi * 0.45 + math.pi * 0.9 * t + T) * 110.0,
-            math.sin(-math.pi / 2.0 - math.pi * 0.45 + math.pi * 0.9 * t + T) * 110.0))
+        for span in BOW_SPANS:
+            add("arc", lambda t, T=turn, S=span: (
+                math.cos(T - S * 0.5 + S * t) * 110.0,
+                math.sin(T - S * 0.5 + S * t) * 110.0))
 
 
 def classify(points, want_margin=False):
@@ -366,8 +382,10 @@ def hand_report():
         pct, others = _tally(shape, "circle", clean)
         worst = min(worst, pct)
         print("    %-30s circle %3d%%   %s" % (label, pct, others))
-    print("\n  Worst case: %d%%. A closed ring is unmistakable; a ring lifted a"
-          "\n  quarter early is not a ring at all." % worst)
+    print("\n  Worst case: %d%%. A ring is now a ring whether it is lifted a"
+          "\n  quarter early, overrun, or squashed narrow. Only a stroke that"
+          "\n  runs a third of a turn PAST shut stops being one -- and by then"
+          "\n  it really has begun to wind, which is what a spiral is." % worst)
     return worst
 
 
