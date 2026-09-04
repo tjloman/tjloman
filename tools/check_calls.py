@@ -51,6 +51,15 @@ extends_re = re.compile(r"^extends\s+(\w+)", re.M)
 # `(x as Villager).foo(` and `Weapon.foo(`
 cast_call_re = re.compile(r"\bas\s+(\w+)\s*\)\s*\.\s*(\w+)\s*\(")
 static_call_re = re.compile(r"(?<![\w.])([A-Z]\w+)\s*\.\s*(\w+)\s*\(")
+# `CreatureBody.NOURISHMENT` — a CONSTANT read off a class, with no call
+# brackets after it. The call checks above all end in `(`, so a renamed or
+# deleted constant sailed through every one of them: `main.gd` went on
+# referring to a NOURISHMENT that the digestion rework had removed, and the
+# game would not load. Reading a member is exactly as breakable as calling one.
+static_member_re = re.compile(r"(?<![\w.$\"])([A-Z]\w+)\s*\.\s*(\w+)\b(?!\s*\()")
+# Double-quoted text, stripped before that regex runs so a class name inside a
+# string is not mistaken for a real reference.
+quoted_re = re.compile(r'"[^"]*"')
 # A bare `_helper(` — a call on self, with nothing in front of it to say so.
 own_call_re = re.compile(r"(?<![\w.$\"])(_\w+)\s*\(")
 
@@ -305,6 +314,12 @@ def check(paths, classes):
                         continue
                     if method not in members_of(cls, classes):
                         problems.append((path, lineno, cls, method, line.strip()))
+            # The same question for a member READ rather than a call.
+            for cls, name in static_member_re.findall(quoted_re.sub('""', line)):
+                if cls not in classes or name in BUILTIN:
+                    continue
+                if name not in members_of(cls, classes):
+                    problems.append((path, lineno, cls, name, line.strip()))
             # ARGUMENTS. Only for calls whose class is known: a static call
             # (`CreatureEthos.kindness(...)`) or a call on a member declared
             # with a project type (`mind.judge(...)`).

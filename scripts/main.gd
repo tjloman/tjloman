@@ -749,16 +749,49 @@ func _run_smoke_test() -> void:
 	# nowhere left to go. Stature is 1..65,535, size is its square root, and the
 	# body's stomach and energy still read the SIZE, so a thirty-hour arc drops
 	# in under a body that was balanced for a one-hour one.
+	# This used to divide an hour by a constant NOURISHMENT and call the answer
+	# stature-per-hour. There is no such constant any more, and more to the
+	# point there is no such RATE: digestion now runs on how full the gut is and
+	# how big the beast has grown, and a heavy one puts less of its dinner into
+	# growing. The arc is a curve, so the only honest way to report it is to run
+	# it — a creature kept fed, working steadily, relieving itself when pressed.
+	#
+	# Read this as the FLOOR, not the typical case. Topping the gut up every
+	# tick is more than any creature really eats, and it shows: fat pins near
+	# 100 for the whole run, so the heaviness penalty is working against growth
+	# the entire time and the arc STILL takes thirty hours. A normally-fed beast
+	# takes longer. That is the useful thing to watch for a regression in — if
+	# this ever prints a full-grown creature in an afternoon, the arc is broken.
 	var arc := Creature.new()
-	var earned := 3600.0 / CreatureBody.NOURISHMENT * CreatureBody.STATURE_PER_UNIT
+	var gut := CreatureBody.new()
 	var shown := PackedStringArray()
-	for hours: float in [0.0, 1.0, 4.0, 8.0, 30.0]:
-		arc.stature = clampf(hours * earned, 1.0, Creature.FULL_STATURE)
-		shown.append("%gh %s %d%% %.1fm" % [
-			hours, arc.stature_text().split(" ")[-1], int(arc.growth * 100.0),
-			lerpf(CreatureBody.MIN_SCALE, CreatureBody.MAX_SCALE, arc.growth) * 2.5])
-	print("SMOKE TEST: stature — %.0f a hour, %.0f hours to FFFF | %s" % [
-		earned, Creature.FULL_STATURE / earned, "  ·  ".join(shown)])
+	var marks: Array[float] = [1.0, 4.0, 8.0, 30.0]
+	var tick := 20.0
+	var clock := 0.0
+	var next_mark := 0
+	var first_hour := 0.0
+	shown.append("0h %s 0%% %.1fm" % [
+		arc.stature_text().split(" ")[-1], CreatureBody.MIN_SCALE * 2.5])
+	while next_mark < marks.size():
+		gut.stomach = gut.capacity(arc.growth)     # kept fed, which is the premise
+		var got := gut.digest(tick, arc.growth)
+		var gained: float = got["growth"]
+		arc.stature = minf(arc.stature + gained, Creature.FULL_STATURE)
+		gut.exert(0.5, tick)
+		if gut.bursting():
+			gut.relieve()
+		clock += tick
+		if clock >= marks[next_mark] * 3600.0:
+			if next_mark == 0:
+				first_hour = arc.stature
+			shown.append("%gh %s %d%% %.1fm" % [
+				marks[next_mark], arc.stature_text().split(" ")[-1],
+				int(arc.growth * 100.0),
+				lerpf(CreatureBody.MIN_SCALE, CreatureBody.MAX_SCALE, arc.growth) * 2.5])
+			next_mark += 1
+	print(("SMOKE TEST: stature, gorged (the fastest the arc runs) — %.0f in the"
+		+ " first hour, %d%% of FFFF by 30h | %s") % [
+		first_hour, int(arc.stature / Creature.FULL_STATURE * 100.0), "  ·  ".join(shown)])
 	arc.free()
 
 	# FORESIGHT. The one part of the mind that faces forwards: it learns what
