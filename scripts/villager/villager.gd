@@ -52,6 +52,11 @@ const TAME_MORALITY := 40.0    # benevolent and saintly souls only
 ## can reach, rather than waiting for a god to carry believers there by hand.
 ## This is the longest journey anybody in the game makes, which is what finally
 ## makes a horse an honest need rather than a convenience.
+## HOW MUCH TIMBER AND STONE A TOWN KEEPS OVER what its next house costs.
+## Small on purpose: the reserve that matters is the house's own price, and
+## this is only so the one after it does not start from an empty yard.
+const MATERIAL_SPARE := 6
+
 const MISSION_RANGE := 320.0
 const MISSION_FAITH := 55.0
 
@@ -1108,22 +1113,49 @@ func _pick_job() -> bool:
 
 	# Housing crisis? (Scores sit below a hungry village's food worry so
 	# the WHOLE town doesn't drop its ploughs to hammer one hut.)
+	#
+	# WHAT THE NEXT HOUSE ACTUALLY COSTS, not what a hut used to. This was the
+	# single worst bug the village AI has had, and it was invisible because
+	# every part of it looked reasonable on its own: the town stopped wanting
+	# lumber at ten and stone at six, a house for five homeless is a LONGHOUSE
+	# costing twenty-two and fourteen, and `build` was scored the moment the
+	# store held four and two. So the highest-scoring job in the village was
+	# always "build", start_construction always failed to pay for it, and
+	# _start_job dropped the villager into a two-second wander and did it all
+	# again. Any town past eleven souls could never raise another roof, and
+	# fifty of them stood in the road re-deciding this forever — which is both
+	# why nobody was building and why it ran so badly.
 	var homeless := village.homeless_count()
 	var damaged := _find_damaged_house()
+	var next_house: Dictionary = House.SPECS[village.next_house_size()]
+	var lumber_due: int = next_house["lumber"]
+	var stone_due: int = next_house["stone"]
 	if village.construction_site != null:
 		scores["build"] = 42.0
-	elif homeless > 0 and store.lumber >= 4 and store.stone >= 2:
+	elif homeless > 0 and store.lumber >= lumber_due and store.stone >= stone_due:
 		scores["build"] = 38.0 + homeless * 6.0
 	elif damaged != null and store.lumber >= 1:
 		scores["build"] = 26.0
 
-	# Materials wanted? (for the next hut, plus a reserve)
-	var want_lumber: bool = store.lumber < 10 and (homeless > 0 or store.lumber < 5)
-	var want_stone: bool = store.stone < 6 and (homeless > 0 or store.stone < 3)
-	if want_lumber and _nearest_in_group("trees", village.influence_radius * 2.5) != null:
-		scores["chop"] = 35.0 + maxf(10.0 - store.lumber, 0.0) * 2.0
-	if want_stone and _nearest_in_group("rock_deposits", village.influence_radius * 2.5) != null:
-		scores["quarry"] = 33.0 + maxf(6.0 - store.stone, 0.0) * 2.0
+	# Materials wanted: enough for the house the town is actually saving up for,
+	# and a little over so the one after it is not started from nothing. With
+	# nobody homeless it keeps the spare and no more, which is what stops a
+	# settled village stripping the hillside for timber it has no use for.
+	var reserve_lumber := MATERIAL_SPARE
+	var reserve_stone := MATERIAL_SPARE
+	if homeless > 0:
+		reserve_lumber += lumber_due
+		reserve_stone += stone_due
+	# WHAT THE TOWN CAN SEE, not what this one villager can. Scoring asks
+	# whether there is timber worth walking to at all — the same question for
+	# everybody, so the village answers it once a second and fifty people read
+	# it. Which tree to walk to is still this villager's own question, asked in
+	# _start_job by the one person actually going. See VillageWatch.
+	var watch := village.watch
+	if store.lumber < reserve_lumber and watch.timber != null:
+		scores["chop"] = 35.0 + minf(float(reserve_lumber - store.lumber), 12.0) * 2.0
+	if store.stone < reserve_stone and watch.stone != null:
+		scores["quarry"] = 33.0 + minf(float(reserve_stone - store.stone), 12.0) * 2.0
 
 	# Food security, per diet.
 	var abandoned := village.agriculture_abandoned()
@@ -1152,7 +1184,7 @@ func _pick_job() -> bool:
 	# GOING OUT TO PREACH. Only from a town that believes firmly enough to spare
 	# somebody for days, and only by the devout.
 	if village.converted and village.belief > MISSION_FAITH \
-			and morality >= TAME_MORALITY and _nearest_heathen() != null:
+			and morality >= TAME_MORALITY and watch.heathen != null:
 		scores["preach"] = 27.0
 	# THE EVENING CIRCLE. Dancing at the nest after dark, whether the beast is
 	# there or not — scored high because it is what people would rather be
@@ -1161,21 +1193,21 @@ func _pick_job() -> bool:
 	if village.nest != null and is_instance_valid(village.nest) and GameState.is_night():
 		scores["circle"] = 30.0
 	if village.diet == Village.Diet.CANNIBAL and store.meat_food < 4 \
-			and _will_eat_human_flesh() and _nearest_corpse() != null:
+			and _will_eat_human_flesh() and watch.corpse != null:
 		scores["butcher"] = 50.0 + food_worry
 	if eats_meat and store.meat_food < 5:
 		if abandoned and Workshop.any_meat(village):
 			scores["butcher_pen"] = 40.0 + food_worry
-		if _nearest_huntable() != null:
+		if watch.game != null:
 			scores["hunt"] = (35.0 if abandoned else 25.0) + food_worry
 		# The shore feeds anyone patient enough to stand on it.
-		if _find_shore() != Vector3.INF:
+		if watch.shore != Vector3.INF:
 			scores["fish"] = 23.0 + food_worry * 0.6
 
 	# Taming: a privilege of the good, pointless for the fallen. An empty
 	# pen makes it urgent — a dog and a mount change everything.
 	if morality >= TAME_MORALITY and not abandoned and village.tamed_count() < Workshop.stalls(village):
-		if _nearest_tamable() != null:
+		if watch.tamable != null:
 			scores["tame"] = 24.0 + (12.0 if village.tamed_count() == 0 else 0.0)
 
 	if scores.is_empty():

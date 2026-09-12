@@ -96,10 +96,44 @@ const ATTENTION_DECAY := 0.5       # per second (a miracle's notice lasts ~a min
 const BREED_BASE := 0.45           # per second WHILE a partner is present
 const BREED_ATTENTION_GAIN := 50.0  # attention needed to double that
 
-## Hand-placed founding homes, clear of the farm (E), store (NW), and pen (S).
-const STARTER_HOUSE_SPOTS: Array[Vector3] = [
-	Vector3(5, 0, 9), Vector3(-4.5, 0, 10), Vector3(10.5, 0, 5),
+## HOW MANY OF THE FOUNDING SOULS SLEEP INDOORS.
+##
+## Three hand-placed huts was right when a village was eight people. Founding
+## fifty souls into eight beds left forty-two of them sleeping in the dirt on
+## the first morning of the world, which is not a town — it is a refugee camp
+## that happens to own a totem.
+##
+## Not all of them, though. A town with nothing left to build is a town standing
+## in the road. Four in five housed is enough that nobody starts the game in the
+## rain, and short enough that raising the next one is still somebody's job.
+const FOUNDING_HOUSED := 0.8
+## The sizes are cycled rather than picked: a place that has stood for a
+## generation has a hall or two and a scatter of smaller homes around them, not
+## eight identical longhouses in a row.
+const FOUNDING_SIZES: Array[int] = [
+	House.Size.LONGHOUSE, House.Size.HOUSE, House.Size.HUT, House.Size.HOUSE,
 ]
+const FOUNDING_MOST := 24
+const FOUNDING_PER_RING := 7
+const FOUNDING_RING := 9.5
+const FOUNDING_RING_STEP := 5.0
+
+## THE TOWN'S OWN NUMBERS, WORKED OUT ONCE FOR EVERYBODY.
+##
+## How many souls there are, how many sleep rough, who is at what job, how
+## devout they are on average — every villager wanted all of those every time it
+## chose what to do next, and every answer walked the whole village. That is
+## work that grows as the SQUARE of the town: eight people asking eight-long
+## questions is nothing, fifty people asking fifty-long questions several times
+## a second is the slowdown. Raising villages to fifty souls is what made a
+## quiet inefficiency into the thing you can feel.
+##
+## They are ADVISORY numbers, every one of them. Nobody needs this frame's exact
+## count of woodcutters to decide whether to go and cut wood, and a third of a
+## second out of date changes no decision anybody makes. The roster is refreshed
+## outright whenever the town gains or loses somebody, so the count is never
+## wrong about who exists — only ever a moment behind about what they are doing.
+const TALLY_EVERY := 0.35
 
 var village_name := "Elsmere"
 var is_player_home := true
@@ -107,6 +141,7 @@ var converted := false
 var belief := 0.0
 var influence_radius := MIN_INFLUENCE
 var diet := Diet.OMNIVORE
+
 
 var totem: Node3D
 var farm: Farm                 # the founding field (always farms[0])
@@ -136,9 +171,23 @@ var vendetta: Array[Animal] = []
 ## villager reads the result instead of working it out for themselves — which
 ## is what makes a settlement of hundreds affordable. See VillageHive.
 var hive := VillageHive.new()
+## WHAT THE TOWN CAN SEE. The same bargain as the crowd mind, for the country
+## round the village rather than for its mood — see VillageWatch.
+var watch := VillageWatch.new()
 var attention := 0.0
 ## 0..100 — hard-won nerve. See RESOLVE_* above.
 var resolve := RESOLVE_START
+
+## The town's own numbers, kept between tallies. See TALLY_EVERY.
+var _roster: Array[Villager] = []
+var _tally_left := 0.0
+var _homeless := 0
+var _children := 0
+var _teachers := 0
+var _jobs := {}
+var _worshippers := 0
+var _dancers := 0
+var _morality := 0.0
 
 var _totem_orb: MeshInstance3D
 var _influence_ring: MeshInstance3D
@@ -411,19 +460,64 @@ func _build_influence_ring() -> void:
 
 
 func _build_starting_houses() -> void:
-	var sizes: Array = [House.Size.HUT, House.Size.HUT, House.Size.HOUSE] \
-		if is_player_home else [House.Size.HUT, House.Size.HUT]
-	for i in sizes.size():
+	var souls := STARTING_SOULS if is_player_home else STARTING_SOULS * 2 / 3
+	var beds_wanted := int(float(souls) * FOUNDING_HOUSED)
+	var beds := 0
+	var raised := 0
+	while beds < beds_wanted and raised < FOUNDING_MOST:
+		var spot := _founding_spot(raised)
+		if spot == Vector3.INF:
+			break          # the ground round here will not take another one
+		var size: int = FOUNDING_SIZES[raised % FOUNDING_SIZES.size()]
 		var house := House.new()
-		house.size = sizes[i]
+		house.size = size as House.Size
 		house.village = self
 		house.age = randf_range(5.0, 20.0)
-		house.position = _grounded(STARTER_HOUSE_SPOTS[i], 2.0)
+		house.position = spot
 		# Face the totem — computed off-tree, so no look_at here.
 		house.basis = Basis.looking_at(
 			-Vector3(house.position.x, 0, house.position.z), Vector3.UP)
 		add_child(house)
 		houses.append(house)
+		beds += int(House.SPECS[size]["capacity"])
+		raised += 1
+
+
+## WHERE THE i-TH FOUNDING HOUSE STANDS: rings widening out from the totem,
+## turned a little against each other so the second ring does not sit squarely
+## behind the first. Anything that would land on the market, the field or the
+## pen is stepped over rather than shuffled about at random, which is what makes
+## the founding town look laid out instead of scattered.
+func _founding_spot(i: int) -> Vector3:
+	for tries in FOUNDING_MOST:
+		var n := i + tries
+		var ring := floori(float(n) / float(FOUNDING_PER_RING))
+		var step := n % FOUNDING_PER_RING
+		var radius := FOUNDING_RING + float(ring) * FOUNDING_RING_STEP
+		var angle := (float(step) / float(FOUNDING_PER_RING) + float(ring) * 0.37) * TAU
+		var spot := Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
+		var settled := _grounded(spot, 2.0)
+		if not _spot_blocked(global_position + settled):
+			return settled
+	return Vector3.INF
+
+
+## IS THIS GROUND ALREADY SPOKEN FOR? One answer, in world space, shared by the
+## founding rings and by every build spot chosen afterwards — so a town cannot
+## raise its first houses by one set of rules and its later ones by another.
+func _spot_blocked(pos: Vector3) -> bool:
+	for h in houses:
+		if is_instance_valid(h) and h.global_position.distance_to(pos) < 4.5:
+			return true
+	if totem != null and totem.global_position.distance_to(pos) < 6.0:
+		return true
+	for f in farms:
+		if is_instance_valid(f) and f.global_position.distance_to(pos) < 7.0:
+			return true
+	# The round market is wide — houses keep extra distance from it.
+	if store != null and store.global_position.distance_to(pos) < 8.5:
+		return true
+	return pen_position().distance_to(pos) < 6.0
 
 
 func _spawn_villagers(count: int) -> void:
@@ -453,11 +547,7 @@ func spawn_child(pos: Vector3, mother: Villager = null) -> void:
 ## The village wants a school once it has a couple of children, the timber
 ## and stone to raise one, and doesn't already have an Edubba.
 func child_count() -> int:
-	var n := 0
-	for v in my_villagers():
-		if not v.is_adult():
-			n += 1
-	return n
+	return _children
 
 
 func has_edubba() -> bool:
@@ -496,11 +586,7 @@ func needs_teacher() -> bool:
 
 ## Everyone presently holding a post at the school.
 func teachers() -> int:
-	var n := 0
-	for v in my_villagers():
-		if v.is_teacher:
-			n += 1
-	return n
+	return _teachers
 
 
 func _process(delta: float) -> void:
@@ -508,11 +594,7 @@ func _process(delta: float) -> void:
 	# the nest gathers depends on how many are round the fire TOGETHER — eight
 	# people dancing is worth more than eight people praying.
 	if nest != null and is_instance_valid(nest):
-		var dancers := 0
-		for v in my_villagers():
-			if v.state == Villager.State.CIRCLING:
-				dancers += 1
-		nest.dance_tick(dancers, delta)
+		nest.dance_tick(_dancers, delta)
 	# Ahead of the LOD gate, on the real clock: the torches are a LOOK, and a
 	# look that updates on a strided tick judders. They cost nothing when the
 	# town is far off or the sun is up, which the tick checks first thing.
@@ -528,10 +610,7 @@ func _process(delta: float) -> void:
 			return
 		delta *= _sim_skip
 		_sim_skip = 0
-	var worshippers := 0
-	for v in my_villagers():
-		if v.is_worshipping():
-			worshippers += 1
+	var worshippers := _worshippers
 	if worshippers > 0:
 		if converted:
 			var conviction := lerpf(0.75, 1.25, (average_morality() + 100.0) / 200.0)
@@ -546,7 +625,12 @@ func _process(delta: float) -> void:
 	if attention > 0.0:
 		attention = maxf(attention - ATTENTION_DECAY * delta, 0.0)
 	# The town takes stock — once, for everybody.
+	_tally_left -= delta
+	if _tally_left <= 0.0:
+		_tally_left = TALLY_EVERY
+		_retally()
 	hive.tick(delta, self)
+	watch.tick(delta, self)
 
 	_housing_timer -= delta
 	if _housing_timer <= 0.0:
@@ -654,12 +738,51 @@ func _within(reach: float) -> bool:
 
 
 func my_villagers() -> Array[Villager]:
-	var result: Array[Villager] = []
+	if _roster.is_empty():
+		_refresh_roster()
+	return _roster
+
+
+## WHO IS HERE. The one walk over the villagers group that everything else in
+## the town reads instead of repeating. Called outright on every birth, death
+## and adoption — all of which already go through _assign_housing — so the list
+## is never wrong about who exists.
+func _refresh_roster() -> void:
+	_roster.clear()
 	for v in get_tree().get_nodes_in_group("villagers"):
 		var villager := v as Villager
 		if is_instance_valid(villager) and villager.village == self:
-			result.append(villager)
-	return result
+			_roster.append(villager)
+
+
+## AND WHAT THEY ARE DOING, counted in one pass rather than four. Everything
+## here used to be its own walk over the town, called from inside a decision
+## that fifty people were making at once.
+func _retally() -> void:
+	_refresh_roster()
+	_homeless = 0
+	_children = 0
+	_teachers = 0
+	_worshippers = 0
+	_dancers = 0
+	_jobs = {}
+	var morals := 0.0
+	for v in _roster:
+		if v.home == null:
+			_homeless += 1
+		if not v.is_adult():
+			_children += 1
+		if v.is_teacher:
+			_teachers += 1
+		if v.is_worshipping():
+			_worshippers += 1
+		if v.state == Villager.State.CIRCLING:
+			_dancers += 1
+		var job := v.current_job()
+		if job != "":
+			_jobs[job] = _jobs.get(job, 0) + 1
+		morals += v.morality
+	_morality = morals / float(maxi(_roster.size(), 1))
 
 
 func population() -> int:
@@ -670,22 +793,12 @@ func population() -> int:
 ## villager reads this to steer toward under-served work, so the flock spreads
 ## across the village's needs instead of all conga-lining to one resource.
 func job_counts() -> Dictionary:
-	var counts := {}
-	for v in my_villagers():
-		var job := v.current_job()
-		if job != "":
-			counts[job] = counts.get(job, 0) + 1
-	return counts
+	return _jobs
 
 
 func average_morality() -> float:
-	var villagers := my_villagers()
-	if villagers.is_empty():
-		return 0.0
-	var total := 0.0
-	for v in villagers:
-		total += v.morality
-	return total / villagers.size()
+	return _morality
+
 
 
 ## A village that has fallen far enough gives up the plough entirely.
@@ -764,11 +877,7 @@ func housing_capacity() -> int:
 
 
 func homeless_count() -> int:
-	var homeless := 0
-	for v in my_villagers():
-		if v.home == null:
-			homeless += 1
-	return homeless
+	return _homeless
 
 
 ## Greedy re-assignment: fill houses in order; the leftover sleep rough.
@@ -776,7 +885,8 @@ func homeless_count() -> int:
 ## house standing against the years.
 func _assign_housing() -> void:
 	Util.prune(houses)
-	var villagers := my_villagers()
+	_refresh_roster()
+	var villagers := _roster
 	var slots := []
 	for h in houses:
 		for i in h.capacity():
@@ -788,6 +898,9 @@ func _assign_housing() -> void:
 			lived_in[villagers[i].home] = true
 	for h in houses:
 		h.occupied = lived_in.has(h)
+	# Who is homeless has just changed by definition, and everyone who asks
+	# reads the tally rather than counting for themselves.
+	_retally()
 
 
 ## A villager set down here by the hand has joined us — welcome them home.
@@ -828,23 +941,7 @@ func find_build_spot(world: WorldGen) -> Vector3:
 			if not world.line_dry(global_position.x, global_position.z, pos.x, pos.z):
 				continue
 			pos.y = world.settle_height(pos.x, pos.z, 2.2)
-		var blocked := false
-		for h in houses:
-			if is_instance_valid(h) and h.global_position.distance_to(pos) < 4.5:
-				blocked = true
-				break
-		if totem.global_position.distance_to(pos) < 6.0:
-			blocked = true
-		for f in farms:
-			if is_instance_valid(f) and f.global_position.distance_to(pos) < 7.0:
-				blocked = true
-				break
-		# The round market is wide — houses keep extra distance from it.
-		if store.global_position.distance_to(pos) < 8.5:
-			blocked = true
-		if pen_position().distance_to(pos) < 6.0:
-			blocked = true
-		if not blocked:
+		if not _spot_blocked(pos):
 			return pos
 	return Vector3.INF
 
