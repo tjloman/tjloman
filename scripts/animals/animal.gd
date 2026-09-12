@@ -398,9 +398,18 @@ func _find_prey() -> Node3D:
 
 func _strike_prey() -> void:
 	if _prey is Animal:
+		var worth: float = (_prey as Animal).spec.get("meat", 1)
 		(_prey as Animal).take_damage(25.0)
 		if not is_instance_valid(_prey) or _prey.is_queued_for_deletion():
 			hunger = maxf(hunger - 70.0, 0.0)
+			# THE PACK EATS, not just the wolf. A kill banks toward the hunting
+			# herd's own next head, so wolves living beside fat cattle become
+			# more wolves — which is what makes a herd worth defending and a
+			# predator worth driving off. The victim's herd learns of it by its
+			# own bookkeeping; see Herd._tend_agents.
+			var pack = get_meta("herd", null)
+			if pack != null and is_instance_valid(pack):
+				(pack as Herd).fed_on(worth)
 			_prey = null
 			state = State.IDLE
 	elif _prey is Villager:

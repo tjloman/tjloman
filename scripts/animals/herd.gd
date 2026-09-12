@@ -114,6 +114,48 @@ const GROUNDS_PER_TICK := 12
 const REDEAL_SHARE := 0.4
 const REDEAL_PER_TICK := 5
 
+## A HERD IS A POPULATION, not a number that was rolled once.
+##
+## The dice say how many come over the hill on the day the world is made. What
+## happens to them afterwards is the part that matters, because a herd that can
+## only ever shrink is scenery with a countdown on it. This is a meat wall: the
+## thing wolves grow fat on, the thing a village eats through the winter, the
+## thing a creature can drive home, butcher for sport, or — by planting bushes
+## and keeping the wolves off it — grow into something enormous.
+##
+## CAPACITY IS A MULTIPLE OF THE HERD THE LAND FIRST PRODUCED. The dice already
+## encode how rich a place is for a species: highland that threw two hundred
+## reindeer is highland that can feed two hundred reindeer. So the ceiling starts
+## just under the birth size — a herd left entirely alone drifts down, which is
+## what makes tending it mean something — and every bush within reach lifts it.
+const SEASON := 40.0
+const CARRY_BARE := 0.85
+const CARRY_PER_BUSH := 0.14
+const CARRY_MOST := 3.0
+const FORAGE_REACH := 34.0
+
+## How much of itself a fed, unfrightened herd adds in a season, and how long
+## the memory of being hunted holds that down. Fear is not decoration: a herd
+## being worked by wolves does not calve, so predation costs a herd far more
+## than the beasts actually taken.
+const BREED := 0.16
+const FEAR_PER_LOSS := 0.22
+const FEAR_FADE := 0.34
+
+## WHAT A PREDATOR GETS OUT OF IT. Kills bank against the pack's own next head:
+## a wolf pack living off fat cattle becomes a bigger wolf pack, which is the
+## whole reason the meat wall is worth defending.
+const FED_PER_HEAD := 4.0
+
+## A PREDATOR'S CEILING IS MEAT, NOT BERRIES. Bushes are the lever for a grazing
+## herd and mean nothing to a wolf, so a pack's capacity rides on how well it
+## has been eating lately instead. The larder fades every season, which is what
+## closes the loop in both directions: a pack beside a fat herd swells, and a
+## pack that has eaten the herd out starves back down to what is left. Without
+## the fade, predators would only ever ratchet upward.
+const LARDER_PER_MEAL := 0.05
+const LARDER_FADE := 0.30
+
 ## How far a herd drifts from where it was seeded, and how long it grazes one
 ## patch before moving on.
 const ROAM := 26.0
@@ -148,6 +190,11 @@ var _shuffle_left := 0.0
 var _ground_cursor := 0
 var _spread := 0.0
 var _redeal_left := 0
+var _born_head := 0
+var _fear := 0.0
+var _fed := 0.0
+var _larder := 0.0
+var _season_left := 0.0
 
 
 ## Roll the head count for a species. Public so the seeding code and the smoke
@@ -173,6 +220,8 @@ func _ready() -> void:
 	_home = global_position
 	_target = _home
 	_spread = maxf(SPACING * sqrt(float(head)), SPREAD_LEAST)
+	_born_head = head
+	_season_left = randf() * SEASON     # herds do not all reckon on the same frame
 	_build_members()
 	_build_multimesh()
 	_shuffle_left = randf() * SHUFFLE_EVERY
@@ -233,6 +282,10 @@ func _process(delta: float) -> void:
 	_graze_left -= delta
 	if _graze_left <= 0.0:
 		_pick_pasture()
+	_season_left -= delta
+	if _season_left <= 0.0:
+		_season_left = SEASON
+		_reckon()
 	_drift(delta)
 	_shuffle_left -= delta
 	if _shuffle_left <= 0.0:
@@ -351,9 +404,11 @@ func _tend_agents() -> void:
 			continue
 		if not is_instance_valid(agent) or agent.is_queued_for_deletion():
 			# Eaten, butchered, or thrown into the sea. It does not come back,
-			# and the herd is one head smaller for good.
+			# and the herd is one head smaller for good — and frightened,
+			# whatever it was that took it.
 			m["agent"] = null
 			m["dead"] = true
+			lost_one()
 			_agents_afoot -= 1
 			continue
 		# Keep the row in step with where the animal actually walked to, so
@@ -390,6 +445,10 @@ func _tend_agents() -> void:
 		# be looking. The motion names are ModelAnimator's own vocabulary, so
 		# the far pose and the near clip are the same word.
 		born.state = AS_STATE.get(m["motion"], Animal.State.IDLE)
+		# THE WAY HOME. A promoted beast carries a handle on the herd it came
+		# from, so a kill can be credited to the killer's pack and charged to
+		# the victim's — which is the whole food chain in one reference.
+		born.set_meta("herd", self)
 		m["agent"] = born
 		_agents_afoot += 1
 
@@ -404,5 +463,124 @@ func alive() -> int:
 	return n
 
 
+## THE SEASON TURNS. The herd counts what the land will feed it, how frightened
+## it is, and how many of it there are, and grows or dwindles accordingly.
+##
+## Logistic, not linear: growth falls away as the herd approaches what the
+## ground can carry, so a tended herd settles at its ceiling instead of running
+## off to infinity, and a thin herd on good ground comes back fast.
+func _reckon() -> void:
+	_fear = maxf(_fear - FEAR_FADE, 0.0)
+	_larder *= 1.0 - LARDER_FADE
+	var n := alive()
+	if n <= 0:
+		queue_free()          # the last of them went; the herd is not a thing
+		return
+	var ceiling := capacity()
+	var room := 1.0 - float(n) / maxf(ceiling, 1.0)
+	var calm := 1.0 - clampf(_fear, 0.0, 1.0)
+	var change := BREED * float(n) * room * calm
+	# Over its ceiling the herd thins whether it is calm or not — hunger does
+	# not care how safe you feel — so the calm factor only ever helps growth.
+	if room < 0.0:
+		change = BREED * float(n) * room
+	var whole := int(change)
+	# The fraction is a chance rather than a rounding, or a herd of six with a
+	# gain of 0.4 head a season would never breed at all.
+	if randf() < absf(change - float(whole)):
+		whole += 1 if change > 0.0 else -1
+	if whole > 0:
+		_grow(whole)
+	elif whole < 0:
+		_cull(-whole)
+
+
+## WHAT THE GROUND WILL FEED, in head. Bushes in reach are the lever the player
+## and the creature actually have: plant them and the ceiling rises, and the
+## herd fills the room over the following seasons.
+func capacity() -> float:
+	# A hunting herd is fed by what it catches, and counting bushes for a wolf
+	# pack was simply the wrong question — it capped a pack at what the berries
+	# nearby would support.
+	if Animal.SPECIES[species].get("predator", false):
+		var fat := clampf(CARRY_BARE + _larder * LARDER_PER_MEAL, 0.2, CARRY_MOST)
+		return maxf(float(_born_head) * fat, 1.0)
+	var bushes := 0
+	for b in get_tree().get_nodes_in_group("forage"):
+		var bush := b as Node3D
+		if is_instance_valid(bush) and bush.global_position.distance_to(
+				global_position) < FORAGE_REACH:
+			bushes += 1
+	var mult := clampf(CARRY_BARE + float(bushes) * CARRY_PER_BUSH, 0.2, CARRY_MOST)
+	return maxf(float(_born_head) * mult, 1.0)
+
+
+func _grow(many: int) -> void:
+	for i in many:
+		# A calf slots into the formation with the rest, and starts out doing
+		# what calves do — see HerdMotion's `young` mix.
+		var a := randf() * TAU
+		var r := sqrt(randf()) * _spread
+		_members.append({
+			"offset": Vector2(cos(a) * r, sin(a) * r),
+			"motion": HerdMotion.draw_motion("young", randf()),
+			"slot": randi() % HerdMotion.SLOTS,
+			"facing": randf() * TAU,
+			"ground": global_position.y,
+			"agent": null,
+			"dead": false,
+		})
+	head = _members.size()
+	_spread = maxf(SPACING * sqrt(float(alive())), SPREAD_LEAST)
+	if _mm != null:
+		_mm.instance_count = _members.size()
+		_write_transforms()
+
+
+## Starvation takes the ones with nobody promoted into them first, so a beast
+## the player is watching is never quietly deleted out from under them.
+func _cull(many: int) -> void:
+	var taken := 0
+	for m in _members:
+		if taken >= many:
+			break
+		if m["dead"] or m["agent"] != null:
+			continue
+		m["dead"] = true
+		taken += 1
+
+
+## SOMETHING TOOK ONE. However it went — wolf, villager, creature, or a god in
+## a temper — the herd is one smaller and it is frightened, and a frightened
+## herd does not calve. Cruelty therefore costs a herd far more than the beast.
+func lost_one() -> void:
+	_fear = minf(_fear + FEAR_PER_LOSS, 1.0)
+
+
+## A PREDATOR ATE. Kills bank toward the pack's own next head, which is how a
+## wolf pack living beside fat cattle becomes a bigger wolf pack.
+func fed_on(worth: float) -> void:
+	_fed += worth
+	_larder += worth
+	while _fed >= FED_PER_HEAD:
+		_fed -= FED_PER_HEAD
+		if alive() < int(capacity()):
+			_grow(1)
+
+
+## In a word: is it doing well? Read off the same numbers the season uses, so
+## the label can never disagree with what is about to happen.
+func condition() -> String:
+	if _fear > 0.5:
+		return "hunted"
+	var n := float(alive())
+	var ceiling := capacity()
+	if n > ceiling * 0.95:
+		return "as many as the land will feed"
+	if n < ceiling * 0.55:
+		return "thin"
+	return "thriving"
+
+
 func hover_text() -> String:
-	return "A herd of %d %s" % [alive(), species]
+	return "A herd of %d %s — %s" % [alive(), species, condition()]
