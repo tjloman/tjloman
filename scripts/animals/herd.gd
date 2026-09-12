@@ -58,6 +58,28 @@ const SOCIAL := {
 	"elk": [1, 1, 0],
 }
 
+## THE SEAM BETWEEN NUMBER AND ANIMAL, in both directions. HerdMotion's motion
+## names are ModelAnimator's semantic states, so a grazing member becomes a
+## grazing animal and back again without anybody visibly changing their mind.
+const AS_STATE := {
+	"graze": Animal.State.GRAZE,
+	"walk": Animal.State.WANDER,
+	"run": Animal.State.FLEE,
+	"play": Animal.State.WANDER,
+	"idle": Animal.State.IDLE,
+	"sleep": Animal.State.IDLE,
+}
+const AS_MOTION := {
+	Animal.State.GRAZE: "graze",
+	Animal.State.GO_FORAGE: "graze",
+	Animal.State.WANDER: "walk",
+	Animal.State.FLEE: "run",
+	Animal.State.CHASE: "run",
+	Animal.State.GO_DRINK: "walk",
+	Animal.State.DRINKING: "graze",
+	Animal.State.IDLE: "idle",
+}
+
 ## HOW CLOSE A BEAST MUST BE to stop being a number and become an animal, and
 ## how far it must wander back out before it is demoted again. The gap between
 ## the two is not fussiness: without it a beast hovering exactly on the line
@@ -75,6 +97,13 @@ const SPREAD_LEAST := 3.0
 ## re-sampled per tick. Both are constants, and that is the point.
 const SHUFFLE_EVERY := 0.2
 const GROUNDS_PER_TICK := 12
+
+## HOW MANY TICKS A MOOD TAKES TO CROSS A HERD. A fixed number of ticks, not a
+## fixed number of head per tick: at twelve a tick a two-hundred-head herd took
+## three and a half seconds to all start running, which does not read as alarm,
+## it reads as indifference. Four ticks is a ripple you can watch cross the mass
+## in under a second whether the herd is twenty head or two thousand.
+const RIPPLE_TICKS := 4
 
 ## How far a herd drifts from where it was seeded, and how long it grazes one
 ## patch before moving on.
@@ -94,6 +123,12 @@ var species := ""
 var world: WorldGen = null
 var head := 0
 
+## WHAT THE HERD IS DOING, as one word. It is the herd that has a mood, not the
+## beast: the mood decides the PROPORTIONS in which its members are dealt their
+## motions, and those proportions are what make a mass of boxes read as a herd
+## rather than as a formation. See HerdMotion.MOODS.
+var mood := "graze"
+
 var _members: Array[Dictionary] = []
 var _mm: MultiMesh = null
 var _mmi: MultiMeshInstance3D = null
@@ -103,6 +138,7 @@ var _graze_left := 0.0
 var _shuffle_left := 0.0
 var _ground_cursor := 0
 var _spread := 0.0
+var _redeal_left := 0
 
 
 ## Roll the head count for a species. Public so the seeding code and the smoke
@@ -142,8 +178,12 @@ func _build_members() -> void:
 		var r := sqrt(randf()) * _spread
 		_members.append({
 			"offset": Vector2(cos(a) * r, sin(a) * r),
-			"sway": randf() * TAU,
-			"rate": randf_range(0.25, 0.6),
+			# TWO SMALL INTEGERS ARE THE WHOLE ANIMATION STATE of a member:
+			# which motion it is playing and which phase offset it plays it at.
+			# Everything else is looked up from a table HerdMotion builds once
+			# a tick for the entire world. See that file for why.
+			"motion": HerdMotion.draw_motion(mood, randf()),
+			"slot": randi() % HerdMotion.SLOTS,
 			"facing": randf() * TAU,
 			# Started at the herd's own ground rather than at zero, and refined
 			# by the round-robin afterwards. Sampling two hundred heights in the
@@ -189,6 +229,7 @@ func _process(delta: float) -> void:
 	if _shuffle_left <= 0.0:
 		_shuffle_left = SHUFFLE_EVERY * stride
 		_resample_grounds(GROUNDS_PER_TICK)
+		_redeal(ceili(float(_members.size()) / float(RIPPLE_TICKS)))
 		_write_transforms()
 		_tend_agents()
 
@@ -214,7 +255,10 @@ func _drift(delta: float) -> void:
 	var to := _target - global_position
 	to.y = 0.0
 	if to.length() < 0.5:
+		# Arrived. Heads go down, and the mix of motions changes with them.
+		set_mood("graze")
 		return
+	set_mood("move")
 	global_position += to.normalized() * minf(pace * delta, to.length())
 
 
@@ -234,7 +278,11 @@ func _resample_grounds(how_many: int) -> void:
 func _write_transforms() -> void:
 	if _mm == null:
 		return
-	var t := float(Time.get_ticks_msec()) * 0.001
+	# ONE TABLE FOR THE WHOLE WORLD, built by whichever herd ticks first this
+	# frame. Everything below is a lookup and some adds — no trigonometry runs
+	# per member, which is the difference between a herd of two hundred costing
+	# what a herd of twenty costs and it costing ten times as much.
+	HerdMotion.refresh(float(Time.get_ticks_msec()) * 0.001)
 	var here := global_position
 	for i in _members.size():
 		var m := _members[i]
@@ -245,14 +293,33 @@ func _write_transforms() -> void:
 		if m["agent"] != null or m["dead"]:
 			_mm.set_instance_transform(i, Transform3D().scaled(Vector3.ZERO))
 			continue
-		var sway: float = m["sway"] + t * float(m["rate"])
+		var p: Vector4 = HerdMotion.pose(m["motion"], m["slot"])
 		var off: Vector2 = m["offset"]
-		var p := Vector3(off.x + cos(sway) * 0.35,
-			float(m["ground"]) - here.y,
-			off.y + sin(sway * 0.8) * 0.35)
-		var turn := Basis(Vector3.UP, float(m["facing"]) + cos(sway * 0.5) * 0.25)
-		_mm.set_instance_transform(i, Transform3D(turn, p))
+		var turn := Basis.from_euler(Vector3(p.y, float(m["facing"]) + p.w, p.z))
+		_mm.set_instance_transform(i, Transform3D(turn, Vector3(
+			off.x, float(m["ground"]) - here.y + p.x, off.y)))
 		_mm.set_instance_color(i, Color(1, 1, 1))
+
+
+## THE MOOD CHANGED, so everybody is dealt a new motion — but NOT all in the
+## same frame. A herd startling is a ripple that crosses it, and re-dealing the
+## whole formation at once looks like a switch being thrown. Members are re-dealt
+## a slice at a time on the same round-robin the ground heights ride.
+func set_mood(to: String) -> void:
+	if to == mood:
+		return
+	mood = to
+	_redeal_left = _members.size()
+
+
+func _redeal(how_many: int) -> void:
+	if _redeal_left <= 0 or _members.is_empty():
+		return
+	for i in mini(how_many, _redeal_left):
+		var m := _members[_redeal_left - 1]
+		if not m["dead"]:
+			m["motion"] = HerdMotion.draw_motion(mood, randf())
+		_redeal_left -= 1
 
 
 ## PROMOTION. The handful of head nearest the camera become real beasts, up to
@@ -279,6 +346,9 @@ func _tend_agents() -> void:
 		m["offset"] = Vector2(local.x, local.z)
 		m["ground"] = agent.global_position.y
 		if agent.global_position.distance_to(focus) > DEMOTE_BEYOND:
+			# And hands back what it was doing, so the seam is silent in both
+			# directions: a beast that ran off keeps running as a number.
+			m["motion"] = AS_MOTION.get(agent.state, mood if mood != "move" else "walk")
 			agent.queue_free()
 			m["agent"] = null
 			_agents_afoot -= 1
@@ -298,6 +368,12 @@ func _tend_agents() -> void:
 		# if it runs off it should not be dragged about by the formation.
 		get_parent().add_child(born)
 		born.global_position = p
+		# IT CARRIES ON DOING WHAT IT WAS DOING. Without this a grazing member
+		# stands up and wanders the moment it crosses forty metres, which is a
+		# visible seam exactly where the player is closest and most likely to
+		# be looking. The motion names are ModelAnimator's own vocabulary, so
+		# the far pose and the near clip are the same word.
+		born.state = AS_STATE.get(m["motion"], Animal.State.IDLE)
 		m["agent"] = born
 		_agents_afoot += 1
 
