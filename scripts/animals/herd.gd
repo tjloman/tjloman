@@ -98,12 +98,21 @@ const SPREAD_LEAST := 3.0
 const SHUFFLE_EVERY := 0.2
 const GROUNDS_PER_TICK := 12
 
-## HOW MANY TICKS A MOOD TAKES TO CROSS A HERD. A fixed number of ticks, not a
-## fixed number of head per tick: at twelve a tick a two-hundred-head herd took
-## three and a half seconds to all start running, which does not read as alarm,
-## it reads as indifference. Four ticks is a ripple you can watch cross the mass
-## in under a second whether the herd is twenty head or two thousand.
-const RIPPLE_TICKS := 4
+## WHAT SHARE OF THE HERD ANSWERS A CHANGE OF MOOD, and how fast the answer
+## crosses them.
+##
+## Not all of them, and not quickly. A herd does not switch: some of it looks
+## up, and the rest goes on eating. Four head in ten answer any one change, and
+## they are picked at random rather than in a block, so a mood that persists
+## converts the mass in waves instead of throwing a switch over it — and a herd
+## that is alarmed twice is visibly more alarmed than a herd alarmed once.
+##
+## Five a tick puts about three and a third seconds between the first head
+## coming up and the last, on a big herd. An earlier version crossed the whole
+## herd in under a second and it was wrong: it read as one animal with two
+## hundred bodies.
+const REDEAL_SHARE := 0.4
+const REDEAL_PER_TICK := 5
 
 ## How far a herd drifts from where it was seeded, and how long it grazes one
 ## patch before moving on.
@@ -229,7 +238,7 @@ func _process(delta: float) -> void:
 	if _shuffle_left <= 0.0:
 		_shuffle_left = SHUFFLE_EVERY * stride
 		_resample_grounds(GROUNDS_PER_TICK)
-		_redeal(ceili(float(_members.size()) / float(RIPPLE_TICKS)))
+		_redeal(REDEAL_PER_TICK)
 		_write_transforms()
 		_tend_agents()
 
@@ -309,14 +318,21 @@ func set_mood(to: String) -> void:
 	if to == mood:
 		return
 	mood = to
-	_redeal_left = _members.size()
+	# Only a share answers, and a change arriving mid-ripple ADDS to what is
+	# still outstanding rather than replacing it — two alarms in quick
+	# succession should move more of the herd than one, not restart the count.
+	_redeal_left = mini(_redeal_left + ceili(_members.size() * REDEAL_SHARE),
+		_members.size())
 
 
 func _redeal(how_many: int) -> void:
 	if _redeal_left <= 0 or _members.is_empty():
 		return
 	for i in mini(how_many, _redeal_left):
-		var m := _members[_redeal_left - 1]
+		# Picked at random, not walked in order: a block of neighbours all
+		# changing together is a wipe across the formation, which is exactly
+		# the tell that gives away that these are not animals.
+		var m := _members[randi() % _members.size()]
 		if not m["dead"]:
 			m["motion"] = HerdMotion.draw_motion(mood, randf())
 		_redeal_left -= 1
