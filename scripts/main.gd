@@ -1175,6 +1175,44 @@ func _run_smoke_test() -> void:
 		if is_instance_valid(jaws):
 			jaws.queue_free()
 
+	# THE ARM. Reach must climb with size, strength and practice; the ladder
+	# must gate what it can do; and a juggle interrupted must come down.
+	var thrower := Creature.new()
+	add_child(thrower)
+	thrower.global_position = village.global_position + Vector3(14, 0, 14)
+	var green := CreatureThrowing.reach(thrower)
+	var green_rung := CreatureThrowing.level(thrower)
+	thrower.body.strength = 85.0
+	thrower.mind.skill["throw"] = 9.0
+	print("SMOKE TEST: arm — untaught %.0f m (level %d, juggles %d), practised %.0f m (level %d, juggles %d)" % [
+		green, green_rung, CreatureThrowing.hands(thrower),
+		CreatureThrowing.reach(thrower), CreatureThrowing.level(thrower),
+		CreatureThrowing.hands(thrower)])
+	# A shot inside the arm has an arc; one beyond it has none, and it knows.
+	var near_mark := thrower.global_position + Vector3(20, 0, 0)
+	var far_mark := thrower.global_position + Vector3(9000, 0, 0)
+	var lobbed := CreatureThrowing.arc_to(thrower, near_mark, "lob")
+	var pitched := CreatureThrowing.arc_to(thrower, near_mark, "pitch")
+	print("SMOKE TEST: arm — 20m lob rises %.1f m/s, fastball rises %.1f m/s, a mile off: %s" % [
+		lobbed.y, pitched.y, CreatureThrowing.arc_to(thrower, far_mark, "lob") == Vector3.ZERO])
+	# Two sheep up, then something startles it.
+	var props: Array[Node3D] = []
+	for i in 2:
+		var ewe := Animal.create("sheep")
+		add_child(ewe)
+		ewe.global_position = thrower.global_position + Vector3(1.0 + i, 0, 0)
+		props.append(ewe)
+		thrower.throwing.aloft.append(ewe)
+		ewe.pick_up()
+	var up := thrower.throwing.busy()
+	thrower.throwing.spill(thrower)
+	print("SMOKE TEST: juggle — two in the air=%s, dropped on interruption=%s (%s)" % [
+		up, thrower.throwing.aloft.is_empty(),
+		"falling" if props[0].state == Animal.State.FALLING else "NOT falling"])
+	for prop in props:
+		prop.queue_free()
+	thrower.queue_free()
+
 	# BELIEF WITHOUT A MIRACLE. A full granary is not impressed by one more
 	# sack; an empty one is. And the same trick twice is worth less the second
 	# time, which is what stops any of this being a printing press.

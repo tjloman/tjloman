@@ -64,6 +64,13 @@ const MEANING := {
 	"fish": {"bounty": 0.35, "daring": -0.1},
 	"watch": {"fellowship": 0.35, "daring": -0.15},
 	"play": {"fellowship": 0.25, "daring": 0.35, "order": -0.1},
+	# JUGGLING IS NOT A GOOD OR AN EVIL THING, and this row is where that is
+	# actually true rather than merely said: it touches daring and fellowship,
+	# which carry no weight at all in GOOD, and order only barely. A saint and
+	# a monster can both spend an afternoon throwing sheep at the sky and come
+	# out of it the same person they went in as. What their character decides
+	# is how they put the sheep DOWN — see CreatureThrowing.finish.
+	"juggle": {"daring": 0.45, "fellowship": 0.4, "order": -0.15},
 	"cast": {"daring": 0.4, "devotion": 0.35, "order": 0.1},
 	"wander": {"fellowship": -0.25, "daring": 0.15},
 	"rest": {"daring": -0.2},

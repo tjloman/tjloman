@@ -44,7 +44,7 @@ const ANIM := {
 	"CARRYING": "carry", "PLAY": "play", "DANCE": "play",
 	"GUARD": "guard", "COMMUNE": "guard", "SOOTHE": "idle", "HEED": "idle",
 	"CATCH": "run", "FLEE": "run", "RUN": "run", "SHUN": "run", "DEPART": "run",
-	"SMASH": "attack", "LEASHED": "walk", "MIMIC": "walk",
+	"SMASH": "attack", "LEASHED": "walk", "MIMIC": "walk", "JUGGLE": "play",
 }
 
 ## A plain-language phrase for the creature dashboard.
@@ -77,6 +77,7 @@ const DOING := {
 	"DEPART": "walking away from you, for good",
 	"SOOTHE": "sitting with someone who is frightened",
 	"HEED": "stopped, looking up at you",
+	"JUGGLE": "juggling, of all things",
 }
 
 ## The little word that floats over its head.
@@ -87,7 +88,7 @@ const SAYS := {
 	"SMASH": "RAAWR", "FLEE": "!!!", "CAST": "***", "LEASHED": "yes?",
 	"LOUNGE": "~", "DANCE": "la la", "PRAY": "ommm", "COMMUNE": "behold",
 	"RUN": "whoosh", "MIMIC": "like this?", "SHUN": "...", "DEPART": "goodbye",
-	"SOOTHE": "there, there", "HEED": "...?",
+	"SOOTHE": "there, there", "HEED": "...?", "JUGGLE": "ta-daa",
 }
 
 
@@ -262,10 +263,30 @@ static func hover_text(who: Creature, doing: String) -> String:
 	return ("%s — %s (%s, %s)\n" +
 		"bond %d · trusts you %d · attention %d\n" +
 		"hunger %d · energy %d · %s\n" +
+		"%s\n" +
 		"[P — pet   ·   L — scold   ·   C — lock camera]") % [
 		who.called(), doing, who.morality_word(), mood_word(who.mood),
 		int(who.bond), int(who.trust), int(who.attention),
-		int(who.hunger), int(who.energy), who.favorite_deed()]
+		int(who.hunger), int(who.energy), who.favorite_deed(), arm_word(who)]
+
+
+## THE ARM, in one line: what it has learned to do with a thing in its claws and
+## how far it can send one. Both numbers are grown, not given — size and
+## strength on one side, a lifetime of throwing on the other.
+static func arm_word(who: Creature) -> String:
+	var rung := CreatureThrowing.level(who)
+	var what := "a clumsy heave"
+	if rung >= CreatureThrowing.FOUR_AT:
+		what = "juggles four"
+	elif rung >= CreatureThrowing.THREE_AT:
+		what = "juggles three"
+	elif rung >= CreatureThrowing.JUGGLE_AT:
+		what = "juggles"
+	elif rung >= CreatureThrowing.PITCH_AT:
+		what = "throws a fastball"
+	elif rung >= CreatureThrowing.LOB_AT:
+		what = "lobs, and aims"
+	return "arm %d of 9 — %s, out to %d m" % [rung, what, int(CreatureThrowing.reach(who))]
 
 
 static func anim_for(state_name: String, moving: bool) -> String:

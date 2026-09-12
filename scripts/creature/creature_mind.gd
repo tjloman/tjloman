@@ -121,6 +121,11 @@ const VERB_TRAITS := {
 	"watch": {"social": 0.6, "calms": 0.3, "thrill": 0.2},
 	"smash": {"thrill": 0.7, "effort": 0.8},
 	"throw": {"thrill": 0.7, "effort": 0.7},
+	# JUGGLING. Pure amusement with people in it, and hard work — it is the
+	# most strenuous thing on this list that produces absolutely nothing. That
+	# a creature does it at all is the clearest sign it has energy to spare and
+	# somebody to spend it in front of.
+	"juggle": {"thrill": 1.1, "social": 0.5, "effort": 0.75},
 	"flee": {"escape": 1.0, "effort": 0.8},
 	"tend": {"effort": 0.5, "social": 0.25},
 	# HERDING. To the body, driving cattle is simply hard work with people
@@ -566,6 +571,12 @@ func to_dict() -> Dictionary:
 		"seen": seen.duplicate(true),
 		"familiarity": familiarity.duplicate(true),
 		"repertoire": repertoire.duplicate(true),
+		# WHAT IT HAS GOT GOOD AT, and it was never written down. A creature
+		# with a hundred and fifty throws behind it came back from a save
+		# unable to aim, because `skill` was the one thing here that a session
+		# built and a save forgot. The arm is a thing the player GREW; it has
+		# to survive putting the game down.
+		"skill": skill.duplicate(true),
 		"ethos": ethos.to_dict(),
 		"beliefs": beliefs.to_dict(),
 		"bonds": bonds.to_dict(),
@@ -578,6 +589,7 @@ func from_dict(data: Dictionary) -> void:
 	seen = (data.get("seen", {}) as Dictionary).duplicate(true)
 	familiarity = (data.get("familiarity", {}) as Dictionary).duplicate(true)
 	repertoire = (data.get("repertoire", {}) as Dictionary).duplicate(true)
+	skill = (data.get("skill", {}) as Dictionary).duplicate(true)
 	# A save from before the compass existed carries one number; unfold it onto
 	# the axes that number used to stand for, so an old creature keeps its soul.
 	if data.has("ethos"):

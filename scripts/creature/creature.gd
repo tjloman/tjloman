@@ -17,7 +17,7 @@ enum State {
 	IDLE, WANDER, SEEK_FOOD, EATING, SLEEPING, GO_TEND, TENDING,
 	WATCH, GO_GATHER, CARRYING, PLAY, GUARD, SULK, CATCH,
 	GO_FISH, FISHING, GO_STORE, SMASH, FLEE, CAST, LEASHED,
-	LOUNGE, DANCE, PRAY, COMMUNE, RUN, MIMIC, SHUN, DEPART, SOOTHE, HEED,
+	LOUNGE, DANCE, PRAY, COMMUNE, RUN, MIMIC, SHUN, DEPART, SOOTHE, HEED, JUGGLE,
 }
 
 const WALK_SPEED := 3.5
@@ -46,18 +46,6 @@ const OBSERVE_PERIOD := 2.5
 ## a spruce. Strength is grown by hauling; this is grown only by throwing.
 const THROW_MASTERY := 2.0
 
-## THE LOB INTO THE GRANARY. `LOB_GRAVITY` is the engine's own pull on a loose
-## body, not the creature's GRAVITY — the things it lobs are RigidBodies and
-## fall at the world's rate, and getting this wrong is the difference between a
-## shot that lands and one that always falls short. The rest is how willing it
-## is to try (a quarter of the time cold, nearly always once practised), how far
-## it will try from, and how badly it misses before it has learned.
-const LOB_GRAVITY := 9.8
-const LOB_REACH := 60.0
-const LOB_TRY := 0.25
-const LOB_LEARNED := 0.7
-const LOB_OVER := 1.06     # aim a touch long: the platform stands above ground
-const LOB_WOBBLE := 0.22
 ## How sharply a deed's moral weight colours how it FELT to do. This is what
 ## makes cruelty sour for a kind creature and sweet for a wicked one.
 const REMORSE := 2.0
@@ -114,6 +102,9 @@ var growth: float:
 ## See CreatureBlessings; `walks_on_water` below is the one answer the steering
 ## needs, kept here so every reader does not have to know about the module.
 var blessings := CreatureBlessings.new()
+## THE ARM — how far it can send a thing, how well it aims, and whatever it
+## currently has in the air. See CreatureThrowing.
+var throwing := CreatureThrowing.new()
 ## FLIGHT, granted by a miracle: while aloft the creature ignores the ground
 ## entirely — it soars over water, forest and hill alike, which is how it keeps
 ## up with a god on a map this wide. Forwarded to the blessings module, which
@@ -439,6 +430,8 @@ func _physics_process(delta: float) -> void:
 			_process_cast(delta)
 		State.LEASHED:
 			_process_leashed(delta)
+		State.JUGGLE:
+			throwing.tick(self, delta)
 		State.LOUNGE:
 			CreatureLeisure.lounge(self, delta)
 		State.DANCE:
@@ -598,6 +591,10 @@ func _decide() -> void:
 	# A watchdog abort mid-carry sets the cargo down, never drops it forever.
 	if _carried != null:
 		_release_carried(true)
+	# AND ANYTHING IT HAD IN THE AIR COMES DOWN. Frightened, struck, called
+	# away, bored — it is all the same to three villagers three storeys up.
+	if throwing.busy():
+		throwing.spill(self)
 	_last_deed = ""
 	_mood_before = mood
 	# YOUR COMMAND FIRST, and instantly: a leashed creature never waits.
@@ -665,6 +662,8 @@ func _perceive() -> Array:
 	CreatureHerding.offer(self, opts)
 	# His own place, if his village ever built him one.
 	CreatureNest.offer(self, opts)
+	# Two sheep, three villagers, or fire out of nothing — see CreatureThrowing.
+	CreatureThrowing.offer(self, opts)
 
 	# A FULL creature does not hunt. Appetite, not just hunger, decides.
 	var can_eat := _can_eat(1.0)
@@ -876,6 +875,8 @@ func _enact(choice: Dictionary) -> void:
 			_catch_target = target
 			_carry_intent = "hurl"
 			state = State.CATCH
+		"juggle":
+			throwing.begin(self)
 		"smash":
 			_smash_target = target
 			state = State.SMASH
@@ -1390,17 +1391,21 @@ func _hurl_carried() -> void:
 	if _carried == null or not is_instance_valid(_carried):
 		_carried = null
 		return
-	var dir := Vector3(randf_range(-1, 1), 0.6, randf_range(-1, 1)).normalized()
-	var v := dir * randf_range(14.0, 22.0)
-	# THE SHOT. A creature that has landed one in a granary and been cheered for
-	# it starts AIMING — not every time, and not well at first, but the knack
-	# climbs every time it comes off. This is the one deed in the game that
-	# turns vandalism into provision by nothing but practice, and it is worth
-	# more belief than any amount of walking sacks in by hand (VillageWonder).
-	var lob := _aim_at_larder()
+	# WHAT IT HAS IN ITS ARM. A creature that has never learned there is
+	# anything to aim at simply gets rid of the thing; one that has learned the
+	# lob can put it in a granary, and one that has learned the fastball can
+	# send it flat and hard at something it means to hit. See CreatureThrowing.
+	var v := CreatureThrowing.heave(self)
+	var lob := CreatureThrowing.at_the_larder(self, _carried)
 	if lob != Vector3.ZERO:
 		v = lob
-		_carried.set_meta("hurled_by_creature", true)
+	elif CreatureThrowing.level(self) >= CreatureThrowing.LOB_AT:
+		var mark := _throw_mark()
+		if mark != Vector3.INF:
+			var shot := CreatureThrowing.arc_to(self, mark,
+				CreatureThrowing.best_style(self))
+			if shot != Vector3.ZERO:
+				v = shot
 	if _carried.has_method("take_damage"):
 		_carried.call("take_damage", 25.0)  # one arg: works for animal and villager
 	if _carried is RigidBody3D:
@@ -1411,35 +1416,15 @@ func _hurl_carried() -> void:
 	_carried = null
 
 
-## THE ARC INTO THE STOREHOUSE, or nothing if it is not going to try.
-##
-## Only for the things a granary actually takes — throwing a villager at the
-## barn is not provision — and only from a beast that has either got lucky once
-## or seen it work. A forty-five degree lob carries v^2/g, so the speed for a
-## given distance falls straight out of it; the wobble is what it has not
-## learned yet, and it shrinks as the knack grows.
-func _aim_at_larder() -> Vector3:
-	if not (_carried is FoodItem or _carried is ResourceItem or _carried is WildTree):
-		return Vector3.ZERO
-	var store := CreatureEyes.nearest_store(get_tree(), global_position)
-	if store == null:
-		return Vector3.ZERO
-	var to := store.global_position - global_position
-	var flat := Vector3(to.x, 0.0, to.z)
-	var d := flat.length()
-	if d < 6.0 or d > LOB_REACH:
-		return Vector3.ZERO
-	var knack := mind.knack("larder")
-	if randf() > LOB_TRY + knack * LOB_LEARNED:
-		return Vector3.ZERO
-	var speed := sqrt(maxf(d, 1.0) * LOB_GRAVITY) * LOB_OVER
-	var aim := (flat.normalized() + Vector3.UP).normalized()
-	# What it has not learned yet, as a cone that closes with practice.
-	var wobble := (1.0 - knack) * LOB_WOBBLE
-	aim += Vector3(randf_range(-wobble, wobble), randf_range(-wobble, wobble) * 0.4,
-		randf_range(-wobble, wobble))
-	mind.practise("throw", true)
-	return aim.normalized() * speed
+## WHERE A TAUGHT ARM AIMS when the granary is not the answer: at whatever it
+## is cross with, or simply as far out over the country as it can manage. A
+## creature that can aim does not throw things at its own feet.
+func _throw_mark() -> Vector3:
+	var far := CreatureThrowing.reach(self)
+	if _smash_target != null and is_instance_valid(_smash_target):
+		return _smash_target.global_position
+	var out := global_transform.basis.z.normalized()
+	return global_position + out * far * randf_range(0.5, 0.95)
 
 
 ## Stomp the house: heavy damage, a boom, terror for anyone watching.
