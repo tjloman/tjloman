@@ -69,28 +69,28 @@ var _cheer_left := 0.0
 ##
 ## Asked here rather than on the village for the same reason Workshop.short_of
 ## is: it is entirely a question about nests.
-static func wanted_by(village: Village) -> bool:
-	return village.nest == null and village.converted and village.belief > 45.0 \
-		and village.construction_site == null \
-		and village.store.lumber >= 6 and village.store.stone >= 10
+static func wanted_by(town: Village) -> bool:
+	return town.nest == null and town.converted and town.belief > 45.0 \
+		and town.construction_site == null \
+		and town.store.lumber >= 6 and town.store.stone >= 10
 
 
 ## RAISED. Kept here with `wanted_by` rather than on the village, which was
 ## already sitting exactly on its public-method limit — and this is a question
 ## about nests either way.
-static func raise_at(village: Village, world_spot: Vector3, beast: Creature) -> void:
-	if village.nest != null or beast == null \
-			or not village.store.try_spend_materials(6, 10):
+static func raise_at(town: Village, world_spot: Vector3, beast: Creature) -> void:
+	if town.nest != null or beast == null \
+			or not town.store.try_spend_materials(6, 10):
 		return
 	var n := CreatureNest.new()
-	n.village = village
+	n.village = town
 	n.creature = beast
-	n.position = village.to_local(world_spot)
-	village.add_child(n)
-	village.nest = n
-	if village.is_player_home:
+	n.position = town.to_local(world_spot)
+	town.add_child(n)
+	town.nest = n
+	if town.is_player_home:
 		GameState.announce(
-			"%s has raised a nest for your creature." % village.village_name)
+			"%s has raised a nest for your creature." % town.village_name)
 
 
 func _ready() -> void:
@@ -166,6 +166,7 @@ func _scratch(marks: Node3D, how: float) -> void:
 	var count := int(round(absf(how) * 9.0))
 	var pale := Color(0.78, 0.74, 0.66) if how >= 0.0 else Color(0.2, 0.17, 0.15)
 	for i in count:
+		@warning_ignore("integer_division")
 		var group := i / 5
 		var within := i % 5
 		var x := -0.28 + float(group) * 0.24 + float(within) * 0.045

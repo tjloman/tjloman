@@ -13,6 +13,10 @@ signal cast_hint(text: String)
 signal settings_changed
 ## SOMEBODY IS READING THE STONE. Carries the whole of what is scratched on a
 ## nest wall up to the HUD, which is the only place with room to show it.
+## Emitted by DivineHand when the creature's stone wall is long-pressed, and
+## read by the HUD. Godot only looks for an emit inside THIS class, so it
+## calls a signal the rest of the game plainly uses unused.
+@warning_ignore("unused_signal")
 signal stone_read(text: String)
 
 ## One full day/night cycle, in real seconds. (The pace of the sun is the

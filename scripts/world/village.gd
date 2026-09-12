@@ -245,7 +245,10 @@ func _ready() -> void:
 	# reach is worked out from how many people there are — so founding the
 	# houses first meant laying out a town of fifty inside the ring of a hamlet.
 	# _build_starting_houses hands out the beds when it is done.
-	_spawn_villagers(STARTING_SOULS if is_player_home else STARTING_SOULS * 2 / 3)
+	# Two thirds, rounded down — a heathen hamlet is meant to be smaller.
+	@warning_ignore("integer_division")
+	var founding := STARTING_SOULS if is_player_home else STARTING_SOULS * 2 / 3
+	_spawn_villagers(founding)
 	_update_influence()
 	_build_starting_houses()
 	GameState.alignment_changed.connect(_on_alignment_changed)
@@ -475,6 +478,7 @@ func _build_influence_ring() -> void:
 
 func _build_starting_houses() -> void:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	@warning_ignore("integer_division")
 	var souls := STARTING_SOULS if is_player_home else STARTING_SOULS * 2 / 3
 	var beds_wanted := int(float(souls) * FOUNDING_HOUSED)
 	var beds := 0
@@ -1524,9 +1528,9 @@ func _rebuild(data: Dictionary) -> void:
 	# again on reload, because `_ready` had already put its founding houses up.
 	# The surplus goes.
 	while houses.size() > want_houses.size() and not houses.is_empty():
-		var spare: House = houses.pop_back()
+		var spare = houses.pop_back()
 		if is_instance_valid(spare):
-			spare.queue_free()
+			(spare as House).queue_free()
 	for i in range(houses.size(), want_houses.size()):
 		# int() because the size comes back out of a save file as a number, not
 		# as the enum it went in as — and SPECS is keyed by the enum.
@@ -1546,9 +1550,9 @@ func _rebuild(data: Dictionary) -> void:
 		houses.append(h)
 	var want_farms := int(data.get("farms", 0))
 	while farms.size() > want_farms and not farms.is_empty():
-		var spare_farm: Farm = farms.pop_back()
+		var spare_farm = farms.pop_back()
 		if is_instance_valid(spare_farm):
-			spare_farm.queue_free()
+			(spare_farm as Farm).queue_free()
 	for i in range(farms.size(), want_farms):
 		var spot := find_build_spot(world, ROOM_ROUND_A_FARM)
 		if spot == Vector3.INF:

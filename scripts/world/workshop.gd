@@ -118,22 +118,22 @@ static func create(which: String, home: Village) -> Workshop:
 ## This lives here rather than on Village because it is entirely a question
 ## ABOUT TRADES, and putting it here means adding a trade never means editing the
 ## village at all.
-static func short_of(village: Village) -> String:
-	if village.construction_site != null:
+static func short_of(town: Village) -> String:
+	if town.construction_site != null:
 		return ""
 	var have := {}
-	for w in village.workshops:
+	for w in town.workshops:
 		if is_instance_valid(w):
 			have[w.trade] = int(have.get(w.trade, 0)) + 1
-	var souls := village.population()
+	var souls := town.population()
 	for which: String in TRADES:
 		var spec: Dictionary = TRADES[which]
 		if int(have.get(which, 0)) >= wanted(which, souls):
 			continue
-		if not _makes_sense(village, String(spec["needs"])):
+		if not _makes_sense(town, String(spec["needs"])):
 			continue
-		if village.store.lumber < int(spec["lumber"]) \
-				or village.store.stone < int(spec["stone"]):
+		if town.store.lumber < int(spec["lumber"]) \
+				or town.store.stone < int(spec["stone"]):
 			continue
 		return which
 	return ""
@@ -141,32 +141,32 @@ static func short_of(village: Village) -> String:
 
 ## The condition beyond mere numbers. A mill wants grain to grind, a barn wants
 ## beasts to keep, a shrine wants somebody who already believes.
-static func _makes_sense(village: Village, needs: String) -> bool:
+static func _makes_sense(town: Village, needs: String) -> bool:
 	match needs:
 		"grain":
-			return village.store.plant_food >= 6
+			return town.store.plant_food >= 6
 		"stock":
 			# A BARN IS FOR A TOWN THAT ALREADY HERDS, not one that might. It
 			# wants beasts on the ground AND its pen full enough that the
-			# animals are the problem — otherwise every village with one tamed
+			# animals are the problem — otherwise every town with one tamed
 			# sheep raises a barn it will never fill.
-			return village.tamed_count() >= Village.MAX_TAMED - 2
+			return town.tamed_count() >= Village.MAX_TAMED - 2
 		"faith":
-			return village.belief > 25.0
+			return town.belief > 25.0
 	return true
 
 
 ## A trade with room at it, counting who is already posted where.
-static func with_room(village: Village, from: Vector3) -> Workshop:
-	Util.prune(village.workshops)
+static func with_room(town: Village, from: Vector3) -> Workshop:
+	Util.prune(town.workshops)
 	var taken := {}
-	for v in village.my_villagers():
-		var at: Workshop = v.workshop
-		if at != null and is_instance_valid(at):
-			taken[at] = int(taken.get(at, 0)) + 1
+	for v in town.my_villagers():
+		var posted = v.workshop
+		if posted != null and is_instance_valid(posted):
+			taken[posted] = int(taken.get(posted, 0)) + 1
 	var best: Workshop = null
 	var closest := INF
-	for w in village.workshops:
+	for w in town.workshops:
 		if not is_instance_valid(w) or int(taken.get(w, 0)) >= w.employs():
 			continue
 		var gap := w.global_position.distance_to(from)
@@ -179,24 +179,24 @@ static func with_room(village: Village, from: Vector3) -> Workshop:
 ## HOW MANY BEASTS THIS TOWN CAN HOLD — a pen and a prayer, or a pen and barns.
 ## Kept with the barn rather than on the village, which has been sitting on its
 ## public-method limit for some time now, and is a question about barns anyway.
-static func stalls(village: Village) -> int:
+static func stalls(town: Village) -> int:
 	var barns := 0
-	for w in village.workshops:
+	for w in town.workshops:
 		if is_instance_valid(w) and w.trade == "barn":
 			barns += 1
 	return Village.MAX_TAMED + barns * Village.BARN_STALLS
 
 
 ## IS THERE ANY MEAT ON THE HOOF AT ALL — loose in the yard or in a barn's book.
-static func any_meat(village: Village) -> bool:
-	if village.best_penned_meat() != null:
+static func any_meat(town: Village) -> bool:
+	if town.best_penned_meat() != null:
 		return true
-	return with_stock(village) != null
+	return with_stock(town) != null
 
 
 ## A barn with something in it.
-static func with_stock(village: Village) -> Workshop:
-	for w in village.workshops:
+static func with_stock(town: Village) -> Workshop:
+	for w in town.workshops:
 		if is_instance_valid(w) and w.trade == "barn" and w.stock_held() > 0:
 			return w
 	return null
@@ -218,10 +218,10 @@ static func butchery(who: Villager, quarry: Animal) -> int:
 ## EVERY POST IN THE TOWN, across all its trades. What the job-picker divides
 ## its crowd penalty by, so a village that has raised eight trades can actually
 ## staff them instead of deciding after the fourth villager that work is busy.
-static func posts(village: Village) -> int:
-	Util.prune(village.workshops)
+static func posts(town: Village) -> int:
+	Util.prune(town.workshops)
 	var total := 0
-	for w in village.workshops:
+	for w in town.workshops:
 		if is_instance_valid(w):
 			total += w.employs()
 	return total

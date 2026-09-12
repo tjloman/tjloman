@@ -891,6 +891,44 @@ def check_undeclared_names(files):
     return problems
 
 
+# `var beast: Animal = row["agent"]` followed a line or two later by
+# `is_instance_valid(beast)`.
+typed_then_guarded = re.compile(r"^\s*var\s+(\w+)\s*:\s*([A-Z]\w+)\s*=")
+
+
+def check_late_validity_guards(files):
+    """A typed assignment from a handle that the next lines then check is alive.
+
+    The guard is too late. Assigning an ALREADY-FREED object to a TYPED
+    variable is an error in Godot in its own right — it is raised by the
+    assignment, before any is_instance_valid() below it can run — so the very
+    check that says "this handle may be dead" proves the line above it can
+    throw.
+
+    This took the game down in a live session: a herd keeps a handle on each
+    beast it has promoted to a real body, those bodies are freed by everything
+    from a wolf to a chunk unloading, and `var agent: Animal = m["agent"]` was
+    the first line of the loop that tidied them up.
+
+    The fix is always the same shape: read it untyped, ask whether it is still
+    there, and only then give it a type.
+    """
+    problems = []
+    for path in files:
+        lines = open(path, encoding="utf-8").read().split("\n")
+        for i, line in enumerate(lines):
+            hit = typed_then_guarded.match(line.split("#")[0])
+            if not hit:
+                continue
+            name = hit.group(1)
+            guard = re.compile(r"is_instance_valid\(\s*%s\s*\)" % re.escape(name))
+            for ahead in lines[i + 1:i + 5]:
+                if guard.search(ahead):
+                    problems.append((path, i + 1, name, hit.group(2), line.strip()))
+                    break
+    return problems
+
+
 def main():
     root = "scripts"
     targets = sys.argv[1:] or [root]
@@ -947,6 +985,13 @@ def main():
               "function, its parameters, or its class provides it. gdparse "
               "accepts this; Godot refuses to load the script."
               "\n    %s" % (path, lineno, name, where, line))
+    late_guards = check_late_validity_guards(files)
+    for path, lineno, name, kind, line in late_guards:
+        print("%s:%d: '%s' is typed as %s here and only checked with "
+              "is_instance_valid() below — but assigning an already-freed "
+              "object to a TYPED variable is itself the error, raised before "
+              "that check can run. Read it untyped, guard it, then type it."
+              "\n    %s" % (path, lineno, name, kind, line))
     loop_vars = check_untyped_loop_vars(files)
     for path, lineno, name, line in loop_vars:
         print("%s:%d: '%s' comes from an UNTYPED array literal, so it is a "
@@ -956,7 +1001,7 @@ def main():
               % (path, lineno, name, name, line))
     total = len(problems) + len(escapes) + len(formats) + len(shadowed) \
         + len(loose_arrays) + len(variants) + len(shadowed_members) \
-        + len(loop_vars) + len(shadowed_globals) + len(undeclared)
+        + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

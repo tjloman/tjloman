@@ -571,9 +571,9 @@ func _hold_cloud(cloud: StormCloud) -> void:
 	Util.prune(_clouds)
 	_clouds.append(cloud)
 	while _clouds.size() > RAIN_CLOUDS:
-		var oldest: StormCloud = _clouds.pop_front()
-		if is_instance_valid(oldest):
-			oldest.disperse()
+		var shed = _clouds.pop_front()
+		if is_instance_valid(shed):
+			(shed as StormCloud).disperse()
 
 
 ## A raindrop: two triangles, billboarded, stretched into a streak. It used to

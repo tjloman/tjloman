@@ -210,7 +210,10 @@ var _observe_time := 0.0
 var _state_time := 0.0
 var _prev_state := State.IDLE
 var _cheer_time := 0.0
-var _look_time := 0.0      # when it next turns its head, while lounging
+## When it next turns its head, while lounging. Read and written by
+## CreatureLeisure, which Godot cannot see from in here.
+@warning_ignore("unused_private_class_variable")
+var _look_time := 0.0
 var _body: Node3D
 var _label: Label3D
 var _halo: OmniLight3D = null         # its own light in the dark
@@ -767,8 +770,9 @@ func _offer_quiet_life(opts: Dictionary) -> void:
 func offer_option(opts: Dictionary, verb: String, type: String, target: Node3D) -> void:
 	var key := verb + "|" + type
 	if opts.has(key) and target != null:
-		var held: Node3D = opts[key]["target"]
-		if held != null and is_instance_valid(held) \
+		var handle = opts[key]["target"]
+		var held := handle as Node3D if is_instance_valid(handle) else null
+		if held != null \
 				and held.global_position.distance_squared_to(global_position) \
 					<= target.global_position.distance_squared_to(global_position):
 			return
@@ -800,10 +804,11 @@ func _type_of(node: Node) -> String:
 ## Carry out the mind's choice by driving the body's existing motor states.
 func _enact(choice: Dictionary) -> void:
 	var verb: String = choice["verb"]
-	var target: Node3D = choice.get("target", null)
-	if target != null and not is_instance_valid(target):
+	var aimed_at = choice.get("target", null)
+	if aimed_at != null and not is_instance_valid(aimed_at):
 		_wander()
 		return
+	var target := aimed_at as Node3D
 	match verb:
 		"relieve":
 			CreatureRelief.go(self, String(choice.get("type", "open")))

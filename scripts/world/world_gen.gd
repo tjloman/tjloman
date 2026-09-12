@@ -146,9 +146,9 @@ func _tick_burns(delta: float) -> void:
 					floori(grown.end.x / CHUNK_SIZE) + 1):
 				touched[Vector2i(cx, cz)] = true
 	for cell: Vector2i in touched:
-		var chunk: Chunk = _chunks.get(cell)
-		if chunk != null and is_instance_valid(chunk):
-			chunk.recolor()
+		var cached = _chunks.get(cell)
+		if cached != null and is_instance_valid(cached):
+			(cached as Chunk).recolor()
 
 
 ## Terrain queries ------------------------------------------------------------
@@ -571,9 +571,9 @@ func rebuild_around(area: Rect2) -> void:
 	var z1 := floori(grown.end.y / CHUNK_SIZE)
 	for cz in range(z0, z1 + 1):
 		for cx in range(x0, x1 + 1):
-			var chunk: Chunk = _chunks.get(Vector2i(cx, cz))
-			if chunk != null and is_instance_valid(chunk):
-				chunk.rebuild_terrain()
+			var cached = _chunks.get(Vector2i(cx, cz))
+			if cached != null and is_instance_valid(cached):
+				(cached as Chunk).rebuild_terrain()
 
 
 ## Every loaded chunk rebuilt — for restoring a save full of scars, where the
@@ -581,9 +581,9 @@ func rebuild_around(area: Rect2) -> void:
 func rebuild_all() -> void:
 	_sea_cache.clear()
 	for cell: Vector2i in _chunks:
-		var chunk: Chunk = _chunks[cell]
-		if is_instance_valid(chunk):
-			chunk.rebuild_terrain()
+		var cached = _chunks[cell]
+		if is_instance_valid(cached):
+			(cached as Chunk).rebuild_terrain()
 
 
 ## EVERY FLOWER WITHIN REACH, in world space. Chunks keep the spots they
@@ -597,9 +597,10 @@ func blooms_near(at: Vector3, within: float) -> Array[Vector3]:
 	var hi := Vector2i(floori((at.x + within) / CHUNK_SIZE), floori((at.z + within) / CHUNK_SIZE))
 	for cz in range(lo.y, hi.y + 1):
 		for cx in range(lo.x, hi.x + 1):
-			var chunk: Chunk = _chunks.get(Vector2i(cx, cz))
-			if chunk == null or not is_instance_valid(chunk):
+			var cached = _chunks.get(Vector2i(cx, cz))
+			if cached == null or not is_instance_valid(cached):
 				continue
+			var chunk := cached as Chunk
 			for spot: Vector3 in chunk.blooms():
 				if spot.distance_squared_to(at) < reach:
 					out.append(spot)

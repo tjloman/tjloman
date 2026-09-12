@@ -627,8 +627,8 @@ func merge_from(other: Herd) -> void:
 	for m in other.taken_over():
 		if m["dead"]:
 			continue
-		var agent: Animal = m["agent"]
-		if agent != null and is_instance_valid(agent):
+		var agent := _living(m)
+		if agent != null:
 			agent.set_meta("herd", self)
 			m["offset"] += Vector2(shift.x, shift.z)
 		else:
@@ -835,10 +835,21 @@ func _tend_agents() -> void:
 	var budget := Quality.herd_agents()
 	for i in _members.size():
 		var m := _members[i]
-		var agent: Animal = m["agent"]
-		if agent == null:
+		# UNTYPED ON PURPOSE, and this is the whole of why. Writing
+		# `var agent: Animal = m["agent"]` looks harmless and is not: assigning
+		# an ALREADY-FREED object to a TYPED variable is an error in Godot, and
+		# it is thrown before the is_instance_valid() below it can ever run. A
+		# promoted beast can be freed by anything at all — eaten, butchered,
+		# burned, thrown into the sea, or carried off with its own chunk — so a
+		# row holding a dead handle is the ordinary case here, not the strange
+		# one. It hard locked the game a minute and a half into a session.
+		var held = m["agent"]
+		if held == null:
 			continue
-		if not is_instance_valid(agent) or agent.is_queued_for_deletion():
+		var agent: Animal = null
+		if is_instance_valid(held):
+			agent = held as Animal
+		if agent == null or agent.is_queued_for_deletion():
 			# Eaten, butchered, or thrown into the sea. It does not come back,
 			# and the herd is one head smaller for good — and frightened,
 			# whatever it was that took it.
@@ -878,7 +889,11 @@ func _tend_agents() -> void:
 		if p.distance_to(focus) > PROMOTE_WITHIN:
 			continue
 		var born := Animal.create(species)
-		born.global_position = p
+		# ITS PLACE IS SET AFTER IT IS IN THE TREE, below — a Node3D that has no
+		# parent has no global transform to write to, and Godot says so, loudly,
+		# once per promoted beast. This line used to be here as well and did
+		# nothing but fill the log; it only started showing when promotion began
+		# working again.
 		# A BARN'S BEAST COMES BACK TAMED. Promotion has to restore what the
 		# animal WAS, or every time you walked up to the barn its stock would
 		# turn feral in front of you.
@@ -923,6 +938,17 @@ func _exit_tree() -> void:
 	# The beasts are going too — freed with the chunk — so this is a release of
 	# SLOTS, not a demotion, and it does not care whether the node is still valid.
 	_agents_afoot = maxi(_agents_afoot, 0)
+
+
+## THE ANIMAL PROMOTED INTO THIS ROW, or null — including when it was there a
+## moment ago and has since been freed. Every reader goes through here because
+## the obvious `var agent: Animal = m["agent"]` throws on a freed handle before
+## any guard can run; see _tend_agents.
+static func _living(m: Dictionary) -> Animal:
+	var held = m["agent"]
+	if held == null or not is_instance_valid(held):
+		return null
+	return held as Animal
 
 
 ## How many head are still standing, promoted or not — what the herd would tell
@@ -1245,8 +1271,8 @@ func scorched(at: Vector3, reach: float, kill := 0.0) -> int:
 		if d > reach:
 			continue
 		caught += 1
-		var agent: Animal = m["agent"]
-		if agent != null and is_instance_valid(agent):
+		var agent := _living(m)
+		if agent != null:
 			# Left to the Animal, which burns visibly and dies through its own
 			# clock and the usual demotion bookkeeping. Counting it here as well
 			# would kill it twice.
@@ -1306,8 +1332,8 @@ func blown(from: Vector3, push: Vector3, reach: float) -> void:
 		var here := global_position + Vector3(m["offset"].x, 0.0, m["offset"].y)
 		if here.distance_to(from) > reach:
 			continue
-		var agent: Animal = m["agent"]
-		if agent != null and is_instance_valid(agent) and agent.state != Animal.State.HELD:
+		var agent := _living(m)
+		if agent != null and agent.state != Animal.State.HELD:
 			agent.drop(flat * BLOWN_THROW + Vector3.UP * BLOWN_LIFT, true)
 			continue
 		# Not all the same distance, or the mass slides like one sheet of ice.

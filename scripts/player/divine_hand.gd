@@ -346,7 +346,7 @@ func _update_hover(mouse_pos: Vector2) -> void:
 	else:
 		ground_point = hit.position
 		ground_point.y = maxf(ground_point.y, 0.0)
-		var collider: Object = hit.collider
+		var collider = hit.collider
 		if is_instance_valid(collider) and collider is Node3D \
 				and not (collider as Node3D).is_in_group("ground"):
 			hover_target = collider
