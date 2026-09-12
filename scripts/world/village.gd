@@ -1249,23 +1249,114 @@ func to_dict() -> Dictionary:
 			"lumber": store.lumber, "stone": store.stone,
 		},
 		"folk": folk,
-		# THE BUILDINGS IT RAISED. Houses, fields and the school are still not
-		# saved — that gap is older than these two and wants fixing on its own —
-		# but a town of fifty that loses every trade it built on a reload is a
-		# town that has to re-earn an hour of work, so these go in now.
-		"trades": _trades_to_list(),
-		"nest": [] if nest == null or not is_instance_valid(nest) \
-			else [nest.position.x, nest.position.y, nest.position.z],
+		# WHAT IT BUILT, AS COUNTS — not as coordinates.
+		#
+		# The world is reseeded from the same seed on load, so the land comes
+		# back identical and the village could in principle be pinned back to
+		# the metre. Counts are kept instead, deliberately: a saved position is
+		# a promise about terrain that any later change to worldgen breaks, and
+		# a town that comes back the same SIZE in a slightly different shape is
+		# a far better failure than one with a mill hanging over a new cliff.
+		#
+		# House sizes are kept because a longhouse is not a hut, and everything
+		# else is a tally.
+		"houses": _house_sizes(),
+		"farms": farms.size(),
+		"edubba": has_edubba(),
+		"trades": _trade_counts(),
+		"nest": nest != null and is_instance_valid(nest),
 	}
 
 
-func _trades_to_list() -> Array:
+func _house_sizes() -> Array:
 	var out := []
+	for h in houses:
+		if is_instance_valid(h) and not h.under_construction:
+			out.append(int(h.size))
+	return out
+
+
+func _trade_counts() -> Dictionary:
+	var out := {}
 	for w in workshops:
 		if is_instance_valid(w):
-			out.append({"trade": w.trade,
-				"at": [w.position.x, w.position.y, w.position.z]})
+			out[w.trade] = int(out.get(w.trade, 0)) + 1
 	return out
+
+
+## PUT THE TOWN BACK UP. Called from `from_dict` once the plain numbers are in.
+##
+## A freshly generated village has already built its starting huts and its
+## founding field in `_ready`, so this builds UP TO the saved counts rather than
+## from nothing — otherwise a reloaded town would have its founding houses twice.
+## Everything is placed by the village's own `find_build_spot`, which is what
+## puts it on ground that suits it rather than on ground that suited it once.
+func _rebuild(data: Dictionary) -> void:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	var want_houses: Array = data.get("houses", [])
+	# A TOWN CAN COME BACK SMALLER THAN IT WAS FOUNDED. Building up to the count
+	# is most of the job, but a village that burned down to two huts had three
+	# again on reload, because `_ready` had already put its founding houses up.
+	# The surplus goes.
+	while houses.size() > want_houses.size() and not houses.is_empty():
+		var spare: House = houses.pop_back()
+		if is_instance_valid(spare):
+			spare.queue_free()
+	for i in range(houses.size(), want_houses.size()):
+		var spot := find_build_spot(world)
+		if spot == Vector3.INF:
+			break
+		var h := House.new()
+		h.size = int(want_houses[i]) as House.Size
+		h.village = self
+		h.age = randf_range(5.0, 20.0)
+		h.position = to_local(spot)
+		h.basis = Basis.looking_at(
+			-Vector3(h.position.x, 0, h.position.z), Vector3.UP)
+		add_child(h)
+		houses.append(h)
+	var want_farms := int(data.get("farms", 0))
+	while farms.size() > want_farms and not farms.is_empty():
+		var spare_farm: Farm = farms.pop_back()
+		if is_instance_valid(spare_farm):
+			spare_farm.queue_free()
+	for i in range(farms.size(), want_farms):
+		var spot := find_build_spot(world)
+		if spot == Vector3.INF:
+			break
+		spawn_farm_at(spot)
+	if bool(data.get("edubba", false)) and not has_edubba():
+		var spot := find_build_spot(world)
+		if spot != Vector3.INF:
+			# Raised free: the materials were spent in the life being restored,
+			# and charging for it again would quietly rob every reloaded town.
+			var e := Edubba.new()
+			e.village = self
+			e.position = to_local(spot)
+			add_child(e)
+			edubba = e
+	var trades: Dictionary = data.get("trades", {})
+	for which: String in trades:
+		if not Workshop.TRADES.has(which):
+			continue          # a trade this build no longer has
+		for i in int(trades[which]):
+			var spot := find_build_spot(world)
+			if spot == Vector3.INF:
+				break
+			var shop := Workshop.create(which, self)
+			shop.position = to_local(spot)
+			add_child(shop)
+			workshops.append(shop)
+	if bool(data.get("nest", false)) and nest == null:
+		var spot := find_build_spot(world)
+		var beast := get_tree().get_first_node_in_group("creature") as Creature
+		if spot != Vector3.INF and beast != null:
+			var n := CreatureNest.new()
+			n.village = self
+			n.creature = beast
+			n.position = to_local(spot)
+			add_child(n)
+			nest = n
 
 
 ## Restore a village's lived state onto a freshly generated one. Its people are
@@ -1285,24 +1376,7 @@ func from_dict(data: Dictionary) -> void:
 		store.meat_food = int(st.get("meat", store.meat_food))
 		store.lumber = int(st.get("lumber", store.lumber))
 		store.stone = int(st.get("stone", store.stone))
-	for row: Dictionary in data.get("trades", []):
-		var at: Array = row.get("at", [])
-		if at.size() != 3:
-			continue
-		var shop := Workshop.create(String(row.get("trade", "well")), self)
-		shop.position = Vector3(at[0], at[1], at[2])
-		add_child(shop)
-		workshops.append(shop)
-	var where: Array = data.get("nest", [])
-	if where.size() == 3 and nest == null:
-		var beast := get_tree().get_first_node_in_group("creature") as Creature
-		if beast != null:
-			var n := CreatureNest.new()
-			n.village = self
-			n.creature = beast
-			n.position = Vector3(where[0], where[1], where[2])
-			add_child(n)
-			nest = n
+	_rebuild(data)
 	var folk: Array = data.get("folk", [])
 	if not folk.is_empty():
 		for v in my_villagers():
