@@ -29,9 +29,9 @@ extends Node3D
 ## HOW MANY COME AT ONCE, as dice: [how many, how many sides, flat bonus].
 ##
 ## These are the numbers the design asks for, kept as a table precisely so they
-## can be argued with later without touching any code. Bison and elk herd in
-## life; they are listed as solitary here because that is what was asked for,
-## and changing one's mind about that is a one-line edit.
+## can be argued with later without touching any code — which is exactly what
+## happened to bison and elk, who began here as solitary and are now the small
+## bands they are in life. That was two lines.
 const SOCIAL := {
 	# THE GREAT HERDS.
 	"ox": [7, 10, 0],          # cattle: 7-70, the rolling dice of a full herd
@@ -51,11 +51,13 @@ const SOCIAL := {
 	"tiger": [1, 6, 0],
 	"bear": [1, 6, 0],
 	"dog": [1, 2, 0],
+	# THE SMALL BANDS. Neither a great herd nor a lone animal — a bison mob or a
+	# few elk together, which is what both actually do.
+	"bison": [2, 8, 0],        # 2-16
+	"elk": [3, 2, 0],          # 3-6, and tight
 	# THE SOLITARY ONES, who keep their own company.
 	"anteater": [1, 1, 0],
 	"coati": [1, 1, 0],
-	"bison": [1, 1, 0],
-	"elk": [1, 1, 0],
 }
 
 ## THE SEAM BETWEEN NUMBER AND ANIMAL, in both directions. HerdMotion's motion
