@@ -41,7 +41,8 @@ ELSEWHERE = [
 # how this check missed the gust entirely on its first run.
 LIVE = ('"animals"', "ignite_animals_near", "frighten_animals_near")
 # ...and how it says "and to the mass as well".
-MASS = ('get_nodes_in_group("herds")', "bolt_from(", "scorched(", "doused(")
+MASS = ('get_nodes_in_group("herds")', "bolt_from(", "scorched(", "doused(",
+        "calmed(")
 
 
 def functions(text):

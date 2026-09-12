@@ -173,6 +173,12 @@ const RECIPES := {
 	# water; warded, it is gold and silver light coming down round the beast
 	# wherever it walks, mending what walks into it. See MercyShroud.
 	"calm+life+ward+water": "healing_shroud",
+	# AND THE QUIET ONE, which is the eyes read the other way round. Both are
+	# the earth coming out of something alive: `life` is the body, `earth` the
+	# ground under it. Where the eyes have fire, force and fury, this has calm
+	# — and `ward`, which everywhere else in the book means "held on the
+	# creature", here also means the plain thing it says, which is privacy.
+	"calm+earth+life+ward": "blessed_relief",
 }
 
 ## What a compound COSTS: the sum of its runes' base costs, times this per

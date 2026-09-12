@@ -2300,6 +2300,17 @@ func scare(from_pos: Vector3) -> void:
 	_pitch_body(0.0)
 
 
+## THE OPPOSITE OF scare(): a fright LET GO OF rather than waited out. Never
+## reaches somebody under the jaws or on their way out — peace is not a rescue.
+func calm() -> void:
+	if state in [State.FLEE, State.HIDE]:
+		state = State.WANDER
+		_action_time = randf_range(1.5, 4.0)
+		_target = global_position
+		_pitch_body(0.0)
+	happiness = minf(happiness + 6.0, 100.0)
+
+
 func witness_horror(weight: float) -> void:
 	morality = clampf(morality - weight, -100.0, 100.0)
 

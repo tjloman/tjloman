@@ -1199,6 +1199,24 @@ func _run_smoke_test() -> void:
 			blessed.get("miracle", "NOTHING"), light.left, light._reach(),
 			MiracleManager.KARMA["healing_shroud"]["player"]])
 		light.free()
+		# THE QUIET ONE. It must top the creature up so the moment is worth
+		# having, leave rich muck, and let go of every fright within reach.
+		var eased := Spellbook.interpret(["ward", "earth", "life", "calm"])
+		beast.body.waste = 10.0
+		beast.fear = 80.0
+		beast.mood = 20.0
+		var scared := Animal.create("sheep")
+		add_child(scared)
+		scared.global_position = beast.global_position + Vector3(4, 0, 0)
+		scared.scare(beast.global_position)
+		var was_running := scared.state == Animal.State.FLEE
+		MiracleManager.resolve("blessed_relief", beast.global_position)
+		var muck := get_tree().get_nodes_in_group("poop").size()
+		print("SMOKE TEST: relief — @' V O ) = %s, muck dropped=%d, fear %.0f, mood %.0f" % [
+			eased.get("miracle", "NOTHING"), muck, beast.fear, beast.mood])
+		print("SMOKE TEST: relief — the sheep was running=%s, and is now %s" % [
+			was_running, "calm" if scared.state != Animal.State.FLEE else "STILL RUNNING"])
+		scared.queue_free()
 
 	# THE ARM. Reach must climb with size, strength and practice; the ladder
 	# must gate what it can do; and a juggle interrupted must come down.

@@ -761,6 +761,15 @@ func scare(from_pos: Vector3) -> void:
 		_action_time = 5.0
 
 
+## THE OPPOSITE OF scare(), and nothing had one. Fright only ever ran out on
+## its own clock, so a miracle of peace had no door to say "stop" through.
+func calm() -> void:
+	if state == State.FLEE:
+		state = State.IDLE
+		_action_time = randf_range(1.0, 3.0)
+		_flee_from = Vector3.INF
+
+
 ## Set down gently inside a kind village's pen? That IS a taming: the
 ## herders take in what the god delivers.
 func _maybe_pen_tame() -> void:

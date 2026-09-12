@@ -57,6 +57,9 @@ const MIRACLES := {
 	"storm_shroud": {"cost": 35.0, "color": Color(0.68, 0.78, 1.0)},
 	# And the mercy, worn. One rune more than the shower it is made of.
 	"healing_shroud": {"cost": 30.0, "color": Color(1.0, 0.9, 0.6)},
+	# And the quietest working in the book. Cheap, because what it is worth is
+	# not the sort of thing prayer measures.
+	"blessed_relief": {"cost": 18.0, "color": Color(0.72, 0.88, 0.68)},
 	"water_walk": {"cost": 20.0, "color": Color(0.55, 0.85, 0.95)},
 	"healing_shower": {"cost": 25.0, "color": Color(0.55, 1.0, 0.7)},
 }
@@ -107,6 +110,9 @@ const KARMA := {
 	# A god who wraps his beast in mending light is doing the plainest kind
 	# thing there is, and the beast is the one standing inside it.
 	"healing_shroud": {"player": 3.5, "creature": 3.0},
+	# Nobody is hurt, a field is manured, and everything within sight of it
+	# stops being frightened for a minute. It is a small good and it is a good.
+	"blessed_relief": {"player": 1.5, "creature": 2.5},
 	"volcano": {"player": -10.0, "creature": -7.5},
 	"water_walk": {"player": 1.5, "creature": 2.5},
 	"healing_shower": {"player": 4.5, "creature": 3.5},
@@ -126,6 +132,20 @@ const CREATURE_SIGHT_RANGE := 45.0
 const TWISTER_TAKES := 0.15
 ## How much of a herd's fright a healing miracle takes away.
 const HEAL_CALM := 0.5
+
+## A NICE POOP, in numbers. How near the creature the working must land, how
+## full the miracle tops it up to, how much better than ordinary muck it is,
+## how far the peace goes out, and how long it sits there afterwards.
+const RELIEF_WITHIN := 60.0
+const RELIEF_FULL := 82.0
+const RELIEF_RICHNESS := 2.6
+const RELIEF_PEACE := 26.0
+const RELIEF_LOUNGE := 14.0
+const RELIEF_MOOD := 30.0
+const RELIEF_LESSON := 2.0
+const RELIEF_AWE := 2.0
+const PEACE_CALM := 55.0
+const PEACE_CHEER := 8.0
 
 ## HOW MUCH RAIN IS ALLOWED IN THE SKY AT ONCE.
 ##
@@ -492,6 +512,7 @@ func resolve(miracle: String, pos: Vector3, momentum := Vector3.ZERO,
 		"eye_volcano": _cast_eye_volcano(pos)
 		"storm_shroud": _cast_storm_shroud(pos, potency)
 		"healing_shroud": _cast_healing_shroud(pos, potency)
+		"blessed_relief": _cast_blessed_relief(pos, potency)
 		"water_walk": _cast_water_walk(pos, potency)
 		"healing_shower": _cast_healing_shower(pos, potency)
 		_: return
@@ -1258,6 +1279,105 @@ func _cast_storm_shroud(pos: Vector3, potency := 1.0) -> void:
 	SoundBank.play_at("boom", creature.global_position, -6.0)
 	GameState.announce(GameState.named(
 		"The sky gathers on %s's shoulders. It will not leave them for a while."))
+
+
+## A NICE POOP.
+##
+##   @'  V  O  )      calm + earth + life + ward
+##
+## Every other working here reaches for weather or fire. This one reaches for a
+## body, and it is the same grammar read the kind way: `life` is a living thing,
+## `earth` is the ground it is standing on, `calm` is the state it is being put
+## into, and `ward` — which everywhere else in the book means "held on the
+## creature" — here also means the plain thing it says, which is privacy.
+##
+## It is the mirror of the eyes, rune for rune. Both are the earth coming out of
+## something alive. One has fire, force and fury in it. This one has calm.
+##
+## WHAT IT DOES: the creature goes, right now, wherever it is standing, and it
+## is a GOOD one whatever it had been holding — the miracle sees to that. The
+## muck is rich: it feeds a far wider ring of ground for far longer than an
+## ordinary movement does. And the peace goes out with it. Nothing within reach
+## stays frightened: beasts stop running, herds settle to graze, people let go
+## of whatever had them hiding. Then the creature sits down.
+##
+## It is not a joke miracle. It is the cheapest good thing a god can do.
+func _cast_blessed_relief(pos: Vector3, potency := 1.0) -> void:
+	var creature := get_tree().get_first_node_in_group("creature") as Creature
+	if creature == null:
+		GameState.hint("Your creature is nowhere near enough to be eased.")
+		return
+	if creature.global_position.distance_to(pos) > RELIEF_WITHIN:
+		GameState.hint("Cast it nearer your creature.")
+		return
+	# A GOOD ONE WHATEVER IT HAD. Half-full is not a nice poop; the miracle
+	# tops it up so the moment is worth having, which is the whole request.
+	creature.body.waste = maxf(creature.body.waste, RELIEF_FULL)
+	var came := creature.body.relieve()
+	var muck := Poop.new()
+	muck.amount = came
+	muck.richness = RELIEF_RICHNESS * lerpf(0.9, 1.4, clampf(potency / 3.0, 0.0, 1.0))
+	var scene := get_tree().current_scene
+	if scene == null:
+		return
+	scene.add_child(muck)
+	var behind := -creature.global_transform.basis.z * (1.2 * creature.scale.y)
+	muck.global_position = creature.global_position + behind
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world != null:
+		muck.global_position.y = world.surface_at(
+			muck.global_position.x, muck.global_position.z)
+	_ease_the_creature(creature)
+	peace_upon(creature.global_position, RELIEF_PEACE * potency)
+	VillageWonder.spectacle(get_tree(), "repose", "kindness", creature.global_position,
+		RELIEF_AWE, "Your creature sits down in the sun, entirely at peace.")
+	GameState.announce(GameState.named(
+		"%s lets out a long, contented sigh. All is well with the world."))
+
+
+## THE MOMENT ITSELF. Mood, boredom, the heart — and then it sits down, because
+## a creature that has this done for it and immediately goes back to smashing a
+## fence has not had the experience the miracle is named after.
+func _ease_the_creature(who: Creature) -> void:
+	who.mood = minf(who.mood + RELIEF_MOOD, 100.0)
+	who.boredom = 0.0
+	who.fear = 0.0
+	who.energy = minf(who.energy + 12.0, 100.0)
+	who.heart.stir("relief", 0.85)
+	who.heart.stir("contentment", 0.7)
+	who.express("happy", 4.0)
+	# It LEARNS that this was good, through the same door every other deed is
+	# learned through — a beast that has been eased once will go looking for
+	# somewhere pleasant to do it again.
+	who.mind.reinforce(RELIEF_LESSON)
+	# AND IT SITS DOWN. `_action_time` is the clock LOUNGE actually runs on and
+	# `_target` is where it would walk to first — INF means "here", which is
+	# the only place a creature that has just had this done wants to be.
+	who.state = Creature.State.LOUNGE
+	who._action_time = RELIEF_LOUNGE
+	who._target = Vector3.INF
+
+
+## THE RING OF PEACE. The opposite of every frighten_ and ignite_ sweep in this
+## file, and it goes to exactly the same places they do — including the HERD
+## MASS, where nearly all the animals in the world actually are, and which every
+## sweep that misses it silently reaches about three percent of.
+func peace_upon(pos: Vector3, reach: float) -> void:
+	for a in get_tree().get_nodes_in_group("animals"):
+		var animal := a as Animal
+		if is_instance_valid(animal) \
+				and animal.global_position.distance_to(pos) < reach:
+			animal.calm()
+	for h in get_tree().get_nodes_in_group("herds"):
+		var herd := h as Herd
+		if is_instance_valid(herd):
+			herd.calmed(PEACE_CALM)
+	for v in get_tree().get_nodes_in_group("villagers"):
+		var villager := v as Villager
+		if is_instance_valid(villager) \
+				and villager.global_position.distance_to(pos) < reach:
+			villager.calm()
+			villager.cheer(PEACE_CHEER)
 
 
 ## THE MERCY, WORN. `ward` on the healing shower: the same kindness, carried

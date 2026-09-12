@@ -24,13 +24,16 @@ const REACH := 7.0
 const NOURISH_SECONDS := 150.0
 
 var amount := 1.0      # 0..1, how much came out
+## HOW GOOD IT IS FOR THE GROUND, as a multiple. One for an ordinary movement;
+## more when a god had a hand in it — see MiracleManager._cast_blessed_relief.
+var richness := 1.0
 var _age := 0.0
 var _pile: Node3D = null
 
 
 func _ready() -> void:
 	add_to_group("poop")
-	var size := lerpf(0.22, 0.5, clampf(amount, 0.0, 1.0))
+	var size := lerpf(0.22, 0.5, clampf(amount, 0.0, 1.0)) * minf(richness, 2.0)
 	_pile = Util.lite_sphere(size, Color(0.34, 0.24, 0.15), Vector3.ZERO, 6)
 	_pile.scale.y = 0.55
 	add_child(_pile)
@@ -44,15 +47,17 @@ func _ready() -> void:
 ## and fields both take it; anything else in reach simply ignores it.
 func _feed_the_ground() -> void:
 	var fed := 0
+	var reach := REACH * richness
+	var good := NOURISH_SECONDS * amount * richness
 	for t in get_tree().get_nodes_in_group("trees"):
 		var tree := t as WildTree
-		if is_instance_valid(tree) and tree.global_position.distance_to(global_position) < REACH:
-			tree.rain(NOURISH_SECONDS * amount)
+		if is_instance_valid(tree) and tree.global_position.distance_to(global_position) < reach:
+			tree.rain(good)
 			fed += 1
 	for f in get_tree().get_nodes_in_group("farms"):
 		var farm := f as Farm
-		if is_instance_valid(farm) and farm.global_position.distance_to(global_position) < REACH:
-			farm.water(NOURISH_SECONDS * amount)
+		if is_instance_valid(farm) and farm.global_position.distance_to(global_position) < reach:
+			farm.water(good)
 			fed += 1
 	if fed > 0:
 		GameState.announce(GameState.named(
