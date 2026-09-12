@@ -341,6 +341,10 @@ func _physics_process(delta: float) -> void:
 			if _action_time <= 0.0:
 				_finish_deed("tend", 4.0)
 		State.SLEEPING:
+			if _target != Vector3.INF \
+					and global_position.distance_to(_target) > 2.0:
+				_move_toward(_target, WALK_SPEED * 0.7, delta)
+				return
 			_apply_gravity_only(delta)
 			# HEAVY OR LIGHT. A content, well-fed creature sleeps like a stone
 			# and gets the good of it. One that is hungry, spent, or braced for
@@ -401,13 +405,13 @@ func _physics_process(delta: float) -> void:
 		State.LEASHED:
 			_process_leashed(delta)
 		State.LOUNGE:
-			_process_lounge(delta)
+			CreatureLeisure.lounge(self, delta)
 		State.DANCE:
-			_process_dance(delta)
+			CreatureLeisure.dance(self, delta)
 		State.PRAY:
-			_process_pray(delta)
+			CreatureLeisure.pray(self, delta)
 		State.COMMUNE:
-			_process_commune(delta)
+			CreatureLeisure.commune(self, delta)
 		State.SOOTHE:
 			_process_soothe(delta)
 		State.HEED:
@@ -806,6 +810,13 @@ func _enact(choice: Dictionary) -> void:
 		"shepherd", "cull":
 			CreatureHerding.go(self, verb, target as Herd)
 		"rest":
+			# His own bed if his village made him one, and wherever he stands if
+			# not. The walk is the lounge handler's, reused rather than a second
+			# copy of "go somewhere and settle".
+			if target is CreatureNest:
+				_target = (target as CreatureNest).bed()
+			else:
+				_target = Vector3.INF
 			state = State.SLEEPING
 		"eat":
 			if target is FoodStore:
@@ -880,7 +891,10 @@ func _enact(choice: Dictionary) -> void:
 		"lounge":
 			# A long, unhurried stretch of nothing. The creature is not idle
 			# between deeds here — being at ease IS the deed, and it lasts long
-			# enough for you to sit and watch it.
+			# enough for you to sit and watch it. At his own nest he goes to the
+			# bed they made him rather than lying down where he stood.
+			_target = (target as CreatureNest).bed() if target is CreatureNest \
+				else Vector3.INF
 			state = State.LOUNGE
 			_action_time = randf_range(9.0, 20.0)
 			feel("contentment", 0.5, 3.0)
@@ -893,8 +907,11 @@ func _enact(choice: Dictionary) -> void:
 		"commune":
 			state = State.COMMUNE
 			_action_time = randf_range(7.0, 13.0)
-			var home := CreatureEyes.home_village(get_tree())
-			_target = home.global_position if home != null else global_position
+			if target is CreatureNest:
+				_target = (target as CreatureNest).water()
+			else:
+				var home := CreatureEyes.home_village(get_tree())
+				_target = home.global_position if home != null else global_position
 		"run":
 			# For the joy of it, and for the muscle. Somewhere far, at speed.
 			if target != null:
@@ -1870,125 +1887,6 @@ func _process_leashed(delta: float) -> void:
 ## than sleep, but it is awake, it is looking around, and it is very slowly
 ## working out what it thinks of the place. A creature that has learned to like
 ## this is a creature you can just sit and watch.
-func _process_lounge(delta: float) -> void:
-	_apply_gravity_only(delta)
-	_action_time -= delta
-	energy = minf(energy + 1.4 * delta, 100.0)
-	body.idle(delta)
-	# It turns its head to whatever is nearby. This is where its opinions of
-	# ordinary things quietly form.
-	_look_time -= delta
-	if _look_time <= 0.0:
-		_look_time = randf_range(2.0, 4.0)
-		CreatureWatching.observe(self)
-		var about := _things_around(20.0)
-		if not about.is_empty():
-			_face(about[randi() % about.size()].global_position)
-	if _action_time <= 0.0:
-		_last_deed = "lounge"
-		_finish_choice(0.5 + boredom / 300.0)
-
-
-## DANCING — learned by watching villagers dance, and performed AT them. It is
-## a spectacle, and a village that stops to watch its god's creature caper is a
-## village warming to you.
-func _process_dance(delta: float) -> void:
-	_apply_gravity_only(delta)
-	_action_time -= delta
-	rotation.y += delta * 2.4
-	_body.scale.y = 1.0 + sin(Time.get_ticks_msec() / 120.0) * 0.12
-	_cheer_time -= delta
-	if _cheer_time <= 0.0:
-		_cheer_time = 1.0
-		_cheer_nearby(18.0, 1.2)
-		var village := CreatureEyes.home_village(get_tree())
-		if village != null:
-			# AN INVITATION, not a summons. The crowd mind decides whether the
-			# town takes it up, and a village that is frightened of the beast
-			# will not — see VillageHive.invite.
-			village.hive.invite("dance", self, global_position, 1.0)
-			if _audience(18.0) > 0:
-				village.change_belief(0.35)
-	if _action_time <= 0.0:
-		_body.scale.y = 1.0
-		body.exert(0.8, 0.4)
-		boredom = maxf(boredom - 30.0, 0.0)
-		_last_deed = "dance"
-		# The bigger the crowd, the better it felt. Nobody watching is a
-		# lesson too — it may well decide dancing is not worth the effort.
-		_finish_choice(0.4 + _audience(18.0) * 0.35)
-
-
-## LEADING PRAYER. Sat still, eyes shut, arms out. The villagers at their totem
-## pray harder with it there, and the prayer flows to you.
-func _process_pray(delta: float) -> void:
-	_apply_gravity_only(delta)
-	_action_time -= delta
-	express("love", 0.6)
-	var faithful := 0
-	for v in get_tree().get_nodes_in_group("villagers"):
-		var villager := v as Villager
-		if not is_instance_valid(villager) or villager.global_position \
-				.distance_to(global_position) > 22.0:
-			continue
-		if villager.is_worshipping():
-			faithful += 1
-	var village := CreatureEyes.home_village(get_tree())
-	if village != null:
-		village.hive.invite("pray", self, global_position, 0.9)
-	if faithful > 0:
-		GameState.add_prayer_power(faithful * 1.6 * delta)
-		if village != null:
-			village.change_belief(0.22 * delta * faithful)
-	if _action_time <= 0.0:
-		mood = minf(mood + 6.0, 100.0)
-		_last_deed = "pray"
-		_finish_choice(0.5 + faithful * 0.4)
-
-
-## HOLDING COURT. It walks into the middle of the village and simply stands
-## there being enormous, and the people turn and look. No violence, no miracle,
-## no gift — just presence, and belief grows from it.
-func _process_commune(delta: float) -> void:
-	var village := CreatureEyes.home_village(get_tree())
-	if village == null:
-		_decide()
-		return
-	if global_position.distance_to(_target) > village.influence_radius * 0.45:
-		_move_toward(_target, WALK_SPEED * 0.8, delta)
-		return
-	_apply_gravity_only(delta)
-	_action_time -= delta
-	village.hive.invite("commune", self, global_position, 0.8)
-	var audience := _audience(20.0)
-	if audience > 0:
-		village.change_belief(0.3 * delta * minf(audience, 6))
-		village.notice(0.4 * delta)
-		_cheer_time -= delta
-		if _cheer_time <= 0.0:
-			_cheer_time = 2.0
-			for v in get_tree().get_nodes_in_group("villagers"):
-				var villager := v as Villager
-				if is_instance_valid(villager) and villager.global_position \
-						.distance_to(global_position) < 20.0:
-					villager.attend(global_position)
-	if _action_time <= 0.0:
-		_last_deed = "commune"
-		_finish_choice(0.4 + audience * 0.3)
-
-
-## IT LOOKS UP AT YOU, AND STOPS.
-##
-## When the device underneath is genuinely struggling — sustained slow frames,
-## which is what a throttling phone actually does to you — the creature quits
-## whatever it was doing, turns to face the camera, and waits. Nothing else it
-## does costs anything like a miracle of its own: an orb, its particles, its
-## weather and everything the weather then touches. Dropping that one behaviour
-## buys back more than every graphics knob put together.
-##
-## The point of doing it THIS way rather than silently is that a creature that
-## stops and looks at you is not a glitch. It is the most legible thing in the
-## game. The player reads "it noticed something" — and it did.
 func _process_heed(delta: float) -> void:
 	_apply_gravity_only(delta)
 	_face(GameState.camera_focus)

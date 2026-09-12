@@ -74,7 +74,6 @@ const REACH := 16.0
 
 var village: Village
 var trade := "well"
-var _shift_left := 0.0
 
 
 static func create(which: String, home: Village) -> Workshop:
@@ -180,7 +179,6 @@ func _ready() -> void:
 		add_child(custom)
 	else:
 		_build_stand_in(spec)
-	_shift_left = randf() * SHIFT
 
 
 ## A plain stand-in until art ships, distinct enough per trade to be told apart
@@ -228,21 +226,24 @@ func employs() -> int:
 	return int(TRADES[trade]["employs"])
 
 
-## ONE TURN OF WORK, done by a villager who has arrived and stayed. Returns a
-## line to announce, or "" for the quiet trades — a well does not deserve a
-## bulletin every nine seconds.
-func work_shift() -> String:
+## ONE TURN OF WORK, done by a villager who has arrived and stayed.
+##
+## The shift clock lives on the VILLAGER, not here: two people at one mill are
+## two shifts, not one, and a building holding the timer would have silently
+## halved the output of every trade somebody doubled up on. This building has no
+## clock of its own at all.
+func work_shift() -> void:
 	var spec: Dictionary = TRADES[trade]
 	var store := village.store if village != null else null
 	if store == null:
-		return ""
+		return
 	var takes: Dictionary = spec["takes"]
 	# Nothing is produced unless the whole input is there. A half-fed mill
 	# simply idles, which is a truer thing for it to do than run on nothing.
 	for what: String in takes:
 		var have: int = store.plant_food if what == "plant" else store.meat_food
 		if have < int(takes[what]):
-			return ""
+			return
 	for what: String in takes:
 		store.take(FoodItem.FoodType.PLANT if what == "plant" else FoodItem.FoodType.MEAT,
 			int(takes[what]))
@@ -256,7 +257,6 @@ func work_shift() -> String:
 			if village != null:
 				village.belief = minf(village.belief + 0.4, 100.0)
 				GameState.add_prayer_power(1.2)
-	return ""
 
 
 ## A well's whole point. Fields in reach are watered exactly as rain waters

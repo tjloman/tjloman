@@ -54,7 +54,6 @@ var _effigy: Node3D = null
 var _faces: Array[MeshInstance3D] = []
 var _scratches: Array[Node3D] = []
 var _flames: Array[Node3D] = []
-var _pool: MeshInstance3D = null
 var _recarve_left := 0.0
 var _flicker_left := 0.0
 
@@ -193,19 +192,19 @@ func _build_effigy() -> void:
 ## THE POOL he drinks from and sees himself in. Shallow, still, and dark enough
 ## to hold a reflection — which is all the mirror this game needs.
 func _build_pool() -> void:
-	_pool = MeshInstance3D.new()
+	var pool := MeshInstance3D.new()
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(5.0, 4.0)
-	_pool.mesh = plane
+	pool.mesh = plane
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color(0.16, 0.26, 0.32, 0.86)
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA if Quality.water_alpha() \
 		else BaseMaterial3D.TRANSPARENCY_DISABLED
 	mat.metallic = 0.5
 	mat.roughness = 0.12
-	_pool.material_override = mat
-	_pool.position = Vector3(5.4, 0.06, 2.2)
-	add_child(_pool)
+	pool.material_override = mat
+	pool.position = Vector3(5.4, 0.06, 2.2)
+	add_child(pool)
 
 
 ## THE FIRE they dance around, and the torches along the wall that make the

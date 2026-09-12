@@ -1249,7 +1249,23 @@ func to_dict() -> Dictionary:
 			"lumber": store.lumber, "stone": store.stone,
 		},
 		"folk": folk,
+		# THE BUILDINGS IT RAISED. Houses, fields and the school are still not
+		# saved — that gap is older than these two and wants fixing on its own —
+		# but a town of fifty that loses every trade it built on a reload is a
+		# town that has to re-earn an hour of work, so these go in now.
+		"trades": _trades_to_list(),
+		"nest": [] if nest == null or not is_instance_valid(nest) \
+			else [nest.position.x, nest.position.y, nest.position.z],
 	}
+
+
+func _trades_to_list() -> Array:
+	var out := []
+	for w in workshops:
+		if is_instance_valid(w):
+			out.append({"trade": w.trade,
+				"at": [w.position.x, w.position.y, w.position.z]})
+	return out
 
 
 ## Restore a village's lived state onto a freshly generated one. Its people are
@@ -1269,6 +1285,24 @@ func from_dict(data: Dictionary) -> void:
 		store.meat_food = int(st.get("meat", store.meat_food))
 		store.lumber = int(st.get("lumber", store.lumber))
 		store.stone = int(st.get("stone", store.stone))
+	for row: Dictionary in data.get("trades", []):
+		var at: Array = row.get("at", [])
+		if at.size() != 3:
+			continue
+		var shop := Workshop.create(String(row.get("trade", "well")), self)
+		shop.position = Vector3(at[0], at[1], at[2])
+		add_child(shop)
+		workshops.append(shop)
+	var where: Array = data.get("nest", [])
+	if where.size() == 3 and nest == null:
+		var beast := get_tree().get_first_node_in_group("creature") as Creature
+		if beast != null:
+			var n := CreatureNest.new()
+			n.village = self
+			n.creature = beast
+			n.position = Vector3(where[0], where[1], where[2])
+			add_child(n)
+			nest = n
 	var folk: Array = data.get("folk", [])
 	if not folk.is_empty():
 		for v in my_villagers():
