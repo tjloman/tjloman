@@ -1244,7 +1244,7 @@ func scorched(at: Vector3, reach: float, kill := 0.0) -> int:
 		elif not _already_alight(i):
 			_burning.append({"i": i, "left": BURN_SECONDS})
 	# THEY ALL RUN, burned or not, and much further out than the fire reaches.
-	flee_fire(at, reach)
+	bolt_from(at, reach * FIRE_FLEES)
 	return caught
 
 
@@ -1258,21 +1258,24 @@ func _already_alight(i: int) -> bool:
 	return false
 
 
-## RUN FROM IT. Fire the herd can SEE, whether or not it touched anybody.
+## RUN FROM IT. Anything frightening at a point, whether or not it touched
+## anybody — a fire the herd can see, a thunderclap, a twister coming over the
+## hill, a bolt into the next field.
 ##
-## Separate from `scorched` on purpose, and cheap on purpose: a rolling ball
+## Separate from `scorched` on purpose, and cheap on purpose: a rolling fireball
 ## lays flame eleven times a second down its whole track, and every one of those
 ## is a chance for a herd to bolt — but none of them may walk two hundred
-## members to work that out. This looks at the herd's own position and its
-## spread and nothing else, and turns back at the door if the fire is nowhere
-## near.
-func flee_fire(at: Vector3, reach: float) -> void:
+## members to work it out. This looks at the herd's own position and its spread
+## and nothing else, and turns back at the door if the thing is nowhere near.
+## `within` is the whole distance at which it matters; the caller decides how
+## much wider than its own effect that is.
+func bolt_from(at: Vector3, within: float) -> void:
 	if alive() <= 0 or keeper != null:
 		return
-	if global_position.distance_to(at) - _spread > reach * FIRE_FLEES:
+	if global_position.distance_to(at) - _spread > within:
 		return
 	scattered(FIRE_FEAR)
-	# Away from the fire itself, not anywhere: `scattered` picks a random
+	# Away from the thing itself, not anywhere: `scattered` picks a random
 	# bearing, which is right for a botched drive and wrong for this.
 	var away := global_position - at
 	away.y = 0.0
@@ -1280,6 +1283,30 @@ func flee_fire(at: Vector3, reach: float) -> void:
 		away = Vector3(randf() - 0.5, 0.0, randf() - 0.5)
 	_target = global_position + away.normalized() * ROAM
 	_graze_left = GRAZE_LEAST
+
+
+## RAIN ON IT. The flames go out and the beasts live.
+##
+## Fire could not reach a herd's numbered mass until today, and neither could
+## the thing that puts fire out — which is the same bug wearing the other face,
+## and the worse of the two, because it is the mercy. A god who burns a herd
+## and then calls down a cloudburst to save what is left of it should get to
+## save it. Their fright is left alone: they have still just been set on fire.
+func doused(at: Vector3, reach: float) -> int:
+	var out := 0
+	var still: Array[Dictionary] = []
+	for row in _burning:
+		var i: int = row["i"]
+		if i >= _members.size():
+			continue
+		var m := _members[i]
+		var here := global_position + Vector3(m["offset"].x, 0.0, m["offset"].y)
+		if here.distance_to(at) <= reach:
+			out += 1
+			continue
+		still.append(row)
+	_burning = still
+	return out
 
 
 ## THE ONES STILL ALIGHT. They are numbers, so there is no flame to draw on

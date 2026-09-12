@@ -97,6 +97,10 @@ const KARMA := {
 const LIGHTNING_KILL_RADIUS := 3.0
 const LIGHTNING_BURN_RADIUS := 8.0
 const CREATURE_SIGHT_RANGE := 45.0
+## What a twister takes out of a herd it is standing in, per tick of its own
+## clock (five a second). Over the life of one funnel that is a few head, which
+## is what a tornado through cattle should cost — not a wipe, and not nothing.
+const TWISTER_TAKES := 0.15
 
 ## HOW MUCH RAIN IS ALLOWED IN THE SKY AT ONCE.
 ##
@@ -540,6 +544,14 @@ func _cast_rain(pos: Vector3, potency := 1.0) -> void:
 			if is_instance_valid(body) and body.get("burning") \
 					and body.global_position.distance_to(pos) < reach:
 				body.call("extinguish")
+	# AND THE HERDS. Every group above is a group of NODES, and a herd's burning
+	# members are numbers — so rain fell straight through the mass exactly as
+	# fire used to, which of the two is the worse way round: it is the mercy
+	# that was missing.
+	for h in get_tree().get_nodes_in_group("herds"):
+		var herd := h as Herd
+		if is_instance_valid(herd):
+			herd.doused(pos, reach)
 
 	_hold_cloud(cloud)
 	# It disperses rather than being deleted: the layers fade out over a few
@@ -604,6 +616,15 @@ func _cast_lightning(pos: Vector3) -> void:
 		elif adist < LIGHTNING_BURN_RADIUS:
 			animal.ignite()
 
+	# AND THE HERD IT LANDED IN. The loop above reaches a herd's promoted few
+	# and nothing else, so the most iconic miracle in the genre struck down into
+	# two hundred caribou and killed whichever handful the world had happened to
+	# build bodies for. Judged on the same two radii as the beasts above.
+	for h in get_tree().get_nodes_in_group("herds"):
+		var herd := h as Herd
+		if is_instance_valid(herd):
+			herd.scorched(pos, LIGHTNING_BURN_RADIUS, LIGHTNING_KILL_RADIUS)
+
 	# A bolt sets the nearest trees — and any field it strikes — alight.
 	ignite_trees_near(pos, 5.0)
 	for f in get_tree().get_nodes_in_group("farms"):
@@ -619,6 +640,26 @@ func ignite_trees_near(pos: Vector3, radius: float) -> void:
 		var tree := t as WildTree
 		if is_instance_valid(tree) and tree.global_position.distance_to(pos) < radius:
 			tree.ignite()
+
+
+## FRIGHTEN WHAT IS NEAR, without hurting it. The sister of the two above for
+## every miracle that is a NOISE or a WIND rather than a fire.
+##
+## The same hole they had: a thunderclap scared every animal in the "animals"
+## group and a herd puts a couple of dozen head in it out of two hundred, so
+## the loudest miracle in the game went off inside a herd of caribou and the
+## herd went on grazing. A bolt, a bang and a twister are exactly the things a
+## herd exists to run from.
+func frighten_animals_near(pos: Vector3, radius: float) -> void:
+	for a in get_tree().get_nodes_in_group("animals"):
+		var animal := a as Animal
+		if is_instance_valid(animal) \
+				and animal.global_position.distance_to(pos) < radius:
+			animal.scare(pos)
+	for h in get_tree().get_nodes_in_group("herds"):
+		var herd := h as Herd
+		if is_instance_valid(herd):
+			herd.bolt_from(pos, radius)
 
 
 ## AND THE BEASTS IN IT. The sister of the above, and it was simply missing —
@@ -789,6 +830,20 @@ func _cast_earthquake(pos: Vector3, potency := 1.0) -> void:
 		var at := here + Vector2(cos(drift), sin(drift)) * out \
 			+ Vector2(randf_range(-1.2, 1.2), randf_range(-1.2, 1.2))
 		_buckle(world, at, lift, step)
+		# EVERYTHING STANDING ON IT RUNS. A quake rucked the ground up under a
+		# village and a herd and neither so much as looked up: it moved earth
+		# and touched nothing alive, which of all the miracles here is the one
+		# that most obviously should. Frightening only, and no harm — being
+		# shaken is terrifying and survivable, and what a quake really does is
+		# done to the shape of the world.
+		var felt := Vector3(at.x, 0.0, at.y)
+		frighten_animals_near(felt, QUAKE_BUMP_RADIUS * 2.0)
+		for v in get_tree().get_nodes_in_group("villagers"):
+			var soul := v as Villager
+			if is_instance_valid(soul) and Vector2(soul.global_position.x,
+					soul.global_position.z).distance_to(at) < QUAKE_BUMP_RADIUS * 2.0:
+				soul.scare(felt)
+				soul.witness_horror(1.0)
 		# One shake and one beat per pair, which is what makes it read as a rip
 		# travelling rather than a shape appearing.
 		if step % 2 == 0:
@@ -886,6 +941,12 @@ func _pour_lava(pos: Vector3, rise: float, reach: float, loud := false) -> void:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	if world == null or world.is_underwater(pos.x, pos.z):
 		return
+	# MOLTEN ROCK IS THE HOTTEST THING IN THE GAME and it set nothing alive on
+	# fire: a lavaball landing in a herd of cattle scorched the ground at full
+	# char and did not singe one of them. It burns what it lands on now, the
+	# same as every other fire.
+	ignite_trees_near(pos, reach)
+	ignite_animals_near(pos, reach)
 	var here := Vector2(pos.x, pos.z)
 	var hollow := world.scars.hollow_near(here, reach + 2.0)
 	if hollow.is_empty():
@@ -1193,6 +1254,14 @@ func _shower_mercy(pos: Vector3, reach: float) -> void:
 			var farm := f as Farm
 			if is_instance_valid(farm) and farm.global_position.distance_to(pos) < reach:
 				farm.extinguish()
+		# AND THE HERDS. Every group above is a group of NODES, and a herd's
+		# burning members are numbers — so the kindest miracle in the game fell
+		# straight through a burning herd. The mercy has to reach the mass for
+		# the same reason the fire does.
+		for h in get_tree().get_nodes_in_group("herds"):
+			var herd := h as Herd
+			if is_instance_valid(herd):
+				herd.doused(pos, reach)
 		var creature := get_tree().get_first_node_in_group("creature") as Creature
 		if creature != null and creature.global_position.distance_to(pos) < reach:
 			creature.receive_heal()
@@ -1302,6 +1371,21 @@ func _run_tornado(funnel: Node3D, drift: Vector3, life: float, radius: float) ->
 					node.call("scare", here)
 				if node.has_method("take_damage"):
 					node.call("take_damage", 6.0)
+	# AND THE HERDS, which is where nearly all the animals in the world are. A
+	# twister walked through two hundred caribou and took whichever few the
+	# world had built bodies for. Herds are handled apart from the loop above
+	# rather than through it, because this runs five times a second for the
+	# whole life of the funnel and must not walk two hundred members each time:
+	# bolting is a distance check against the herd itself, and what the twister
+	# TAKES is a roll, one head at a time, for as long as it stands in them.
+	for h in get_tree().get_nodes_in_group("herds"):
+		var herd := h as Herd
+		if not is_instance_valid(herd):
+			continue
+		herd.bolt_from(here, radius * 2.0)
+		if herd.global_position.distance_to(here) - herd.spread() < radius \
+				and randf() < TWISTER_TAKES:
+			herd.take_one()
 	get_tree().create_timer(0.2).timeout.connect(
 		func() -> void: _run_tornado(funnel, drift, life - 0.2, radius))
 
@@ -1525,10 +1609,11 @@ func _cast_thunderclap(pos: Vector3, potency: float) -> void:
 		if is_instance_valid(villager) and villager.global_position.distance_to(pos) < radius:
 			villager.scare(pos)
 			villager.witness_horror(1.0)
-	for a in get_tree().get_nodes_in_group("animals"):
-		var beast := a as Animal
-		if is_instance_valid(beast) and beast.global_position.distance_to(pos) < radius:
-			beast.scare(pos)
+	# THE LOUDEST MIRACLE IN THE GAME went off inside a herd of caribou and the
+	# herd went on grazing, because a bang looks through the "animals" group and
+	# a herd puts a couple of dozen head in it out of two hundred. A bang is
+	# exactly the thing a herd exists to run from.
+	frighten_animals_near(pos, radius)
 
 
 ## RAIN AND LIGHTNING TOGETHER — the first real storm, and the one the player

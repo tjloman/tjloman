@@ -39,6 +39,9 @@ const KINDS := {
 }
 
 const KARMA_PER_KILL := -3.0
+## What one head of a burned herd is worth against that. Less than a person,
+## and not nothing: forty of them is worse than one villager.
+const KARMA_PER_HEAD := 0.25
 const TRAIL_INTERVAL := 0.09     # seconds between flames dropped in flight
 const REST_SPEED := 1.2           # below this it has come to rest -> bursts
 
@@ -199,7 +202,7 @@ func _ignite_trail(pos: Vector3, reach: float) -> void:
 	for h in get_tree().get_nodes_in_group("herds"):
 		var herd := h as Herd
 		if is_instance_valid(herd):
-			herd.flee_fire(pos, reach)
+			herd.bolt_from(pos, reach * Herd.FIRE_FLEES)
 	for t in get_tree().get_nodes_in_group("trees"):
 		var tree := t as WildTree
 		if is_instance_valid(tree) and tree.global_position.distance_to(pos) < reach:
@@ -284,8 +287,12 @@ func _go_off() -> void:
 		var herd := h as Herd
 		if is_instance_valid(herd):
 			caught += herd.scorched(pos, reach, kill)
-	if caught > 0 and kill > 0.0:
-		GameState.shift_alignment(KARMA_PER_KILL * 0.25 * float(caught))
+	# AND IT COSTS SOMETHING. Burning a herd alive is charged per head, and the
+	# GOUT is charged for it too — the first version only charged when the
+	# miracle had a killing core, which meant setting forty head of cattle
+	# alight with the miracle designed for setting things alight was free.
+	if caught > 0:
+		GameState.shift_alignment(KARMA_PER_KILL * KARMA_PER_HEAD * float(caught))
 
 	for h in get_tree().get_nodes_in_group("houses"):
 		var house := h as House
@@ -311,6 +318,23 @@ func _go_off() -> void:
 	# The gout does not do this, which is its entire reason for existing.
 	if bool(spec["digs"]):
 		_gouge(pos)
+
+	# WHAT THE CAST ITSELF COSTS. Every other miracle is charged its karma by
+	# MiracleManager.resolve — and a thrown fire never goes through resolve,
+	# because it does its own work where it lands. So the fireball's row in that
+	# table has NEVER been applied: for as long as the game has had fire,
+	# hurling it has cost a god nothing at all unless it happened to kill
+	# somebody at point blank. The file's own header says the gods of peace do
+	# not learn this one; mechanically they might as well have.
+	var due: Dictionary = MiracleManager.KARMA.get(kind, {})
+	if not due.is_empty():
+		GameState.shift_alignment(float(due["player"]))
+		var creature := get_tree().get_first_node_in_group("creature") as Creature
+		if creature != null and is_instance_valid(creature) \
+				and creature.global_position.distance_to(pos) \
+					< MiracleManager.CREATURE_SIGHT_RANGE:
+			creature.witness(float(due["creature"]))
+			creature.mind.witness_miracle(kind)
 
 	# The blast is the sermon: terror converts where the fire LANDS.
 	for v in get_tree().get_nodes_in_group("village"):

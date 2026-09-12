@@ -666,7 +666,7 @@ func _terrify_nearby() -> void:
 	for h in get_tree().get_nodes_in_group("herds"):
 		var herd := h as Herd
 		if is_instance_valid(herd):
-			herd.flee_fire(global_position, BURN_TERROR / Herd.FIRE_FLEES)
+			herd.bolt_from(global_position, BURN_TERROR)
 
 
 func extinguish() -> void:
