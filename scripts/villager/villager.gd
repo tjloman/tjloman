@@ -19,7 +19,7 @@ enum State {
 	GO_WORK, WORKING, GO_BUILD_SHOP, BUILDING_SHOP,
 	GO_BUILD_NEST, BUILDING_NEST, GO_CIRCLE, CIRCLING,
 	MUSTERING, HAULING, GO_ARM, FIGHT, HIDE,
-	FLEE, HELD, FALLING, DYING,
+	FLEE, HELD, FALLING, PINNED, DYING,
 }
 
 ## Names are drawn by sex, so a villager's name reads with its model.
@@ -150,6 +150,11 @@ var weapon := ""      # "" = bare-handed; otherwise a Weapon.SPECS kind
 
 ## Personal karma: -100 wicked .. +100 saintly.
 var morality := randf_range(10.0, 40.0)
+## ON THE GROUND WITH THE JAWS ON THEM. Non-null for the half minute a pack
+## spends killing this villager — which is the half minute their neighbours
+## have to do something about it. Owned by the village, not by either animal in
+## it; see Mauling.
+var pin: Mauling = null
 
 var state := State.WANDER
 var _target := Vector3.ZERO
@@ -280,6 +285,23 @@ func _physics_process(delta: float) -> void:
 			# they cover the same ground either way.
 			_sim_scale = float(_sim_skip)
 			_sim_skip = 0
+	# PINNED suspends everything, and for the same reason DYING does: they are
+	# not doing anything, they are being done to. No hunger, no ageing, no
+	# watchdog — the ONLY clock that runs is the Mauling's, and the village
+	# turns that one. All this does is keep them on the ground and put the
+	# count over their head, so a player can see from across the field whether
+	# it is still worth sending the hand.
+	if state == State.PINNED:
+		if pin == null:
+			state = State.WANDER   # the pin ended without going through us
+			if _animator == null and _visuals != null:
+				_visuals.rotation = Vector3.ZERO
+		else:
+			_apply_gravity_only(delta)
+			if _animator == null and _visuals != null:
+				_visuals.rotation_degrees.x = 88.0
+			_label.text = "%s — HELD DOWN (%d%%)" % [villager_name, int(pin.gone() * 100.0)]
+			return
 	# Dying suspends the whole normal life — they lie there, out of the fight,
 	# until healed/lifted back or the window closes.
 	if state == State.DYING:
@@ -511,10 +533,10 @@ func _physics_process(delta: float) -> void:
 				_decide()
 			elif _move_toward(village.store.global_position,
 					WALK_SPEED * _speed_factor(), delta, 2.2):
-				_take_up_arms()
+				Militia.take_up_arms(self)
 				_decide()
 		State.FIGHT:
-			_process_fight(delta)
+			Militia.fight(self, delta)
 		State.HIDE:
 			# Not every people answers terror with steel. Run for the nearest
 			# home and cower there until the danger passes.
@@ -925,6 +947,7 @@ func _pitch_body(deg: float) -> void:
 ## clips are ignored, so a model with only walk/idle still works.
 func _anim_state() -> String:
 	match state:
+		State.PINNED: return "fall"   # prone; no rig here has a clip for this
 		State.DYING: return "dying"
 		State.FALLING: return "fall"
 		State.HAULING: return "carry"
@@ -1111,17 +1134,25 @@ func _decide() -> void:
 	# arm themselves and go for the threat — but only if they dare. Caught alone
 	# and bare-handed, a villager runs instead (and is often run down).
 	if village != null and village.is_roused() and is_adult():
-		var foe := _find_foe()
+		var foe := Militia.find_foe(self)
 		if foe != null:
 			# WHETHER THEY FIGHT AT ALL is their own hard-won doctrine: a village
 			# that has stood and won reaches for weapons, one that has buried its
 			# dead bars its doors instead (see Village.resolve).
-			var allies := _allies_near()
-			if village.will_fight(allies, weapon != ""):
+			var allies := Militia.allies_near(self)
+			# THE TOWN'S DOCTRINE DECIDES — EXCEPT TWICE. `will_fight` is the
+			# learned answer to "do people like us fight things like that", and
+			# a village that has buried its dead answers no. It does not get to
+			# answer no while a neighbour is screaming under the jaws, or about
+			# a species it has sworn on. Both overrides are needed HERE as well
+			# as in Militia.dares_fight: without this one a timid town watches
+			# its neighbour eaten from inside a hut.
+			var no_choice: bool = Militia.sworn_on(self, foe)
+			if no_choice or village.will_fight(allies, weapon != ""):
 				if weapon == "" and Weapon.affordable(village.store) != "" and allies >= 1:
 					state = State.GO_ARM
 					return
-				if _dares_fight():
+				if Militia.dares_fight(self, foe):
 					_fight_target = foe
 					state = State.FIGHT
 					_attack_cd = 0.3
@@ -1130,7 +1161,7 @@ func _decide() -> void:
 			state = State.HIDE
 			_action_time = randf_range(8.0, 16.0)
 			_target = village.refuge(global_position)
-			_report_terror(foe)
+			Militia.report_terror(foe)
 			return
 	if _pick_job():
 		return
@@ -1699,119 +1730,43 @@ func current_job() -> String:
 
 
 ## The militia -----------------------------------------------------------------
-
-## Draw a weapon from the storehouse (paying its materials). Bare hands if the
-## village is too poor — a mob is still a mob.
-func _take_up_arms() -> void:
-	if weapon != "" or village == null:
-		return
-	var made := Weapon.forge(village.store)
-	if made == "":
-		return
-	weapon = made
-	if is_instance_valid(_weapon_visual):
-		_weapon_visual.queue_free()
-	_weapon_visual = Weapon.build_visual(weapon)
-	_visuals.add_child(_weapon_visual)
+##
+## Arming, counting neighbours, nerve, closing and striking all live in Militia
+## now — along with answering a scream, which is the part that grew. What is
+## left here is only the pin: being the one on the ground.
 
 
-## How many of my people are close enough to fight alongside me. Courage —
-## and therefore the whole balance of predator attacks — rests on this count.
-func _allies_near() -> int:
-	if village == null:
-		return 0
-	var n := 0
-	for v in village.my_villagers():
-		if v == self or not v.is_adult() or v.state == State.DYING:
-			continue
-		if v.global_position.distance_to(global_position) < ALLY_RADIUS:
-			n += 1
-	return n
+## THE JAWS CLOSE. Everything that happens over the next half minute is the
+## Mauling's business and the village's; this is only the body going down.
+func pinned_by(what: Mauling) -> void:
+	_dismount()
+	if _carry_kind != "":
+		_clear_carry()
+	pin = what
+	state = State.PINNED
+	velocity = Vector3.ZERO
+	_fight_target = null
+	happiness = maxf(happiness - 40.0, 0.0)
+	_pitch_body(0.0)
 
 
-## Will this villager stand and fight, or run? Alone, they run — and a wolf
-## runs them down. Together, they turn and kill it.
-func _dares_fight() -> bool:
-	if health < RETREAT_HEALTH:
-		return false
-	var needed := COURAGE_ARMED if weapon != "" else COURAGE_BARE
-	return _allies_near() >= needed
-
-
-## Close with the enemy and strike it on the weapon's cooldown. Breaks off if
-## the target dies, if the villager is badly hurt, or if their nerve fails.
-func _process_fight(delta: float) -> void:
-	if _fight_target == null or not is_instance_valid(_fight_target) \
-			or _fight_target.is_queued_for_deletion():
-		_fight_target = null
-		_decide()
-		return
-	if health < RETREAT_HEALTH or not _dares_fight():
-		# Nerve broken: run, and let the fear spread the alarm further.
-		var flee_from := _fight_target.global_position
-		_fight_target = null
-		scare(flee_from)
-		return
-	var reach := Weapon.reach(weapon)
-	if global_position.distance_to(_fight_target.global_position) > reach:
-		_move_toward(_fight_target.global_position, FLEE_SPEED * 0.85, delta, reach * 0.8)
-		return
-	_apply_gravity_only(delta)
-	# Face the enemy while trading blows.
-	var to_foe := _fight_target.global_position - global_position
-	to_foe.y = 0.0
-	if to_foe.length() > 0.05:
-		look_at(global_position - to_foe.normalized(), Vector3.UP)
-	_attack_cd -= delta
-	if _attack_cd > 0.0:
-		return
-	_attack_cd = Weapon.cooldown(weapon)
-	_strike(_fight_target)
-
-
-## Land a blow (Weapon resolves the damage) and settle up if the foe drops.
-func _strike(foe: Node3D) -> void:
-	var killed := Weapon.strike(self, foe, weapon)
-	if killed and foe is Animal:
-		if village != null:
-			village.remember_battle(true)   # standing together WORKED
-			village.vendetta.erase(foe)
-			if village.is_player_home:
-				GameState.announce("%s and their neighbours have killed the beast."
-					% villager_name)
-		_fight_target = null
-		happiness = minf(happiness + 12.0, 100.0)
-		_decide()
-	elif foe is Creature:
-		# A mob is a lesson. The creature is left to work out for ITSELF which
-		# of its recent deeds brought this on — perhaps eating one of them.
-		(foe as Creature).mind.experience("mobbed", -1.4)
-		if village != null and village.is_player_home:
-			GameState.announce("%s strikes at your creature with %s!"
-				% [villager_name, Weapon.label(weapon)])
-
-
-## Fleeing from the creature TEACHES IT that terror works — the mirror of the
-## lesson a mob teaches. Which one it learns depends on what the people do.
-func _report_terror(foe: Node3D) -> void:
-	if foe is Creature:
-		(foe as Creature).mind.experience("feared", 0.8)
-
-
-## What this villager should be fighting right now, if anything: a marked beast
-## or a predator inside the bounds — or the creature itself, once the village
-## has taken enough from it.
-func _find_foe() -> Node3D:
-	if village == null:
-		return null
-	var beast := village.fight_target(global_position)
-	if beast != null:
-		return beast
-	if village.hates_creature():
-		var c := get_tree().get_first_node_in_group("creature") as Creature
-		if c != null and c.global_position.distance_to(global_position) < 30.0:
-			return c
-	return null
+## PULLED OUT IN TIME. How much of them is left was decided by how long they
+## were held and how many were holding — see Mauling.rise_health.
+func pulled_free(left: float) -> void:
+	pin = null
+	# NEVER A HEAL. `left` is the ceiling on what is left of them, not a number
+	# to be set to: somebody who went under the jaws at half health does not
+	# come out of it better off than they went in.
+	health = maxf(minf(health, left), 1.0)
+	if _animator == null and _visuals != null:
+		_visuals.rotation = Vector3.ZERO
+	if state == State.PINNED:
+		state = State.WANDER
+	happiness = maxf(happiness - 20.0, 0.0)
+	if village != null and village.is_player_home:
+		GameState.announce("%s is pulled out from under them, alive — barely."
+			% villager_name)
+	scare(global_position + Vector3(randf() - 0.5, 0, randf() - 0.5))
 
 
 ## Target finding ------------------------------------------------------------
@@ -2224,6 +2179,11 @@ func die(of_old_age: bool) -> void:
 	if not of_old_age and village != null and _last_attacker is Animal \
 			and is_instance_valid(_last_attacker):
 		village.mark_for_death(_last_attacker as Animal)
+		# AND THE OATH IS SWORN OVER THE GRAVE. Three of these to the same kind
+		# of animal and this village hunts them on sight for a lifetime — see
+		# VillageFeud. A man pulled back from dying never reaches here, which is
+		# exactly right: the town counts burials, not near misses.
+		village.feud.blooded((_last_attacker as Animal).species)
 	# Dying while the village was up in arms teaches them the cost of standing.
 	if not of_old_age and village != null and village.is_roused():
 		village.remember_battle(false)
@@ -2273,6 +2233,9 @@ func _land() -> void:
 		take_damage((_fall_speed - 14.0) * 5.0, true)
 	if not is_instance_valid(self) or is_queued_for_deletion():
 		return
+	# THE TOWN SAW THAT. A person coming down out of the sky is not a miracle,
+	# and it is not nothing either — see VillageWonder.
+	VillageWonder.landed(get_tree(), "kin", global_position, _fall_speed, burning)
 	if state == State.DYING:
 		return  # a killing toss — they lie dying, don't snap into a flee
 	scare(global_position + Vector3(randf() - 0.5, 0, randf() - 0.5))
@@ -2327,7 +2290,7 @@ func _defect_to(host: Village) -> void:
 
 
 func scare(from_pos: Vector3) -> void:
-	if state == State.HELD or state == State.DYING:
+	if state in [State.HELD, State.DYING, State.PINNED]:
 		return
 	_dismount()
 	state = State.FLEE
@@ -2364,7 +2327,8 @@ func is_afraid() -> bool:
 ## awesome thing that is not, right now, hurting anybody. Being ATTENDED to is
 ## what the creature's quieter deeds are actually for.
 func attend(point: Vector3) -> void:
-	if is_afraid() or state in [State.HELD, State.FALLING, State.DYING, State.FIGHT]:
+	if is_afraid() or state in [State.HELD, State.FALLING, State.DYING,
+			State.PINNED, State.FIGHT]:
 		return
 	var flat := point - global_position
 	flat.y = 0.0
@@ -2376,6 +2340,9 @@ func attend(point: Vector3) -> void:
 ## Divine hand interface -----------------------------------------------------
 
 func pick_up() -> void:
+	# LIFTED OUT FROM UNDER THE PACK. The plainest rescue in the game, and the
+	# one a player reaches for first — so it has to actually work.
+	Mauling.free_of(self)
 	_dismount()
 	state = State.HELD
 	_pitch_body(0.0)
@@ -2451,6 +2418,7 @@ func _status_word() -> String:
 		State.GO_CIRCLE, State.CIRCLING: return "dancing the circle"
 		State.GO_BUILD_SHOP, State.BUILDING_SHOP: return "raising a workshop"
 		State.GO_WORK, State.WORKING: return "at work"
+		State.PINNED: return "DOWN — they have hold of them"
 		State.GO_ARM: return "running for a weapon"
 		State.FIGHT: return "FIGHTING for their life"
 		State.COURT: return "courting at the totem"

@@ -8,6 +8,10 @@ const DECAY_SECONDS := 120.0
 
 var villager_name := "someone"
 
+## Set the first time it hits anything hard enough to be worth watching, so a
+## body that bounces twice is one event rather than three.
+var _shown := false
+
 
 func _init() -> void:
 	collision_layer = 4
@@ -20,6 +24,10 @@ func _init() -> void:
 	physics_material_override = phys
 	linear_damp = 0.8
 	angular_damp = 8.0
+	# A THROWN BODY IS SOMETHING PEOPLE WATCH LAND. There is no other way for a
+	# RigidBody to notice that it arrived, and there are never many corpses.
+	contact_monitor = true
+	max_contacts_reported = 1
 
 
 func _ready() -> void:
@@ -39,7 +47,17 @@ func _ready() -> void:
 	add_child(body)
 	add_child(Util.sphere(0.16, Color(0.7, 0.62, 0.55), Vector3(0.65, 0, 0)))
 
+	body_entered.connect(_on_hit)
 	get_tree().create_timer(DECAY_SECONDS).timeout.connect(_decay)
+
+
+## Touchdown. Whoever's ground this is has just had one of the dead land on it.
+func _on_hit(_what: Node) -> void:
+	if _shown:
+		return
+	_shown = true
+	VillageWonder.landed(get_tree(), "corpse", global_position,
+		linear_velocity.length())
 
 
 func _decay() -> void:

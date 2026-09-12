@@ -15,6 +15,9 @@ const BELIEF_DECAY_PER_SEC := 0.02
 const WORSHIP_PRAYER_PER_SEC := 1.5
 const WORSHIP_BELIEF_PER_SEC := 0.05
 const MIN_INFLUENCE := 14.0
+## How far from an atrocity a child or an expecting mother bolts. Wider than the
+## mauling's reach: the creature is enormous and everyone can see it.
+const ATROCITY_REACH := 42.0
 const MAX_INFLUENCE := 65.0
 ## HOW MANY SOULS A TOWN IS FOUNDED WITH. Twelve was a hamlet you could watch
 ## all of at once; fifty is a place, with enough hands that the town has to be
@@ -201,6 +204,12 @@ var hive := VillageHive.new()
 ## WHAT THE TOWN CAN SEE. The same bargain as the crowd mind, for the country
 ## round the village rather than for its mood — see VillageWatch.
 var watch := VillageWatch.new()
+## THE GRUDGE, and who is on the ground right now. A town's opinion of a species
+## is written by burying people, and it outlives the fight — see VillageFeud.
+var feud := VillageFeud.new()
+## BELIEF FROM EVERYTHING THAT IS NOT A MIRACLE — things thrown into town, a
+## granary filled from the air, the creature carrying on. See VillageWonder.
+var wonder := VillageWonder.new()
 ## THE EXPEDITION. One job, and who turns up for it decides whether the town
 ## comes home with meat or with livestock — see VillageParty.
 var party := VillageParty.new()
@@ -710,6 +719,11 @@ func _process(delta: float) -> void:
 			change_belief(worshippers * WORSHIP_BELIEF_PER_SEC * delta)
 	change_belief(-BELIEF_DECAY_PER_SEC * delta)
 
+	# The maulings under way, and the town's memory of wonders. Both are small
+	# and both must run at real pace whatever the simulation stride is doing to
+	# this town — a pack is not slower because nobody is looking.
+	feud.tick(delta)
+	wonder.tick(delta)
 	if alarm > 0.0:
 		alarm -= delta
 	if grudge > 0.0:
@@ -876,6 +890,21 @@ func _retally() -> void:
 			_jobs[job] = _jobs.get(job, 0) + 1
 		morals += v.morality
 	_morality = morals / float(maxi(_roster.size(), 1))
+	_watch_for_the_sworn()
+
+
+## A TOWN WITH AN OATH KEEPS ITS OWN WATCH. Everything else about the militia
+## waits to be roused by somebody getting hurt, which is the right default and
+## exactly the wrong one for a species this village has already buried people
+## to: they do not wait for the next scream, they go out the moment one is seen
+## on their ground. This is the "on sight" half of the oath — `fight_target`
+## already answers with the sworn ones, this is what makes anybody ask.
+func _watch_for_the_sworn() -> void:
+	if is_roused() or feud.sworn_at.is_empty():
+		return
+	var seen := fight_target(global_position)
+	if seen != null and feud.is_sworn(seen.species):
+		raise_alarm(seen.global_position)
 
 
 func population() -> int:
@@ -1339,6 +1368,9 @@ func hover_text() -> String:
 	var extra := ""
 	if is_roused():
 		extra = "\nROUSED — %d under arms" % armed_count()
+	var sworn := feud.report()
+	if sworn != "":
+		extra += "\n" + sworn
 	return "%s — %s\n%s (pop %d)\nThe town is %s%s" % [
 		village_name, faith, mood, population(), hive.report(), extra]
 
@@ -1357,6 +1389,14 @@ func raise_alarm(where: Vector3, from_creature := false) -> void:
 	hive.witness("outrage" if from_creature else "horror", where, 1.0)
 	if from_creature:
 		grudge = minf(grudge + 18.0, 100.0)
+		# THE ONES WHO CANNOT FIGHT DO NOT STAY TO WATCH. A creature getting
+		# down to atrocities in the middle of a town scatters the children and
+		# the expecting mothers first, and loudly — which is the same response
+		# a mauling gets, because it is the same event to a six-year-old.
+		for v in my_villagers():
+			if (not v.is_adult() or v.pregnant) \
+					and v.global_position.distance_to(where) < ATROCITY_REACH:
+				Militia.flee_screaming(v, where)
 	if was_calm and is_player_home:
 		if from_creature and grudge >= GRUDGE_HOSTILE:
 			GameState.announce("%s has had enough of your creature. They are taking up arms!"
@@ -1412,12 +1452,16 @@ func fight_target(from: Vector3) -> Animal:
 			best = beast
 	if best != null:
 		return best
-	# No blood debt outstanding: drive off whatever prowls our ground.
+	# No blood debt outstanding: drive off whatever prowls our ground — and hunt
+	# anything the town has SWORN on, predator or not, the moment it is seen
+	# inside the bounds. That oath is why a wolf pack that once ate three people
+	# never gets to walk through this village again.
 	for n in get_tree().get_nodes_in_group("animals"):
 		var beast := n as Animal
 		if not is_instance_valid(beast) or beast.tamed_by != null:
 			continue
-		if not beast.spec.get("predator", false):
+		var hated := feud.is_sworn(beast.species)
+		if not hated and not beast.spec.get("predator", false):
 			continue
 		var here := beast.global_position.distance_to(global_position)
 		if here > influence_radius:
@@ -1522,6 +1566,9 @@ func to_dict() -> Dictionary:
 		"converted": converted, "belief": belief, "diet": int(diet),
 		"resolve": resolve, "grudge": grudge, "attention": attention,
 		"hive": hive.to_dict(),
+		# The oaths, but never the maulings: a pin is thirty seconds long and
+		# has two live animals in it, and neither survives a save.
+		"feud": feud.to_dict(),
 		"store": {
 			"plant": store.plant_food, "meat": store.meat_food,
 			"lumber": store.lumber, "stone": store.stone,
@@ -1646,6 +1693,7 @@ func _rebuild(data: Dictionary) -> void:
 func from_dict(data: Dictionary) -> void:
 	village_name = String(data.get("name", village_name))
 	hive.from_dict(data.get("hive", {}))
+	feud.from_dict(data.get("feud", {}))
 	converted = bool(data.get("converted", converted))
 	belief = float(data.get("belief", belief))
 	diet = data.get("diet", diet) as Diet

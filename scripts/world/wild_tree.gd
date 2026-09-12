@@ -394,11 +394,19 @@ func set_flight_spin(angular: Vector3) -> void:
 ## into lumber, most of it lost — a wasteful god) or a fresh planting.
 func _land(impact_speed: float) -> void:
 	rotation = Vector3(0.0, _plant_yaw, 0.0)  # upright again, at its own facing
+	# WHOEVER'S GROUND THIS IS JUST WATCHED A TREE FALL OUT OF THE SKY. A pine
+	# coming down in the square is not a miracle and it is a very long way from
+	# nothing — and one coming down ON FIRE is the other kind of belief.
+	VillageWonder.landed(get_tree(), "tree", global_position, impact_speed, burning)
 	for s in get_tree().get_nodes_in_group("stores"):
 		var store := s as FoodStore
 		if is_instance_valid(store) \
 				and store.global_position.distance_to(global_position) < FoodStore.PLATFORM_RADIUS + 1.5:
 			store.add_lumber(maxi(int(lumber), 1))
+			var town := store.get_parent() as Village
+			if town != null and is_instance_valid(town):
+				town.wonder.given(town, "lumber", maxi(int(lumber), 1),
+					impact_speed, has_meta("hurled_by_creature"))
 			queue_free()
 			return
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen

@@ -1131,18 +1131,71 @@ func _run_smoke_test() -> void:
 		wolf.global_position = victim2.global_position + Vector3(2, 0, 0)
 		victim2.hurt_by(wolf, 20.0)
 		await get_tree().create_timer(0.2).timeout
-		var foe: Node3D = victim2._find_foe()
-		victim2._take_up_arms()
+		var foe: Node3D = Militia.find_foe(victim2)
+		Militia.take_up_arms(victim2)
 		print("SMOKE TEST: militia — roused=%s grudge=%.0f foe=%s armed=%s allies=%d dares=%s" % [
 			village.is_roused(), village.grudge, foe != null, victim2.weapon,
-			victim2._allies_near(), victim2._dares_fight()])
+			Militia.allies_near(victim2), Militia.dares_fight(victim2)])
 		var before := wolf.health
-		victim2._strike(wolf)
+		Militia.strike(victim2, wolf)
 		print("SMOKE TEST: militia strike — wolf %.0f -> %.0f hp (weapon %s)" % [
 			before, wolf.health if is_instance_valid(wolf) else 0.0, victim2.weapon])
 		if is_instance_valid(wolf):
 			village.mark_for_death(wolf)
 			print("SMOKE TEST: vendetta size=%d" % village.vendetta.size())
+
+	# THE MAULING. A pack must have to STAND THERE for half a minute, the town
+	# must be outraged while they do, and somebody pulled out in time must get
+	# up worse than they went down but alive.
+	if townsfolk.size() >= 2:
+		var eaten := townsfolk[1]
+		var jaws := Animal.create("wolf")
+		add_child(jaws)
+		jaws.global_position = eaten.global_position + Vector3(1.2, 0, 0)
+		Mauling.seize(eaten, jaws)
+		var pinned := eaten.pin != null
+		var gripped := jaws.state == Animal.State.MAUL
+		var outraged := village.feud.outraged(eaten.global_position)
+		village.feud.tick(12.0)          # twelve seconds under the jaws
+		var part_way := eaten.pin.gone() if eaten.pin != null else -1.0
+		var would_rise := eaten.pin.rise_health() if eaten.pin != null else -1.0
+		print("SMOKE TEST: mauling — pinned=%s held=%s outraged=%s after 12s %d%% done, rises at %.0f%%" % [
+			pinned, gripped, outraged, int(part_way * 100.0), would_rise])
+		# A poke does nothing; a wound takes it off the body.
+		jaws.scare(eaten.global_position)
+		var still_on := jaws.state == Animal.State.MAUL
+		jaws.take_damage(jaws.health * 0.5)
+		print("SMOKE TEST: mauling — shouting at it kept it on=%s, wounding it freed them=%s at %.0f hp" % [
+			still_on, eaten.pin == null, eaten.health])
+		# Three burials and the town swears on the species for a lifetime.
+		for i in 3:
+			village.feud.blooded("wolf")
+		print("SMOKE TEST: feud — sworn on wolves=%s, blows land at x%.2f" % [
+			village.feud.is_sworn("wolf"), village.feud.wrath("wolf")])
+		if is_instance_valid(jaws):
+			jaws.queue_free()
+
+	# BELIEF WITHOUT A MIRACLE. A full granary is not impressed by one more
+	# sack; an empty one is. And the same trick twice is worth less the second
+	# time, which is what stops any of this being a printing press.
+	var belief_was := village.belief
+	village.store.plant_food = 400
+	village.wonder.given(village, "grain", 10, 0.0, false)
+	var fat := village.belief - belief_was
+	belief_was = village.belief
+	village.store.plant_food = 0
+	village.store.meat_food = 0
+	village.wonder.given(village, "grain", 10, 0.0, false)
+	var lean := village.belief - belief_was
+	belief_was = village.belief
+	village.wonder.given(village, "grain", 10, 0.0, false)
+	var twice := village.belief - belief_was
+	print("SMOKE TEST: wonder — same gift: full barn %.2f, empty barn %.2f, repeated %.2f" % [
+		fat, lean, twice])
+	belief_was = village.belief
+	VillageWonder.landed(get_tree(), "ox", village.global_position, 26.0, true)
+	print("SMOKE TEST: wonder — a burning ox lands in the square: belief +%.2f, town is %s" % [
+		village.belief - belief_was, village.hive.report()])
 
 	# PERSISTENCE: a mind written down and read back must be the same mind, and
 	# it must land in the ACTIVE PROFILE rather than in one global slot. The test

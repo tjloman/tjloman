@@ -60,6 +60,14 @@ static func dance(who: Creature, delta: float) -> void:
 		who._body.scale.y = 1.0
 		who.body.exert(0.8, 0.4)
 		who.boredom = maxf(who.boredom - 30.0, 0.0)
+		# A FINISHED DANCE IS ONE EVENT, not only the drip while it went on. A
+		# village that watched the god's beast dance the whole thing through
+		# has SEEN something, and the ledger makes sure the fourth one in five
+		# minutes is merely a creature capering. See VillageWonder.
+		if who._audience(18.0) > 0:
+			VillageWonder.spectacle(who.get_tree(), "dance", "wonder",
+				who.global_position, 2.8,
+				"Your creature dances for them, and they will not look away.")
 		who._last_deed = "dance"
 		# The bigger the crowd, the better it felt. Nobody watching is a
 		# lesson too — it may well decide dancing is not worth the effort.
@@ -89,6 +97,10 @@ static func pray(who: Creature, delta: float) -> void:
 			village.change_belief(0.22 * delta * faithful)
 	if who._action_time <= 0.0:
 		who.mood = minf(who.mood + 6.0, 100.0)
+		if faithful > 0:
+			VillageWonder.spectacle(who.get_tree(), "pray", "wonder",
+				who.global_position, 1.8 + float(mini(faithful, 6)) * 0.5,
+				"Your creature kneels and prays with them.")
 		who._last_deed = "pray"
 		who._finish_choice(0.5 + faithful * 0.4)
 

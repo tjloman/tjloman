@@ -107,19 +107,39 @@ func _process(delta: float) -> void:
 		if rb.has_meta("no_deposit_until") \
 				and Time.get_ticks_msec() < int(rb.get_meta("no_deposit_until")):
 			continue  # freshly withdrawn: give the hand time to carry it off
+		# HOW FAST IT ARRIVED, read before the body is freed. This is the whole
+		# difference between a gift carried in and a shot from the halfway line
+		# — see VillageWonder.given.
+		var flew := rb.linear_velocity.length()
+		var by_beast := rb.has_meta("hurled_by_creature")
 		if rb is FoodItem:
 			var f := rb as FoodItem
-			add(f.food_type, maxi(f.count, 1))  # a bundle banks all its units
+			var many := maxi(f.count, 1)
+			var word := "grain" if f.food_type == FoodItem.FoodType.PLANT else "meat"
+			add(f.food_type, many)  # a bundle banks all its units
 			rb.queue_free()
 			_thank_the_giver()
+			_marvel(word, many, flew, by_beast)
 		elif rb is ResourceItem:
 			var r := rb as ResourceItem
+			var many := maxi(r.count, 1)
 			if r.kind == "lumber":
-				add_lumber(maxi(r.count, 1))
+				add_lumber(many)
 			else:
-				add_stone(maxi(r.count, 1))
+				add_stone(many)
 			rb.queue_free()
 			_thank_the_giver()
+			_marvel(r.kind, many, flew, by_beast)
+
+
+## THE TOWN TAKES NOTE. A storehouse is a child of its village, so it does not
+## have to go looking for one — and a store standing on nobody's ground (they do
+## exist, briefly, while a village is being raised) simply says nothing.
+func _marvel(what: String, many: int, flew: float, by_beast: bool) -> void:
+	var town := get_parent() as Village
+	if town == null or not is_instance_valid(town):
+		return
+	town.wonder.given(town, what, many, flew, by_beast)
 
 
 ## A gift to the storehouse gladdens whoever's nearby — the villagers

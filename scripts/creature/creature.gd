@@ -45,6 +45,19 @@ const OBSERVE_PERIOD := 2.5
 ## the difference between a beast that can shift a spruce and one that can throw
 ## a spruce. Strength is grown by hauling; this is grown only by throwing.
 const THROW_MASTERY := 2.0
+
+## THE LOB INTO THE GRANARY. `LOB_GRAVITY` is the engine's own pull on a loose
+## body, not the creature's GRAVITY — the things it lobs are RigidBodies and
+## fall at the world's rate, and getting this wrong is the difference between a
+## shot that lands and one that always falls short. The rest is how willing it
+## is to try (a quarter of the time cold, nearly always once practised), how far
+## it will try from, and how badly it misses before it has learned.
+const LOB_GRAVITY := 9.8
+const LOB_REACH := 60.0
+const LOB_TRY := 0.25
+const LOB_LEARNED := 0.7
+const LOB_OVER := 1.06     # aim a touch long: the platform stands above ground
+const LOB_WOBBLE := 0.22
 ## How sharply a deed's moral weight colours how it FELT to do. This is what
 ## makes cruelty sour for a kind creature and sweet for a wicked one.
 const REMORSE := 2.0
@@ -1198,6 +1211,12 @@ func _process_carrying(delta: float) -> void:
 				for v in get_tree().get_nodes_in_group("villagers"):
 					if v.global_position.distance_to(global_position) < 8.0:
 						v.cheer(2.0)
+				# CARRIED IN AND SET DOWN. Worth far less than the shot from the
+				# halfway line, and worth a great deal to a town with nothing —
+				# which is the whole of VillageWonder's arithmetic.
+				var fed := store.get_parent() as Village
+				if fed != null and is_instance_valid(fed):
+					fed.wonder.given(fed, "stores", 1, 0.0, false)
 				_finish_deed("gather", 6.0)
 		"eat":
 			_apply_gravity_only(delta)
@@ -1373,6 +1392,15 @@ func _hurl_carried() -> void:
 		return
 	var dir := Vector3(randf_range(-1, 1), 0.6, randf_range(-1, 1)).normalized()
 	var v := dir * randf_range(14.0, 22.0)
+	# THE SHOT. A creature that has landed one in a granary and been cheered for
+	# it starts AIMING — not every time, and not well at first, but the knack
+	# climbs every time it comes off. This is the one deed in the game that
+	# turns vandalism into provision by nothing but practice, and it is worth
+	# more belief than any amount of walking sacks in by hand (VillageWonder).
+	var lob := _aim_at_larder()
+	if lob != Vector3.ZERO:
+		v = lob
+		_carried.set_meta("hurled_by_creature", true)
 	if _carried.has_method("take_damage"):
 		_carried.call("take_damage", 25.0)  # one arg: works for animal and villager
 	if _carried is RigidBody3D:
@@ -1381,6 +1409,37 @@ func _hurl_carried() -> void:
 	elif is_instance_valid(_carried) and _carried.has_method("drop"):
 		_carried.call("drop", v, false)
 	_carried = null
+
+
+## THE ARC INTO THE STOREHOUSE, or nothing if it is not going to try.
+##
+## Only for the things a granary actually takes — throwing a villager at the
+## barn is not provision — and only from a beast that has either got lucky once
+## or seen it work. A forty-five degree lob carries v^2/g, so the speed for a
+## given distance falls straight out of it; the wobble is what it has not
+## learned yet, and it shrinks as the knack grows.
+func _aim_at_larder() -> Vector3:
+	if not (_carried is FoodItem or _carried is ResourceItem or _carried is WildTree):
+		return Vector3.ZERO
+	var store := CreatureEyes.nearest_store(get_tree(), global_position)
+	if store == null:
+		return Vector3.ZERO
+	var to := store.global_position - global_position
+	var flat := Vector3(to.x, 0.0, to.z)
+	var d := flat.length()
+	if d < 6.0 or d > LOB_REACH:
+		return Vector3.ZERO
+	var knack := mind.knack("larder")
+	if randf() > LOB_TRY + knack * LOB_LEARNED:
+		return Vector3.ZERO
+	var speed := sqrt(maxf(d, 1.0) * LOB_GRAVITY) * LOB_OVER
+	var aim := (flat.normalized() + Vector3.UP).normalized()
+	# What it has not learned yet, as a cone that closes with practice.
+	var wobble := (1.0 - knack) * LOB_WOBBLE
+	aim += Vector3(randf_range(-wobble, wobble), randf_range(-wobble, wobble) * 0.4,
+		randf_range(-wobble, wobble))
+	mind.practise("throw", true)
+	return aim.normalized() * speed
 
 
 ## Stomp the house: heavy damage, a boom, terror for anyone watching.
@@ -1420,6 +1479,11 @@ func _process_smash(delta: float) -> void:
 	_smash_target = null
 	SoundBank.play_at("boom", global_position, -2.0)
 	feel("fury", 0.5)
+	# THEY WATCHED THAT. A god whose beast kicks a house flat in front of the
+	# whole village is not a god nobody believes in — see VillageWonder. The
+	# outrage this also earns is raised separately, by whatever it hit.
+	VillageWonder.spectacle(get_tree(), "tantrum", "horror", global_position, 2.4,
+		"Your creature is smashing things in the village. They watch, and they believe.")
 	# A release, yes — but not inherently more satisfying than honest work, or
 	# every creature drifts into vandalism whatever its nature.
 	var thrill := 0.15 + boredom / 260.0

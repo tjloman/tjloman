@@ -78,10 +78,14 @@ static func forge(store: FoodStore) -> String:
 ## Resolve one blow from `attacker` (a villager) against `foe`. Returns true if
 ## the blow KILLED the foe, so the caller can settle up. Combat resolution lives
 ## here with the arms themselves rather than bloating the villager.
-static func strike(attacker: Node3D, foe: Node3D, kind: String) -> bool:
+## `fury` is what the village's history with this thing is worth — 1.0 for an
+## ordinary beast, more for one whose species the town has buried people to.
+## Not a sharper spear: people who have done this before do not hesitate, and
+## they know where to stand. See VillageFeud.wrath.
+static func strike(attacker: Node3D, foe: Node3D, kind: String, fury := 1.0) -> bool:
 	if foe == null or not is_instance_valid(foe):
 		return false
-	var dmg := damage(kind)
+	var dmg := damage(kind) * fury
 	SoundBank.play_at("hammer" if kind != "bow" else "pick", attacker.global_position, -6.0)
 	if foe is Animal:
 		var beast := foe as Animal

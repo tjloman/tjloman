@@ -6,9 +6,17 @@ extends CharacterBody3D
 ##
 ## Add a species by adding a SPECIES row. That's the whole job.
 
-enum State { IDLE, WANDER, FLEE, CHASE, HELD, FALLING, GO_DRINK, DRINKING, GO_FORAGE, GRAZE }
+enum State {
+	IDLE, WANDER, FLEE, CHASE, MAUL, HELD, FALLING, GO_DRINK, DRINKING, GO_FORAGE, GRAZE,
+}
 
 const GRAVITY := 20.0
+
+## How much of itself a beast will spend on a kill before it bolts. Above this
+## it keeps its grip through anything; below, it is off the body and running.
+## This single number is what a spear is WORTH: one thrust takes a wolf under
+## it, four bare-handed blows do the same, and either way somebody gets up.
+const MAUL_NERVE := 0.55
 
 ## What the butcher calls it. Anything not listed is just "<species> meat".
 const MEAT_NAMES := {
@@ -103,6 +111,9 @@ var thirst := randf_range(0.0, 40.0)
 var age_seconds := 0.0
 var lifespan_seconds := randf_range(12.0, 28.0) * GameState.DAY_SECONDS
 
+## WHO THIS ONE HAS ON THE GROUND. Non-null only while it is holding a villager
+## down, which is now the only way a predator ever kills a person — see Mauling.
+var pinning: Villager = null
 var state := State.IDLE
 var _target := Vector3.ZERO
 var _prey: Node3D = null
@@ -257,6 +268,11 @@ func _physics_process(delta: float) -> void:
 					velocity = Vector3.ZERO
 					_maybe_pen_tame()
 					return
+				# THE TOWN SAW AN OX COME DOWN IN THE SQUARE. Judged before the
+				# fall damage, so a beast that bursts on landing still counts
+				# as the thing everybody watched arrive — see VillageWonder.
+				VillageWonder.landed(get_tree(), species, global_position,
+					_fall_speed, burning)
 				if _fall_speed > 16.0:
 					take_damage((_fall_speed - 16.0) * 4.0)
 				if state == State.FALLING:
@@ -285,6 +301,21 @@ func _physics_process(delta: float) -> void:
 				state = State.IDLE
 			elif _move_toward(_prey.global_position, spec["speed"] * 1.3, delta):
 				_strike_prey()
+		State.MAUL:
+			# STANDING ON SOMEBODY. It does not move, it does not re-target, and
+			# it does not look around: for the next half minute this animal is a
+			# stationary thing in the middle of a village, which is exactly what
+			# gives the village its shot. The clock is the Mauling's.
+			_apply_gravity_only(delta)
+			if pinning == null or not is_instance_valid(pinning) or pinning.pin == null:
+				release_hold()
+			else:
+				var over := pinning.global_position - global_position
+				over.y = 0.0
+				if over.length() > 1.2:
+					_move_toward(pinning.global_position, spec["speed"], delta, 1.0)
+				elif over.length() > 0.05:
+					rotation.y = atan2(over.x, over.z)
 		State.GO_DRINK:
 			if _water_target == Vector3.INF:
 				state = State.IDLE
@@ -335,7 +366,10 @@ func _physics_process(delta: float) -> void:
 ## Slow thinking: needs first (drink, eat), then predator targeting,
 ## guard-dog work, breeding, night despawn.
 func _think() -> void:
-	if state in [State.HELD, State.FALLING, State.FLEE,
+	# MAUL is on this list for the same reason HELD is: the animal is not
+	# choosing anything right now. Nothing it thirsts for, hungers for or is
+	# frightened of takes it off a body — only the Mauling ending does.
+	if state in [State.HELD, State.FALLING, State.FLEE, State.MAUL,
 			State.DRINKING, State.GO_DRINK, State.GO_FORAGE, State.GRAZE]:
 		return
 	if night_spawned and not GameState.is_night():
@@ -435,13 +469,19 @@ func _strike_prey() -> void:
 			_prey = null
 			state = State.IDLE
 	elif _prey is Villager:
-		# Blood on the ground: the victim remembers WHO, and the village rouses.
-		(_prey as Villager).hurt_by(self, 20.0)
-		if is_instance_valid(_prey):
-			(_prey as Villager).scare(global_position)
-		hunger = maxf(hunger - 45.0, 0.0)
+		# IT DOES NOT BITE AND WALK AWAY. A wolf used to take twenty health out
+		# of somebody and go looking for the next one, so five wolves killed
+		# five people in the time it takes to cross a field and no village could
+		# answer that. It pulls them DOWN and holds them, which takes half a
+		# minute of standing perfectly still in somebody else's village. See
+		# Mauling — the whole balance of predators now lives there.
+		var quarry := _prey as Villager
 		_prey = null
-		state = State.IDLE
+		quarry.hurt_by(self, 8.0)   # the wound that takes them off their feet
+		if is_instance_valid(quarry) and not quarry.is_dying():
+			Mauling.seize(quarry, self)
+		if pinning == null:
+			state = State.IDLE
 	elif _prey.has_method("take_damage"):
 		_prey.call("take_damage", 20.0, false)
 		_prey.call("scare", global_position)
@@ -680,8 +720,13 @@ func take_damage(amount: float) -> void:
 	health -= amount
 	if health <= 0.0:
 		die()
-	else:
-		scare(global_position + Vector3(randf() - 0.5, 0, randf() - 0.5))
+		return
+	if state == State.MAUL:
+		if health / maxf(_full_health, 1.0) > MAUL_NERVE:
+			return   # it has its teeth in something and it is not letting go
+		# DRIVEN OFF THE BODY — which is the whole of what the militia is for.
+		Mauling.free_of(self)
+	scare(global_position + Vector3(randf() - 0.5, 0, randf() - 0.5))
 
 
 ## Death drops physical meat; hunters bypass this and take it to the granary.
@@ -702,7 +747,12 @@ func die(drop_meat := true) -> void:
 
 
 func scare(from_pos: Vector3) -> void:
-	if state in [State.HELD, State.CHASE]:
+	# A BEAST ON A KILL IS NOT SHOOED OFF IT. MAUL is on this list with CHASE
+	# and for a stronger reason: if a shout were enough, one bare-handed child
+	# could poke a whole pack off a body, and the thirty seconds would never
+	# cost the village anything to win. It lets go when it is HURT enough —
+	# see take_damage — or when it is dead.
+	if state in [State.HELD, State.CHASE, State.MAUL]:
 		return
 	state = State.FLEE
 	_flee_from = from_pos
@@ -782,6 +832,22 @@ func meat_yield() -> int:
 	return spec["meat"]
 
 
+## THE JAWS. Called by the Mauling, both ways — it owns the pin, this only
+## reflects it, so that a beast demoted back into its herd mid-kill (or freed
+## with the chunk it stood in) cannot leave a villager pinned by a ghost.
+func hold_down(who: Villager) -> void:
+	pinning = who
+	_prey = null
+	state = State.MAUL
+
+
+func release_hold() -> void:
+	pinning = null
+	if state == State.MAUL:
+		state = State.IDLE
+		_action_time = randf_range(0.5, 1.5)
+
+
 ## Divine hand interface ------------------------------------------------------
 
 func pick_up() -> void:
@@ -797,6 +863,7 @@ func pick_up() -> void:
 		var from = get_meta("herd")
 		if from is Herd and is_instance_valid(from):
 			(from as Herd).release(self)
+	Mauling.free_of(self)   # whatever it had hold of, it does not any more
 	state = State.HELD
 	_rider = null
 	velocity = Vector3.ZERO
@@ -832,6 +899,7 @@ func _anim_state() -> String:
 		State.FALLING: return "fall"
 		State.HELD: return "idle"
 		State.FLEE, State.CHASE: return "run"
+		State.MAUL: return "graze"   # head down over a body; the nearest clip there is
 		State.DRINKING: return "drink"
 		State.GRAZE: return "graze"
 	return "walk" if Vector2(velocity.x, velocity.z).length() > 0.3 else "idle"
