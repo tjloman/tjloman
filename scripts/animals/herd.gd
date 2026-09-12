@@ -211,6 +211,65 @@ const HUNTS_BELOW := 9.0
 ## fifth of the animal's speed; running is most of it, which is what makes the
 ## distance a herd opens up actually depend on what it is.
 const BOLT_PACE := 0.8
+## And how fast a band that has decided to go somewhere moves. Grazing pace is
+## a fifth of the animal, which at two hundred metres is a nine-minute walk that
+## nobody would ever see finish. A herd travelling to rejoin its own kind is not
+## grazing: it is going somewhere, and it looks like it.
+const TREK_PACE := 0.45
+
+## JOINING, AND CALVING OFF. A herd is not a fixed thing with a head count that
+## only goes up and down — it is a BAND, and bands run together and break apart.
+##
+## Two motions, opposite and answering each other. A herd cut down to a remnant
+## goes looking for its own kind and walks into them, because that is what a
+## frightened few actually do. A herd that has filled the ground it stands on
+## sheds a small band off itself, which walks away and settles somewhere else —
+## and that is how a meadow the creature has planted thick with bushes stops
+## being one enormous mass and becomes a country with herds in it.
+##
+## SMALLNESS ALONE IS NOT LONELINESS. That was the first thing this got wrong:
+## a band shed for being crowded is small by definition, so it turned straight
+## round and walked back into the herd that shed it, forever. What sends a herd
+## looking is being a REMNANT — fewer than it was, few for its kind, and either
+## still afraid or on ground that will not feed even the few that are left. A
+## young band is small and calm and has room, so it stays where it was put; and
+## an anteater, whose kind travels in ones and twos, is never few for its kind
+## at all and never goes looking for anybody.
+const LONELY_SHARE := 0.35
+const JOIN_FEAR := 0.25
+const SEEK_WITHIN := 200.0
+const SEEK_STEP := 8.0
+const JOIN_WITHIN := 4.0
+## Never onto ground that cannot feed the pair. A quarter over the ceiling is
+## allowed — they crowd, and the season thins them — but a remnant walking into
+## an already-full herd only to starve there is not a rescue.
+const JOIN_ROOM := 1.25
+
+## WHEN A HERD FEELS CROWDED, and how much of itself goes when it does.
+##
+## "Too huge" HAS TO MEAN TOO HUGE FOR ITS KIND. A flat head count was tried
+## first and it was wrong in a way worth writing down: at forty head, sixteen of
+## the twenty species in the table could never split however well they were
+## tended, because a mob of bison tops out at sixteen and a band of elk at six.
+## Twice what a band of this kind usually comes to is the same question asked
+## properly, and it lets a thick, well-fed deer wood throw off deer.
+##
+## The share that leaves is deliberately small — a band, not a halving — and
+## both it and what stays behind must still be a band rather than a stray, which
+## is the floor that keeps the near-solitary species out of this entirely.
+const CALVE_AT := 0.9
+const CALVE_TIMES := 2.0
+const CALVE_LEAST := 6
+const CALVE_SHARE := 0.25
+const CALVE_PARTY := 3
+const CALVE_WALK := 90.0
+## How many bands of one kind the country round here will hold. Counted during
+## the look-about, which was walking the herd list anyway, so it costs nothing.
+## This is what bounds the whole business: bands fill the neighbourhood and then
+## no more are shed, rather than a rich meadow budding herds without end.
+const KIN_MOST := 3
+## And how long a herd is left alone after joining or shedding, in seconds.
+const SETTLE := 240.0
 
 ## How far a herd drifts from where it was seeded, and how long it grazes one
 ## patch before moving on.
@@ -262,6 +321,16 @@ var _fed := 0.0
 var _larder := 0.0
 var _season_left := 0.0
 var _watch_left := 0.0
+## WHAT THE LAST LOOK ROUND FOUND OF THEIR OWN KIND, kept so the season's
+## reckoning can ask about the neighbourhood without walking the herd list a
+## second time. `_joining` is a DECISION, not an observation: once a herd has
+## settled on somebody to walk to it does not change its mind, which is what
+## makes joining something that actually finishes.
+var _kin: Herd = null
+var _kin_gap := INF
+var _kin_near := 0
+var _joining: Herd = null
+var _settle_left := 0.0
 
 
 ## Roll the head count for a species. Public so the seeding code and the smoke
@@ -272,6 +341,16 @@ static func roll_for(species_name: String, rng: RandomNumberGenerator) -> int:
 	for i in int(dice[0]):
 		total += rng.randi_range(1, int(dice[1]))
 	return maxi(total, 1)
+
+
+## WHAT A BAND OF THIS KIND USUALLY COMES TO, read off the same dice the world
+## rolls rather than kept as a second table — so an argument about how many
+## wolves travel together only ever has to be had in one place. This is what
+## "small for its kind" is measured against, and it is why an anteater, whose
+## kind comes one or two at a time, is never small for its kind at all.
+static func typical_for(species_name: String) -> float:
+	var dice: Array = SOCIAL.get(species_name, [1, 1, 0])
+	return float(dice[0]) * (float(dice[1]) + 1.0) * 0.5 + float(dice[2])
 
 
 static func create(species_name: String, count: int, home: WorldGen) -> Herd:
@@ -388,25 +467,140 @@ func _look_about() -> void:
 	var hunter: bool = Animal.SPECIES[species].get("predator", false)
 	var closest: Herd = null
 	var gap := INF
+	var kin: Herd = null
+	var kin_gap := INF
+	var near := 0
 	for h in get_tree().get_nodes_in_group("herds"):
 		var other := h as Herd
 		if other == self or not is_instance_valid(other) or other.alive() <= 0:
+			continue
+		var d := other.global_position.distance_to(global_position) - other.spread()
+		# THEIR OWN KIND, noted whether this herd wants company or not. The count
+		# is what tells a crowded herd whether there is room in the country round
+		# here for another band of them, and both answers come out of the walk
+		# over the herd list that was happening anyway.
+		if other.species == species:
+			if other.keeper == null:
+				if d < SEEK_WITHIN:
+					near += 1
+				if d < kin_gap:
+					kin_gap = d
+					kin = other
 			continue
 		var theirs: bool = Animal.SPECIES[other.species].get("predator", false)
 		if hunter == theirs:
 			continue          # packs ignore packs; grazers ignore grazers
 		if hunter and not _worth_hunting(other):
 			continue
-		var d := other.global_position.distance_to(global_position) - other.spread()
 		if d < gap:
 			gap = d
 			closest = other
+	_kin = kin
+	_kin_gap = kin_gap
+	_kin_near = near
+	_go_join()
 	if closest == null:
 		return
 	if hunter:
 		_stalk(closest, gap)
 	else:
 		_take_fright(closest, gap)
+
+
+## WALKING TO THE OTHERS. A herd that has decided to join does not change its
+## mind: its pasture keeps moving toward them until it gets there, or until
+## there is nobody left to get to. It is the same motion a pack uses to close on
+## prey and for the same reason — the herd's HOME moves, not merely the beasts,
+## or they would turn round and wander back the moment they stopped walking.
+func _go_join() -> void:
+	if _joining == null:
+		return
+	if not is_instance_valid(_joining) or _joining.is_queued_for_deletion() \
+			or _joining.alive() <= 0 or _joining.keeper != null:
+		_joining = null
+		return
+	var gap := _joining.global_position.distance_to(global_position) \
+			- _joining.spread() - spread()
+	if gap < JOIN_WITHIN:
+		_join_into(_joining)
+		return
+	if gap > SEEK_WITHIN * 1.5:
+		_joining = null           # they have gone too far to be worth following
+		return
+	# The same motion a creature uses to drive them, which is the right one: the
+	# pasture itself creeps toward the others and STOPS on them rather than
+	# sliding straight past, and the mass walks after it at its own pace.
+	drive_toward(_joining.global_position, SEEK_STEP)
+
+
+## AND ARRIVING. Whichever band is smaller is the one that walks in and stops
+## existing — deterministically, so two herds that decided about each other on
+## the same afternoon cannot each swallow the other.
+func _join_into(host: Herd) -> void:
+	if host.alive() > alive() or (host.alive() == alive()
+			and host.get_instance_id() > get_instance_id()):
+		host.merge_from(self)
+		# LET GO OF THE ROWS RATHER THAN KILLING THEM. merge_from appends the
+		# very same dictionaries to the host, so marking them dead here would
+		# have marked them dead THERE — every beast that had just walked in
+		# would have died on arrival. Dropping the array instead leaves alive()
+		# reading zero for anything still holding this herd, which is what the
+		# rest of the file already checks for.
+		_members = []
+		head = 0
+		if _mm != null:
+			_mm.instance_count = 0
+		queue_free()
+	else:
+		_joining = null           # the other one is the one that should be walking
+
+
+## TAKEN IN. Another band of the same kind walks up and is simply part of this
+## one afterwards.
+##
+## Beasts that are real animals at that moment keep the ground they are standing
+## on — their offset is re-reckoned against this herd's heart and their handle on
+## the way home is repointed, so nothing the player is actually looking at jumps.
+## The rest are numbers, and numbers are dealt fresh places in the joined
+## formation, which is what makes two masses read afterwards as one herd rather
+## than as two clumps that happen to be touching.
+func merge_from(other: Herd) -> void:
+	var shift := other.global_position - global_position
+	for m in other.taken_over():
+		if m["dead"]:
+			continue
+		var agent: Animal = m["agent"]
+		if agent != null and is_instance_valid(agent):
+			agent.set_meta("herd", self)
+			m["offset"] += Vector2(shift.x, shift.z)
+		else:
+			var ang := randf() * TAU
+			var rad := sqrt(randf()) * _spread
+			m["offset"] = Vector2(cos(ang) * rad, sin(ang) * rad)
+			m["ground"] = global_position.y
+		_members.append(m)
+	# THE BETTER GROUND OF THE TWO. Both numbers mean "what this species got out
+	# of country like this", and taking the larger is what stops a rescue from
+	# being punished: two remnants that join should not immediately be over a
+	# ceiling neither of them was over apart.
+	_born_head = maxi(_born_head, other.born_head())
+	head = _members.size()
+	_spread = maxf(SPACING * sqrt(float(alive())), SPREAD_LEAST)
+	_settle_left = SETTLE
+	if _mm != null:
+		_mm.instance_count = _members.size()
+		_write_transforms()
+
+
+## The rows themselves, handed over to the herd this one is walking into. Only
+## ever called by merge_from, on a herd that is about to stop existing.
+func taken_over() -> Array[Dictionary]:
+	return _members
+
+
+## What the land this herd came up on was worth, in head.
+func born_head() -> int:
+	return _born_head
 
 
 ## A pack only bothers with what it actually eats. The prey list is the same one
@@ -477,7 +671,12 @@ func _drift(delta: float) -> void:
 	var spec: Dictionary = Animal.SPECIES[species]
 	# Grazing is a stroll; bolting is most of what the animal can do. A herd that
 	# fled at grazing pace was a herd that could never open any distance at all.
-	var pace: float = spec["speed"] * (BOLT_PACE if mood == "flee" else 0.18)
+	var pace := 0.18
+	if mood == "flee":
+		pace = BOLT_PACE
+	elif _joining != null:
+		pace = TREK_PACE
+	var step: float = spec["speed"] * pace
 	var to := _target - global_position
 	to.y = 0.0
 	if to.length() < 0.5:
@@ -485,7 +684,7 @@ func _drift(delta: float) -> void:
 		set_mood("graze")
 		return
 	set_mood("move")
-	global_position += to.normalized() * minf(pace * delta, to.length())
+	global_position += to.normalized() * minf(step * delta, to.length())
 
 
 ## Ground heights, a slice at a time. `height_at` is noise plus a walk over
@@ -677,6 +876,112 @@ func _reckon() -> void:
 		_grow(whole)
 	elif whole < 0:
 		_cull(-whole)
+	_consider_company()
+
+
+## AND THEN: DOES IT WANT COMPANY, OR ROOM?
+##
+## Both questions are asked once a season and never per frame, and both are
+## answered out of numbers the look-about gathered anyway. A herd that has just
+## done either is left alone for a while afterwards, which is the thing that
+## stops a band being shed and rejoined and shed again for ever.
+func _consider_company() -> void:
+	if keeper != null:
+		return          # a village's stock joins nothing and splits nowhere
+	if _settle_left > 0.0:
+		_settle_left -= SEASON
+		return
+	if _joining != null:
+		return          # already walking to somebody
+	if _wants_company():
+		if _kin != null and is_instance_valid(_kin) and _kin_gap < SEEK_WITHIN \
+				and float(alive() + _kin.alive()) <= _kin.capacity() * JOIN_ROOM:
+			_joining = _kin
+		return
+	if _wants_room() and _kin_near < KIN_MOST:
+		_calve_off()
+
+
+## SMALL FOR ITS KIND, FEWER THAN IT WAS, AND STILL IN TROUBLE.
+##
+## All three, and the three are not decoration. Small alone would send a band
+## that had just been shed for crowding straight back into the herd that shed
+## it. Fewer-than-it-was is what makes this a REMNANT rather than a species that
+## simply travels in small numbers — an anteater is never few for its kind and a
+## bear that was rolled alone was never reduced to it. And the last is the part
+## that makes it mean something: a herd goes looking for the others because it
+## is frightened, or because the ground it is left on will not feed even the few
+## of it that are still standing.
+func _wants_company() -> bool:
+	var n := alive()
+	if n >= _born_head:
+		return false
+	if float(n) >= typical_for(species) * LONELY_SHARE:
+		return false
+	return _fear > JOIN_FEAR or float(n) >= capacity()
+
+
+## FULL. As many as this ground will feed, and enough of them that a band coming
+## off it is still a band.
+func _wants_room() -> bool:
+	var n := float(alive())
+	return n >= float(CALVE_LEAST) and n >= typical_for(species) * CALVE_TIMES \
+			and n >= capacity() * CALVE_AT
+
+
+## SHEDDING A BAND. A quarter of the herd walks off to found another one.
+##
+## The daughter inherits what the land was worth, not the handful that walked:
+## `_born_head` means "what this species gets out of country like this", and the
+## band is going to country like this. Founding it on the eight head that left
+## would put it over its ceiling on the day it was born, and it would starve
+## back down to nothing while the herd it came from went on filling up.
+func _calve_off() -> void:
+	var n := alive()
+	var many := maxi(int(float(n) * CALVE_SHARE), CALVE_PARTY)
+	if n - many < CALVE_PARTY:
+		return
+	var away := _spot_for_band()
+	if is_inf(away.x):
+		return
+	var band := Herd.create(species, many, world)
+	band.position = position + (away - global_position)
+	get_parent().add_child(band)
+	# After the child is in the tree, because _ready reads its own head count as
+	# the land's worth and would otherwise overwrite both of these.
+	band.founded_by(_born_head, SETTLE)
+	# The same machinery starvation uses, and for the same reason: it takes the
+	# rows nobody is promoted into first, so a beast the player is watching
+	# never vanishes out from under them to join a band over the hill.
+	_cull(many)
+	_settle_left = SETTLE
+
+
+## WHERE THE NEW BAND GOES: away from the nearest of their own kind, so the
+## country fills outward rather than stacking bands on one hill. Returns an
+## infinite point when every direction tried was water.
+func _spot_for_band() -> Vector3:
+	var base := randf() * TAU
+	if _kin != null and is_instance_valid(_kin):
+		var off := global_position - _kin.global_position
+		if Vector2(off.x, off.z).length() > 1.0:
+			base = atan2(off.z, off.x)
+	for i in 5:
+		var ang := base + randf_range(-0.6, 0.6) + float(i) * 1.1
+		var spot := global_position + Vector3(cos(ang), 0.0, sin(ang)) * CALVE_WALK
+		if world == null:
+			return spot
+		if world.is_underwater(spot.x, spot.z):
+			continue
+		spot.y = world.height_at(spot.x, spot.z)
+		return spot
+	return Vector3(INF, INF, INF)
+
+
+## HOW A BAND SHED BY ANOTHER HERD IS SET UP, once it is in the tree.
+func founded_by(land_worth: int, settle: float) -> void:
+	_born_head = maxi(land_worth, head)
+	_settle_left = settle
 
 
 ## WHAT THE GROUND WILL FEED, in head. Bushes in reach are the lever the player
@@ -832,6 +1137,8 @@ func take_one() -> bool:
 ## In a word: is it doing well? Read off the same numbers the season uses, so
 ## the label can never disagree with what is about to happen.
 func condition() -> String:
+	if _joining != null and is_instance_valid(_joining):
+		return "looking for the others"
 	if _fear > 0.5:
 		return "hunted"
 	var n := float(alive())
