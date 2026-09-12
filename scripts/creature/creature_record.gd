@@ -39,6 +39,7 @@ static func of(who: Creature) -> Dictionary:
 		"mind": who.mind.to_dict(),
 		"body": who.body.to_dict(),
 		"heart": who.heart.to_dict(),
+		"welfare": who.welfare.to_dict(),
 		"trouble": who.steering.to_dict(),
 	}
 
@@ -75,6 +76,7 @@ static func into(who: Creature, data: Dictionary) -> void:
 	who.mind.from_dict(data.get("mind", {}))
 	who.body.from_dict(data.get("body", {}))
 	who.heart.from_dict(data.get("heart", {}))
+	who.welfare.from_dict(data.get("welfare", {}))
 	who.steering.from_dict(data.get("trouble", {}))
 	# Its size and the colour of its hide follow from the soul just restored.
 	who.refresh_appearance()

@@ -655,6 +655,10 @@ func _update_creature_panel() -> void:
 			int(creature.body.strength),
 			"  BOOSTED" if creature.body.is_boosted() else ""], room),
 		_field("Stature", creature.stature_text(), room),
+		# What you have made of it, in words rather than numbers — the one line
+		# that tells a player what their treatment of the beast has come to.
+		_field("Kept", "%s%s" % [creature.welfare.account(),
+			"  (in pain)" if creature.welfare.pain > 12.0 else ""], room),
 		_field("Learned", learned, room),
 		_field("Believes", believes, room),
 		_field("World", world, room),

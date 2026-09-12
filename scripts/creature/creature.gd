@@ -178,6 +178,9 @@ var heart := CreatureHeart.new()
 var fear := 0.0
 
 var state := State.IDLE
+## HOW IT HAS BEEN TREATED, and what that leaves it able to think with. Read by
+## observation, sleep, learning, empathy, appetite and growth — see the file.
+var welfare := CreatureWelfare.new()
 var _last_deed := ""  # the deed a pet or scolding will be credited to
 var _act_verb := ""    # the verb the mind chose (what the next reward teaches)
 var _act_type := ""    # the kind of thing it chose to act on
@@ -229,6 +232,7 @@ var _sway_tick := 0                # throttles the push-trees-aside sweep
 
 func _ready() -> void:
 	mind.heart = heart
+	mind.welfare = welfare
 	add_to_group("creature")
 	collision_layer = 2
 	collision_mask = 1
@@ -338,10 +342,15 @@ func _physics_process(delta: float) -> void:
 				_finish_deed("tend", 4.0)
 		State.SLEEPING:
 			_apply_gravity_only(delta)
-			energy = minf(energy + 6.0 * delta, 100.0)
+			# HEAVY OR LIGHT. A content, well-fed creature sleeps like a stone
+			# and gets the good of it. One that is hungry, spent, or braced for
+			# the next blow sleeps thin — it rests more slowly AND wakes sooner,
+			# which is why mistreatment compounds: it can never catch up.
+			var depth := welfare.sleep_depth()
+			energy = minf(energy + (2.0 + 5.0 * depth) * delta, 100.0)
 			if _animator == null:
 				_body.rotation_degrees.z = 80
-			if energy > 85.0:
+			if energy > lerpf(55.0, 92.0, depth):
 				if _animator == null:
 					_body.rotation_degrees.z = 0
 				_decide()
@@ -412,7 +421,13 @@ func _physics_process(delta: float) -> void:
 		State.DEPART:
 			_process_depart(delta)
 
-	_observe_time -= delta
+	# ITS HEAD IS ITS OWN. Observation runs on every tick of every state, hands
+	# busy or not, and a well-kept creature with attention to spare does it
+	# oftener — while a wretched or frightened one has little left over to look
+	# up with. This is the cheapest and truest statement of what welfare buys.
+	welfare.tick(delta, hunger, energy, mood)
+	CreatureWelfare.shed(self, delta)
+	_observe_time -= delta * welfare.watchfulness()
 	if _observe_time <= 0.0:
 		_observe_time = OBSERVE_PERIOD
 		CreatureWatching.observe(self)
@@ -479,7 +494,13 @@ func _tick_feelings(delta: float) -> void:
 	# whether the body wanted it. Eating when sated is what makes it fat.
 	var d := body.digest(delta, growth)
 	if d["growth"] > 0.0:
-		_grow_by(d["growth"])
+		# FOOD IS NOT THE WHOLE OF GROWING. A starved, worked, beaten creature
+		# does not put on size even when it is fed; a cherished one outgrows
+		# what its meals alone would explain. Past bearing it wastes instead.
+		_grow_by(d["growth"] * welfare.growth_factor())
+	var wasting := welfare.wasting()
+	if wasting > 0.0:
+		stature = maxf(stature - wasting * delta, 1.0)
 	body.idle(delta)
 	# Opinions it stops rehearsing fade slowly back toward neutral.
 	_decay_tick -= delta
@@ -1633,6 +1654,7 @@ func _devour_villager(victim: Villager) -> void:
 ## how monsters are made — the creature learns what YOU reward.
 func praise() -> void:
 	lessons += 1
+	welfare.comfort(3.0)
 	bond = minf(bond + 4.0, 100.0)
 	mood = minf(mood + 12.0, 100.0)
 	# Kindness is what buys the right to be listened to.
@@ -2272,6 +2294,9 @@ func _can_eat(units: float) -> bool:
 ## mood drops, and the mind learns that whatever it was just doing hurt. Enough
 ## of that near people and it may become a nervous recluse.
 func take_damage(amount: float, _by_god := false, _instant := false) -> void:
+	# What it costs the LIFE, as against what it costs this moment. A blow from
+	# your own hand also builds the tether (see CreatureWelfare).
+	welfare.hurt(amount, _by_god)
 	# It works out for ITSELF what brought this on — no rule tells it that
 	# being beaten follows from eating people.
 	mind.experience("hurt", -clampf(amount / 25.0, 0.3, 2.0))

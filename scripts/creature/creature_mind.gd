@@ -173,6 +173,11 @@ var repertoire := {}        # verb -> 0..1 casts
 ## HOW GOOD IT HAS GOT, by DOING. Nought to SKILL_CAP per verb. Not a want and
 ## not a permission — see the note on SKILL_CAP for why it is a third thing.
 var skill := {}             # verb -> 0..SKILL_CAP
+## HOW IT HAS BEEN TREATED. Set by the creature that owns this mind, and read in
+## exactly two places: how fast a lesson lands, and which deeds appeal when
+## nothing else is pressing. Both are nudges on machinery that already exists —
+## welfare never picks a deed, it only makes some easier to reach for.
+var welfare: CreatureWelfare = null
 ## ITS CHARACTER, on six axes at once — the whole of what it has become. The
 ## one-number `temperament` below is only this compass squinted at.
 var ethos := CreatureEthos.new()
@@ -224,6 +229,11 @@ func value(verb: String, type: String, drive: Dictionary, ctx := {}) -> float:
 	# that suits it appeals. An angelic creature simply does not want to eat
 	# people; a monstrous one is drawn to it.
 	v += conscience_of(verb)
+	# WHAT A LIFE LEANS IT TOWARD. A creature raised well drifts to the quiet,
+	# companionable deeds; a tormented one to rage and wreckage. A tilt on the
+	# ballot, never a rule — a lifetime of teaching can tilt it back.
+	if welfare != null:
+		v += welfare.leaning(verb)
 	if not seen.has(k):
 		v += NOVELTY
 	v -= float(_sated.get(k, 0.0))   # sick of doing this for now
@@ -361,7 +371,12 @@ func reinforce(reward: float) -> void:
 	if _last_key == "":
 		return
 	var cur: float = q.get(_last_key, 0.0)
-	q[_last_key] = clampf(cur + LR * (reward - cur), -Q_CLAMP, Q_CLAMP)
+	# HOW WELL IT CAN TAKE A LESSON AT ALL. A cherished creature learns faster
+	# than food and repetition explain; a wretched or tethered one barely learns
+	# at all, because it is not attending to the lesson. This is the arithmetic
+	# behind the claim that cruelty is a slower road to a stupider creature.
+	var rate := LR * (welfare.learning() if welfare != null else 1.0)
+	q[_last_key] = clampf(cur + rate * (reward - cur), -Q_CLAMP, Q_CLAMP)
 	seen[_last_key] = int(seen.get(_last_key, 0)) + 1
 	_sated[_last_key] = minf(float(_sated.get(_last_key, 0.0)) + SATIATION, 2.5)
 	beliefs.credit(reward)   # the circumstances get their share of the lesson
@@ -431,7 +446,6 @@ func experience(tag: String, reward: float) -> void:
 	beliefs.consequence(tag, reward)
 
 
-## Watching the god cast a miracle teaches it, a little, how the power feels.
 ## IT DID THE THING. Whether it came off or not, the doing of it taught the
 ## body something — which is why a fumble still counts, only for less.
 func practise(verb: String, went_well := true) -> void:
@@ -451,6 +465,7 @@ func skill_level(verb: String) -> int:
 	return int(floorf(float(skill.get(verb, 0.0))))
 
 
+## Watching the god cast a miracle teaches it, a little, how the power feels.
 func witness_miracle(miracle: String) -> void:
 	familiarity[miracle] = minf(float(familiarity.get(miracle, 0.0)) + MIRACLE_STEP, 1.0)
 

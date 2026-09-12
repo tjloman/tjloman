@@ -38,7 +38,11 @@ static func observe(who: Creature) -> void:
 		# business: a creature whose every memory of hunger is a bad one feels
 		# for a starving man, and one that has never gone hungry feels nothing.
 		who.heart.attend(Creature.OBSERVE_PERIOD)
-		who.heart.sympathise(CreatureEyes.plight_of(villager), 1.0 / maxf(souls, 1.0))
+		# HOW MUCH OF THEM GETS IN. Emotional availability is the first thing
+		# hardship takes: a cherished creature reads a starving man and is moved,
+		# a wretched one looks straight through him.
+		who.heart.sympathise(CreatureEyes.plight_of(villager),
+			who.welfare.openness() / maxf(souls, 1.0))
 		# And it notices WHO. Not "a villager" — this one, by name (CreatureBonds).
 		who.mind.bonds.meet(villager)
 		match villager.state:
