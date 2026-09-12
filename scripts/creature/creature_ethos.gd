@@ -48,6 +48,12 @@ const MEANING := {
 	"tend": {"bounty": 0.8, "order": 0.6, "mercy": 0.2},
 	"gather": {"bounty": 0.7, "order": 0.4},
 	"guard": {"mercy": 0.5, "order": 0.6, "fellowship": 0.3, "daring": 0.3},
+	# Driving a herd home is husbandry: providing, and putting things where they
+	# belong. Taking one out of it feeds people at a cost, which is why it is
+	# bountiful and orderly and very slightly unmerciful all at once — a beast
+	# that does nothing but cull grows into a butcher, not a monster.
+	"shepherd": {"bounty": 0.9, "order": 0.7, "fellowship": 0.3},
+	"cull": {"bounty": 0.65, "order": 0.3, "mercy": -0.25},
 	"heal": {"mercy": 1.1, "fellowship": 0.3},
 	# The cruel ones, likewise all cruel differently.
 	"smash": {"mercy": -0.9, "order": -1.0, "daring": 0.4},

@@ -41,6 +41,32 @@ const RELISH := 0.45
 ## belief far harder than merely doing the thing does.
 const TEACH_LR := 0.75
 
+## HOW GOOD IT HAS GOT AT A THING, nought to nine — and the only one of the
+## three kinds of learning in this file that comes from DOING.
+##
+## The other two answer different questions. `repertoire` is whether it can do a
+## thing AT ALL, and that is picked up by watching somebody else. `q` is whether
+## a thing is WORTH doing, and that is picked up from how it turned out. Neither
+## of them is HOW WELL, and how well is what lets a grown creature do things a
+## young one cannot reach at all. A beast that has spent its life throwing
+## stones and saplings can in the end pick up a full spruce and put it through
+## something like a javelin. Nothing announces that this is possible. It arrives
+## because the creature kept practising and one day the tree went up.
+##
+## This is deliberately NOT a value: being good at throwing does not make a
+## creature want to throw, and being hopeless at it does not stop it trying.
+## Wanting is `q`'s job and it is trained by consequences. Skill only settles
+## what happens when the attempt is made.
+const SKILL_CAP := 9.0
+## Practice has sharply diminishing returns, so gain is divided by the level
+## already held: the first throws teach more than the thousandth. That is what
+## makes a level nine creature something a player RAISED rather than something
+## that merely got old.
+const SKILL_STEP := 0.25
+## A fumble teaches too. It simply teaches less — and a creature that only ever
+## learned from its successes would never get past the things it is bad at.
+const SKILL_FUMBLE := 0.3
+
 ## CHARACTER IS A RUNNING IMPRESSION OF RECENT DEEDS, not a bank balance. The
 ## creature IS what it has been DOING lately: each act pulls its character a
 ## little toward what that act means, so a habit defines it while a single lapse
@@ -97,6 +123,15 @@ const VERB_TRAITS := {
 	"throw": {"thrill": 0.7, "effort": 0.7},
 	"flee": {"escape": 1.0, "effort": 0.8},
 	"tend": {"effort": 0.5, "social": 0.25},
+	# HERDING. To the body, driving cattle is simply hard work with people
+	# somewhere in it — the same shape as gathering. Nothing here says a herd is
+	# valuable or that driving one is kind; a creature finds that out by doing it
+	# and seeing what you and the village make of it.
+	"shepherd": {"effort": 0.8, "social": 0.35, "thrill": 0.2},
+	# And taking one for the table is work that ends in meat, which is the same
+	# thing gathering is. That it happens to be a killing is a matter for its
+	# conscience (see CreatureEthos), not for its appetite.
+	"cull": {"feeds": 0.45, "effort": 0.6, "thrill": 0.25},
 	"gift": {"social": 0.6, "effort": 0.4},
 	"guard": {"social": 0.4, "effort": 0.3, "calms": 0.2},
 	"rescue": {"social": 0.7, "effort": 0.7},
@@ -135,6 +170,9 @@ var familiarity := {}       # miracle name -> 0..1, learned by witnessing
 ## Practices it has picked up by WATCHING — dancing, praying, holding court.
 ## An empty repertoire is a creature that has never seen anyone enjoy anything.
 var repertoire := {}        # verb -> 0..1 casts
+## HOW GOOD IT HAS GOT, by DOING. Nought to SKILL_CAP per verb. Not a want and
+## not a permission — see the note on SKILL_CAP for why it is a third thing.
+var skill := {}             # verb -> 0..SKILL_CAP
 ## ITS CHARACTER, on six axes at once — the whole of what it has become. The
 ## one-number `temperament` below is only this compass squinted at.
 var ethos := CreatureEthos.new()
@@ -394,6 +432,25 @@ func experience(tag: String, reward: float) -> void:
 
 
 ## Watching the god cast a miracle teaches it, a little, how the power feels.
+## IT DID THE THING. Whether it came off or not, the doing of it taught the
+## body something — which is why a fumble still counts, only for less.
+func practise(verb: String, went_well := true) -> void:
+	var now: float = float(skill.get(verb, 0.0))
+	var gain := SKILL_STEP * (1.0 if went_well else SKILL_FUMBLE) / (1.0 + now)
+	skill[verb] = minf(now + gain, SKILL_CAP)
+
+
+## How good it is, as a fraction of the whole climb — which is what most callers
+## actually want, since they are scaling something by it.
+func knack(verb: String) -> float:
+	return float(skill.get(verb, 0.0)) / SKILL_CAP
+
+
+## The number a player would be told, nought to nine.
+func skill_level(verb: String) -> int:
+	return int(floorf(float(skill.get(verb, 0.0))))
+
+
 func witness_miracle(miracle: String) -> void:
 	familiarity[miracle] = minf(float(familiarity.get(miracle, 0.0)) + MIRACLE_STEP, 1.0)
 

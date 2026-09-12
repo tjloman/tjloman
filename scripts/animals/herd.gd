@@ -568,6 +568,55 @@ func fed_on(worth: float) -> void:
 			_grow(1)
 
 
+## How wide the mass stands, so anything asking "am I among them" can ask about
+## the herd rather than about its centre point.
+func spread() -> float:
+	return _spread
+
+
+## DRIVEN. The pasture itself moves, not just the beasts — otherwise they walk
+## back the moment the creature stops pushing, and shepherding would be a thing
+## you did forever and never finished.
+func drive_toward(where: Vector3, step: float) -> void:
+	var to := where - _home
+	to.y = 0.0
+	if to.length() < 0.5:
+		return
+	_home += to.normalized() * minf(step, to.length())
+	_target = _home
+	_graze_left = 0.0
+	set_mood("move")
+
+
+## SCATTERED, by a creature that does not know how to drive them yet.
+func scattered(fear: float) -> void:
+	_fear = minf(_fear + fear, 1.0)
+	set_mood("flee")
+	# They go somewhere other than where they were being pushed, which is what
+	# makes a botched drive cost ground rather than merely gain none.
+	var a := randf() * TAU
+	_target = _home + Vector3(cos(a), 0.0, sin(a)) * ROAM
+	_graze_left = GRAZE_LEAST
+
+
+## SETTLED, by something standing watch over them.
+func calmed(by: float) -> void:
+	_fear = maxf(_fear - by, 0.0)
+	if _fear < 0.2:
+		set_mood("graze")
+
+
+## ONE TAKEN, cleanly, by something that meant to. Prefers a head nobody is
+## promoted into, so a beast the player is watching is not deleted mid-stride.
+func take_one() -> bool:
+	for m in _members:
+		if not m["dead"] and m["agent"] == null:
+			m["dead"] = true
+			lost_one()
+			return true
+	return false
+
+
 ## In a word: is it doing well? Read off the same numbers the season uses, so
 ## the label can never disagree with what is about to happen.
 func condition() -> String:

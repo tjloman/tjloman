@@ -38,6 +38,13 @@ const FULL_STATURE := 65535.0
 const GROWTH_CURVE := 0.5
 const STUCK_SECONDS := 30.0   # no state may hold the creature hostage
 const OBSERVE_PERIOD := 2.5
+
+## HOW MUCH A LIFETIME OF THROWING ADDS to what can be thrown, as a multiple of
+## raw lifting strength. At the top of the climb a creature sends something
+## three times the size of what its muscle alone would let it launch — which is
+## the difference between a beast that can shift a spruce and one that can throw
+## a spruce. Strength is grown by hauling; this is grown only by throwing.
+const THROW_MASTERY := 2.0
 ## How sharply a deed's moral weight colours how it FELT to do. This is what
 ## makes cruelty sour for a kind creature and sweet for a wicked one.
 const REMORSE := 2.0
@@ -408,7 +415,7 @@ func _physics_process(delta: float) -> void:
 	_observe_time -= delta
 	if _observe_time <= 0.0:
 		_observe_time = OBSERVE_PERIOD
-		_observe_world()
+		CreatureWatching.observe(self)
 
 	_try_catch_throw()
 
@@ -520,76 +527,6 @@ func _tick_watchdogs(delta: float) -> void:
 ## This is also where it LOOKS AT PEOPLE. Watching somebody is how empathy is
 ## earned, and reading their plight through its own history is how it comes to
 ## feel anything about them at all (see CreatureHeart).
-func _observe_world() -> void:
-	var watched_work := false
-	var souls := 0
-	for v in get_tree().get_nodes_in_group("villagers"):
-		var villager := v as Villager
-		if not is_instance_valid(villager):
-			continue
-		if villager.global_position.distance_to(global_position) > 16.0:
-			continue
-		souls += 1
-		# Close enough to READ. What it makes of them is entirely its own
-		# business: a creature whose every memory of hunger is a bad one feels
-		# for a starving man, and one that has never gone hungry feels nothing.
-		heart.attend(OBSERVE_PERIOD)
-		heart.sympathise(CreatureEyes.plight_of(villager), 1.0 / maxf(souls, 1.0))
-		# And it notices WHO. Not "a villager" — this one, by name (CreatureBonds).
-		mind.bonds.meet(villager)
-		match villager.state:
-			Villager.State.FARMING:
-				mind.teach("tend", "farm", 1.0, 0.02)
-				watched_work = true
-			Villager.State.FISHING:
-				mind.teach("fish", "water", 1.0, 0.02)
-				watched_work = true
-			Villager.State.BUILDING, Villager.State.CHOPPING, Villager.State.QUARRYING:
-				mind.teach("gather", "goods", 1.0, 0.015)
-				watched_work = true
-			Villager.State.GO_FEED, Villager.State.TAMING:
-				mind.teach("gift", "sheep", 1.0, 0.01)
-				watched_work = true
-			# THE PRACTICES. A creature cannot dance until it has seen dancing,
-			# and cannot lead a prayer it has never watched anyone say. This is
-			# the whole of how its repertoire widens: villages that celebrate
-			# and worship raise creatures that celebrate and worship, and a
-			# grim, joyless village raises a creature that knows neither.
-			Villager.State.PLAY:
-				mind.witness_practice("dance")
-			Villager.State.WORSHIPPING, Villager.State.PREACHING:
-				mind.witness_practice("pray")
-	if watched_work:
-		# Curiosity about the villagers' work keeps it engaged and alert.
-		attention = minf(attention + 5.0, 100.0)
-		boredom = maxf(boredom - 4.0, 0.0)
-		feel("wonder", 0.12, 0.0)
-	# NOBODY ABOUT. Loneliness is the one feeling that barely cools on its own;
-	# it needs company to lift, which is what gives a solitary life its weight.
-	if souls == 0:
-		heart.stir("loneliness", 0.03)
-	else:
-		heart.stir("contentment", 0.03 * minf(souls, 3))
-	# AND IT LEARNS WHAT ALL THIS FEELS LIKE. Whatever is true of its situation
-	# right now gets quietly associated with whatever it is feeling right now,
-	# and over a lifetime that becomes the only account it has of what hunger,
-	# darkness or a crowd is actually like.
-	var now := _circumstances()
-	heart.learn(now)
-	# DOES THIS BRING SOMETHING BACK? A moment much like one it felt strongly
-	# about — especially standing in the very spot — returns a shadow of the old
-	# feeling, and it will never be able to say why it does not like it here.
-	var back := mind.beliefs.reminder(now, global_position)
-	if not back.is_empty():
-		heart.stir(String(back["felt"]), float(back["strength"]))
-	if GameState.is_night():
-		for a in get_tree().get_nodes_in_group("animals"):
-			var animal := a as Animal
-			if is_instance_valid(animal) and animal.species == "wolf" \
-					and animal.global_position.distance_to(global_position) < 25.0:
-				mind.teach("guard", "village", 1.0, 0.05)
-
-
 ## Decision-making — THE MIND DECIDES ------------------------------------------
 ##
 ## The creature no longer follows a script of behaviours. Each time it must act,
@@ -663,6 +600,9 @@ func _perceive() -> Array:
 	if energy < 55.0:
 		offer_option(opts, "rest", "none", null)
 	CreatureRelief.offer(self, opts)
+	# A herd it is standing in: drive them, take one, stand watch. It is told
+	# nothing about any of them — see CreatureHerding.
+	CreatureHerding.offer(self, opts)
 
 	# A FULL creature does not hunt. Appetite, not just hunger, decides.
 	var can_eat := _can_eat(1.0)
@@ -671,11 +611,14 @@ func _perceive() -> Array:
 		offer_option(opts, "eat", _type_of(food), food)
 	# Things it could carry off — to the granary, or to hurl, or to devour.
 	var carriable := CreatureEyes.nearest_carriable(get_tree(), global_position, 35.0)
-	if carriable != null and not can_lift(carriable):
-		carriable = null   # beyond its strength; it knows better than to try
 	if carriable != null:
-		offer_option(opts, "gather", _type_of(carriable), carriable)
-		offer_option(opts, "throw", _type_of(carriable), carriable)
+		# Carrying and hurling are asked separately, because a practised thrower
+		# can send things it could not otherwise do much with. It knows better
+		# than to try what is plainly beyond it, either way.
+		if can_lift(carriable):
+			offer_option(opts, "gather", _type_of(carriable), carriable)
+		if can_lift(carriable, true):
+			offer_option(opts, "throw", _type_of(carriable), carriable)
 	# Every creature, beast and building nearby is something it COULD attack,
 	# carry, hurl or eat. Whether it ever does is entirely learned.
 	for node in _things_around(26.0):
@@ -697,6 +640,8 @@ func _perceive() -> Array:
 				offer_option(opts, "flee", t, node)   # only a frightened beast thinks of running
 			if (node as Villager).is_dying():
 				offer_option(opts, "rescue", t, node)
+		if node is WildTree and can_lift(node, true):
+			offer_option(opts, "throw", t, node)
 		if node is WildTree and can_lift(node):
 			# Only as much tree as its muscle can manage. A hatchling wrestles
 			# saplings; a forest giant needs a grown beast — or the Strength
@@ -835,6 +780,8 @@ func _enact(choice: Dictionary) -> void:
 	match verb:
 		"relieve":
 			CreatureRelief.go(self, String(choice.get("type", "open")))
+		"shepherd", "cull":
+			CreatureHerding.go(self, verb, target as Herd)
 		"rest":
 			state = State.SLEEPING
 		"eat":
@@ -883,6 +830,10 @@ func _enact(choice: Dictionary) -> void:
 			var home := CreatureEyes.home_village(get_tree())
 			_target = home.global_position if home != null else global_position
 		"guard":
+			# A herd is guarded in the same posture as a village, but settling
+			# the beasts is its own outcome, so it routes through the module.
+			if target is Herd:
+				CreatureHerding.go(self, verb, target as Herd)
 			state = State.GUARD
 			_action_time = randf_range(10.0, 18.0)
 			_pick_guard_waypoint()
@@ -1229,6 +1180,9 @@ func _process_carrying(delta: float) -> void:
 			_action_time -= delta
 			_apply_gravity_only(delta)
 			if _action_time <= 0.0:
+				# THE PRACTICE THAT BUILDS THE ARM. Every hurl teaches, whatever
+				# it was aimed at and whatever anyone thought of it.
+				mind.practise("throw", true)
 				_hurl_carried()
 				_last_deed = "rampage"
 				mind.shape({"mercy": -0.6, "order": -0.7, "daring": 0.5})
@@ -1878,7 +1832,7 @@ func _process_leashed(delta: float) -> void:
 	if _action_time <= 0.0:
 		_action_time = 3.0
 		# Waiting where it was told, but still watching the world go by.
-		_observe_world()
+		CreatureWatching.observe(self)
 
 
 ## The quiet life ---------------------------------------------------------------
@@ -1902,7 +1856,7 @@ func _process_lounge(delta: float) -> void:
 	_look_time -= delta
 	if _look_time <= 0.0:
 		_look_time = randf_range(2.0, 4.0)
-		_observe_world()
+		CreatureWatching.observe(self)
 		var about := _things_around(20.0)
 		if not about.is_empty():
 			_face(about[randi() % about.size()].global_position)
@@ -2267,9 +2221,21 @@ func is_laden() -> bool:
 
 ## Can it actually lift this? A sapling needs little; a forest giant needs real
 ## muscle — earned by work, or lent by the Strength miracle.
-func can_lift(thing: Node3D) -> bool:
+## WHAT IT CAN GET OFF THE GROUND — and, for a throw, what it can get off the
+## ground AND SEND SOMEWHERE, which is not the same question.
+##
+## Muscle decides what can be picked up. TECHNIQUE decides what can be thrown,
+## and technique is the one thing here that comes only from having thrown
+## things. At the top of that climb a creature handles a full spruce the way a
+## man handles a javelin — a tree that the same beast, equally strong but
+## untaught, could lift and stagger with and never launch. Nothing announces
+## this. It arrives because it spent its life throwing.
+func can_lift(thing: Node3D, to_throw := false) -> bool:
 	if thing is WildTree:
-		return (thing as WildTree).lumber <= body.lift_limit(growth)
+		var limit := body.lift_limit(growth)
+		if to_throw:
+			limit *= 1.0 + mind.knack("throw") * THROW_MASTERY
+		return (thing as WildTree).lumber <= limit
 	return true
 
 
