@@ -4,11 +4,42 @@ extends StaticBody3D
 ## Once built, the village's children gather here under a teacher instead of
 ## trailing their mothers, which frees the mothers to bear more children.
 
+## WHAT THE CHILDREN ARE DOING RIGHT NOW.
+##
+## They used to mill about within four metres of the door in a loose fog, which
+## is what "children are at school" looks like when nobody has decided what a
+## lesson IS. A class does not mill. It sits in a ring to be told something, it
+## stands in a line and follows, it holds hands and turns, it crowds round the
+## one grown-up in the yard. That is what a school looks like from across a
+## village, and it is all any of this has to be.
+##
+## The horseshoe is the ring with a gap in it, because a story circle that
+## closes has its back to the teller — and a class of five in an open arc reads
+## as a `C` from the air, which is the shape a child would draw.
+const LESSONS := ["circle", "horseshoe", "line", "dance", "huddle"]
+const LESSON_LEAST := 14.0
+const LESSON_MOST := 26.0
+## How far apart the children stand in each. A ring's radius grows with the
+## class so twenty children do not stand inside one another.
+const SEAT_GAP := 1.25
+const RING_LEAST := 2.0
+const LINE_GAP := 1.4
+## How fast a dance turns, in radians a second. Slow: they are small.
+const DANCE_SPIN := 0.5
+
 var village: Village
+
+var _lesson := "circle"
+var _left := 0.0
+## Turns slowly under the dance, and gives the other formations a little life
+## so a class is never a diagram.
+var _drift := 0.0
 
 
 func _ready() -> void:
 	add_to_group("edubba")
+	_left = randf_range(LESSON_LEAST, LESSON_MOST)
+	_lesson = LESSONS[randi() % LESSONS.size()]
 	set_meta("hover_name", "Edubba (school)")
 	collision_layer = 4  # hoverable; villagers pass through
 	collision_mask = 0
@@ -39,6 +70,68 @@ func _ready() -> void:
 ## Where children and the teacher gather — the yard just outside the door.
 func yard_position() -> Vector3:
 	return global_position + Vector3(0, 0, 3.0)
+
+
+## The lesson under way. Changes on its own clock — see `_process`.
+func lesson() -> String:
+	return _lesson
+
+
+## WHERE THE i-TH CHILD OF `many` STANDS. Everything is worked out from the two
+## numbers a child actually knows about itself: which one it is, and how many
+## there are. No child needs to be told where any other one is.
+func spot_for(which: int, many: int) -> Vector3:
+	var count := maxi(many, 1)
+	var seat := clampi(which, 0, count - 1)
+	var yard := yard_position()
+	match _lesson:
+		"line":
+			# Follow the leader: a column facing the door, the smallest at the
+			# back because that is where the smallest always ends up.
+			var along := basis * Vector3(0, 0, 1)
+			var across := basis * Vector3(1, 0, 0)
+			return yard + along * (float(seat) * LINE_GAP) \
+				+ across * (sin(float(seat) * 1.7) * 0.35)
+		"huddle":
+			# Round the teacher, close enough to be fussed over.
+			var a := float(seat) * TAU / float(count) + _drift
+			var r := 0.8 + fmod(float(seat) * 0.37, 1.0) * 1.1
+			return yard + Vector3(cos(a), 0.0, sin(a)) * r
+		"dance":
+			var spin := _drift * DANCE_SPIN * 6.0
+			var d := _ring_radius(count)
+			var b := float(seat) * TAU / float(count) + spin
+			return yard + Vector3(cos(b), 0.0, sin(b)) * d
+		"horseshoe":
+			# The ring with its mouth open toward the door, so every face is
+			# turned the same way and there is a place to stand and be listened
+			# to. Three quarters of a turn, not a whole one.
+			var open := TAU * 0.75
+			var step := open / float(maxi(count - 1, 1))
+			var c := -open * 0.5 + float(seat) * step
+			return yard + Vector3(sin(c), 0.0, -cos(c)) * _ring_radius(count)
+	# "circle" — the plain story ring.
+	var e := float(seat) * TAU / float(count) + _drift * 0.15
+	return yard + Vector3(cos(e), 0.0, sin(e)) * _ring_radius(count)
+
+
+## A ring wide enough that everybody in it has room to sit.
+func _ring_radius(count: int) -> float:
+	return maxf(SEAT_GAP * float(count) / TAU, RING_LEAST)
+
+
+## THE LESSON CHANGES. Long enough that a passer-by sees a class doing one
+## thing rather than a crowd flickering between five.
+func _process(delta: float) -> void:
+	_drift += delta
+	_left -= delta
+	if _left > 0.0:
+		return
+	_left = randf_range(LESSON_LEAST, LESSON_MOST)
+	var next := LESSONS[randi() % LESSONS.size()]
+	if next == _lesson:
+		next = LESSONS[(LESSONS.find(_lesson) + 1) % LESSONS.size()]
+	_lesson = next
 
 
 func hover_text() -> String:

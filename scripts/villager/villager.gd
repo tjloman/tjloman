@@ -79,6 +79,46 @@ const DROWN_DEPTH := 1.1        # water this deep over the feet drowns them
 const DYING_SECONDS := 10.0     # the window to be healed or lifted back to life
 const REVIVE_HEALTH := 10.0     # what a rescue restores them to
 
+## WHAT A JOB IS WORTH: a floor every job shares, and a climb above it that
+## only a town that WANTS the thing ever pays.
+##
+## The board used to be nineteen hand-tuned numbers that each meant something
+## on its own and nothing next to each other, and two of them had no ceiling —
+## so a town with forty homeless scored building at two hundred and ninety and
+## did nothing else, and a town with a full granary still rated ploughing above
+## every trade it had built. Neither is a priority. Both are a town with one job.
+##
+## Now every score is GROWTH_FLOOR plus want times the climb to its own ceiling.
+## Want is a fraction of a real thing — meals per head, homeless per soul,
+## timber against what the next house costs — so nothing can run away, and when
+## a need is MET its job sinks back to the floor and stands level with the
+## school, the well, the shrine and the hunt. That is the whole design in one
+## sentence: base needs are answered hard and quickly, and a town that has
+## answered them has nothing left telling it what to do, so it does everything.
+const GROWTH_FLOOR := 26.0
+const FOOD_CEIL := 86.0
+const SHELTER_CEIL := 70.0
+const STOCK_CEIL := 60.0
+## Meals per head at which a town stops thinking about food at all.
+const FED_ENOUGH := 2.0
+
+
+## SOCIAL DISTANCING, and it is the whole difference between a village and a
+## swarm.
+##
+## Fifty people standing in one village all measure from nearly the same spot,
+## so "the nearest tree" is the same tree for every one of them. They converge
+## on it like iron filings: a hunting party reads as fifty arrows meeting at a
+## point instead of a village spread out over its land, which is exactly what a
+## village is NOT.
+##
+## So nobody takes the nearest. Everybody gathers the nearest few and takes the
+## one at their OWN rank among them — a number each villager has for life and
+## nobody else shares, so the fan-out costs no bookkeeping, no claims register
+## and no agreement between them. They simply want slightly different things,
+## which is what makes a crowd of people look like people.
+const SPREAD_CHOICES := 8
+
 ## How much an already-taken job is discouraged for each villager on it, so
 ## the flock spreads across the village's needs instead of all rushing one.
 const CROWD_PENALTY := 7.0
@@ -120,6 +160,10 @@ var _target_animal: Animal = null
 ## beast to gentle. Held apart from _target_animal because the animal does not
 ## exist yet — it is built out of the herd on arrival.
 var _target_herd: Herd = null
+## Which child of the class this one is. Taken once on arriving at school and
+## kept, because a seat that is recomputed every frame is a child that swaps
+## places with its neighbours forever.
+var _school_seat := 0
 var _target_corpse: Corpse = null
 var _target_tree: WildTree = null
 var _target_deposit: RockDeposit = null
@@ -1008,6 +1052,7 @@ func _decide() -> void:
 	if not is_adult():
 		if village.has_edubba():
 			state = State.AT_SCHOOL
+			_school_seat = _seat_among_children()
 			return
 		if mother != null and is_instance_valid(mother) and mother.village == village:
 			state = State.FOLLOW_MOM
@@ -1178,12 +1223,19 @@ func _pick_job() -> bool:
 	var next_house: Dictionary = House.SPECS[village.next_house_size()]
 	var lumber_due: int = next_house["lumber"]
 	var stone_due: int = next_house["stone"]
+	# HOW BADLY, AS A SHARE — not as a count. `38 + homeless * 6` had no ceiling
+	# in it: forty-two homeless scored two hundred and ninety, which is not a
+	# priority, it is a town with one job. A share cannot run away, and it says
+	# the true thing besides — eight without a roof matters differently in a
+	# hamlet of ten than in a city of four hundred.
+	var want_roof := clampf(float(homeless) / float(maxi(village.population(), 1)),
+		0.0, 1.0)
 	if village.construction_site != null:
-		scores["build"] = 42.0
+		scores["build"] = _wants(SHELTER_CEIL, maxf(want_roof, 0.5))
 	elif homeless > 0 and store.lumber >= lumber_due and store.stone >= stone_due:
-		scores["build"] = 38.0 + homeless * 6.0
+		scores["build"] = _wants(SHELTER_CEIL, want_roof)
 	elif damaged != null and store.lumber >= 1:
-		scores["build"] = 26.0
+		scores["build"] = _wants(SHELTER_CEIL, 0.25)
 
 	# Materials wanted: enough for the house the town is actually saving up for,
 	# and a little over so the one after it is not started from nothing. With
@@ -1201,19 +1253,33 @@ func _pick_job() -> bool:
 	# _start_job by the one person actually going. See VillageWatch.
 	var watch := village.watch
 	if store.lumber < reserve_lumber and watch.timber != null:
-		scores["chop"] = 35.0 + minf(float(reserve_lumber - store.lumber), 12.0) * 2.0
+		scores["chop"] = _wants(STOCK_CEIL,
+			float(reserve_lumber - store.lumber) / float(maxi(reserve_lumber, 1)))
 	if store.stone < reserve_stone and watch.stone != null:
-		scores["quarry"] = 33.0 + minf(float(reserve_stone - store.stone), 12.0) * 2.0
+		scores["quarry"] = _wants(STOCK_CEIL,
+			float(reserve_stone - store.stone) / float(maxi(reserve_stone, 1)))
 
-	# Food security, per diet.
+	# FOOD, AND HOW MUCH OF IT THEY STILL WANT.
+	#
+	# The old worry only ever climbed: it went up as the granary emptied and sat
+	# at zero when it was full, which left farming on a flat twenty — above most
+	# of the town's other work, forever. So a fed village went on ploughing
+	# instead of building anything, and "the base needs are met" never turned
+	# into "now do something else".
+	#
+	# Want falls to nothing at two meals a head. A hungry town drops everything
+	# and feeds itself; a fed one finds farming no more pressing than a well, a
+	# school or a shrine, which is the whole point of having those.
 	var abandoned := village.agriculture_abandoned()
 	var eats_meat := village.diet != Village.Diet.VEGAN
-	var food_worry := maxf(20.0 - store.total_food(), 0.0) * 3.0
+	var larder := float(store.total_food()) / float(maxi(village.population(), 1))
+	var want_food := clampf(1.0 - larder / FED_ENOUGH, 0.0, 1.0)
 	if not abandoned:
-		scores["farm"] = 20.0 + food_worry
-		# Hungry and short of fields? Break new ground.
-		if food_worry > 20.0 and village.wants_new_farm() and store.lumber >= 4:
-			scores["build_farm"] = 30.0 + food_worry * 0.5
+		scores["farm"] = _wants(FOOD_CEIL, want_food)
+		# Hungry and short of fields? Break new ground. An investment rather
+		# than a meal, so it is scored as stock and not as supper.
+		if want_food > 0.4 and village.wants_new_farm() and store.lumber >= 4:
+			scores["build_farm"] = _wants(STOCK_CEIL, want_food)
 	if village.penned_hungry() and store.plant_food > 2:
 		scores["feed"] = 26.0
 	# A village with children and no school wants an Edubba raised.
@@ -1237,20 +1303,23 @@ func _pick_job() -> bool:
 	# THE EVENING CIRCLE. Dancing at the nest after dark, whether the beast is
 	# there or not — scored high because it is what people would rather be
 	# doing, and gated on the dark because that is when a fire is worth sitting
-	# at. A hungry village still ploughs: food_worry outruns this easily.
+	# at. A hungry village still ploughs: a wanted meal outruns this easily.
 	if village.nest != null and is_instance_valid(village.nest) and GameState.is_night():
 		scores["circle"] = 30.0
 	if village.diet == Village.Diet.CANNIBAL and store.meat_food < 4 \
 			and _will_eat_human_flesh() and watch.corpse != null:
-		scores["butcher"] = 50.0 + food_worry
+		scores["butcher"] = _wants(FOOD_CEIL + 6.0, want_food)
 	if eats_meat and store.meat_food < 5:
 		if abandoned and Workshop.any_meat(village):
-			scores["butcher_pen"] = 40.0 + food_worry
+			scores["butcher_pen"] = _wants(FOOD_CEIL, want_food)
+		# THE HUNT sits just under the plough for a farming town and just over
+		# it for one that has given up the plough — near enough either way that
+		# both happen, which is what a hunting party in a farming village is.
 		if watch.game != null:
-			scores["hunt"] = (35.0 if abandoned else 25.0) + food_worry
+			scores["hunt"] = _wants(FOOD_CEIL + (6.0 if abandoned else -6.0), want_food)
 		# The shore feeds anyone patient enough to stand on it.
 		if watch.shore != Vector3.INF:
-			scores["fish"] = 23.0 + food_worry * 0.6
+			scores["fish"] = _wants(FOOD_CEIL - 10.0, want_food)
 
 	# Taming: a privilege of the good, pointless for the fallen. An empty
 	# pen makes it urgent — a dog and a mount change everything.
@@ -1779,8 +1848,8 @@ func _nearest_forage_bush() -> ForageBush:
 
 
 func _nearest_huntable() -> Animal:
-	var best: Animal = null
-	var best_dist := INF
+	var best: Array = []
+	var reach := village.influence_radius * 2.0
 	for a in get_tree().get_nodes_in_group("animals"):
 		var animal := a as Animal
 		if not is_instance_valid(animal) or animal.is_queued_for_deletion():
@@ -1790,43 +1859,45 @@ func _nearest_huntable() -> Animal:
 		if animal.spec.get("predator", false):
 			continue  # villagers hunt dinner, not death
 		var d := global_position.distance_to(animal.global_position)
-		if d < best_dist and d < village.influence_radius * 2.0:
-			best_dist = d
-			best = animal
-	return best
+		if d < reach:
+			_consider(best, animal, d)
+	return _my_pick(best) as Animal
 
 
 func _nearest_tamable() -> Animal:
-	var best: Animal = null
-	var best_dist := INF
+	var best: Array = []
+	var reach := village.influence_radius * 2.0
 	for a in get_tree().get_nodes_in_group("animals"):
 		var animal := a as Animal
 		if not is_instance_valid(animal) or not animal.is_tamable():
 			continue
 		var d := global_position.distance_to(animal.global_position)
-		if d < best_dist and d < village.influence_radius * 2.0:
-			best_dist = d
-			best = animal
-	return best
+		if d < reach:
+			_consider(best, animal, d)
+	return _my_pick(best) as Animal
 
 
 func _nearest_corpse() -> Corpse:
-	var best: Corpse = null
-	var best_dist := INF
+	var best: Array = []
+	var reach := village.influence_radius * 1.5
 	for c in get_tree().get_nodes_in_group("corpses"):
 		var corpse := c as Corpse
 		if not is_instance_valid(corpse) or corpse.is_queued_for_deletion():
 			continue
 		var d := global_position.distance_to(corpse.global_position)
-		if d < best_dist and d < village.influence_radius * 1.5:
-			best_dist = d
-			best = corpse
-	return best
+		if d < reach:
+			_consider(best, corpse, d)
+	return _my_pick(best) as Corpse
+
+
+## A job's score: the shared floor, plus however much of the climb the town's
+## want actually earns.
+func _wants(ceiling: float, want: float) -> float:
+	return GROWTH_FLOOR + clampf(want, 0.0, 1.0) * (ceiling - GROWTH_FLOOR)
 
 
 func _nearest_in_group(group: String, max_dist: float) -> Node3D:
-	var best: Node3D = null
-	var best_dist := max_dist
+	var best: Array = []
 	for n in get_tree().get_nodes_in_group(group):
 		var node := n as Node3D
 		if not is_instance_valid(node) or node.is_queued_for_deletion():
@@ -1835,10 +1906,32 @@ func _nearest_in_group(group: String, max_dist: float) -> Node3D:
 				or (node as WildTree).is_held() or (node as WildTree).burning):
 			continue
 		var d := global_position.distance_to(node.global_position)
-		if d < best_dist:
-			best_dist = d
-			best = node
-	return best
+		if d < max_dist:
+			_consider(best, node, d)
+	return _my_pick(best)
+
+
+## Keep this one if it is among the nearest few, in order. A short insertion
+## rather than a sort, because the list is eight long and the candidates can be
+## every tree in every loaded chunk.
+func _consider(best: Array, node: Node3D, d: float) -> void:
+	var at := best.size()
+	while at > 0 and d < float(best[at - 1][0]):
+		at -= 1
+	if at >= SPREAD_CHOICES:
+		return
+	best.insert(at, [d, node])
+	if best.size() > SPREAD_CHOICES:
+		best.resize(SPREAD_CHOICES)
+
+
+## This villager's own choice from the nearest few. The rank comes from its
+## instance id, which is unique, stable for its whole life, and needs asking
+## nobody.
+func _my_pick(best: Array) -> Node3D:
+	if best.is_empty():
+		return null
+	return best[int(get_instance_id()) % best.size()][1] as Node3D
 
 
 ## Riding --------------------------------------------------------------------
@@ -1892,21 +1985,46 @@ func _process_follow_mom(delta: float) -> void:
 
 
 ## At school: play in the Edubba yard near the teacher and the other children.
+## A CLASS, NOT A CROWD. Children used to drift to within four metres of the
+## door and mill there, which is what "at school" looks like when nobody has
+## decided what a lesson is. They take a place in whatever the Edubba is doing —
+## a story ring, an open horseshoe facing the teller, a line following the
+## leader, a turning dance, a huddle round the grown-up — and hold it. Each
+## child asks only which one it is and how many there are; nothing has to know
+## where any other child is standing. See Edubba.spot_for.
+## WHICH ONE OF THE CHILDREN THIS IS, in the village's own order — stable for
+## as long as the class is, which is all a formation needs.
+func _seat_among_children() -> int:
+	var seat := 0
+	for v in village.my_villagers():
+		if v == self:
+			return seat
+		if not v.is_adult():
+			seat += 1
+	return seat
+
+
 func _process_at_school(delta: float) -> void:
 	if not village.has_edubba() or is_adult():
 		_decide()
 		return
-	var yard := village.edubba.yard_position()
-	if global_position.distance_to(yard) > 4.0:
-		_move_toward(yard + Vector3(randf_range(-2, 2), 0, randf_range(-2, 2)),
-			WALK_SPEED * _speed_factor(), delta)
+	var seat := village.edubba.spot_for(_school_seat, maxi(village.child_count(), 1))
+	if global_position.distance_to(seat) > 0.5:
+		_move_toward(seat, WALK_SPEED * _speed_factor() * 0.8, delta, 0.4)
 	else:
 		_apply_gravity_only(delta)
-		social = minf(social + 3.0 * delta, 100.0)
-		happiness = minf(happiness + 0.5 * delta, 100.0)
-		_action_time -= delta
-		if _action_time <= 0.0:
-			_decide()  # re-check needs now and then
+		# Facing the middle of whatever it is — a ring of backs is not a class.
+		# Bodies are modelled facing +Z and look_at aims -Z, so this looks at
+		# the point opposite, the same way _move_toward does.
+		var mid := village.edubba.yard_position()
+		var away := global_position - Vector3(mid.x, 0.0, mid.z)
+		if Vector2(away.x, away.z).length() > 0.05:
+			look_at(global_position + Vector3(away.x, 0.0, away.z), Vector3.UP)
+	social = minf(social + 3.0 * delta, 100.0)
+	happiness = minf(happiness + 0.5 * delta, 100.0)
+	_action_time -= delta
+	if _action_time <= 0.0:
+		_decide()  # re-check needs now and then
 
 
 ## Movement ------------------------------------------------------------------

@@ -115,6 +115,23 @@ const FOUNDING_SIZES: Array[int] = [
 	House.Size.LONGHOUSE, House.Size.HOUSE, House.Size.HUT, House.Size.HOUSE,
 ]
 const FOUNDING_MOST := 24
+
+## THE GENERATIONS A TOWN IS FOUNDED WITH.
+##
+## Fifty adults between sixteen and forty-five is not a village, it is a work
+## party: no babies, no children, nobody old, and — the thing that gave it
+## away — an Edubba standing empty because there was nobody young enough to be
+## in it. A town has generations in it at once. So five souls are born every ten
+## years, back as far as anybody is still alive to be, and whatever is left over
+## fills the working middle.
+##
+## It pays for itself twice: the school has pupils from the first morning, and
+## wants_edubba (which needs two children) is true at founding, so raising one
+## is among the first things the town has a reason to do.
+const COHORT := 5
+const COHORT_YEARS := 10.0
+const COHORT_ELDEST := 70.0
+const COHORT_JITTER := 4.0
 ## HOW A TOWN LAYS ITSELF OUT: the innermost band a building may stand on, how
 ## far each band steps outward, and how many bearings are tried round each one.
 const BUILD_NEAREST := 7.5
@@ -569,11 +586,36 @@ func _spot_blocked(pos: Vector3, own_room := 0.0) -> bool:
 
 func _spawn_villagers(count: int) -> void:
 	for i in count:
-		var v := _make_villager(randf_range(16.0, 45.0))
+		var v := _make_villager(_founding_age(i, count))
+		# NOBODY DIES ON THE FIRST MORNING. A lifespan is rolled between sixty
+		# and eighty-five without reference to the age it is handed, so a
+		# seventy-year-old founder had a fair chance of being born already past
+		# their own end.
+		v.lifespan = maxf(v.lifespan, v.age + randf_range(5.0, 22.0))
 		var spot := _grounded(Vector3(randf_range(-5, 5), 0, randf_range(-5, 5)), 0.5)
 		v.position = spot + Vector3(0, 0.6, 0)
 		add_child(v)
 	_assign_housing()
+
+
+## THE AGE OF THE i-TH FOUNDING SOUL: the generations first, oldest rung last,
+## and the working middle for whatever the ladder does not use. The jitter is
+## what keeps a rung from being five people of exactly the same age standing in
+## a row — it spreads each one over eight years, so the second rung holds
+## children and the teens who are nearly done being them.
+func _founding_age(i: int, count: int) -> float:
+	@warning_ignore("integer_division")
+	var rungs := int(COHORT_ELDEST / COHORT_YEARS) + 1
+	var laddered := mini(rungs * COHORT, count)
+	if i < laddered:
+		@warning_ignore("integer_division")
+		var rung := i / COHORT
+		# absf and not maxf: clamping at zero put half of the youngest rung at
+		# exactly newborn, and five babies of identical age is the row of
+		# identical people this was meant to avoid. Folded, they spread 0-4.
+		return absf(float(rung) * COHORT_YEARS
+			+ randf_range(-COHORT_JITTER, COHORT_JITTER))
+	return randf_range(Villager.ADULT_AGE + 2.0, 45.0)
 
 
 func _make_villager(start_age: float) -> Villager:
