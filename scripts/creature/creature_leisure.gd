@@ -20,7 +20,7 @@ static func lounge(who: Creature, delta: float) -> void:
 		return
 	who._apply_gravity_only(delta)
 	who._action_time -= delta
-	who.energy = minf(energy + 1.4 * delta, 100.0)
+	who.energy = minf(who.energy + 1.4 * delta, 100.0)
 	who.body.idle(delta)
 	# It turns its head to whatever is nearby. This is where its opinions of
 	# ordinary things quietly form.
@@ -30,9 +30,9 @@ static func lounge(who: Creature, delta: float) -> void:
 		CreatureWatching.observe(who)
 		var about := who._things_around(20.0)
 		if not about.is_empty():
-			who._face(about[randi() % about.size()].who.global_position)
+			who._face(about[randi() % about.size()].global_position)
 	if who._action_time <= 0.0:
-		_last_deed = "lounge"
+		who._last_deed = "lounge"
 		who._finish_choice(0.5 + who.boredom / 300.0)
 
 
@@ -42,11 +42,11 @@ static func lounge(who: Creature, delta: float) -> void:
 static func dance(who: Creature, delta: float) -> void:
 	who._apply_gravity_only(delta)
 	who._action_time -= delta
-	rotation.y += delta * 2.4
-	_body.scale.y = 1.0 + sin(Time.get_ticks_msec() / 120.0) * 0.12
-	_cheer_time -= delta
-	if _cheer_time <= 0.0:
-		_cheer_time = 1.0
+	who.rotation.y += delta * 2.4
+	who._body.scale.y = 1.0 + sin(Time.get_ticks_msec() / 120.0) * 0.12
+	who._cheer_time -= delta
+	if who._cheer_time <= 0.0:
+		who._cheer_time = 1.0
 		who._cheer_nearby(18.0, 1.2)
 		var village := CreatureEyes.home_village(who.get_tree())
 		if village != null:
@@ -57,10 +57,10 @@ static func dance(who: Creature, delta: float) -> void:
 			if who._audience(18.0) > 0:
 				village.change_belief(0.35)
 	if who._action_time <= 0.0:
-		_body.scale.y = 1.0
-		body.exert(0.8, 0.4)
+		who._body.scale.y = 1.0
+		who.body.exert(0.8, 0.4)
 		who.boredom = maxf(who.boredom - 30.0, 0.0)
-		_last_deed = "dance"
+		who._last_deed = "dance"
 		# The bigger the crowd, the better it felt. Nobody watching is a
 		# lesson too — it may well decide dancing is not worth the effort.
 		who._finish_choice(0.4 + who._audience(18.0) * 0.35)
@@ -75,7 +75,7 @@ static func pray(who: Creature, delta: float) -> void:
 	var faithful := 0
 	for v in who.get_tree().get_nodes_in_group("villagers"):
 		var villager := v as Villager
-		if not is_instance_valid(villager) or villager.who.global_position \
+		if not is_instance_valid(villager) or villager.global_position \
 				.distance_to(who.global_position) > 22.0:
 			continue
 		if villager.is_worshipping():
@@ -84,12 +84,12 @@ static func pray(who: Creature, delta: float) -> void:
 	if village != null:
 		village.hive.invite("pray", who, who.global_position, 0.9)
 	if faithful > 0:
-		GameCreature.State.add_prayer_power(faithful * 1.6 * delta)
+		GameState.add_prayer_power(faithful * 1.6 * delta)
 		if village != null:
 			village.change_belief(0.22 * delta * faithful)
 	if who._action_time <= 0.0:
-		who.mood = minf(mood + 6.0, 100.0)
-		_last_deed = "pray"
+		who.mood = minf(who.mood + 6.0, 100.0)
+		who._last_deed = "pray"
 		who._finish_choice(0.5 + faithful * 0.4)
 
 
@@ -127,16 +127,16 @@ static func commune(who: Creature, delta: float) -> void:
 	if audience > 0:
 		village.change_belief(0.3 * delta * minf(audience, 6))
 		village.notice(0.4 * delta)
-		_cheer_time -= delta
-		if _cheer_time <= 0.0:
-			_cheer_time = 2.0
+		who._cheer_time -= delta
+		if who._cheer_time <= 0.0:
+			who._cheer_time = 2.0
 			for v in who.get_tree().get_nodes_in_group("villagers"):
 				var villager := v as Villager
-				if is_instance_valid(villager) and villager.who.global_position \
+				if is_instance_valid(villager) and villager.global_position \
 						.distance_to(who.global_position) < 20.0:
 					villager.attend(who.global_position)
 	if who._action_time <= 0.0:
-		_last_deed = "commune"
+		who._last_deed = "commune"
 		who._finish_choice(0.4 + audience * 0.3)
 
 

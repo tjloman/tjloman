@@ -829,85 +829,8 @@ func _anim_state() -> String:
 		State.DYING: return "dying"
 		State.FALLING: return "fall"
 		State.HAULING: return "carry"
-		State.GO_BUILD_NEST:
-			if _move_toward(_shop_spot, WALK_SPEED * _speed_factor(), delta):
-				_dismount()
-				state = State.BUILDING_NEST
-				_action_time = 26.0
-		State.BUILDING_NEST:
-			_apply_gravity_only(delta)
-			_action_time -= delta
-			_work_noise("hammer", 0.8, delta)
-			if _action_time <= 0.0:
-				CreatureNest.raise_at(village, _shop_spot,
-					get_tree().get_first_node_in_group("creature") as Creature)
-				_shop_spot = Vector3.INF
-				_decide()
-		State.GO_CIRCLE:
-			if village.nest == null or not is_instance_valid(village.nest):
-				_decide()
-			elif _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
-				state = State.CIRCLING
-				_action_time = randf_range(25.0, 50.0)
-		State.CIRCLING:
-			_apply_gravity_only(delta)
-			# Round the fire, facing it. The chant is the village's own noise,
-			# and the prayer it raises is counted by the nest, not by each dancer
-			# — a circle is worth more than the people in it added up.
-			if village.nest != null and is_instance_valid(village.nest):
-				# Round the fire, and facing it. The circle actually turns —
-				# a ring of people standing still is a queue, not a dance.
-				var mid := village.nest.global_position
-				var out := global_position - mid
-				out.y = 0.0
-				global_position = mid + out.rotated(Vector3.UP, delta * 0.45) \
-					+ Vector3(0, global_position.y - mid.y, 0)
-				look_at(Vector3(mid.x, global_position.y, mid.z), Vector3.UP)
-				_work_noise("chant", 0.5, delta)
-			_action_time -= delta
-			if _action_time <= 0.0 or not GameState.is_night():
-				_decide()
-		State.GO_BUILD_SHOP:
-			if _move_toward(_shop_spot, WALK_SPEED * _speed_factor(), delta):
-				_dismount()
-				state = State.BUILDING_SHOP
-				_action_time = 18.0
-		State.BUILDING_SHOP:
-			_apply_gravity_only(delta)
-			_action_time -= delta
-			_work_noise("hammer", 0.8, delta)
-			if _action_time <= 0.0:
-				village.spawn_workshop_at(_shop_kind, _shop_spot)
-				_shop_spot = Vector3.INF
-				_shop_kind = ""
-				_decide()
-		State.GO_WORK:
-			if workshop == null or not is_instance_valid(workshop):
-				workshop = null
-				_decide()
-			elif _move_toward(workshop.post(), WALK_SPEED * _speed_factor(), delta):
-				_dismount()
-				state = State.WORKING
-				_shift_left = Workshop.SHIFT
-				# A STINT, not a life sentence. Long enough to be somewhere and
-				# be seen there, short enough that the town reshuffles as its
-				# needs change rather than posting people for good.
-				_action_time = randf_range(40.0, 70.0)
-		State.WORKING:
-			_apply_gravity_only(delta)
-			if workshop == null or not is_instance_valid(workshop):
-				workshop = null
-				_decide()
-			else:
-				_work_noise("hammer", 0.35, delta)
-				_shift_left -= delta
-				if _shift_left <= 0.0:
-					_shift_left = Workshop.SHIFT
-					workshop.work_shift()
-				_action_time -= delta
-				if _action_time <= 0.0:
-					workshop = null
-					_decide()
+		State.CIRCLING: return "play"
+		State.BUILDING_NEST, State.BUILDING_SHOP, State.WORKING: return "work"
 		State.GO_ARM: return "run"
 		State.FIGHT: return "attack"
 		State.HELD: return "idle"
@@ -2293,85 +2216,10 @@ func _status_word() -> String:
 		State.GO_BUILD_EDUBBA, State.BUILDING_EDUBBA: return "raising the Edubba"
 		State.GO_FISH, State.FISHING: return "fishing"
 		State.HAULING: return "hauling to the storehouse"
-		State.GO_BUILD_NEST:
-			if _move_toward(_shop_spot, WALK_SPEED * _speed_factor(), delta):
-				_dismount()
-				state = State.BUILDING_NEST
-				_action_time = 26.0
-		State.BUILDING_NEST:
-			_apply_gravity_only(delta)
-			_action_time -= delta
-			_work_noise("hammer", 0.8, delta)
-			if _action_time <= 0.0:
-				CreatureNest.raise_at(village, _shop_spot,
-					get_tree().get_first_node_in_group("creature") as Creature)
-				_shop_spot = Vector3.INF
-				_decide()
-		State.GO_CIRCLE:
-			if village.nest == null or not is_instance_valid(village.nest):
-				_decide()
-			elif _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
-				state = State.CIRCLING
-				_action_time = randf_range(25.0, 50.0)
-		State.CIRCLING:
-			_apply_gravity_only(delta)
-			# Round the fire, facing it. The chant is the village's own noise,
-			# and the prayer it raises is counted by the nest, not by each dancer
-			# — a circle is worth more than the people in it added up.
-			if village.nest != null and is_instance_valid(village.nest):
-				# Round the fire, and facing it. The circle actually turns —
-				# a ring of people standing still is a queue, not a dance.
-				var mid := village.nest.global_position
-				var out := global_position - mid
-				out.y = 0.0
-				global_position = mid + out.rotated(Vector3.UP, delta * 0.45) \
-					+ Vector3(0, global_position.y - mid.y, 0)
-				look_at(Vector3(mid.x, global_position.y, mid.z), Vector3.UP)
-				_work_noise("chant", 0.5, delta)
-			_action_time -= delta
-			if _action_time <= 0.0 or not GameState.is_night():
-				_decide()
-		State.GO_BUILD_SHOP:
-			if _move_toward(_shop_spot, WALK_SPEED * _speed_factor(), delta):
-				_dismount()
-				state = State.BUILDING_SHOP
-				_action_time = 18.0
-		State.BUILDING_SHOP:
-			_apply_gravity_only(delta)
-			_action_time -= delta
-			_work_noise("hammer", 0.8, delta)
-			if _action_time <= 0.0:
-				village.spawn_workshop_at(_shop_kind, _shop_spot)
-				_shop_spot = Vector3.INF
-				_shop_kind = ""
-				_decide()
-		State.GO_WORK:
-			if workshop == null or not is_instance_valid(workshop):
-				workshop = null
-				_decide()
-			elif _move_toward(workshop.post(), WALK_SPEED * _speed_factor(), delta):
-				_dismount()
-				state = State.WORKING
-				_shift_left = Workshop.SHIFT
-				# A STINT, not a life sentence. Long enough to be somewhere and
-				# be seen there, short enough that the town reshuffles as its
-				# needs change rather than posting people for good.
-				_action_time = randf_range(40.0, 70.0)
-		State.WORKING:
-			_apply_gravity_only(delta)
-			if workshop == null or not is_instance_valid(workshop):
-				workshop = null
-				_decide()
-			else:
-				_work_noise("hammer", 0.35, delta)
-				_shift_left -= delta
-				if _shift_left <= 0.0:
-					_shift_left = Workshop.SHIFT
-					workshop.work_shift()
-				_action_time -= delta
-				if _action_time <= 0.0:
-					workshop = null
-					_decide()
+		State.GO_BUILD_NEST, State.BUILDING_NEST: return "raising the creature's nest"
+		State.GO_CIRCLE, State.CIRCLING: return "dancing the circle"
+		State.GO_BUILD_SHOP, State.BUILDING_SHOP: return "raising a workshop"
+		State.GO_WORK, State.WORKING: return "at work"
 		State.GO_ARM: return "running for a weapon"
 		State.FIGHT: return "FIGHTING for their life"
 		State.COURT: return "courting at the totem"
@@ -2400,85 +2248,8 @@ func _status_text() -> String:
 		State.PREACHING: return "hear me!"
 		State.FISHING: return "fish?"
 		State.HAULING: return "haul"
-		State.GO_BUILD_NEST:
-			if _move_toward(_shop_spot, WALK_SPEED * _speed_factor(), delta):
-				_dismount()
-				state = State.BUILDING_NEST
-				_action_time = 26.0
-		State.BUILDING_NEST:
-			_apply_gravity_only(delta)
-			_action_time -= delta
-			_work_noise("hammer", 0.8, delta)
-			if _action_time <= 0.0:
-				CreatureNest.raise_at(village, _shop_spot,
-					get_tree().get_first_node_in_group("creature") as Creature)
-				_shop_spot = Vector3.INF
-				_decide()
-		State.GO_CIRCLE:
-			if village.nest == null or not is_instance_valid(village.nest):
-				_decide()
-			elif _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
-				state = State.CIRCLING
-				_action_time = randf_range(25.0, 50.0)
-		State.CIRCLING:
-			_apply_gravity_only(delta)
-			# Round the fire, facing it. The chant is the village's own noise,
-			# and the prayer it raises is counted by the nest, not by each dancer
-			# — a circle is worth more than the people in it added up.
-			if village.nest != null and is_instance_valid(village.nest):
-				# Round the fire, and facing it. The circle actually turns —
-				# a ring of people standing still is a queue, not a dance.
-				var mid := village.nest.global_position
-				var out := global_position - mid
-				out.y = 0.0
-				global_position = mid + out.rotated(Vector3.UP, delta * 0.45) \
-					+ Vector3(0, global_position.y - mid.y, 0)
-				look_at(Vector3(mid.x, global_position.y, mid.z), Vector3.UP)
-				_work_noise("chant", 0.5, delta)
-			_action_time -= delta
-			if _action_time <= 0.0 or not GameState.is_night():
-				_decide()
-		State.GO_BUILD_SHOP:
-			if _move_toward(_shop_spot, WALK_SPEED * _speed_factor(), delta):
-				_dismount()
-				state = State.BUILDING_SHOP
-				_action_time = 18.0
-		State.BUILDING_SHOP:
-			_apply_gravity_only(delta)
-			_action_time -= delta
-			_work_noise("hammer", 0.8, delta)
-			if _action_time <= 0.0:
-				village.spawn_workshop_at(_shop_kind, _shop_spot)
-				_shop_spot = Vector3.INF
-				_shop_kind = ""
-				_decide()
-		State.GO_WORK:
-			if workshop == null or not is_instance_valid(workshop):
-				workshop = null
-				_decide()
-			elif _move_toward(workshop.post(), WALK_SPEED * _speed_factor(), delta):
-				_dismount()
-				state = State.WORKING
-				_shift_left = Workshop.SHIFT
-				# A STINT, not a life sentence. Long enough to be somewhere and
-				# be seen there, short enough that the town reshuffles as its
-				# needs change rather than posting people for good.
-				_action_time = randf_range(40.0, 70.0)
-		State.WORKING:
-			_apply_gravity_only(delta)
-			if workshop == null or not is_instance_valid(workshop):
-				workshop = null
-				_decide()
-			else:
-				_work_noise("hammer", 0.35, delta)
-				_shift_left -= delta
-				if _shift_left <= 0.0:
-					_shift_left = Workshop.SHIFT
-					workshop.work_shift()
-				_action_time -= delta
-				if _action_time <= 0.0:
-					workshop = null
-					_decide()
+		State.GO_BUILD_NEST, State.BUILDING_NEST: return "nest"
+		State.GO_CIRCLE, State.CIRCLING: return "dance"
 		State.GO_ARM: return "arms!"
 		State.FIGHT: return "FIGHT!"
 		State.COURT: return "♥"

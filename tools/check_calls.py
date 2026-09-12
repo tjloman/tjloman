@@ -750,6 +750,147 @@ def check_shadowed_globals(files):
     return out
 
 
+# WORDS THAT ARE NOT NAMES. Keywords, the lowercase built-in types, and the
+# handful of literals — everything a line can contain that looks like an
+# identifier but never has to be declared anywhere.
+NOT_A_NAME = {
+    "if", "elif", "else", "for", "in", "while", "return", "var", "const",
+    "func", "static", "extends", "class_name", "class", "match", "when",
+    "break", "continue", "pass", "and", "or", "not", "is", "as", "self",
+    "true", "false", "null", "await", "signal", "enum", "super", "assert",
+    "breakpoint", "void", "int", "float", "bool", "yield", "set", "get",
+    "master", "puppet", "remote", "sync", "trait", "namespace", "_",
+}
+
+# `foo` — a bare lowercase name, with nothing in front of it to give it an
+# owner. The lookbehind rules out `a.foo`, `$foo`, `@foo` and a name already
+# inside a word; the lookahead rules out `foo(`, which is a CALL and is the
+# business of check() above rather than of this rule.
+bare_name_re = re.compile(r"(?<![\w.$@])([a-z_]\w*)\b(?!\s*\()")
+# Everything that DECLARES a name inside a function body.
+local_decl_names = re.compile(r"(?:^|\s)(?:var|for)\s+(\w+)")
+# An inline lambda brings its own parameters into the lines that follow it.
+lambda_params_re = re.compile(r"\bfunc\s*\(([^)]*)\)")
+# Class-level declarations, annotations and all: `@onready var x`, `var y`,
+# `const Z`, `signal s`, `enum E`, `func f`.
+class_decl_re = re.compile(
+    r"^(?:@\w+(?:\([^)]*\))?\s+)*(?:static\s+)?"
+    r"(?:var|const|signal|enum)\s+(\w+)", re.M)
+strings_re = re.compile(r'"[^"]*"|\'[^\']*\'')
+
+
+def _func_bodies(src):
+    """Every function in a file as (line number, whole signature, body lines).
+
+    The signature is joined across continuation lines: a `func` whose
+    parameters wrap onto a second line still declares them, and reading only
+    the first line would report every one of the rest as undeclared.
+    """
+    lines = src.split("\n")
+    heads = [i for i, ln in enumerate(lines)
+             if re.match(r"^(?:static\s+)?func\s+\w+\s*\(", ln)]
+    out = []
+    for n, start in enumerate(heads):
+        sig = lines[start]
+        after = start
+        while sig.count("(") > sig.count(")") and after + 1 < len(lines):
+            after += 1
+            sig += " " + lines[after].strip()
+        stop = heads[n + 1] if n + 1 < len(heads) else len(lines)
+        # A function ends at the next top-level declaration, whichever comes
+        # first: the next `func`, or anything else at column zero.
+        for i in range(after + 1, stop):
+            ln = lines[i]
+            if ln and not ln[0].isspace() and not ln.startswith(")"):
+                stop = i
+                break
+        out.append((start + 1, sig, lines[after + 1:stop], after + 1))
+    return out
+
+
+def check_undeclared_names(files):
+    """A bare name inside a function that nothing in scope declares.
+
+    This is the rule that would have caught the two worst load failures this
+    project has had, both of them the same mistake: code LIFTED OUT of a node
+    class into a static helper, where `energy` and `_cheer_time` and `rotation`
+    no longer mean anything because there is no longer a `self` holding them.
+    `gdparse` accepts every one of those — they are perfectly good syntax —
+    and the game simply does not load.
+
+    It runs where the scope is CLOSED and can therefore be known exactly:
+
+      * every `static func` anywhere, which can see only its parameters, its
+        own locals, and the class's constants and static members; and
+      * every function in a class extending RefCounted or Object, whose
+        inherited surface is small enough to write down.
+
+    Instance methods of Node subclasses are left alone, because checking those
+    means knowing the whole Godot node API and a rule that cries wolf is a rule
+    that gets switched off.
+
+    Only LOWERCASE names are considered. A capitalised bare name is a class, an
+    autoload or a global enum, and this file has no business guessing at those.
+    Calls are left to check() — this rule is about names that are merely READ.
+    """
+    # The whole of RefCounted and Object worth naming, plus what @GlobalScope
+    # offers as a bare word rather than as a call.
+    inherited = {
+        "free", "get_instance_id", "get_script", "get_class", "is_class",
+        "notification", "to_string", "property_list_changed",
+    }
+    problems = []
+    for path in files:
+        src = open(path, encoding="utf-8").read()
+        base = extends_re.search(src)
+        closed_class = base is not None and base.group(1) in ("RefCounted", "Object")
+        members = set(class_decl_re.findall(src)) | set(func_re.findall(src))
+        members |= inherited
+        for lineno, header, body, body_at in _func_bodies(src):
+            is_static = header.lstrip().startswith("static ")
+            # THE FRAME TIME, ORPHANED. This one runs in EVERY function of
+            # every class, closed scope or not, because `delta` is not a
+            # property of anything in Godot: a function using it that was not
+            # handed it is always a mistake, and it is the exact mistake that
+            # happens when a block of a `_process` is moved somewhere else.
+            # Three blocks of this project's villager state machine were
+            # pasted into three `match state:` blocks that return strings, and
+            # fifty-four lines of `delta` came with them.
+            if "delta" not in header:
+                for offset, ln in enumerate(body):
+                    bare = strings_re.sub('""', ln.split("#")[0])
+                    if re.search(r"(?<![\w.$@])delta\b", bare):
+                        problems.append((path, body_at + offset, "delta",
+                                         header.split(")")[0].strip() + ")",
+                                         ln.strip()))
+            if not is_static and not closed_class:
+                continue
+            scope = set(members)
+            inner = header[header.index("(") + 1:header.rindex(")")] \
+                if ")" in header else ""
+            for pname, _kind in parse_params(inner):
+                scope.add(pname)
+            clean_body = [strings_re.sub('""', ln.split("#")[0]) for ln in body]
+            for ln in clean_body:
+                scope |= set(local_decl_names.findall(ln))
+                for raw in lambda_params_re.findall(ln):
+                    for pname, _k in parse_params(raw):
+                        scope.add(pname)
+            for offset, ln in enumerate(clean_body):
+                stripped = ln.strip()
+                if not stripped or stripped.startswith("##"):
+                    continue
+                for name in bare_name_re.findall(ln):
+                    if name in NOT_A_NAME or name in scope:
+                        continue
+                    if name in SHADOWABLE:
+                        continue          # a global used as a bare reference
+                    problems.append((path, body_at + offset, name,
+                                     header.split(")")[0].strip() + ")",
+                                     body[offset].strip()))
+    return problems
+
+
 def main():
     root = "scripts"
     targets = sys.argv[1:] or [root]
@@ -800,6 +941,12 @@ def main():
               "%s() — Godot warns and carries on, so this never gets fixed, and "
               "the real %s() is unreachable from inside this scope"
               "\n    %s" % (path, lineno, kind, name, name, name, line))
+    undeclared = check_undeclared_names(files)
+    for path, lineno, name, where, line in undeclared:
+        print("%s:%d: '%s' is not declared in the scope of %s — nothing in this "
+              "function, its parameters, or its class provides it. gdparse "
+              "accepts this; Godot refuses to load the script."
+              "\n    %s" % (path, lineno, name, where, line))
     loop_vars = check_untyped_loop_vars(files)
     for path, lineno, name, line in loop_vars:
         print("%s:%d: '%s' comes from an UNTYPED array literal, so it is a "
@@ -809,7 +956,7 @@ def main():
               % (path, lineno, name, name, line))
     total = len(problems) + len(escapes) + len(formats) + len(shadowed) \
         + len(loose_arrays) + len(variants) + len(shadowed_members) \
-        + len(loop_vars) + len(shadowed_globals)
+        + len(loop_vars) + len(shadowed_globals) + len(undeclared)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0
