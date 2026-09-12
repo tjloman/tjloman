@@ -116,6 +116,10 @@ var _target := Vector3.ZERO
 var _action_time := 0.0
 var _target_food: FoodItem = null
 var _target_animal: Animal = null
+## The wild herd they are going to cut a head out of, when there is no loose
+## beast to gentle. Held apart from _target_animal because the animal does not
+## exist yet — it is built out of the herd on arrival.
+var _target_herd: Herd = null
 var _target_corpse: Corpse = null
 var _target_tree: WildTree = null
 var _target_deposit: RockDeposit = null
@@ -588,11 +592,24 @@ func _physics_process(delta: float) -> void:
 				_build_site = null
 				_decide()
 		State.GO_TAME:
-			_process_go_target(_target_animal, delta, State.TAMING, 3.0)
+			if _target_animal == null and _target_herd != null:
+				_process_go_target(_target_herd, delta, State.TAMING, 3.0)
+			else:
+				_process_go_target(_target_animal, delta, State.TAMING, 3.0)
 		State.TAMING:
 			_apply_gravity_only(delta)
 			_action_time -= delta
-			if not is_instance_valid(_target_animal) or not _target_animal.is_tamable():
+			# CUTTING ONE OUT OF A WILD HERD — the same patient work as gentling
+			# a stray, and the beast is only built once it is theirs. From there it
+			# looks after itself: a tamed animal grazes round the pen and drinks at
+			# the well, which is the whole of being the village's own.
+			if _target_animal == null and _target_herd != null:
+				if not is_instance_valid(_target_herd) or _target_herd.alive() <= 0:
+					_target_herd = null
+					_decide()
+				elif _action_time <= 0.0:
+					_take_from_herd()
+			elif not is_instance_valid(_target_animal) or not _target_animal.is_tamable():
 				_target_animal = null
 				_decide()
 			elif _action_time <= 0.0:
@@ -745,6 +762,25 @@ func _process_go_target(target: Variant, delta: float, next: State, work_time: f
 		_dismount()
 		state = next
 		_action_time = work_time
+
+
+## ONE HEAD OUT OF A WILD HERD, gentled and kept. The herd builds the beast —
+## it was a row of numbers until this moment — and taming it hands it to the
+## village, which reparents it so it survives the chunk it was standing in
+## unloading, and sets it grazing round the pen.
+func _take_from_herd() -> void:
+	var from := _target_herd
+	_target_herd = null
+	var won := from.give_one(global_position)
+	if won == null:
+		_decide()
+		return
+	won.tame(village)
+	morality = minf(morality + 2.0, 100.0)
+	if village.is_player_home:
+		GameState.announce("%s cut a %s out of the herd and brought it home."
+			% [villager_name, won.species])
+	_decide()
 
 
 func _work_noise(sound: String, period: float, delta: float) -> void:
@@ -954,6 +990,7 @@ func cheer(amount: float) -> void:
 func _decide() -> void:
 	_dismount()
 	_release_farm()  # re-deciding drops any field claim, so others may take it
+	_target_herd = null
 	if _carry_kind != "":
 		_clear_carry()  # a load abandoned mid-haul is lost (interrupted by fear, etc.)
 	# Survival first.
@@ -1218,7 +1255,7 @@ func _pick_job() -> bool:
 	# Taming: a privilege of the good, pointless for the fallen. An empty
 	# pen makes it urgent — a dog and a mount change everything.
 	if morality >= TAME_MORALITY and not abandoned and village.tamed_count() < Workshop.stalls(village):
-		if watch.tamable != null:
+		if watch.tamable != null or watch.stock != null:
 			scores["tame"] = 24.0 + (12.0 if village.tamed_count() == 0 else 0.0)
 
 	if scores.is_empty():
@@ -1328,7 +1365,15 @@ func _start_job(job: String) -> void:
 			_target_animal = village.best_penned_meat()
 			state = Workshop.butchery(self, _target_animal) as State
 		"tame":
+			# A loose beast first — it is nearer and nobody has to cut it out of
+			# anything. Failing that, the herd the town has its eye on.
 			_target_animal = _nearest_tamable()
+			if _target_animal == null:
+				_target_herd = village.watch.stock
+				if _target_herd == null or not is_instance_valid(_target_herd):
+					state = State.WANDER
+					_action_time = 2.0
+					return
 			state = State.GO_TAME
 		"work":
 			workshop = Workshop.with_room(village, global_position)

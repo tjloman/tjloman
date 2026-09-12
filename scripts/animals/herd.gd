@@ -1221,6 +1221,33 @@ func release(beast: Animal) -> void:
 	_spread = maxf(SPACING * sqrt(float(alive())), SPREAD_LEAST)
 
 
+## ONE CUT OUT OF THE HERD, ALIVE, as a real beast for somebody to keep.
+##
+## The other way a head leaves a herd. `take_one` is for the table and never
+## builds anything; this builds the animal, because whoever asked for it means
+## to walk it home — a villager cutting a heifer out of wild cattle, which until
+## now they could not do at all. Taming looked through the "animals" group, and
+## a herd puts at most a couple of dozen head in it out of however many hundred,
+## so a village could stand beside two hundred caribou and own none of them.
+##
+## It prefers a head nobody is promoted into, the same as everything else here,
+## so a beast the player is watching is never swapped out from under them. The
+## herd is one smaller and frightened by it: a hand reaching in and carrying one
+## off is not a thing the rest of them shrug at.
+func give_one(at: Vector3) -> Animal:
+	for m in _members:
+		if m["dead"] or m["agent"] != null:
+			continue
+		m["dead"] = true
+		lost_one()
+		_spread = maxf(SPACING * sqrt(float(alive())), SPREAD_LEAST)
+		var won := Animal.create(species)
+		get_parent().add_child(won)
+		won.global_position = at
+		return won
+	return null
+
+
 ## AND ONE TAKEN OUT FOR THE TABLE, without ever building it. A butcher does
 ## not need the animal to exist to get meat off it.
 func slaughter() -> int:

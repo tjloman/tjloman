@@ -46,6 +46,10 @@ var timber: WildTree = null
 var stone: RockDeposit = null
 var game: Animal = null
 var tamable: Animal = null
+## A WILD HERD WORTH TAKING STOCK FROM. Not the same question as `tamable`
+## above: that is one loose beast standing about, this is a herd the village
+## can cut a head out of and raise as its own.
+var stock: Herd = null
 var corpse: Corpse = null
 var shore := Vector3.INF
 var heathen: Village = null
@@ -67,6 +71,7 @@ func tick(delta: float, town: Village) -> void:
 	_look_for_stone(tree, here, reach * STONE_REACH)
 	_look_for_beasts(tree, here, reach * GAME_REACH)
 	_look_for_corpse(tree, here, reach * CORPSE_REACH)
+	_look_for_stock(tree, here, reach * GAME_REACH)
 	_look_for_shore(tree, here)
 	_look_for_heathen(tree, town, here)
 
@@ -120,6 +125,23 @@ func _look_for_beasts(tree: SceneTree, here: Vector3, reach: float) -> void:
 		if d < best_tame and beast.is_tamable():
 			best_tame = d
 			tamable = beast
+
+
+## THE NEAREST HERD THE TOWN COULD TAKE STOCK FROM: wild (a barn's own herd is
+## already theirs), still standing, and of a kind that can be kept at all.
+func _look_for_stock(tree: SceneTree, here: Vector3, reach: float) -> void:
+	stock = null
+	var best := reach
+	for n in tree.get_nodes_in_group("herds"):
+		var herd := n as Herd
+		if herd == null or not is_instance_valid(herd) or herd.keeper != null:
+			continue
+		if herd.alive() <= 0 or not Animal.SPECIES[herd.species].get("tame", false):
+			continue
+		var d := here.distance_to(herd.global_position) - herd.spread()
+		if d < best:
+			best = d
+			stock = herd
 
 
 func _look_for_corpse(tree: SceneTree, here: Vector3, reach: float) -> void:
