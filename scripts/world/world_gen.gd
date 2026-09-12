@@ -92,6 +92,7 @@ var _burn_tick := 0.0
 
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS   # the streamer outlives the pause
 	add_to_group("world_gen")
 	load_radius = Quality.load_radius()
 	unload_radius = Quality.unload_radius()
@@ -114,6 +115,16 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	# LOADING GOES ON WHILE THE WORLD IS HELD. The opening screen pauses the
+	# tree so nothing ages or starves while the player is choosing — and raising
+	# the land is the one job that must NOT stop for that, because it is most of
+	# what "loading" means here. So the streamer alone is exempt: this node runs
+	# always, everything it spawns is pausable (see _spawn_chunk), and while the
+	# game is held the only thing that happens is ground arriving.
+	if get_tree().paused:
+		if focus_node != null:
+			_stream_chunks()
+		return
 	_tick_burns(delta)
 	if focus_node == null:
 		return
@@ -675,6 +686,11 @@ func _creature_cells() -> Dictionary:
 
 func _spawn_chunk(cell: Vector2i) -> void:
 	var chunk := Chunk.new()
+	# PAUSABLE, EXPLICITLY. This node runs even while the tree is paused so the
+	# land can keep arriving, and a child inherits that unless it is told
+	# otherwise — which would have quietly left every animal, herd and villager
+	# in every chunk running through a pause that exists precisely to stop them.
+	chunk.process_mode = Node.PROCESS_MODE_PAUSABLE
 	chunk.world = self
 	chunk.cell = cell
 	chunk.position = Vector3(cell.x * CHUNK_SIZE, 0, cell.y * CHUNK_SIZE)

@@ -9,6 +9,26 @@ const MAX_CONCURRENT := 24
 ## join, in seconds. A loop that clicks is worse than no loop. See `_make_loop`.
 const SPLICE := 0.25
 
+## EVERY SOUND, AND HOW TO MAKE IT. Twenty-four waveforms synthesized from
+## nothing, which is why there are no audio files in this project — and which
+## used to happen in one lump before the first frame was ever drawn.
+##
+## They are a TABLE of recipes now rather than a run of assignments, so the
+## work can be done a little at a time behind the opening screen while the
+## player is still choosing things (see `warm_next`), and any sound asked for
+## before its turn comes simply makes itself on the spot. Nothing has to know
+## which of those two happened.
+const ONE_SHOTS := [
+	"baa", "cluck", "oink", "neigh", "bark", "howl", "croak", "saw", "pick",
+	"hammer", "murmur", "chatter", "boom", "coo", "caw", "screech", "drum",
+	"whisper",
+]
+## THE SMALL VOICES. Everything above is a one-shot; these are LOOPS, because
+## a cricket is not an event. See `_make_loop` and `voice`.
+const VOICES := [
+	"crickets", "bees", "flies", "peepers", "chitter", "rustle",
+]
+
 var _bank := {}
 var _active := 0
 ## The looping voices, kept apart from the one-shots because they are used
@@ -17,38 +37,41 @@ var _active := 0
 var _loops := {}
 
 
-func _ready() -> void:
-	_bank["baa"] = _make_baa()
-	_bank["cluck"] = _make_cluck()
-	_bank["oink"] = _make_oink()
-	_bank["neigh"] = _make_neigh()
-	_bank["bark"] = _make_bark()
-	_bank["howl"] = _make_howl()
-	_bank["croak"] = _make_croak()
-	_bank["saw"] = _make_saw()
-	_bank["pick"] = _make_pick()
-	_bank["hammer"] = _make_hammer()
-	_bank["murmur"] = _make_murmur()
-	_bank["chatter"] = _make_chatter()
-	_bank["boom"] = _make_boom()
-	_bank["coo"] = _make_coo()
-	_bank["caw"] = _make_caw()
-	_bank["screech"] = _make_screech()
-	_bank["drum"] = _make_drum()
-	_bank["whisper"] = _make_whisper()
-	# THE SMALL VOICES. Everything above is a one-shot; these are LOOPS, because
-	# a cricket is not an event. See `_make_loop` and `voice`.
-	_loops["crickets"] = _make_crickets()
-	_loops["bees"] = _make_bees()
-	_loops["flies"] = _make_flies()
-	_loops["peepers"] = _make_peepers()
-	_loops["chitter"] = _make_chitter()
-	_loops["rustle"] = _make_rustle()
+## MAKE ONE THAT IS NOT MADE YET, and say whether there was anything left to
+## do. The opening screen calls this until it says no; everything else calls
+## `_ensure`, which reaches the same place by another door.
+func warm_next() -> bool:
+	for name: String in ONE_SHOTS:
+		if not _bank.has(name):
+			_bank[name] = call("_make_" + name)
+			return true
+	for name: String in VOICES:
+		if not _loops.has(name):
+			_loops[name] = call("_make_" + name)
+			return true
+	return false
+
+
+## How much of the bank is built, 0..1 — for the line under the opening screen.
+func warmth() -> float:
+	var done := float(_bank.size() + _loops.size())
+	return clampf(done / float(ONE_SHOTS.size() + VOICES.size()), 0.0, 1.0)
+
+
+## The sound, built if this is the first anyone has asked for it.
+func _ensure(sound: String) -> void:
+	if _bank.has(sound):
+		return
+	if sound in ONE_SHOTS:
+		_bank[sound] = call("_make_" + sound)
 
 
 ## Plays a named sound at a world position, then cleans itself up.
 func play_at(sound: String, pos: Vector3, volume_db := 0.0, pitch_jitter := 0.12) -> void:
-	if not _bank.has(sound) or _active >= MAX_CONCURRENT:
+	if _active >= MAX_CONCURRENT:
+		return
+	_ensure(sound)
+	if not _bank.has(sound):
 		return
 	var scene := get_tree().current_scene
 	if scene == null:
@@ -73,11 +96,15 @@ func play_at(sound: String, pos: Vector3, volume_db := 0.0, pitch_jitter := 0.12
 ## which is what lets a chorus go from intermittent to continuous as the player
 ## draws a rune. Null for an unknown name.
 func voice(voice_name: String) -> AudioStreamWAV:
+	# Built on the spot if the warmer has not reached it yet — a chorus asked
+	# for in the first seconds must not come back silent for ever after.
+	if not _loops.has(voice_name) and voice_name in VOICES:
+		_loops[voice_name] = call("_make_" + voice_name)
 	return _loops.get(voice_name)
 
 
 func has_voice(voice_name: String) -> bool:
-	return _loops.has(voice_name)
+	return voice_name in VOICES
 
 
 ## Synthesis core ------------------------------------------------------------

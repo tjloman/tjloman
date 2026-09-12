@@ -70,6 +70,11 @@ var _stone_time := 0.0
 
 
 func _ready() -> void:
+	# AWAKE WHILE THE WORLD IS HELD. The opening screen pauses the tree, and a
+	# paused node is offered no input — so without this the buttons that open
+	# this very menu would be shouting at something asleep.
+	process_mode = Node.PROCESS_MODE_ALWAYS
+
 	layer = 5
 	_build_bars()
 	_build_miracle_panel()

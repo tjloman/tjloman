@@ -36,6 +36,10 @@ var _environment: Environment
 
 
 func _ready() -> void:
+	# NO RUN EVER STARTS STUCK. The opening screen holds the tree, and naming a
+	# creature reloads the scene — which would otherwise carry the pause into
+	# the new one with nothing left alive to lift it.
+	get_tree().paused = false
 	_setup_input()
 	_build_environment()
 
@@ -148,8 +152,15 @@ func _ready() -> void:
 
 	GameState.announce("A new god stirs over an endless world. Elsmere awaits your influence.")
 
+	# THE OPENING SCREEN, and the world held behind it. Everything a phone
+	# cannot otherwise reach lives on it — see StartScreen. Never during a
+	# smoke test: those run on timers, and a paused tree has no timers.
 	if "--smoke-test" in OS.get_cmdline_user_args():
 		_run_smoke_test()
+	else:
+		var start := StartScreen.new()
+		start.profiles = profiles
+		add_child(start)
 
 
 ## Re-apply the tier knobs that are cheap to flip mid-game (lights, glow,

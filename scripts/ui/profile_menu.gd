@@ -36,6 +36,11 @@ var _begin: Button
 
 
 func _ready() -> void:
+	# AWAKE WHILE THE WORLD IS HELD. The opening screen pauses the tree, and a
+	# paused node is offered no input — so without this the buttons that open
+	# this very menu would be shouting at something asleep.
+	process_mode = Node.PROCESS_MODE_ALWAYS
+
 	layer = 13
 	_build()
 	# A god with no creature is asked to name one before anything else happens.
@@ -128,6 +133,12 @@ func open(naming := false) -> void:
 		else "Raise another — it begins in a world of its own, and costs these nothing."
 	if naming:
 		_name_field.grab_focus()
+
+
+## Is this menu in front of the player right now? The opening screen waits on
+## it: on a first run the creature is named before anything else is offered.
+func is_open() -> bool:
+	return _panel != null and _panel.visible
 
 
 func close_menu() -> void:

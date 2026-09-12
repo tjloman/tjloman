@@ -19,6 +19,17 @@ extends Node
 const DIR := "res://models/"
 ## .glb/.gltf are the usual Blender exports; .obj a single mesh; .scn/.tscn a
 ## Godot scene; .tres/.res a saved Mesh resource.
+## EVERY NAME THIS BANK IS EVER ASKED FOR that is not an animal species (those
+## come from Animal.SPECIES). Kept so the opening screen can look each one up
+## once while the player is still reading — every miss is a walk over the
+## filesystem, and on a phone a dozen of those landing on the first frame a
+## village is drawn is a hitch you can see. See StartScreen._fill_warm_jobs.
+const KNOWN := [
+	"villager", "villager_female", "villager_male", "creature", "tree",
+	"tree_forest", "tree_grassland", "tree_savanna", "tree_wetland",
+	"bush", "flower", "rock", "house", "school", "store", "hand", "nest",
+]
+
 const EXTS := [".glb", ".gltf", ".obj", ".scn", ".tscn", ".tres", ".res"]
 
 # name -> loaded Resource, or null when we've checked and found nothing. Both
