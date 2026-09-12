@@ -16,6 +16,7 @@ enum State {
 	GO_PREACH, PREACHING, GO_FEED, GO_BUILD_FARM, BUILDING_FARM,
 	GO_FISH, FISHING, COURT, FOLLOW_MOM, AT_SCHOOL, TEACH,
 	GO_BUILD_EDUBBA, BUILDING_EDUBBA,
+	GO_WORK, WORKING, GO_BUILD_SHOP, BUILDING_SHOP,
 	HAULING, GO_ARM, FIGHT, HIDE,
 	FLEE, HELD, FALLING, DYING,
 }
@@ -66,6 +67,9 @@ const REVIVE_HEALTH := 10.0     # what a rescue restores them to
 const CROWD_PENALTY := 7.0
 
 var village: Village
+## The trade this one is posted to, while it is posted there. Public because a
+## trade counts heads to know whether it still has room.
+var workshop: Workshop = null
 var home: House = null
 var villager_name := "Villager"
 var is_female := randf() < 0.5
@@ -119,6 +123,9 @@ var _sim_skip := 0               # physics frames skipped while far from the cam
 ## note in _physics_process — this is what keeps distant villages fed.
 var _sim_scale := 1.0
 var _target_bush: ForageBush = null
+var _shop_spot := Vector3.INF
+var _shop_kind := ""
+var _shift_left := 0.0
 var _target_farm: Farm = null
 var _carrying_feed := false
 var _carry_kind := ""            # non-empty while hauling a gathered load home
@@ -353,6 +360,47 @@ func _physics_process(delta: float) -> void:
 				village.spawn_edubba_at(_edubba_spot)
 				_edubba_spot = Vector3.INF
 				_decide()
+		State.GO_BUILD_SHOP:
+			if _move_toward(_shop_spot, WALK_SPEED * _speed_factor(), delta):
+				_dismount()
+				state = State.BUILDING_SHOP
+				_action_time = 18.0
+		State.BUILDING_SHOP:
+			_apply_gravity_only(delta)
+			_action_time -= delta
+			_work_noise("hammer", 0.8, delta)
+			if _action_time <= 0.0:
+				village.spawn_workshop_at(_shop_kind, _shop_spot)
+				_shop_spot = Vector3.INF
+				_shop_kind = ""
+				_decide()
+		State.GO_WORK:
+			if workshop == null or not is_instance_valid(workshop):
+				workshop = null
+				_decide()
+			elif _move_toward(workshop.post(), WALK_SPEED * _speed_factor(), delta):
+				_dismount()
+				state = State.WORKING
+				_shift_left = Workshop.SHIFT
+				# A STINT, not a life sentence. Long enough to be somewhere and
+				# be seen there, short enough that the town reshuffles as its
+				# needs change rather than posting people for good.
+				_action_time = randf_range(40.0, 70.0)
+		State.WORKING:
+			_apply_gravity_only(delta)
+			if workshop == null or not is_instance_valid(workshop):
+				workshop = null
+				_decide()
+			else:
+				_work_noise("hammer", 0.35, delta)
+				_shift_left -= delta
+				if _shift_left <= 0.0:
+					_shift_left = Workshop.SHIFT
+					workshop.work_shift()
+				_action_time -= delta
+				if _action_time <= 0.0:
+					workshop = null
+					_decide()
 		State.GO_ARM:
 			# To the storehouse for arms. If the stores can't pay for a weapon
 			# they go bare-handed rather than stand about.
@@ -736,6 +784,47 @@ func _anim_state() -> String:
 		State.DYING: return "dying"
 		State.FALLING: return "fall"
 		State.HAULING: return "carry"
+		State.GO_BUILD_SHOP:
+			if _move_toward(_shop_spot, WALK_SPEED * _speed_factor(), delta):
+				_dismount()
+				state = State.BUILDING_SHOP
+				_action_time = 18.0
+		State.BUILDING_SHOP:
+			_apply_gravity_only(delta)
+			_action_time -= delta
+			_work_noise("hammer", 0.8, delta)
+			if _action_time <= 0.0:
+				village.spawn_workshop_at(_shop_kind, _shop_spot)
+				_shop_spot = Vector3.INF
+				_shop_kind = ""
+				_decide()
+		State.GO_WORK:
+			if workshop == null or not is_instance_valid(workshop):
+				workshop = null
+				_decide()
+			elif _move_toward(workshop.post(), WALK_SPEED * _speed_factor(), delta):
+				_dismount()
+				state = State.WORKING
+				_shift_left = Workshop.SHIFT
+				# A STINT, not a life sentence. Long enough to be somewhere and
+				# be seen there, short enough that the town reshuffles as its
+				# needs change rather than posting people for good.
+				_action_time = randf_range(40.0, 70.0)
+		State.WORKING:
+			_apply_gravity_only(delta)
+			if workshop == null or not is_instance_valid(workshop):
+				workshop = null
+				_decide()
+			else:
+				_work_noise("hammer", 0.35, delta)
+				_shift_left -= delta
+				if _shift_left <= 0.0:
+					_shift_left = Workshop.SHIFT
+					workshop.work_shift()
+				_action_time -= delta
+				if _action_time <= 0.0:
+					workshop = null
+					_decide()
 		State.GO_ARM: return "run"
 		State.FIGHT: return "attack"
 		State.HELD: return "idle"
@@ -875,13 +964,14 @@ func _decide() -> void:
 		_action_time = randf_range(3.0, 6.0)
 		_target = village.global_position + Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)) * 8.0
 		return
-	# Lost the post (school gone, or replaced)? Stop being a teacher.
-	if is_teacher and (not village.has_edubba() or village.teacher != self):
+	# Lost the post? Only the school going does that now. The post used to be a
+	# single slot on the village, so a second teacher taking it silently unseated
+	# the first — which is why a town of any size still had exactly one.
+	if is_teacher and not village.has_edubba():
 		is_teacher = false
-	# A teacher is needed and I'm free to take the post.
-	if village.needs_teacher() and not _has_dependent_child():
+	# A post is open and I am free to take it.
+	if not is_teacher and village.needs_teacher() and not _has_dependent_child():
 		is_teacher = true
-		village.teacher = self
 	if is_teacher and village.has_edubba():
 		state = State.TEACH
 		_action_time = randf_range(8.0, 16.0)
@@ -1043,6 +1133,14 @@ func _pick_job() -> bool:
 	# A village with children and no school wants an Edubba raised.
 	if village.wants_edubba():
 		scores["build_edubba"] = 34.0
+	# THE TRADES. A standing job at a well, a mill, a barn or a shrine — the
+	# answer to a town too big for four kinds of work. Scored modestly: nobody
+	# abandons a hungry village to mind a well, but a settled one fills them.
+	if Workshop.with_room(village, global_position) != null:
+		scores["work"] = 22.0
+	var raise_shop := Workshop.short_of(village)
+	if raise_shop != "":
+		scores["build_shop"] = 28.0
 	if village.diet == Village.Diet.CANNIBAL and store.meat_food < 4 \
 			and _will_eat_human_flesh() and _nearest_corpse() != null:
 		scores["butcher"] = 50.0 + food_worry
@@ -1067,11 +1165,26 @@ func _pick_job() -> bool:
 	# so villagers fan out across the village's needs instead of all rushing the
 	# nearest tree or field (the first-run conga line).
 	var crowd := village.job_counts()
+	# HOW MANY THIS JOB HAS ROOM FOR. The crowd penalty used to be charged per
+	# HEAD regardless of how much work there was, so a job saturated at three or
+	# four people whether it was one field or ten, one well or eight. That is
+	# why raising buildings did nothing on its own: a town of fifty built its
+	# trades and then left them empty, because the fifth villager to consider a
+	# trade was already being told it was crowded.
+	#
+	# Charged per POST instead, a job absorbs as many hands as it has places.
+	# The jobs left at one are the ones genuinely limited by the ground rather
+	# than by anything the village built: there is only so much game on a
+	# hillside, and only ever one building site.
+	var room := {
+		"farm": maxi(village.farms.size() * 2, 1),
+		"work": maxi(Workshop.posts(village), 1),
+	}
 	var best: String = ""
 	var best_score := -INF
 	for job: String in scores:
 		var jittered: float = scores[job] + randf_range(-5.0, 5.0) \
-			- CROWD_PENALTY * float(crowd.get(job, 0))
+			- CROWD_PENALTY * float(crowd.get(job, 0)) / float(room.get(job, 1))
 		if jittered > best_score:
 			best_score = jittered
 			best = job
@@ -1152,6 +1265,24 @@ func _start_job(job: String) -> void:
 		"tame":
 			_target_animal = _nearest_tamable()
 			state = State.GO_TAME
+		"work":
+			workshop = Workshop.with_room(village, global_position)
+			if workshop == null:
+				state = State.WANDER
+				_action_time = 2.0
+				return
+			_target = workshop.post()
+			state = State.GO_WORK
+		"build_shop":
+			_shop_kind = Workshop.short_of(village)
+			var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+			_shop_spot = village.find_build_spot(world) if _shop_kind != "" else Vector3.INF
+			if _shop_spot == Vector3.INF:
+				state = State.WANDER
+				_action_time = 2.0
+				return
+			state = State.GO_BUILD_SHOP
+			_maybe_mount()
 
 
 func _find_damaged_house() -> House:
@@ -1305,6 +1436,8 @@ func _make_carry_visual(kind: String) -> void:
 func current_job() -> String:
 	match state:
 		State.GO_BUILD, State.BUILDING: return "build"
+		State.GO_WORK, State.WORKING: return "work"
+		State.GO_BUILD_SHOP, State.BUILDING_SHOP: return "build_shop"
 		State.GO_CHOP, State.CHOPPING: return "chop"
 		State.GO_QUARRY, State.QUARRYING: return "quarry"
 		State.GO_FARM, State.FARMING: return "farm"
@@ -2004,6 +2137,47 @@ func _status_word() -> String:
 		State.GO_BUILD_EDUBBA, State.BUILDING_EDUBBA: return "raising the Edubba"
 		State.GO_FISH, State.FISHING: return "fishing"
 		State.HAULING: return "hauling to the storehouse"
+		State.GO_BUILD_SHOP:
+			if _move_toward(_shop_spot, WALK_SPEED * _speed_factor(), delta):
+				_dismount()
+				state = State.BUILDING_SHOP
+				_action_time = 18.0
+		State.BUILDING_SHOP:
+			_apply_gravity_only(delta)
+			_action_time -= delta
+			_work_noise("hammer", 0.8, delta)
+			if _action_time <= 0.0:
+				village.spawn_workshop_at(_shop_kind, _shop_spot)
+				_shop_spot = Vector3.INF
+				_shop_kind = ""
+				_decide()
+		State.GO_WORK:
+			if workshop == null or not is_instance_valid(workshop):
+				workshop = null
+				_decide()
+			elif _move_toward(workshop.post(), WALK_SPEED * _speed_factor(), delta):
+				_dismount()
+				state = State.WORKING
+				_shift_left = Workshop.SHIFT
+				# A STINT, not a life sentence. Long enough to be somewhere and
+				# be seen there, short enough that the town reshuffles as its
+				# needs change rather than posting people for good.
+				_action_time = randf_range(40.0, 70.0)
+		State.WORKING:
+			_apply_gravity_only(delta)
+			if workshop == null or not is_instance_valid(workshop):
+				workshop = null
+				_decide()
+			else:
+				_work_noise("hammer", 0.35, delta)
+				_shift_left -= delta
+				if _shift_left <= 0.0:
+					_shift_left = Workshop.SHIFT
+					workshop.work_shift()
+				_action_time -= delta
+				if _action_time <= 0.0:
+					workshop = null
+					_decide()
 		State.GO_ARM: return "running for a weapon"
 		State.FIGHT: return "FIGHTING for their life"
 		State.COURT: return "courting at the totem"
@@ -2032,6 +2206,47 @@ func _status_text() -> String:
 		State.PREACHING: return "hear me!"
 		State.FISHING: return "fish?"
 		State.HAULING: return "haul"
+		State.GO_BUILD_SHOP:
+			if _move_toward(_shop_spot, WALK_SPEED * _speed_factor(), delta):
+				_dismount()
+				state = State.BUILDING_SHOP
+				_action_time = 18.0
+		State.BUILDING_SHOP:
+			_apply_gravity_only(delta)
+			_action_time -= delta
+			_work_noise("hammer", 0.8, delta)
+			if _action_time <= 0.0:
+				village.spawn_workshop_at(_shop_kind, _shop_spot)
+				_shop_spot = Vector3.INF
+				_shop_kind = ""
+				_decide()
+		State.GO_WORK:
+			if workshop == null or not is_instance_valid(workshop):
+				workshop = null
+				_decide()
+			elif _move_toward(workshop.post(), WALK_SPEED * _speed_factor(), delta):
+				_dismount()
+				state = State.WORKING
+				_shift_left = Workshop.SHIFT
+				# A STINT, not a life sentence. Long enough to be somewhere and
+				# be seen there, short enough that the town reshuffles as its
+				# needs change rather than posting people for good.
+				_action_time = randf_range(40.0, 70.0)
+		State.WORKING:
+			_apply_gravity_only(delta)
+			if workshop == null or not is_instance_valid(workshop):
+				workshop = null
+				_decide()
+			else:
+				_work_noise("hammer", 0.35, delta)
+				_shift_left -= delta
+				if _shift_left <= 0.0:
+					_shift_left = Workshop.SHIFT
+					workshop.work_shift()
+				_action_time -= delta
+				if _action_time <= 0.0:
+					workshop = null
+					_decide()
 		State.GO_ARM: return "arms!"
 		State.FIGHT: return "FIGHT!"
 		State.COURT: return "♥"
@@ -2039,6 +2254,8 @@ func _status_text() -> String:
 		State.AT_SCHOOL: return "abc"
 		State.TEACH: return "teach"
 		State.BUILDING_EDUBBA, State.GO_BUILD_EDUBBA: return "build"
+		State.BUILDING_SHOP, State.GO_BUILD_SHOP: return "build"
+		State.GO_WORK, State.WORKING: return "work"
 		State.PLAY: return "wheee"
 		State.FLEE, State.FALLING: return "!!!"
 		State.HELD: return "?!"

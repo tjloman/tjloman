@@ -538,7 +538,23 @@ func fell() -> int:
 		88.0, 1.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tween.tween_interval(2.0)
 	tween.tween_callback(queue_free)
-	return maxi(int(lumber), 1)
+	return timber()
+
+
+## WHAT A TREE IS ACTUALLY WORTH, which goes as the SQUARE of its size.
+##
+## It used to be worth its size flat: a sapling one, a giant ten. So ten
+## saplings paid exactly as well as the tree it took a week to grow, and a
+## village stripped every stick within reach the moment it wanted a hut,
+## starting with the nearest — which were always the small ones.
+##
+## Squared, a sapling is worth one and a giant a hundred. Cutting the little
+## ones stops being worth the walk, and a wood is a thing a village lets stand
+## and comes back to. It also means a well-tended forest — rained on, blessed,
+## left alone — is worth ENORMOUSLY more than a scrubby one, which is the
+## lever a god actually has over a logging town.
+func timber() -> int:
+	return maxi(int(round(lumber * lumber)), 1)
 
 
 func is_felled() -> bool:

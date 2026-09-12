@@ -16,6 +16,15 @@ const WORSHIP_PRAYER_PER_SEC := 1.5
 const WORSHIP_BELIEF_PER_SEC := 0.05
 const MIN_INFLUENCE := 14.0
 const MAX_INFLUENCE := 65.0
+## HOW MANY SOULS A TOWN IS FOUNDED WITH. Twelve was a hamlet you could watch
+## all of at once; fifty is a place, with enough hands that the town has to be
+## ORGANISED rather than merely fed — which is what the workshops are for.
+const STARTING_SOULS := 50
+## And how many fields it will ever break. Four was written for twelve people.
+const FARMS_MOST := 10
+## A school is a civic building: it has posts, like the rest of them.
+const TEACHERS_MOST := 3
+
 const MAX_TAMED := 8
 const PRAYER_PER_VILLAGE := 120.0   # each convert widens your prayer reservoir
 const FARM_HALF := 3.9              # a field's clearance radius (no overlaps)
@@ -94,7 +103,9 @@ var houses: Array[House] = []
 var construction_site: House = null
 var tamed_animals: Array[Animal] = []
 var edubba: Edubba = null      # the schoolhouse, once built
-var teacher: Villager = null   # the one adult who minds the school
+## THE TRADES THIS TOWN HAS RAISED. Each one is somewhere for people to work,
+## which is the whole reason they exist — see Workshop.
+var workshops: Array[Workshop] = []
 
 ## Militia state. `alarm` counts down while the village is roused; `threat_pos`
 ## is where the trouble was last seen; `grudge` is their anger at the creature.
@@ -156,7 +167,7 @@ func _ready() -> void:
 
 	_build_influence_ring()
 	_build_starting_houses()
-	_spawn_villagers(12 if is_player_home else 8)
+	_spawn_villagers(STARTING_SOULS if is_player_home else STARTING_SOULS * 2 / 3)
 	_update_influence()
 	GameState.alignment_changed.connect(_on_alignment_changed)
 	# If a saved game remembers a town that stood here, this IS that town —
@@ -327,12 +338,28 @@ func _flat(v: Vector3) -> Vector2:
 
 
 ## Wants another field? One per ~7 mouths, capped so villages stay villages.
+## HOW MANY FIELDS A TOWN WILL BREAK. The old ceiling of four was written for a
+## village of twelve; at fifty it meant four fields feeding fifty people and
+## three-quarters of the town with nothing to plough. One field per seven souls
+## still, but the cap now follows the town instead of standing still.
 func wants_new_farm() -> bool:
 	Util.prune(farms)
-	return farms.size() < mini(1 + int(population() / 7.0), 4)
+	return farms.size() < mini(1 + int(population() / 7.0), FARMS_MOST)
 
 
-## A farmer finished breaking new ground: register the field.
+func spawn_workshop_at(which: String, world_spot: Vector3) -> void:
+	var spec: Dictionary = Workshop.TRADES.get(which, {})
+	if spec.is_empty() or not store.try_spend_materials(
+			int(spec["lumber"]), int(spec["stone"])):
+		return
+	var shop := Workshop.create(which, self)
+	shop.position = to_local(world_spot)
+	add_child(shop)
+	workshops.append(shop)
+	if is_player_home:
+		GameState.announce("%s has raised a %s." % [village_name, String(spec["label"])])
+
+
 func spawn_farm_at(world_spot: Vector3) -> void:
 	var new_farm := Farm.new()
 	new_farm.position = _farm_position(to_local(world_spot))  # guaranteed dry
@@ -440,15 +467,24 @@ func spawn_edubba_at(world_spot: Vector3) -> void:
 		GameState.announce("%s has raised an Edubba. Its children will learn there now." % village_name)
 
 
-## Keeps exactly one living teacher assigned while a school stands.
+## A SCHOOL IS A CIVIC BUILDING AND HAS POSTS LIKE THE REST. It used to keep
+## exactly one teacher, which made it the only building in the village that got
+## no bigger as the village did. Three is a staff: enough that a town of fifty
+## has somewhere for its patient people to go, and that losing one teacher does
+## not shut the school.
 func needs_teacher() -> bool:
 	if not has_edubba():
 		return false
-	if teacher != null and is_instance_valid(teacher) and teacher.village == self \
-			and teacher.is_adult():
-		return false
-	teacher = null
-	return true
+	return teachers() < TEACHERS_MOST
+
+
+## Everyone presently holding a post at the school.
+func teachers() -> int:
+	var n := 0
+	for v in my_villagers():
+		if v.is_teacher:
+			n += 1
+	return n
 
 
 func _process(delta: float) -> void:
