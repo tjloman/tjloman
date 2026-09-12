@@ -292,6 +292,23 @@ const BURN_SECONDS := Animal.BURN_SECONDS
 const FIRE_FLEES := 4.0
 const FIRE_FEAR := 0.55
 
+## BEING BLOWN ABOUT. How much of the wind's speed a beast is thrown at, and
+## how much lift goes with it so it leaves the ground rather than skidding.
+##
+## HOW FAR A NUMBERED HEAD GOES IS NOT A SEPARATE NUMBER. It is worked out from
+## exactly the throw a real beast gets — the same speed, over the same time in
+## the air — because they are standing in the same wind and the player is
+## looking at both at once. Tuned apart, they disagreed badly: the mass slid
+## ten metres downwind while the bodies beside it flew two, so the herd appeared
+## to outrun the animals in it.
+##
+## The scatter is the only part that varies, and it exists because a mass that
+## moves exactly together slides like one sheet of ice.
+const BLOWN_THROW := 0.6
+const BLOWN_LIFT := 3.5
+const BLOWN_SCATTER_LEAST := 0.7
+const BLOWN_SCATTER_MOST := 1.4
+
 ## How far a herd drifts from where it was seeded, and how long it grazes one
 ## patch before moving on.
 const ROAM := 26.0
@@ -1256,6 +1273,57 @@ func _already_alight(i: int) -> bool:
 		if int(row["i"]) == i:
 			return true
 	return false
+
+
+## BLOWN. A gust takes the whole herd off its feet at once.
+##
+## There is no body to shove for most of them, so the shove is done to the
+## FORMATION: every head in reach is moved bodily downwind, by a little more or
+## a little less, and the herd's own pasture goes with them so they carry on
+## that way rather than trotting straight back. The few that are real animals
+## are genuinely thrown, which is what makes the near edge of the mass read as
+## a scatter of tumbling beasts and the far edge as the whole hillside lurching.
+##
+## It is a shove and not an injury: nobody is hurt by wind, they are only moved
+## and badly frightened.
+func blown(from: Vector3, push: Vector3, reach: float) -> void:
+	if alive() <= 0:
+		return
+	if global_position.distance_to(from) - _spread > reach:
+		return
+	var flat := Vector3(push.x, 0.0, push.z)
+	if flat.length() < 0.5:
+		return
+	# The same arc the thrown beasts fly: launch speed times seconds aloft, and
+	# a body thrown up at BLOWN_LIFT is back on the ground in twice that over
+	# gravity. Derived rather than chosen, so the two can never drift apart.
+	var aloft := BLOWN_LIFT * 2.0 / Animal.GRAVITY
+	var carry := flat.length() * BLOWN_THROW * aloft
+	var downwind := flat.normalized()
+	for m in _members:
+		if m["dead"]:
+			continue
+		var here := global_position + Vector3(m["offset"].x, 0.0, m["offset"].y)
+		if here.distance_to(from) > reach:
+			continue
+		var agent: Animal = m["agent"]
+		if agent != null and is_instance_valid(agent) and agent.state != Animal.State.HELD:
+			agent.drop(flat * BLOWN_THROW + Vector3.UP * BLOWN_LIFT, true)
+			continue
+		# Not all the same distance, or the mass slides like one sheet of ice.
+		var went := downwind * carry \
+			* randf_range(BLOWN_SCATTER_LEAST, BLOWN_SCATTER_MOST)
+		m["offset"] += Vector2(went.x, went.z)
+	# FRIGHT FIRST, THEN THE DIRECTION. `scattered` picks a random bearing to
+	# run on, which is right for a botched drive and wrong here — a herd that
+	# has just been blown across a field goes the way the wind sent it. Setting
+	# the target before the fright meant the fright threw it away again.
+	scattered(FIRE_FEAR * 0.6)
+	_home += downwind * carry
+	_target = _home
+	_graze_left = GRAZE_LEAST
+	_spread = maxf(SPACING * sqrt(float(alive())), SPREAD_LEAST)
+	_write_transforms()
 
 
 ## RUN FROM IT. Anything frightening at a point, whether or not it touched

@@ -101,6 +101,8 @@ const CREATURE_SIGHT_RANGE := 45.0
 ## clock (five a second). Over the life of one funnel that is a few head, which
 ## is what a tornado through cattle should cost — not a wipe, and not nothing.
 const TWISTER_TAKES := 0.15
+## How much of a herd's fright a healing miracle takes away.
+const HEAL_CALM := 0.5
 
 ## HOW MUCH RAIN IS ALLOWED IN THE SKY AT ONCE.
 ##
@@ -705,6 +707,21 @@ func _cast_heal(pos: Vector3, potency := 1.0) -> void:
 		var creature := c as Creature
 		if creature.global_position.distance_to(pos) < reach:
 			creature.receive_heal()
+	# AND THE BEASTS. A healing miracle that would not mend an animal was a
+	# strange kind of mercy: it fell on a burning, half-eaten sheep and did
+	# nothing at all for it. For a herd there is no health to give back, so
+	# it gives the two things a herd can actually be in want of — the fire
+	# goes out, and they stop being afraid.
+	for a in get_tree().get_nodes_in_group("animals"):
+		var beast := a as Animal
+		if is_instance_valid(beast) and beast.global_position.distance_to(pos) < reach:
+			beast.receive_heal()
+	for h in get_tree().get_nodes_in_group("herds"):
+		var herd := h as Herd
+		if is_instance_valid(herd):
+			herd.doused(pos, reach)
+			if herd.global_position.distance_to(pos) - herd.spread() < reach:
+				herd.calmed(HEAL_CALM)
 
 
 ## RAIN THAT STANDS. A heavy enough downpour over a hollow does not run off it
@@ -1592,7 +1609,24 @@ func _cast_gust(pos: Vector3, potency: float, momentum: Vector3) -> void:
 			if node is RigidBody3D:
 				(node as RigidBody3D).apply_central_impulse(push + Vector3.UP * 2.0)
 			elif node is Animal:
-				(node as Animal).scare(pos)
+				# THROWN, not merely startled. A gust frightened a beast and left
+				# it exactly where it stood, which is not what a wind does. It
+				# goes the way the miracle was THROWN — the same thing the flock
+				# does with its momentum — and it goes gently, so a gust is a way
+				# of MOVING animals rather than of killing them.
+				var beast := node as Animal
+				if beast.state != Animal.State.HELD:
+					beast.drop(push * Herd.BLOWN_THROW
+						+ Vector3.UP * Herd.BLOWN_LIFT, true)
+				beast.scare(pos)
+	# AND THE HERDS, all of them at once. The loose beasts above are thrown
+	# one by one; a herd has no body for most of its head, so the shove is
+	# done to the formation itself and its pasture goes downwind with it.
+	# See Herd.blown — the near edge tumbles, the far edge lurches.
+	for h in get_tree().get_nodes_in_group("herds"):
+		var herd := h as Herd
+		if is_instance_valid(herd):
+			herd.blown(pos, push, radius)
 	for t in get_tree().get_nodes_in_group("trees"):
 		var tree := t as WildTree
 		if is_instance_valid(tree) and tree.global_position.distance_to(pos) < radius:

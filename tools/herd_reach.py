@@ -26,9 +26,11 @@ import sys
 MANAGER = "scripts/miracles/miracle_manager.gd"
 THROWN = "scripts/miracles/fireball.gd"
 
-# How a function says "I am doing something to loose animals"...
-LIVE = ('get_nodes_in_group("animals")', "ignite_animals_near",
-        "frighten_animals_near")
+# How a function says "I am doing something to loose animals". The bare
+# `"animals"` catches the group named inside a list literal — `for group in
+# ["pickable", "animals", "villagers"]` — which is how the gust reads it, and
+# how this check missed the gust entirely on its first run.
+LIVE = ('"animals"', "ignite_animals_near", "frighten_animals_near")
 # ...and how it says "and to the mass as well".
 MASS = ('get_nodes_in_group("herds")', "bolt_from(", "scorched(", "doused(")
 

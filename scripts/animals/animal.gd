@@ -796,6 +796,14 @@ func pick_up() -> void:
 	velocity = Vector3.ZERO
 
 
+## MENDED. The same door a villager is healed through, so a miracle does not
+## have to know what it is putting right — it was simply missing here, and a
+## healing shower fell on a burning, half-eaten sheep and did nothing for it.
+func receive_heal() -> void:
+	extinguish()
+	health = _full_health
+
+
 func drop(throw_velocity: Vector3, gentle := false) -> void:
 	state = State.FALLING
 	velocity = throw_velocity
