@@ -291,6 +291,8 @@ ESCAPES = [
      "a fireblast gouges a crater the creature can be standing in"),
     ("firestorm", "flight", "the same, in bulk"),
     ("volcano", "flight", "a volcano raises ground the creature may be under"),
+    ("eye_volcano", "flight",
+     "six of them, aimed, and the creature is standing where you aimed"),
 ]
 
 

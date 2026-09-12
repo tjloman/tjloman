@@ -24,7 +24,16 @@ import re
 import sys
 
 MANAGER = "scripts/miracles/miracle_manager.gd"
-THROWN = "scripts/miracles/fireball.gd"
+# The miracles that do their work from a file of their own. Each needs listing
+# HERE as well, or the survey reads it as a miracle that touches nothing alive —
+# a false clean, which is the one outcome this check must never produce. The
+# entry is (file, the function the effect lands in, the name to print).
+ELSEWHERE = [
+    ("scripts/miracles/fireball.gd", "_go_off", "fireball/fireblast"),
+    ("scripts/miracles/eye_volcano.gd", "_land", "eye_volcano"),
+    ("scripts/miracles/storm_shroud.gd", "_tick_work", "storm_shroud"),
+    ("scripts/miracles/mercy_shroud.gd", "_tick_work", "healing_shroud"),
+]
 
 # How a function says "I am doing something to loose animals". The bare
 # `"animals"` catches the group named inside a list literal — `for group in
@@ -64,23 +73,38 @@ def reaches(name, bodies, needles, seen=None):
     body = bodies[name]
     if any(n in body for n in needles):
         return True
+    # A QUALIFIED CALL IS STILL A CALL. This used to refuse to look at anything
+    # with a dot in front of it, which meant a miracle living in its own file
+    # and routing its burning through `MiracleManager.ignite_animals_near` read
+    # as touching the loose animals and missing the mass — the exact false
+    # report this whole check exists to prevent, produced by the check itself.
+    # Only names that are actually functions here are ever followed, so opening
+    # this up costs nothing.
     return any(reaches(c, bodies, needles, seen)
-               for c in set(re.findall(r"(?<![\w.])(\w+)\(", body)) if c != name)
+               for c in set(re.findall(r"\b(\w+)\(", body)) if c != name)
 
 
 def survey():
     bodies = functions(open(MANAGER, encoding="utf-8").read())
-    for k, v in functions(open(THROWN, encoding="utf-8").read()).items():
-        bodies.setdefault("thrown_" + k, v)
+    extra = []
+    for i, (path, entry, label) in enumerate(ELSEWHERE):
+        tag = "away%d_" % i
+        for k, v in functions(open(path, encoding="utf-8").read()).items():
+            bodies.setdefault(tag + k, v)
+        extra.append((label, tag + entry))
     rows = []
     for name in sorted(bodies):
         if not name.startswith("_cast_"):
             continue
+        # A cast that only hands the effect to one of the files above is judged
+        # by THAT file's row, not by its own empty one.
+        if name[len("_cast_"):] in [label for label, _ in extra]:
+            continue
         rows.append((name[len("_cast_"):],
                      reaches(name, bodies, LIVE), reaches(name, bodies, MASS)))
-    rows.append(("fireball/fireblast",
-                 reaches("thrown__go_off", bodies, LIVE),
-                 reaches("thrown__go_off", bodies, MASS)))
+    for label, entry in extra:
+        rows.append((label, reaches(entry, bodies, LIVE),
+                     reaches(entry, bodies, MASS)))
     return rows
 
 

@@ -148,6 +148,31 @@ const RECIPES := {
 	"earth+ward": "strength",
 	"life+sky": "bird_flock",
 	"fire+force": "lightning",
+	# THE FIRST FIVE-RUNE WORKING.  |  /  V  )  Z
+	#
+	# Earth and fire is molten rock; fury is violence done to it, and those
+	# three are already the volcano. The last two are the AIMING: `force` is a
+	# bolt driven straight, and `ward` is a thing held over something — held
+	# ON it, kept on it. Molten rock, meant, driven in a line, and held on
+	# whatever the god is pointing at.
+	#
+	# It grants the creature ONE use of it: six miniature volcanoes, three
+	# blobs apiece, an eye at a time, each aimed wherever your hand is when it
+	# fires. See EyeVolcano.
+	"earth+fire+force+fury+ward": "eye_volcano",
+	# AND ITS OPPOSITE, also five.  S  |  )  (whirl)  (whirl unwinding)
+	#
+	# Water, force and air is the thunderstorm the god already knows how to
+	# call down on a place. `ward` puts it ROUND something instead — carried
+	# with it — and `calm` is what keeps it up in the sky: a storm with calm in
+	# it rumbles and flashes and never picks anyone out. See StormShroud.
+	"air+calm+force+ward+water": "storm_shroud",
+	# THE GRAMMAR OF THE SHROUDS, in one line: take a working that falls on a
+	# SPOT, add `ward` — the rune of a thing held over something — and it
+	# follows your creature about instead. The healing shower is calm, life and
+	# water; warded, it is gold and silver light coming down round the beast
+	# wherever it walks, mending what walks into it. See MercyShroud.
+	"calm+life+ward+water": "healing_shroud",
 }
 
 ## What a compound COSTS: the sum of its runes' base costs, times this per

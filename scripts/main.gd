@@ -1175,6 +1175,31 @@ func _run_smoke_test() -> void:
 		if is_instance_valid(jaws):
 			jaws.queue_free()
 
+	# THE FIVE-RUNE WORKINGS. Both must read back from the runes in any order,
+	# and neither may be reachable by a god who cannot also get its creature
+	# back out of what it just made (tools/rune_sheet.py asserts the second).
+	var eyes := Spellbook.interpret(["fury", "ward", "earth", "force", "fire"])
+	var worn := Spellbook.interpret(["calm", "water", "ward", "air", "force"])
+	print("SMOKE TEST: five runes — | / V ) Z = %s, S | ) @ @' = %s" % [
+		eyes.get("miracle", "NOTHING"), worn.get("miracle", "NOTHING")])
+	var beast := get_tree().get_first_node_in_group("creature") as Creature
+	if beast != null:
+		var fire_eyes := EyeVolcano.grant(beast)
+		print("SMOKE TEST: eyes — %d blasts of %d blobs = %d miniature volcanoes, karma %.0f" % [
+			fire_eyes.left, EyeVolcano.BLOBS, EyeVolcano.BLASTS * EyeVolcano.BLOBS,
+			MiracleManager.KARMA["eye_volcano"]["player"]])
+		fire_eyes.free()
+		var storm := StormShroud.grant(beast, 12.0)
+		print("SMOKE TEST: shroud — %.0fs of weather, %.1f m wide, karma %.0f" % [
+			storm.left, storm._reach(), MiracleManager.KARMA["storm_shroud"]["player"]])
+		storm.free()
+		var blessed := Spellbook.interpret(["ward", "life", "calm", "water"])
+		var light := MercyShroud.grant(beast, 12.0)
+		print("SMOKE TEST: shroud — S (rev) O ) = %s, %.0fs of light, %.1f m wide, karma %.0f" % [
+			blessed.get("miracle", "NOTHING"), light.left, light._reach(),
+			MiracleManager.KARMA["healing_shroud"]["player"]])
+		light.free()
+
 	# THE ARM. Reach must climb with size, strength and practice; the ladder
 	# must gate what it can do; and a juggle interrupted must come down.
 	var thrower := Creature.new()

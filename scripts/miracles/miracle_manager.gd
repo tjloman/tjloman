@@ -47,6 +47,16 @@ const MIRACLES := {
 	"earthquake": {"cost": 30.0, "color": Color(0.62, 0.5, 0.36)},
 	"lavaball": {"cost": 38.0, "color": Color(1.0, 0.42, 0.1)},
 	"volcano": {"cost": 45.0, "color": Color(0.95, 0.35, 0.12)},
+	# THE EYES. DELIBERATELY CHEAP WHILE IT IS NEW — this is the first five-rune
+	# working in the game and nobody has any idea yet what six aimed volcanoes
+	# are actually worth. It wants casting fifty times before it is priced, and
+	# a miracle at two hundred prayer gets cast twice and never understood.
+	"eye_volcano": {"cost": 40.0, "color": Color(1.0, 0.4, 0.1)},
+	# And the other side of the same coin: a storm that has been told to keep
+	# its hands to itself. Cheap for the same reason.
+	"storm_shroud": {"cost": 35.0, "color": Color(0.68, 0.78, 1.0)},
+	# And the mercy, worn. One rune more than the shower it is made of.
+	"healing_shroud": {"cost": 30.0, "color": Color(1.0, 0.9, 0.6)},
 	"water_walk": {"cost": 20.0, "color": Color(0.55, 0.85, 0.95)},
 	"healing_shower": {"cost": 25.0, "color": Color(0.55, 1.0, 0.7)},
 }
@@ -84,6 +94,19 @@ const KARMA := {
 	# It burns like a fireball, but it BUILDS — a god who fills in his own
 	# craters is doing something less purely destructive than one who digs them.
 	"lavaball": {"player": -1.5, "creature": -1.0},
+	# Opening a volcano is among the worst things a god can do. PUTTING ONE IN
+	# YOUR CREATURE'S HEAD is worse, and the creature's own column is the reason
+	# why: everything else here it merely WATCHES its god do, and this one it
+	# does itself, six times, at whatever its god was pointing at.
+	"eye_volcano": {"player": -6.0, "creature": -4.0},
+	# THE STORM WITH CALM IN IT is not a weapon and is not priced as one. It
+	# puts out fires and waters fields wherever the beast walks, which is a
+	# kindness — and it makes the beast the most frightening thing in the
+	# country while it does, which is why it is not a large one.
+	"storm_shroud": {"player": 1.0, "creature": 1.5},
+	# A god who wraps his beast in mending light is doing the plainest kind
+	# thing there is, and the beast is the one standing inside it.
+	"healing_shroud": {"player": 3.5, "creature": 3.0},
 	"volcano": {"player": -10.0, "creature": -7.5},
 	"water_walk": {"player": 1.5, "creature": 2.5},
 	"healing_shower": {"player": 4.5, "creature": 3.5},
@@ -466,6 +489,9 @@ func resolve(miracle: String, pos: Vector3, momentum := Vector3.ZERO,
 		"earthquake": _cast_earthquake(pos, potency)
 		"lavaball": _cast_lavaball(pos, potency)
 		"volcano": _cast_volcano(pos, potency)
+		"eye_volcano": _cast_eye_volcano(pos)
+		"storm_shroud": _cast_storm_shroud(pos, potency)
+		"healing_shroud": _cast_healing_shroud(pos, potency)
 		"water_walk": _cast_water_walk(pos, potency)
 		"healing_shower": _cast_healing_shower(pos, potency)
 		_: return
@@ -521,6 +547,19 @@ func _cast_rain(pos: Vector3, potency := 1.0) -> void:
 	add_child(cloud)
 
 	var bless := 12.0 * potency
+	rain_upon(pos, reach, bless)
+	_hold_cloud(cloud)
+	# It disperses rather than being deleted: the layers fade out over a few
+	# seconds and the node frees itself when the sky is clear.
+	get_tree().create_timer(12.0).timeout.connect(cloud.disperse)
+
+
+## WHAT FALLING WATER DOES TO WHAT IT FALLS ON: it feeds the green things and it
+## puts out every fire under it. Lifted out of `_cast_rain` so that anything
+## else carrying rain about — a creature walking inside its own thunderstorm,
+## say — is the SAME rain rather than a second, quietly different copy of it.
+## See StormShroud.
+func rain_upon(pos: Vector3, reach: float, bless: float) -> void:
 	for f in get_tree().get_nodes_in_group("farms"):
 		var farm := f as Farm
 		if farm.global_position.distance_to(pos) < reach:
@@ -554,11 +593,6 @@ func _cast_rain(pos: Vector3, potency := 1.0) -> void:
 		var herd := h as Herd
 		if is_instance_valid(herd):
 			herd.doused(pos, reach)
-
-	_hold_cloud(cloud)
-	# It disperses rather than being deleted: the layers fade out over a few
-	# seconds and the node frees itself when the sky is clear.
-	get_tree().create_timer(12.0).timeout.connect(cloud.disperse)
 
 
 ## Keep the sky to a few showers. A new one over a crowded sky sends the oldest
@@ -1143,6 +1177,15 @@ func _hurl_glob(from: Vector3, to: Vector3) -> void:
 		_pour_lava(to, LAVA_RISE * randf_range(0.7, 1.1), LAVA_REACH * randf_range(0.9, 1.3)))
 
 
+## MOLTEN ROCK, POURED HERE, for anything outside this file that needs to lay
+## some. The eyes' blobs come through here so that what a blob burns is exactly
+## what a volcano burns — the trees, the loose beasts AND the herd mass — rather
+## than a second, quietly different copy of the same idea. See EyeVolcano._land
+## and tools/herd_reach.py.
+func pour_lava_at(pos: Vector3, rise: float, reach: float) -> void:
+	_pour_lava(pos, rise, reach)
+
+
 func _lava_glare(at: Vector3, reach: float) -> OmniLight3D:
 	var glare := OmniLight3D.new()
 	glare.light_color = Color(1.0, 0.42, 0.12)
@@ -1181,6 +1224,56 @@ func _shake_camera(strength: float) -> void:
 	var rig := get_tree().get_first_node_in_group("camera_rig") as CameraRig
 	if rig != null:
 		rig.shake(strength)
+
+
+## THE EYES. The miracle itself does almost nothing: it finds the creature, puts
+## the fire in its head, and gets out of the way. Everything after that is the
+## player's aim and the creature's face — see EyeVolcano.
+func _cast_eye_volcano(pos: Vector3) -> void:
+	var creature := get_tree().get_first_node_in_group("creature") as Creature
+	if creature == null:
+		GameState.hint("Your creature is nowhere near enough to be given this.")
+		return
+	if creature.global_position.distance_to(pos) > EyeVolcano.GRANTED_WITHIN:
+		GameState.hint("Cast it nearer your creature to put the fire in its eyes.")
+		return
+	EyeVolcano.grant(creature)
+	SoundBank.play_at("boom", creature.global_position, -4.0)
+	GameState.announce(GameState.named(
+		"%s's eyes fill with molten rock. Point, and it will look there."))
+
+
+## THE STORM ROUND THE BEAST. As with the eyes, the miracle does almost nothing
+## itself: it finds the creature, puts the weather on it, and stands back.
+func _cast_storm_shroud(pos: Vector3, potency := 1.0) -> void:
+	var creature := get_tree().get_first_node_in_group("creature") as Creature
+	if creature == null:
+		GameState.hint("Your creature is nowhere near enough to be shrouded.")
+		return
+	if creature.global_position.distance_to(pos) > StormShroud.GRANTED_WITHIN:
+		GameState.hint("Cast it nearer your creature to wrap it in the weather.")
+		return
+	StormShroud.grant(creature, StormShroud.SECONDS
+		+ potency * StormShroud.SECONDS_PER_POTENCY)
+	SoundBank.play_at("boom", creature.global_position, -6.0)
+	GameState.announce(GameState.named(
+		"The sky gathers on %s's shoulders. It will not leave them for a while."))
+
+
+## THE MERCY, WORN. `ward` on the healing shower: the same kindness, carried
+## about by the creature instead of falling on one spot. See MercyShroud.
+func _cast_healing_shroud(pos: Vector3, potency := 1.0) -> void:
+	var creature := get_tree().get_first_node_in_group("creature") as Creature
+	if creature == null:
+		GameState.hint("Your creature is nowhere near enough to be blessed.")
+		return
+	if creature.global_position.distance_to(pos) > MercyShroud.GRANTED_WITHIN:
+		GameState.hint("Cast it nearer your creature to lay the light on it.")
+		return
+	MercyShroud.grant(creature, MercyShroud.SECONDS
+		+ potency * MercyShroud.SECONDS_PER_POTENCY)
+	GameState.announce(GameState.named(
+		"Gold and silver light comes down around %s, and stays."))
 
 
 ## Two mercies -----------------------------------------------------------------
@@ -1251,38 +1344,46 @@ func _shower_mercy(pos: Vector3, reach: float) -> void:
 	for tick in 20:
 		if not is_instance_valid(self):
 			return
-		for v in get_tree().get_nodes_in_group("villagers"):
-			var villager := v as Villager
-			if not is_instance_valid(villager):
-				continue
-			if villager.global_position.distance_to(pos) < reach:
-				villager.extinguish()
-				villager.receive_heal()
-		for a in get_tree().get_nodes_in_group("animals"):
-			var animal := a as Animal
-			if is_instance_valid(animal) and animal.global_position.distance_to(pos) < reach:
-				animal.extinguish()
-		for t in get_tree().get_nodes_in_group("trees"):
-			var tree := t as WildTree
-			if is_instance_valid(tree) and tree.burning \
-					and tree.global_position.distance_to(pos) < reach:
-				tree.extinguish()
-		for f in get_tree().get_nodes_in_group("farms"):
-			var farm := f as Farm
-			if is_instance_valid(farm) and farm.global_position.distance_to(pos) < reach:
-				farm.extinguish()
-		# AND THE HERDS. Every group above is a group of NODES, and a herd's
-		# burning members are numbers — so the kindest miracle in the game fell
-		# straight through a burning herd. The mercy has to reach the mass for
-		# the same reason the fire does.
-		for h in get_tree().get_nodes_in_group("herds"):
-			var herd := h as Herd
-			if is_instance_valid(herd):
-				herd.doused(pos, reach)
-		var creature := get_tree().get_first_node_in_group("creature") as Creature
-		if creature != null and creature.global_position.distance_to(pos) < reach:
-			creature.receive_heal()
+		mercy_upon(pos, reach)
 		await get_tree().create_timer(0.5).timeout
+
+
+## ONE PASS OF THE MERCY: douse what burns here, mend what hurts here. Lifted
+## out so that anything carrying the same kindness about — a creature wearing
+## it, say — is the SAME mercy rather than a second copy that will drift.
+## See MercyShroud.
+func mercy_upon(pos: Vector3, reach: float) -> void:
+	for v in get_tree().get_nodes_in_group("villagers"):
+		var villager := v as Villager
+		if not is_instance_valid(villager):
+			continue
+		if villager.global_position.distance_to(pos) < reach:
+			villager.extinguish()
+			villager.receive_heal()
+	for a in get_tree().get_nodes_in_group("animals"):
+		var animal := a as Animal
+		if is_instance_valid(animal) and animal.global_position.distance_to(pos) < reach:
+			animal.extinguish()
+	for t in get_tree().get_nodes_in_group("trees"):
+		var tree := t as WildTree
+		if is_instance_valid(tree) and tree.burning \
+				and tree.global_position.distance_to(pos) < reach:
+			tree.extinguish()
+	for f in get_tree().get_nodes_in_group("farms"):
+		var farm := f as Farm
+		if is_instance_valid(farm) and farm.global_position.distance_to(pos) < reach:
+			farm.extinguish()
+	# AND THE HERDS. Every group above is a group of NODES, and a herd's
+	# burning members are numbers — so the kindest miracle in the game fell
+	# straight through a burning herd. The mercy has to reach the mass for
+	# the same reason the fire does.
+	for h in get_tree().get_nodes_in_group("herds"):
+		var herd := h as Herd
+		if is_instance_valid(herd):
+			herd.doused(pos, reach)
+	var creature := get_tree().get_first_node_in_group("creature") as Creature
+	if creature != null and creature.global_position.distance_to(pos) < reach:
+		creature.receive_heal()
 
 
 ## Nature -------------------------------------------------------------------
