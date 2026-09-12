@@ -108,7 +108,17 @@ static func commune(who: Creature, delta: float) -> void:
 			return
 		who._apply_gravity_only(delta)
 		who._action_time -= delta
-		who.thirst = maxf(who.thirst - 9.0 * delta, 0.0)
+		# IT HAS NO THIRST. This asked the creature to slake one and it has
+		# never had one to slake — the word appears nowhere else in the game.
+		# A phantom property: GDScript writes it down without a murmur and
+		# raises only on the frame the line finally runs, which for a deed it
+		# does now and then means minutes into a session.
+		#
+		# What drinking at your own reflecting pool actually IS here is the
+		# quietest thing the creature can do, so that is what it does: it
+		# comes away rested, and less tired of itself.
+		who.energy = minf(who.energy + 2.0 * delta, 100.0)
+		who.boredom = maxf(who.boredom - 4.0 * delta, 0.0)
 		who.heart.stir("contentment", 0.04 * delta)
 		if who._action_time <= 0.0:
 			who._finish_choice(0.5)

@@ -929,6 +929,67 @@ def check_late_validity_guards(files):
     return problems
 
 
+# `who.thirst` — a member READ or WRITTEN on a variable whose class is known.
+# Not followed by "(", because calls are already checked by check() above.
+dotted_member_re = re.compile(r"(?<![\w.$@\"])([a-z_]\w*)\s*\.\s*(\w+)\b(?!\s*\()")
+
+
+def check_phantom_members(files, classes):
+    """A property read or written on a typed variable whose class has no such thing.
+
+    `check()` above follows dotted CALLS — `who.mind.judge(...)` — and
+    `static_member_re` catches a constant read off a class name. Between them
+    sat the commonest mistake of all and nothing looked at it: an ordinary
+    property on an ordinary variable, `who.thirst = ...`, where the class has
+    never had a thirst. GDScript compiles it happily and raises only on the
+    frame it finally runs, which for a deed the creature does now and then
+    means minutes into a session.
+
+    Only the FIRST hop is judged — `who.heart.stir(...)` asks whether Creature
+    has a `heart` and stops there — and only for variables whose class this
+    project declares. Godot's own properties are allowed through BASE_MEMBERS,
+    which is the same table check_shadowed_members uses; a base class missing
+    from it shows up as noise here rather than silence, which is the right way
+    round.
+    """
+    problems = []
+    for path in files:
+        src = open(path, encoding="utf-8").read()
+        for lineno, header, body, body_at in _func_bodies(src):
+            known = {}
+            inner = header[header.index("(") + 1:header.rindex(")")] \
+                if ")" in header else ""
+            for pname, ptype in parse_params(inner):
+                if ptype in classes:
+                    known[pname] = ptype
+            clean = [strings_re.sub('""', ln.split("#")[0]) for ln in body]
+            for ln in clean:
+                for rx in (local_var_re, local_decl_re):
+                    for name, kind in rx.findall(ln + "\n"):
+                        if kind in classes:
+                            known[name] = kind
+            if not known:
+                continue
+            for offset, ln in enumerate(clean):
+                if ln.strip().startswith("#"):
+                    continue
+                for name, member in dict.fromkeys(dotted_member_re.findall(ln)):
+                    if name not in known:
+                        continue
+                    cls = known[name]
+                    have = members_of(cls, classes)
+                    base = classes.get(cls, (set(), None))[1]
+                    while base is not None:
+                        have |= _inherited_members(base)
+                        base = classes.get(base, (set(), None))[1] \
+                            if base in classes else None
+                    have |= _inherited_members(classes.get(cls, (set(), None))[1])
+                    if member not in have and member not in BUILTIN:
+                        problems.append((path, body_at + offset, name, cls,
+                                         member, body[offset].strip()))
+    return problems
+
+
 def main():
     root = "scripts"
     targets = sys.argv[1:] or [root]
@@ -985,6 +1046,11 @@ def main():
               "function, its parameters, or its class provides it. gdparse "
               "accepts this; Godot refuses to load the script."
               "\n    %s" % (path, lineno, name, where, line))
+    phantoms = check_phantom_members(files, classes)
+    for path, lineno, name, cls, member, line in phantoms:
+        print("%s:%d: %s is a %s, and %s has no '%s'. GDScript accepts this and "
+              "raises only on the frame the line finally runs."
+              "\n    %s" % (path, lineno, name, cls, cls, member, line))
     late_guards = check_late_validity_guards(files)
     for path, lineno, name, kind, line in late_guards:
         print("%s:%d: '%s' is typed as %s here and only checked with "
@@ -1001,7 +1067,7 @@ def main():
               % (path, lineno, name, name, line))
     total = len(problems) + len(escapes) + len(formats) + len(shadowed) \
         + len(loose_arrays) + len(variants) + len(shadowed_members) \
-        + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards)
+        + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

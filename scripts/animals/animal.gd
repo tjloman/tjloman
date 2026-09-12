@@ -788,9 +788,15 @@ func pick_up() -> void:
 	# OUT OF THE HERD, if it came from one. A beast being carried is not in a
 	# formation any more, and leaving it in the herd's books stretched the mass
 	# across the map behind it — see Herd.release.
-	var from = get_meta("herd", null)
-	if from is Herd and is_instance_valid(from):
-		(from as Herd).release(self)
+	# ASKED WITH has_meta FIRST. get_meta's default argument does not spare you
+	# the complaint when the object carries no metadata at all, and most animals
+	# carry none — only a beast promoted out of a herd is ever handed this. So
+	# every ordinary sheep picked up by hand printed an error, which is both
+	# noise in the log and the wrong thing to print.
+	if has_meta("herd"):
+		var from = get_meta("herd")
+		if from is Herd and is_instance_valid(from):
+			(from as Herd).release(self)
 	state = State.HELD
 	_rider = null
 	velocity = Vector3.ZERO
