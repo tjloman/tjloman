@@ -55,9 +55,11 @@ const SOCIAL := {
 	# few elk together, which is what both actually do.
 	"bison": [2, 8, 0],        # 2-16
 	"elk": [3, 2, 0],          # 3-6, and tight
-	# THE SOLITARY ONES, who keep their own company.
-	"anteater": [1, 1, 0],
-	"coati": [1, 1, 0],
+	# THE NEAR-SOLITARY. One, or now and then a pair — nothing in the world is
+	# strictly alone any more, and that is right: even the animals that keep
+	# their own company turn up two at a time often enough to notice.
+	"anteater": [1, 2, 0],
+	"coati": [1, 2, 0],
 }
 
 ## THE SEAM BETWEEN NUMBER AND ANIMAL, in both directions. HerdMotion's motion
