@@ -35,7 +35,10 @@ extends Node3D
 const SOCIAL := {
 	# THE GREAT HERDS.
 	"ox": [7, 10, 0],          # cattle: 7-70, the rolling dice of a full herd
-	"reindeer": [2, 100, 0],   # 2-200, and they really do gather like that
+	"caribou": [2, 100, 0],    # 2-200 wild, and they really do gather like that
+	# The domestic one comes from a village taming caribou, not from the world,
+	# so its dice only matter if one is ever loosed again.
+	"reindeer": [1, 4, 0],
 	"sheep": [3, 10, 0],
 	"deer": [2, 8, 0],
 	"llama": [2, 6, 0],

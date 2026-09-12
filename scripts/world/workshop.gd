@@ -49,8 +49,10 @@ const TRADES := {
 		"wants": 1.0 / 22.0, "needs": "grain",
 		"label": "Mill", "tint": Color(0.74, 0.66, 0.48),
 	},
-	# STOCK. Keeps penned beasts fed and lets a village hold more of them, which
-	# is the village end of the herd work — somewhere for driven cattle to go.
+	# STOCK. This is the one that changes what a village CAN BE. A pen holds
+	# eight beasts; a barn holds forty more, which is the difference between
+	# keeping animals and keeping a herd. Only ever raised by a town already
+	# herding to the limit of its pen — see `_makes_sense`.
 	"barn": {
 		"employs": 3, "lumber": 10, "stone": 2,
 		"takes": {"plant": 2}, "makes": {"meat": 3},
@@ -66,6 +68,19 @@ const TRADES := {
 	},
 }
 
+## THE DROVE. Stock does not stand in a barn all day: it is let out in the
+## morning, walked past the well to drink, put on pasture, and drawn back in at
+## dusk. The whole of a barn's day is these four places in order, and it is
+## worth having for exactly one reason — a village with forty beasts in it
+## should LOOK like a village with forty beasts in it, twice a day, in a line.
+const DROVE := ["out", "well", "pasture", "in"]
+## How long each leg lasts, and how far pasture stands from the barn.
+const LEG_SECONDS := 26.0
+const PASTURE := 17.0
+## How far out of line a beast walks. Nothing here is a formation: they string
+## out and bunch up, which is what makes it read as animals rather than a parade.
+const STRAGGLE := 3.2
+
 ## How long one turn of work takes, and how far a well's or a shrine's good
 ## reaches. A shift is long enough that a villager is visibly AT work rather
 ## than touching the building and leaving.
@@ -74,6 +89,8 @@ const REACH := 16.0
 
 var village: Village
 var trade := "well"
+var _leg := 0
+var _leg_left := 0.0
 
 
 static func create(which: String, home: Village) -> Workshop:
@@ -118,7 +135,11 @@ static func _makes_sense(village: Village, needs: String) -> bool:
 		"grain":
 			return village.store.plant_food >= 6
 		"stock":
-			return village.tamed_count() > 0
+			# A BARN IS FOR A TOWN THAT ALREADY HERDS, not one that might. It
+			# wants beasts on the ground AND its pen full enough that the
+			# animals are the problem — otherwise every village with one tamed
+			# sheep raises a barn it will never fill.
+			return village.tamed_count() >= Village.MAX_TAMED - 2
 		"faith":
 			return village.belief > 25.0
 	return true
@@ -142,6 +163,17 @@ static func with_room(village: Village, from: Vector3) -> Workshop:
 			closest = gap
 			best = w
 	return best
+
+
+## HOW MANY BEASTS THIS TOWN CAN HOLD — a pen and a prayer, or a pen and barns.
+## Kept with the barn rather than on the village, which has been sitting on its
+## public-method limit for some time now, and is a question about barns anyway.
+static func stalls(village: Village) -> int:
+	var barns := 0
+	for w in village.workshops:
+		if is_instance_valid(w) and w.trade == "barn":
+			barns += 1
+	return Village.MAX_TAMED + barns * Village.BARN_STALLS
 
 
 ## EVERY POST IN THE TOWN, across all its trades. What the job-picker divides
@@ -269,6 +301,67 @@ func _water_the_fields() -> void:
 			farm.water(SHIFT * 2.0)
 
 
+## WHERE THE STOCK SHOULD BE STANDING at this hour. The barn owns the routine,
+## not the animals: they are only ever told where to go, which means a herd of
+## forty costs one decision rather than forty.
+func drove_spot(which: int) -> Vector3:
+	var leg: String = DROVE[_leg % DROVE.size()]
+	var scatter := Vector3(
+		sin(float(which) * 2.399) * STRAGGLE, 0.0, cos(float(which) * 2.399) * STRAGGLE)
+	match leg:
+		"well":
+			var well := _nearest_well()
+			return (well if well != Vector3.INF else global_position) + scatter
+		"pasture":
+			var a := float(_leg) * 1.1
+			return global_position + Vector3(cos(a), 0.0, sin(a)) * PASTURE + scatter
+		"out":
+			return post() + scatter
+	return global_position + scatter * 0.4
+
+
+## A barn drives its beasts past the well because that is where they drink, and
+## because a village's animals crossing its square is the whole of what a
+## working town looks like from the hill above it.
+func _nearest_well() -> Vector3:
+	if village == null:
+		return Vector3.INF
+	for w in village.workshops:
+		if is_instance_valid(w) and w.trade == "well":
+			return w.global_position
+	return Vector3.INF
+
+
+## Are they in for the night? Butchering and feeding want to know.
+func stock_is_in() -> bool:
+	return DROVE[_leg % DROVE.size()] == "in"
+
+
+func _process(delta: float) -> void:
+	if trade != "barn" or village == null or not is_instance_valid(village):
+		return
+	if Util.sim_stride(global_position) > 4:
+		return
+	_leg_left -= delta
+	if _leg_left > 0.0:
+		return
+	_leg_left = LEG_SECONDS
+	# Night draws them in whatever leg they were on. A barn is a place animals
+	# sleep, and stock still out at dusk is stock somebody has lost.
+	_leg = DROVE.find("in") if GameState.is_night() else (_leg + 1) % DROVE.size()
+	var n := 0
+	for a in village.tamed_animals:
+		var beast := a as Animal
+		if is_instance_valid(beast) and not beast.has_rider():
+			beast.drive_to(drove_spot(n))
+			n += 1
+
+
 func hover_text() -> String:
 	var spec: Dictionary = TRADES[trade]
+	if trade == "barn":
+		return "Barn — %d of %d stalls, stock %s" % [
+			village.tamed_count() if village != null else 0,
+			Workshop.stalls(village) if village != null else 0,
+			"in" if stock_is_in() else "out"]
 	return "%s — work for %d" % [String(spec["label"]), int(spec["employs"])]

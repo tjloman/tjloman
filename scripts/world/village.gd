@@ -25,7 +25,19 @@ const FARMS_MOST := 10
 ## A school is a civic building: it has posts, like the rest of them.
 const TEACHERS_MOST := 3
 
+## HOW MUCH STOCK A TOWN CAN KEEP WITH NOWHERE TO PUT IT. Eight is what will
+## stand about a pen and be watched; past that they wander off and the village
+## cannot feed them. A BARN changes the question entirely — see `stock_room`.
 const MAX_TAMED := 8
+## What one barn adds. Deliberately large: a barn is the difference between
+## keeping a few animals and keeping a HERD, and a village that has built one
+## should be limited by what it can catch rather than by what it can house.
+##
+## It is not literally unbounded, and the reason is the same one the wild herds
+## have: every tamed beast is a real CharacterBody3D that runs physics every
+## frame. Making village stock truly limitless means giving the barn a Herd and
+## its LOD, which is the right next step and a bigger one than this.
+const BARN_STALLS := 40
 const PRAYER_PER_VILLAGE := 120.0   # each convert widens your prayer reservoir
 const FARM_HALF := 3.9              # a field's clearance radius (no overlaps)
 
@@ -919,7 +931,7 @@ func best_penned_meat() -> Animal:
 ## Penned livestock multiplies slowly.
 func _breed_livestock() -> void:
 	Util.prune(tamed_animals)
-	if tamed_animals.size() < 2 or tamed_animals.size() >= MAX_TAMED:
+	if tamed_animals.size() < 2 or tamed_animals.size() >= Workshop.stalls(self):
 		return
 	var by_species := {}
 	for a in tamed_animals:

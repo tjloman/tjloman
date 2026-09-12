@@ -295,7 +295,7 @@ func _scatter() -> void:
 			_scatter_trees(rng, rng.randi_range(0, 1), "forest")
 			_scatter_deposits(rng, rng.randi_range(2, 4))
 			_scatter_bushes(rng, rng.randi_range(0, 2))
-			_scatter_animals(rng, {"reindeer": 0.03, "llama": 0.12, "elk": 0.1})
+			_scatter_animals(rng, {"caribou": 0.03, "llama": 0.12, "elk": 0.1})
 		# THE HOT DRY COUNTRY. Almost nothing grows and almost nothing lives here,
 		# which is the point of it — a desert should be a place you cross.
 		"desert":
@@ -308,7 +308,7 @@ func _scatter() -> void:
 		"tundra":
 			_scatter_trees(rng, rng.randi_range(0, 2), "forest")
 			_scatter_deposits(rng, rng.randi_range(1, 2))
-			_scatter_animals(rng, {"reindeer": 0.07, "bison": 0.12, "elk": 0.14,
+			_scatter_animals(rng, {"caribou": 0.07, "bison": 0.12, "elk": 0.14,
 				"deer": 0.12, "wolf": 0.07, "bear": 0.05, "dog": 0.03})
 		# WHERE WETLAND MEETS FOREST. The densest, loudest, most crowded ground
 		# in the world: everything small, everything at once, and a tiger in it.

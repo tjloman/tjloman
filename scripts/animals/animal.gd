@@ -15,8 +15,8 @@ const MEAT_NAMES := {
 	"sheep": "mutton", "pig": "pork", "chicken": "chicken", "deer": "venison",
 	"ox": "beef", "giraffe": "giraffe steak", "llama": "llama chop",
 	"bear": "bear flank", "wolf": "wolf flesh", "lion": "lion flesh",
-	"tiger": "tiger flesh", "reindeer": "reindeer haunch", "bison": "bison chuck",
-	"elk": "elk loin",
+	"tiger": "tiger flesh", "caribou": "caribou haunch",
+	"reindeer": "reindeer haunch", "bison": "bison chuck", "elk": "elk loin",
 }
 
 ## body = torso box size; leg = leg height; meat = granary yield when
@@ -55,12 +55,20 @@ const SPECIES := {
 	"tiger": {"body": Vector3(0.6, 0.6, 1.5), "leg": 0.5, "color": Color(0.85, 0.5, 0.2),
 		"speed": 5.5, "meat": 3, "predator": true, "prey": ["deer", "pig", "sheep"],
 		"attacks_villagers": true},
-	# THE GREAT HERD, and the ones who walk alone. Reindeer gather in numbers
-	# nothing else here comes near — see Herd.SOCIAL, where they roll 2d100 —
-	# which is exactly why the herd had to stop being a pile of separate beasts
-	# before any of these could be added.
-	"reindeer": {"body": Vector3(0.55, 0.75, 1.4), "leg": 0.75, "color": Color(0.62, 0.55, 0.46),
-		"speed": 5.0, "meat": 3, "skittish": true, "neck": 0.3},
+	# THE GREAT HERD. Caribou gather in numbers nothing else here comes near —
+	# see Herd.SOCIAL, where they roll 2d100 — which is exactly why the herd had
+	# to stop being a pile of separate beasts before any of these could be added.
+	#
+	# CARIBOU AND REINDEER ARE THE SAME ANIMAL AND THAT IS THE POINT. Caribou is
+	# the wild one: it runs in the great tundra herds and it is skittish. Tame a
+	# caribou and what you have is a reindeer — steadier, heavier, a pack beast,
+	# and no longer part of anything wild. The only difference between them is
+	# whose they are, which is the whole of what domestication is.
+	"caribou": {"body": Vector3(0.55, 0.75, 1.4), "leg": 0.75, "color": Color(0.58, 0.52, 0.44),
+		"speed": 5.4, "meat": 3, "skittish": true, "neck": 0.3,
+		"tame": true, "tames_into": "reindeer"},
+	"reindeer": {"body": Vector3(0.6, 0.78, 1.45), "leg": 0.75, "color": Color(0.72, 0.66, 0.56),
+		"speed": 4.4, "meat": 3, "tame": true, "pack": true, "neck": 0.3},
 	"bison": {"body": Vector3(1.0, 1.1, 2.1), "leg": 0.65, "color": Color(0.32, 0.24, 0.2),
 		"speed": 4.5, "meat": 6},
 	"elk": {"body": Vector3(0.7, 0.95, 1.7), "leg": 0.95, "color": Color(0.5, 0.38, 0.26),
@@ -667,7 +675,22 @@ func _maybe_pen_tame() -> void:
 			return
 
 
+## TAMED. For most beasts that is only a change of owner; for a caribou it is a
+## change of KIND. A wild thing that has been gentled and brought home is not the
+## same animal any more, and the table says so rather than any code here —
+## `tames_into` is a species row, so making some other creature domesticable into
+## something else later is a one-line edit.
 func tame(by: Village) -> void:
+	var becomes: String = spec.get("tames_into", "")
+	if becomes != "" and Animal.SPECIES.has(becomes):
+		var kept := global_position
+		var made := Animal.create(becomes)
+		made.tamed_by = by
+		by.add_child(made)
+		made.global_position = kept
+		by.on_tamed_gained(made)
+		queue_free()
+		return
 	tamed_by = by
 	night_spawned = false
 	by.on_tamed_gained(self)
@@ -675,6 +698,18 @@ func tame(by: Village) -> void:
 	# their birth-chunk unloading as the camera roams.
 	if get_parent() != by:
 		reparent.call_deferred(by)
+
+
+## DRIVEN. Told where to stand by whoever is herding it — a barn on its daily
+## round, or a villager. It is a suggestion, not a leash: a hungry or frightened
+## beast still has its own mind and will break off, which is why this only sets
+## a target rather than taking the animal over.
+func drive_to(spot: Vector3) -> void:
+	if state in [State.HELD, State.FALLING, State.FLEE, State.CHASE]:
+		return
+	_target = spot
+	state = State.WANDER
+	_action_time = maxf(_action_time, 6.0)
 
 
 func is_tamable() -> bool:

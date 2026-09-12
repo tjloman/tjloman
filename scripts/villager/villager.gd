@@ -48,6 +48,12 @@ const ELDER_AGE := 60.0
 const PREGNANCY_YEARS := 0.75  # nine months
 const STARVING_HUNGER := 90.0
 const TAME_MORALITY := 40.0    # benevolent and saintly souls only
+## MISSIONARY WORK. A converted village sends people out to the heathen towns it
+## can reach, rather than waiting for a god to carry believers there by hand.
+## This is the longest journey anybody in the game makes, which is what finally
+## makes a horse an honest need rather than a convenience.
+const MISSION_RANGE := 320.0
+const MISSION_FAITH := 55.0
 
 ## COURAGE IN NUMBERS. A villager caught alone by a wolf runs (and is usually
 ## run down); it takes a BAND to stand and fight. This is the whole balance of
@@ -1220,6 +1226,11 @@ func _pick_job() -> bool:
 		scores["build_shop"] = 28.0
 	if CreatureNest.wanted_by(village):
 		scores["build_nest"] = 30.0
+	# GOING OUT TO PREACH. Only from a town that believes firmly enough to spare
+	# somebody for days, and only by the devout.
+	if village.converted and village.belief > MISSION_FAITH \
+			and morality >= TAME_MORALITY and _nearest_heathen() != null:
+		scores["preach"] = 27.0
 	# THE EVENING CIRCLE. Dancing at the nest after dark, whether the beast is
 	# there or not — scored high because it is what people would rather be
 	# doing, and gated on the dark because that is when a fire is worth sitting
@@ -1240,7 +1251,7 @@ func _pick_job() -> bool:
 
 	# Taming: a privilege of the good, pointless for the fallen. An empty
 	# pen makes it urgent — a dog and a mount change everything.
-	if morality >= TAME_MORALITY and not abandoned and village.tamed_count() < Village.MAX_TAMED:
+	if morality >= TAME_MORALITY and not abandoned and village.tamed_count() < Workshop.stalls(village):
 		if _nearest_tamable() != null:
 			scores["tame"] = 24.0 + (12.0 if village.tamed_count() == 0 else 0.0)
 
@@ -1367,6 +1378,19 @@ func _start_job(job: String) -> void:
 				return
 			state = State.GO_BUILD_NEST
 			_maybe_mount()
+		"preach":
+			_mission_village = _nearest_heathen()
+			if _mission_village == null:
+				state = State.WANDER
+				_action_time = 2.0
+				return
+			# THE HORSE MATTERS MOST HERE, so a missionary takes one from
+			# anywhere in the village rather than only from arm's reach. A
+			# believer walking three hundred metres to the next town and three
+			# hundred back is the one journey in this game that is genuinely
+			# improved by being on something.
+			_maybe_mount(INF)
+			state = State.GO_PREACH
 		"circle":
 			if village.nest == null or not is_instance_valid(village.nest):
 				state = State.WANDER
@@ -1384,6 +1408,21 @@ func _start_job(job: String) -> void:
 				return
 			state = State.GO_BUILD_SHOP
 			_maybe_mount()
+
+
+## THE NEAREST TOWN THAT DOES NOT BELIEVE, within a missionary's reach.
+func _nearest_heathen() -> Village:
+	var best: Village = null
+	var closest := MISSION_RANGE
+	for v in get_tree().get_nodes_in_group("village"):
+		var town := v as Village
+		if not is_instance_valid(town) or town == village or town.converted:
+			continue
+		var gap := town.global_position.distance_to(global_position)
+		if gap < closest:
+			closest = gap
+			best = town
+	return best
 
 
 func _find_damaged_house() -> House:
@@ -1541,6 +1580,7 @@ func current_job() -> String:
 		State.GO_BUILD_SHOP, State.BUILDING_SHOP: return "build_shop"
 		State.GO_BUILD_NEST, State.BUILDING_NEST: return "build_nest"
 		State.GO_CIRCLE, State.CIRCLING: return "circle"
+		State.GO_PREACH, State.PREACHING: return "preach"
 		State.GO_CHOP, State.CHOPPING: return "chop"
 		State.GO_QUARRY, State.QUARRYING: return "quarry"
 		State.GO_FARM, State.FARMING: return "farm"
@@ -1788,13 +1828,23 @@ func _nearest_in_group(group: String, max_dist: float) -> Node3D:
 ## Riding --------------------------------------------------------------------
 
 ## The good may ride: grab an idle tamed horse/llama for a long trip.
-func _maybe_mount() -> void:
+## A HORSE IS WORKER TRANSPORT and always has been — a mount is worth 1.9x the
+## walking speed, and every job that travels asks for one before setting off.
+## What was wrong was the reach: fifteen metres was most of a twelve-soul hamlet
+## and is a fifth of the square in a town founded at fifty, so the horses stood
+## in the pen while people walked past them to fields a hundred metres out.
+##
+## It now looks as far as the town's own influence reaches. Fetching a horse
+## from across the village is worth it for a job at the far fence and is not
+## worth it for one next door, and the walk there is the price either way.
+func _maybe_mount(reach := -1.0) -> void:
 	if morality < TAME_MORALITY or _mount != null:
 		return
 	var mount := village.idle_mount()
 	if mount == null:
 		return
-	if mount.global_position.distance_to(global_position) < 15.0:
+	var far := village.influence_radius if reach < 0.0 else reach
+	if mount.global_position.distance_to(global_position) < far:
 		_mount = mount
 		mount.set_rider(self)
 
