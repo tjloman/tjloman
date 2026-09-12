@@ -41,13 +41,15 @@ var _loops := {}
 ## do. The opening screen calls this until it says no; everything else calls
 ## `_ensure`, which reaches the same place by another door.
 func warm_next() -> bool:
-	for name: String in ONE_SHOTS:
-		if not _bank.has(name):
-			_bank[name] = call("_make_" + name)
+	# `sound` and not `name`: every Node has a `name`, and a loop variable
+	# called that shadows it.
+	for sound: String in ONE_SHOTS:
+		if not _bank.has(sound):
+			_bank[sound] = call("_make_" + sound)
 			return true
-	for name: String in VOICES:
-		if not _loops.has(name):
-			_loops[name] = call("_make_" + name)
+	for sound: String in VOICES:
+		if not _loops.has(sound):
+			_loops[sound] = call("_make_" + sound)
 			return true
 	return false
 

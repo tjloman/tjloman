@@ -119,23 +119,11 @@ func spot_for(which: int, many: int) -> Vector3:
 ## long as the class is, which is all a formation needs — and asked once, on
 ## arriving, because a seat recomputed every frame is a child that swaps places
 ## with its neighbours forever.
-func seat_of(child: Villager) -> int:
-	var seat := 0
-	if village == null or not is_instance_valid(village):
-		return seat
-	for v in village.my_villagers():
-		if v == child:
-			return seat
-		if not v.is_adult():
-			seat += 1
-	return seat
-
-
-## WHICH ONE OF THE CHILDREN THIS IS, in the village's own order. Stable for as
-## long as the class is, which is all a formation needs — and asked once, on
-## arriving, because a seat recomputed every frame is a child that swaps places
-## with its neighbours forever.
-func seat_of(child: Villager) -> int:
+## `child` is untyped on purpose. A Villager reaches its Edubba through its
+## village, so naming Villager in this signature closes a circle — Edubba needs
+## Villager needs Village needs Edubba — and Godot answers a circle by refusing
+## to parse the class at all, which takes the whole village down with it.
+func seat_of(child: Node) -> int:
 	var seat := 0
 	if village == null or not is_instance_valid(village):
 		return seat

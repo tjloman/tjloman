@@ -846,6 +846,12 @@ def check_undeclared_names(files):
         closed_class = base is not None and base.group(1) in ("RefCounted", "Object")
         members = set(class_decl_re.findall(src)) | set(func_re.findall(src))
         members |= inherited
+        # A class extending a Godot node has an inherited surface this file
+        # cannot know, so bare names there are normally left alone. PRIVATE
+        # names are the exception and they are safe to judge anywhere: a
+        # leading underscore is this project's own, never something inherited.
+        # `_fire` and `_tutorial_button` both shipped as parse errors in a
+        # CanvasLayer, where the closed-scope rule below could not look.
         for lineno, header, body, body_at in _func_bodies(src):
             is_static = header.lstrip().startswith("static ")
             # THE FRAME TIME, ORPHANED. This one runs in EVERY function of
@@ -863,8 +869,6 @@ def check_undeclared_names(files):
                         problems.append((path, body_at + offset, "delta",
                                          header.split(")")[0].strip() + ")",
                                          ln.strip()))
-            if not is_static and not closed_class:
-                continue
             scope = set(members)
             inner = header[header.index("(") + 1:header.rindex(")")] \
                 if ")" in header else ""
@@ -885,6 +889,9 @@ def check_undeclared_names(files):
                         continue
                     if name in SHADOWABLE:
                         continue          # a global used as a bare reference
+                    if not (closed_class or is_static) \
+                            and not name.startswith("_"):
+                        continue          # inherited surface: not ours to judge
                     problems.append((path, body_at + offset, name,
                                      header.split(")")[0].strip() + ")",
                                      body[offset].strip()))
@@ -990,6 +997,34 @@ def check_phantom_members(files, classes):
     return problems
 
 
+def check_twice_declared(files):
+    """The same function defined twice in one class.
+
+    Godot does not merge them and does not take the last one: it refuses to
+    parse the CLASS, and then every class that names it fails to resolve, and
+    the error you are shown is about some innocent file three steps downstream.
+    Today it was `seat_of` written twice into Edubba, and what the engine
+    reported was that Village could not resolve a type.
+
+    gdparse accepts it happily — two functions of the same name are perfectly
+    good syntax — so nothing in this project's own checks saw it either.
+    """
+    problems = []
+    for path in files:
+        seen = {}
+        lines = open(path, encoding="utf-8").read().split("\n")
+        for lineno, line in enumerate(lines, 1):
+            hit = re.match(r"^(?:static\s+)?func\s+(\w+)\s*\(", line)
+            if not hit:
+                continue
+            name = hit.group(1)
+            if name in seen:
+                problems.append((path, lineno, name, seen[name], line.strip()))
+            else:
+                seen[name] = lineno
+    return problems
+
+
 def main():
     root = "scripts"
     targets = sys.argv[1:] or [root]
@@ -1046,6 +1081,12 @@ def main():
               "function, its parameters, or its class provides it. gdparse "
               "accepts this; Godot refuses to load the script."
               "\n    %s" % (path, lineno, name, where, line))
+    twice = check_twice_declared(files)
+    for path, lineno, name, first, line in twice:
+        print("%s:%d: '%s' is already defined at line %d. Godot refuses to parse "
+              "the whole CLASS for this, and reports it as a failure in some "
+              "other file that merely names the class."
+              "\n    %s" % (path, lineno, name, first, line))
     phantoms = check_phantom_members(files, classes)
     for path, lineno, name, cls, member, line in phantoms:
         print("%s:%d: %s is a %s, and %s has no '%s'. GDScript accepts this and "
@@ -1067,7 +1108,7 @@ def main():
               % (path, lineno, name, name, line))
     total = len(problems) + len(escapes) + len(formats) + len(shadowed) \
         + len(loose_arrays) + len(variants) + len(shadowed_members) \
-        + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms)
+        + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

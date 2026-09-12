@@ -184,34 +184,23 @@ func _row(text: String, on_press: Callable) -> Button:
 
 
 func _refresh_labels() -> void:
-	_quality_button.text = "Graphics: %s  [F2]" % Quality.tier_name()
-	_tutorial_button.text = "Tutorial: %s  [F4]" % ("on" if GameState.tutorial_on else "off")
+	_quality_button.text = "Graphics: %s  [F2]" \
+		% str(Quality.Tier.keys()[Quality.tier]).capitalize()
+
+
+## EVERY BUTTON HERE PULLS THE SAME LEVER ITS KEY DOES. Not a second copy of
+## each behaviour that happens to look alike — one of those two would quietly
+## rot, and it would be the one nobody on a keyboard ever presses.
+func _fire(action: String) -> void:
+	var ev := InputEventAction.new()
+	ev.action = action
+	ev.pressed = true
+	Input.parse_input_event(ev)
 
 
 func _on_quality() -> void:
 	Quality.cycle()
 	_refresh_labels()
-
-
-func _on_tutorial() -> void:
-	GameState.tutorial_on = not GameState.tutorial_on
-	_refresh_labels()
-
-
-func _on_profiles() -> void:
-	if profiles != null and is_instance_valid(profiles):
-		profiles.open()
-
-
-func _on_help() -> void:
-	if hud != null and is_instance_valid(hud):
-		hud.toggle_help()
-
-
-func _on_debug() -> void:
-	var menu := get_tree().get_first_node_in_group("debug_menu") as DebugMenu
-	if menu != null and is_instance_valid(menu):
-		menu.toggle()
 
 
 func _on_begin() -> void:
