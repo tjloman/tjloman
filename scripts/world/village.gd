@@ -29,15 +29,16 @@ const TEACHERS_MOST := 3
 ## stand about a pen and be watched; past that they wander off and the village
 ## cannot feed them. A BARN changes the question entirely — see `stock_room`.
 const MAX_TAMED := 8
-## What one barn adds. Deliberately large: a barn is the difference between
-## keeping a few animals and keeping a HERD, and a village that has built one
-## should be limited by what it can catch rather than by what it can house.
+## What one barn adds — and it is now a number chosen to mean "as many as they
+## can get" rather than one chosen to protect the frame rate.
 ##
-## It is not literally unbounded, and the reason is the same one the wild herds
-## have: every tamed beast is a real CharacterBody3D that runs physics every
-## frame. Making village stock truly limitless means giving the barn a Herd and
-## its LOD, which is the right next step and a bigger one than this.
-const BARN_STALLS := 40
+## That changed when the barn got a Herd. Stock past the loose few in the yard
+## is rows of numbers drawn as one MultiMesh, with only the nearest handful ever
+## built as animals, so four hundred head cost about what forty did. What is
+## still not free is the formation: rewriting it is one cheap pass per member, a
+## few times a second, so this is generous rather than infinite. Four hundred a
+## barn is more than any village will catch.
+const BARN_STALLS := 400
 const PRAYER_PER_VILLAGE := 120.0   # each convert widens your prayer reservoir
 const FARM_HALF := 3.9              # a field's clearance radius (no overlaps)
 
@@ -892,9 +893,16 @@ func on_tamed_lost(animal: Animal) -> void:
 	tamed_animals.erase(animal)
 
 
+## EVERY BEAST THIS TOWN OWNS — the ones standing in the yard AND the ones in
+## the barn's books. Anything asking whether the village has room, or wants more,
+## or has any stock at all, means this number and not the visible one.
 func tamed_count() -> int:
 	Util.prune(tamed_animals)
-	return tamed_animals.size()
+	var n := tamed_animals.size()
+	for w in workshops:
+		if is_instance_valid(w) and w.trade == "barn":
+			n += w.stock_held()
+	return n
 
 
 func has_guard_dog() -> bool:

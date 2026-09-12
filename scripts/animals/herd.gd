@@ -218,6 +218,14 @@ var species := ""
 var world: WorldGen = null
 var head := 0
 
+## WHOSE THEY ARE. A herd with a keeper is a BARN'S herd: village livestock,
+## not wildlife. It does not flee, it does not stalk, nothing hunts it into the
+## ground, and its ceiling is the stalls its village has built rather than the
+## bushes it can reach. Everything else — the formation, the motions, the
+## promotion of the nearest few into real animals — is identical, which is the
+## whole reason a barn can hold four hundred head for what forty used to cost.
+var keeper: Village = null
+
 ## WHAT THE HERD IS DOING, as one word. It is the herd that has a mood, not the
 ## beast: the mood decides the PROPORTIONS in which its members are dealt their
 ## motions, and those proportions are what make a mass of boxes read as a herd
@@ -349,8 +357,8 @@ func _process(delta: float) -> void:
 ## find whatever is worth hunting and go towards it. One scan serves both,
 ## because a herd and a pack are the same object asking opposite questions.
 func _look_about() -> void:
-	if alive() <= 0:
-		return
+	if alive() <= 0 or keeper != null:
+		return          # penned stock neither bolts nor hunts
 	var hunter: bool = Animal.SPECIES[species].get("predator", false)
 	var closest: Herd = null
 	var gap := INF
@@ -427,6 +435,8 @@ func _take_fright(pack: Herd, gap: float) -> void:
 ## step is short.
 func _pick_pasture() -> void:
 	_graze_left = randf_range(GRAZE_LEAST, GRAZE_MOST)
+	if keeper != null:
+		return          # a barn says where its stock stands, not the stock
 	var a := randf() * TAU
 	var r := sqrt(randf()) * ROAM
 	var want := _home + Vector3(cos(a) * r, 0.0, sin(a) * r)
@@ -563,6 +573,11 @@ func _tend_agents() -> void:
 			continue
 		var born := Animal.create(species)
 		born.global_position = p
+		# A BARN'S BEAST COMES BACK TAMED. Promotion has to restore what the
+		# animal WAS, or every time you walked up to the barn its stock would
+		# turn feral in front of you.
+		if keeper != null and is_instance_valid(keeper):
+			born.tamed_by = keeper
 		# Parented to the world, not to the herd: it is a free animal now, and
 		# if it runs off it should not be dragged about by the formation.
 		get_parent().add_child(born)
@@ -627,6 +642,11 @@ func _reckon() -> void:
 ## and the creature actually have: plant them and the ceiling rises, and the
 ## herd fills the room over the following seasons.
 func capacity() -> float:
+	# PENNED STOCK IS LIMITED BY THE BARN AND NOTHING ELSE. Counting bushes for
+	# a village's livestock would be the same error as counting them for a wolf:
+	# these animals are fed from the store by people whose job that is.
+	if keeper != null and is_instance_valid(keeper):
+		return float(Workshop.stalls(keeper))
 	# A hunting herd is fed by what it catches, and counting bushes for a wolf
 	# pack was simply the wrong question — it capped a pack at what the berries
 	# nearby would support.
@@ -676,6 +696,29 @@ func _cull(many: int) -> void:
 			continue
 		m["dead"] = true
 		taken += 1
+
+
+## TAKEN IN. A real animal becomes a row of numbers: the node goes, the head
+## count stays. This is the whole of the barn's trick — a village that keeps
+## four hundred beasts is not running four hundred bodies, it is running one
+## herd and a budget, exactly as the wild ones do.
+func absorb(beast: Animal) -> void:
+	if not is_instance_valid(beast):
+		return
+	if beast.tamed_by != null:
+		beast.tamed_by.on_tamed_lost(beast)
+	_grow(1)
+	_members[_members.size() - 1]["ground"] = beast.global_position.y
+	beast.queue_free()
+
+
+## AND ONE TAKEN OUT FOR THE TABLE, without ever building it. A butcher does
+## not need the animal to exist to get meat off it.
+func slaughter() -> int:
+	if alive() <= 0:
+		return 0
+	take_one()
+	return int(Animal.SPECIES[species].get("meat", 1))
 
 
 ## SOMETHING TOOK ONE. However it went — wolf, villager, creature, or a god in

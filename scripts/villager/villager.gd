@@ -1241,7 +1241,7 @@ func _pick_job() -> bool:
 			and _will_eat_human_flesh() and _nearest_corpse() != null:
 		scores["butcher"] = 50.0 + food_worry
 	if eats_meat and store.meat_food < 5:
-		if abandoned and village.best_penned_meat() != null:
+		if abandoned and Workshop.any_meat(village):
 			scores["butcher_pen"] = 40.0 + food_worry
 		if _nearest_huntable() != null:
 			scores["hunt"] = (35.0 if abandoned else 25.0) + food_worry
@@ -1356,8 +1356,11 @@ func _start_job(job: String) -> void:
 			_target_corpse = _nearest_corpse()
 			state = State.GO_BUTCHER
 		"butcher_pen":
+			# A loose beast in the yard if there is one; otherwise the barn's
+			# books, which a butcher can take from without the animal ever having
+			# been built. Workshop.butchery settles which and sets us going.
 			_target_animal = village.best_penned_meat()
-			state = State.GO_HUNT  # same flow: walk to it, then the deed
+			state = Workshop.butchery(self, _target_animal) as State
 		"tame":
 			_target_animal = _nearest_tamable()
 			state = State.GO_TAME

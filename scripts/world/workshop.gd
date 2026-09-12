@@ -81,6 +81,14 @@ const PASTURE := 17.0
 ## out and bunch up, which is what makes it read as animals rather than a parade.
 const STRAGGLE := 3.2
 
+## HOW MANY BEASTS STAND ABOUT AS REAL ANIMALS before the barn takes the rest
+## into its books. Past this the surplus becomes a Herd — rows of numbers drawn
+## as one MultiMesh, with only the nearest few ever built — which is why a barn
+## can now hold whatever a village can catch. The pen's own eight are left as
+## real animals because they are the ones villagers feed, ride and butcher by
+## hand, and because a yard with nothing standing in it is not a yard.
+const LOOSE_STOCK := 8
+
 ## How long one turn of work takes, and how far a well's or a shrine's good
 ## reaches. A shift is long enough that a villager is visibly AT work rather
 ## than touching the building and leaving.
@@ -89,6 +97,9 @@ const REACH := 16.0
 
 var village: Village
 var trade := "well"
+## ONE HERD PER SPECIES THIS BARN KEEPS. Village livestock beyond the loose few
+## live here as numbers — see Herd, and `_take_in`.
+var stock: Array[Herd] = []
 var _leg := 0
 var _leg_left := 0.0
 
@@ -174,6 +185,34 @@ static func stalls(village: Village) -> int:
 		if is_instance_valid(w) and w.trade == "barn":
 			barns += 1
 	return Village.MAX_TAMED + barns * Village.BARN_STALLS
+
+
+## IS THERE ANY MEAT ON THE HOOF AT ALL — loose in the yard or in a barn's book.
+static func any_meat(village: Village) -> bool:
+	if village.best_penned_meat() != null:
+		return true
+	return with_stock(village) != null
+
+
+## A barn with something in it.
+static func with_stock(village: Village) -> Workshop:
+	for w in village.workshops:
+		if is_instance_valid(w) and w.trade == "barn" and w.stock_held() > 0:
+			return w
+	return null
+
+
+## SEND A BUTCHER SOMEWHERE. A loose beast is walked to and killed the old way;
+## with the yard empty the butcher goes to the barn and takes from its books
+## instead, which needs no animal to exist. Returns the state to enter.
+static func butchery(who: Villager, quarry: Animal) -> int:
+	if quarry != null:
+		return Villager.State.GO_HUNT
+	var barn := with_stock(who.village)
+	if barn == null:
+		return Villager.State.WANDER
+	who.workshop = barn
+	return Villager.State.GO_WORK
 
 
 ## EVERY POST IN THE TOWN, across all its trades. What the job-picker divides
@@ -285,6 +324,14 @@ func work_shift() -> void:
 	match trade:
 		"well":
 			_water_the_fields()
+		"barn":
+			# A SHIFT AT THE BARN IS BUTCHERY when the town is short. Taken from
+			# the book rather than from an animal, so a barn with three hundred
+			# head feeds a village without ever building one of them.
+			if store.meat_food < 8:
+				var got := take_meat()
+				if got > 0:
+					store.add(FoodItem.FoodType.MEAT, got)
 		"shrine":
 			if village != null:
 				village.belief = minf(village.belief + 0.4, 100.0)
@@ -349,6 +396,14 @@ func _process(delta: float) -> void:
 	# Night draws them in whatever leg they were on. A barn is a place animals
 	# sleep, and stock still out at dusk is stock somebody has lost.
 	_leg = DROVE.find("in") if GameState.is_night() else (_leg + 1) % DROVE.size()
+	_take_in()
+	# THE WHOLE MASS MOVES AS ONE. A herd's pasture is a single position, so
+	# droving four hundred head costs exactly what droving four costs — which is
+	# the entire reason the surplus is a herd and not four hundred animals.
+	var spot := drove_spot(0)
+	for h in stock:
+		if is_instance_valid(h):
+			h.drive_toward(spot, 999.0)
 	var n := 0
 	for a in village.tamed_animals:
 		var beast := a as Animal
@@ -357,11 +412,66 @@ func _process(delta: float) -> void:
 			n += 1
 
 
+## TAKING THE SURPLUS IN. Everything past the loose few becomes numbers, sorted
+## by species into whichever herd already keeps that kind. Ridden and pack beasts
+## are left alone: a horse somebody is on is not inventory.
+func _take_in() -> void:
+	Util.prune(village.tamed_animals)
+	Util.prune(stock)
+	var loose := village.tamed_animals.duplicate()
+	loose.reverse()          # newest in first, so the old familiar ones stay out
+	for a in loose:
+		if village.tamed_animals.size() <= LOOSE_STOCK:
+			return
+		var beast := a as Animal
+		if not is_instance_valid(beast) or beast.has_rider():
+			continue
+		if beast.spec.get("ride", false) or beast.spec.get("guard", false):
+			continue          # horses and dogs have work; they do not go in a book
+		_herd_for(beast.species).absorb(beast)
+
+
+## The herd of this kind, opened if the barn has never kept one before.
+func _herd_for(kind: String) -> Herd:
+	for h in stock:
+		if is_instance_valid(h) and h.species == kind:
+			return h
+	var made := Herd.create(kind, 0, null)
+	made.keeper = village
+	made.position = Vector3(0, 0, PASTURE * 0.4)
+	add_child(made)
+	stock.append(made)
+	return made
+
+
+## EVERY HEAD THIS BARN HOLDS, promoted or not.
+func stock_held() -> int:
+	var n := 0
+	for h in stock:
+		if is_instance_valid(h):
+			n += h.alive()
+	return n
+
+
+## MEAT, WITHOUT BUILDING THE ANIMAL. A butcher takes from the book: the biggest
+## beast the barn keeps goes, and the store gets what it was worth.
+func take_meat() -> int:
+	var best: Herd = null
+	var worth := 0
+	for h in stock:
+		if not is_instance_valid(h) or h.alive() <= 0:
+			continue
+		var w := int(Animal.SPECIES[h.species].get("meat", 0))
+		if w > worth:
+			worth = w
+			best = h
+	return best.slaughter() if best != null else 0
+
+
 func hover_text() -> String:
 	var spec: Dictionary = TRADES[trade]
 	if trade == "barn":
-		return "Barn — %d of %d stalls, stock %s" % [
-			village.tamed_count() if village != null else 0,
-			Workshop.stalls(village) if village != null else 0,
-			"in" if stock_is_in() else "out"]
+		var loose: int = village.tamed_count() if village != null else 0
+		return "Barn — %d head (%d in the yard), stock %s" % [
+			loose + stock_held(), loose, "in" if stock_is_in() else "out"]
 	return "%s — work for %d" % [String(spec["label"]), int(spec["employs"])]
