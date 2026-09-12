@@ -24,13 +24,13 @@ const DIR := "res://models/"
 ## once while the player is still reading — every miss is a walk over the
 ## filesystem, and on a phone a dozen of those landing on the first frame a
 ## village is drawn is a hitch you can see. See StartScreen._fill_warm_jobs.
-const KNOWN := [
+const KNOWN: Array[String] = [
 	"villager", "villager_female", "villager_male", "creature", "tree",
 	"tree_forest", "tree_grassland", "tree_savanna", "tree_wetland",
 	"bush", "flower", "rock", "house", "school", "store", "hand", "nest",
 ]
 
-const EXTS := [".glb", ".gltf", ".obj", ".scn", ".tscn", ".tres", ".res"]
+const EXTS: Array[String] = [".glb", ".gltf", ".obj", ".scn", ".tscn", ".tres", ".res"]
 
 # name -> loaded Resource, or null when we've checked and found nothing. Both
 # outcomes are cached so a spawn storm never re-hits the filesystem.

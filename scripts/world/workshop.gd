@@ -73,7 +73,7 @@ const TRADES := {
 ## dusk. The whole of a barn's day is these four places in order, and it is
 ## worth having for exactly one reason — a village with forty beasts in it
 ## should LOOK like a village with forty beasts in it, twice a day, in a line.
-const DROVE := ["out", "well", "pasture", "in"]
+const DROVE: Array[String] = ["out", "well", "pasture", "in"]
 ## How long each leg lasts, and how far pasture stands from the barn.
 const LEG_SECONDS := 26.0
 const PASTURE := 17.0

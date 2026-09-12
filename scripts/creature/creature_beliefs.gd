@@ -74,7 +74,7 @@ const TAG_PHRASE := {
 ## worth raiding when nobody is frightened yet", "dancing pays when the people
 ## are already glad". A creature that could only notice its own hunger and the
 ## hour of the day had a very thin world to be right or wrong about.
-const FEATURES := [
+const FEATURES: Array[String] = [
 	"hungry", "stuffed", "tired", "afraid", "hurt", "bored",
 	"crowd", "armed", "predator", "god_near", "in_village", "night", "alone",
 	"kin_afraid", "kin_hurting", "kin_glad",

@@ -35,7 +35,7 @@ extends RefCounted
 ## what makes a character stick without a single rule saying "be a wrecker".
 
 ## The six axes, in the order a reading considers them.
-const AXES := ["mercy", "bounty", "order", "fellowship", "daring", "devotion"]
+const AXES: Array[String] = ["mercy", "bounty", "order", "fellowship", "daring", "devotion"]
 
 ## WHAT EACH DEED MEANS, on every axis it touches. This is the whole of the
 ## game's moral scaffolding: it never chooses an action, it only says what
@@ -160,7 +160,7 @@ const PLAIN := {
 ## How strongly a leaning is held, in words.
 const FAINT := 0.10        # below this an axis has nothing to say
 const EARNED := 0.38       # both leanings this firm before a proper name is used
-const STRENGTH_WORD := [
+const STRENGTH_WORD: Array[Array] = [
 	[0.20, "faintly "], [0.38, "somewhat "], [0.58, ""],
 	[0.80, "thoroughly "], [99.0, "utterly "],
 ]

@@ -23,11 +23,11 @@ enum State {
 }
 
 ## Names are drawn by sex, so a villager's name reads with its model.
-const FEMALE_NAMES := [
+const FEMALE_NAMES: Array[String] = [
 	"Bess", "Dara", "Greta", "Isolde", "Kira", "Mabel",
 	"Opal", "Rosa", "Tilda", "Vera", "Yara", "Freya",
 ]
-const MALE_NAMES := [
+const MALE_NAMES: Array[String] = [
 	"Aldo", "Cormac", "Edwin", "Fen", "Hobb", "Jarek",
 	"Lomax", "Nol", "Pip", "Sten", "Ulf", "Wick",
 ]

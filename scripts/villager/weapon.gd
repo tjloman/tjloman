@@ -28,7 +28,7 @@ const SPECS := {
 }
 
 ## Tried in order — a village spends what it has on the best arms it can make.
-const BY_PREFERENCE := ["sword", "bow", "spear", "club"]
+const BY_PREFERENCE: Array[String] = ["sword", "bow", "spear", "club"]
 
 
 static func damage(kind: String) -> float:

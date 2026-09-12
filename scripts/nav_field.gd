@@ -41,7 +41,7 @@ const CLIMB_COST := 2.2         # per metre of rise between neighbouring cells
 const THICKET_COST := 0.7       # per obstacle standing in a cell
 const STEEP := 3.5              # a rise this big between cells is a wall
 
-const _NEIGHBOURS := [
+const _NEIGHBOURS: Array[Vector2i] = [
 	Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
 	Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1),
 ]

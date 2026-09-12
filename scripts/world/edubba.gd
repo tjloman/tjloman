@@ -16,7 +16,11 @@ extends StaticBody3D
 ## The horseshoe is the ring with a gap in it, because a story circle that
 ## closes has its back to the teller — and a class of five in an open arc reads
 ## as a `C` from the air, which is the shape a child would draw.
-const LESSONS := ["circle", "horseshoe", "line", "dance", "huddle"]
+## TYPED, and it has to be. An untyped array literal holds Variants, so
+## LESSONS[i] is a Variant and `var next := LESSONS[i]` has nothing to infer
+## from — which this project builds as an error that stops every dependent
+## script loading, and took the whole village down with it.
+const LESSONS: Array[String] = ["circle", "horseshoe", "line", "dance", "huddle"]
 const LESSON_LEAST := 14.0
 const LESSON_MOST := 26.0
 ## How far apart the children stand in each. A ring's radius grows with the

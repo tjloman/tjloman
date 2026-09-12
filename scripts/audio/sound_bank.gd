@@ -18,14 +18,14 @@ const SPLICE := 0.25
 ## player is still choosing things (see `warm_next`), and any sound asked for
 ## before its turn comes simply makes itself on the spot. Nothing has to know
 ## which of those two happened.
-const ONE_SHOTS := [
+const ONE_SHOTS: Array[String] = [
 	"baa", "cluck", "oink", "neigh", "bark", "howl", "croak", "saw", "pick",
 	"hammer", "murmur", "chatter", "boom", "coo", "caw", "screech", "drum",
 	"whisper",
 ]
 ## THE SMALL VOICES. Everything above is a one-shot; these are LOOPS, because
 ## a cricket is not an event. See `_make_loop` and `voice`.
-const VOICES := [
+const VOICES: Array[String] = [
 	"crickets", "bees", "flies", "peepers", "chitter", "rustle",
 ]
 

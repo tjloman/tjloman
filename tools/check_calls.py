@@ -997,6 +997,33 @@ def check_phantom_members(files, classes):
     return problems
 
 
+def check_untyped_array_consts(files):
+    """An array constant that does not say what it holds.
+
+    `const LESSONS := ["circle", ...]` is an array of VARIANTS, so LESSONS[i]
+    has no type — and `var next := LESSONS[i]` therefore has nothing to infer
+    from. This project builds that as an error, and the error stops every
+    dependent script loading: one untyped constant in a schoolhouse took the
+    whole village down with it.
+
+    The line that trips it can be written years after the constant, in another
+    file, by somebody who never looks at the constant at all. So it is the
+    CONSTANT that is asked to say what it holds — there is no cost to it, and
+    it closes the whole family rather than the one line that happened to find
+    it. Seventeen of these were in the project when this rule was written, and
+    every one of them was one `:=` away from the same failure.
+    """
+    problems = []
+    bare = re.compile(r"^const\s+(\w+)\s*:=\s*\[")
+    for path in files:
+        for lineno, line in enumerate(
+                open(path, encoding="utf-8").read().split("\n"), 1):
+            hit = bare.match(line)
+            if hit:
+                problems.append((path, lineno, hit.group(1), line.strip()))
+    return problems
+
+
 def check_twice_declared(files):
     """The same function defined twice in one class.
 
@@ -1081,6 +1108,13 @@ def main():
               "function, its parameters, or its class provides it. gdparse "
               "accepts this; Godot refuses to load the script."
               "\n    %s" % (path, lineno, name, where, line))
+    loose_consts = check_untyped_array_consts(files)
+    for path, lineno, name, line in loose_consts:
+        print("%s:%d: the array constant '%s' does not say what it holds, so "
+              "reading an element of it gives a Variant and ':=' has nothing to "
+              "infer from — an error this project builds as fatal, in whatever "
+              "file eventually indexes it. Name the element type."
+              "\n    %s" % (path, lineno, name, line))
     twice = check_twice_declared(files)
     for path, lineno, name, first, line in twice:
         print("%s:%d: '%s' is already defined at line %d. Godot refuses to parse "
@@ -1108,7 +1142,7 @@ def main():
               % (path, lineno, name, name, line))
     total = len(problems) + len(escapes) + len(formats) + len(shadowed) \
         + len(loose_arrays) + len(variants) + len(shadowed_members) \
-        + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice)
+        + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice) + len(loose_consts)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

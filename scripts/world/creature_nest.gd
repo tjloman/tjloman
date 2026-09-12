@@ -25,7 +25,7 @@ extends StaticBody3D
 ## THE SIX FACES, in the order they are cut into the wall — the same six axes
 ## CreatureEthos keeps, because they ARE the creature's character and a second
 ## list would only drift from the first.
-const FACES := ["mercy", "bounty", "order", "fellowship", "daring", "devotion"]
+const FACES: Array[String] = ["mercy", "bounty", "order", "fellowship", "daring", "devotion"]
 
 ## HOW BIG THE NEST IS: big enough for the biggest creature there can ever BE,
 ## from the day the village raises it.

@@ -43,7 +43,7 @@ const LOCK_COOL := 0.22        # how fast the crowd's attention wanders off agai
 
 ## What the town is minded to do. Order matters: the first that fits wins, so
 ## terror beats a party and a funeral beats idle curiosity.
-const STANCES := ["fleeing", "mobbing", "mourning", "joining", "adoring", "watching", "calm"]
+const STANCES: Array[String] = ["fleeing", "mobbing", "mourning", "joining", "adoring", "watching", "calm"]
 
 ## Thresholds for each posture, and how much of the town each one sweeps up.
 const FLEE_AT := 55.0

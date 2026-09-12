@@ -12,7 +12,7 @@ const MAX_LUMBER := 10.0
 ## The running sum of Fibonacci, one entry per whole size: 1, 1+1, +2, +3, +5...
 ## Written out rather than computed because it is ten numbers that will never
 ## change, and a table can be read at a glance by anyone balancing the economy.
-const TIMBER := [1, 2, 4, 7, 12, 20, 33, 54, 88, 143]
+const TIMBER: Array[int] = [1, 2, 4, 7, 12, 20, 33, 54, 88, 143]
 ## Growth SLOWS as the tree matures: each unit of lumber takes longer than
 ## the last, so mature timber is genuinely worth more than a thicket of
 ## saplings. lumber advances by GROWTH_BASE / (1 + lumber * GROWTH_TAPER).

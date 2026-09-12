@@ -157,7 +157,7 @@ const COMBO_MULTIPLIER := 0.8
 
 ## The rudiments, taught a tier at a time by the villages that come to believe.
 ## Everything castable follows from which of these you hold.
-const RUNE_TIERS := [
+const RUNE_TIERS: Array[Array] = [
 	["water", "life", "calm"],
 	["earth", "force", "ward"],
 	["fire", "sky"],

@@ -46,7 +46,7 @@ const FARM_HALF := 3.9              # a field's clearance radius (no overlaps)
 ## and takes up arms for a while. Grudge is how much they blame the CREATURE
 ## for their blood — once it passes GRUDGE_HOSTILE they will fight it too.
 ## The miracles the crowd mind reads as a terror rather than a blessing.
-const TERRORS := [
+const TERRORS: Array[String] = [
 	"lightning", "fireball", "fireblast", "thunderclap", "lightning_storm",
 	"tornado",
 	"thunderstorm", "tempest", "firestorm", "hurricane",
