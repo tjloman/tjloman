@@ -63,7 +63,8 @@ def cost_map(text):
 
 
 def tiers(text):
-    block = re.search(r"const RUNE_TIERS := \[(.*?)\n\]", text, re.S).group(1)
+    block = re.search(r"const RUNE_TIERS\s*(?::\s*[\w\[\]]+\s*)?:?=\s*\[(.*?)\n\]",
+                      text, re.S).group(1)
     return [re.findall(r'"([a-z_]+)"', row)
             for row in re.findall(r"\[(.*?)\]", block)]
 

@@ -62,7 +62,11 @@ def strip_comments(text):
 
 def block(text, name):
     """The body of a `const NAME := { ... }` or `[ ... ]` declaration."""
-    m = re.search(r"const\s+%s\s*:=\s*([\[{])" % re.escape(name), text)
+    # `:= [` or a declared type — `const NAME: Array[String] = [`. Array
+    # constants say what they hold now, and a tool that only knows the older
+    # spelling reports the constant as missing rather than as changed.
+    m = re.search(r"const\s+%s\s*(?::\s*[\w\[\]]+\s*)?:?=\s*([\[{])"
+                  % re.escape(name), text)
     if not m:
         raise SystemExit("could not find const %s" % name)
     opener = m.group(1)
