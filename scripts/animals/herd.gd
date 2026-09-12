@@ -271,6 +271,27 @@ const KIN_MOST := 3
 ## And how long a herd is left alone after joining or shedding, in seconds.
 const SETTLE := 240.0
 
+## FIRE IN A HERD.
+##
+## Every miracle in the game reached a herd's promoted few and nothing else,
+## because a miracle looks through the "animals" group and a herd puts at most a
+## couple of dozen head in it however many hundred it holds. So a fireblast
+## thrown into two hundred caribou killed the handful that happened to be real
+## and the other hundred and seventy-six did not so much as look up. The mass is
+## the herd; if the mass cannot be burned then burning a herd is a trick of the
+## camera angle.
+##
+## Members are counted WHERE THEY ACTUALLY STAND — each one's own offset against
+## the blast — so a herd standing half in the fire loses half of itself and no
+## more. Nothing here is a share or a guess.
+##
+## And they run from it whatever it did to them. Fleeing reaches much further
+## out than burning does: an animal that can see fire goes, which is both true
+## and the thing that makes a gout thrown at the edge of a herd worth throwing.
+const BURN_SECONDS := Animal.BURN_SECONDS
+const FIRE_FLEES := 4.0
+const FIRE_FEAR := 0.55
+
 ## How far a herd drifts from where it was seeded, and how long it grazes one
 ## patch before moving on.
 const ROAM := 26.0
@@ -321,6 +342,9 @@ var _fed := 0.0
 var _larder := 0.0
 var _season_left := 0.0
 var _watch_left := 0.0
+## Members that are alight: rows of {"i": index, "left": seconds}. They are
+## running, and in about eight seconds they go down.
+var _burning: Array[Dictionary] = []
 ## WHAT THE LAST LOOK ROUND FOUND OF THEIR OWN KIND, kept so the season's
 ## reckoning can ask about the neighbourhood without walking the herd list a
 ## second time. `_joining` is a DECISION, not an observation: once a herd has
@@ -455,6 +479,8 @@ func _process(delta: float) -> void:
 	if _season_left <= 0.0:
 		_season_left = SEASON
 		_reckon()
+	if not _burning.is_empty():
+		_tick_burning(delta)
 	_drift(delta)
 	_shuffle_left -= delta
 	if _shuffle_left <= 0.0:
@@ -1175,6 +1201,105 @@ func drive_toward(where: Vector3, step: float) -> void:
 	_target = _home
 	_graze_left = 0.0
 	set_mood("move")
+
+
+## FIRE LANDS IN THE HERD. Returns how many head it caught.
+##
+## `reach` is where it burns and `kill` is the core that kills outright — a
+## fireblast has one, a gout has none (pass zero). The two radii are the same
+## ones a real Animal is judged by, which is the point: a head standing five
+## metres from a blast catches fire whether or not it happens to be one of the
+## few the world has promoted into a body, and a herd must not be a crueller or
+## a kinder place to stand than the grass beside it.
+##
+## Everything further out than the burning, as far as FIRE_FLEES times it,
+## simply runs: an animal that can see fire goes, which is the whole reason a
+## gout thrown at the EDGE of a herd is worth throwing.
+##
+func scorched(at: Vector3, reach: float, kill := 0.0) -> int:
+	var caught := 0
+	for i in _members.size():
+		var m := _members[i]
+		if m["dead"]:
+			continue
+		var here := global_position + Vector3(m["offset"].x, 0.0, m["offset"].y)
+		here.y = float(m["ground"])
+		var d := here.distance_to(at)
+		if d > reach:
+			continue
+		caught += 1
+		var agent: Animal = m["agent"]
+		if agent != null and is_instance_valid(agent):
+			# Left to the Animal, which burns visibly and dies through its own
+			# clock and the usual demotion bookkeeping. Counting it here as well
+			# would kill it twice.
+			if d < kill:
+				agent.die()
+			else:
+				agent.ignite()
+			continue
+		if d < kill:
+			m["dead"] = true
+			lost_one()
+		elif not _already_alight(i):
+			_burning.append({"i": i, "left": BURN_SECONDS})
+	# THEY ALL RUN, burned or not, and much further out than the fire reaches.
+	flee_fire(at, reach)
+	return caught
+
+
+## Already burning? A ball rolls past laying flame the whole way and then bursts
+## where it stops, so the same head can be reached twice in a second, and a beast
+## alight twice is not alight twice as fast.
+func _already_alight(i: int) -> bool:
+	for row in _burning:
+		if int(row["i"]) == i:
+			return true
+	return false
+
+
+## RUN FROM IT. Fire the herd can SEE, whether or not it touched anybody.
+##
+## Separate from `scorched` on purpose, and cheap on purpose: a rolling ball
+## lays flame eleven times a second down its whole track, and every one of those
+## is a chance for a herd to bolt — but none of them may walk two hundred
+## members to work that out. This looks at the herd's own position and its
+## spread and nothing else, and turns back at the door if the fire is nowhere
+## near.
+func flee_fire(at: Vector3, reach: float) -> void:
+	if alive() <= 0 or keeper != null:
+		return
+	if global_position.distance_to(at) - _spread > reach * FIRE_FLEES:
+		return
+	scattered(FIRE_FEAR)
+	# Away from the fire itself, not anywhere: `scattered` picks a random
+	# bearing, which is right for a botched drive and wrong for this.
+	var away := global_position - at
+	away.y = 0.0
+	if away.length() < 0.5:
+		away = Vector3(randf() - 0.5, 0.0, randf() - 0.5)
+	_target = global_position + away.normalized() * ROAM
+	_graze_left = GRAZE_LEAST
+
+
+## THE ONES STILL ALIGHT. They are numbers, so there is no flame to draw on
+## them; what there is instead is a herd that keeps running while any of it is
+## burning, and thins as they go down one after another rather than all at once.
+func _tick_burning(delta: float) -> void:
+	var still: Array[Dictionary] = []
+	for row in _burning:
+		row["left"] = float(row["left"]) - delta
+		var i: int = row["i"]
+		if i >= _members.size() or _members[i]["dead"]:
+			continue          # something else got to it first
+		if float(row["left"]) > 0.0:
+			still.append(row)
+			continue
+		_members[i]["dead"] = true
+		lost_one()
+	_burning = still
+	if not _burning.is_empty():
+		set_mood("flee")
 
 
 ## SCATTERED, by a creature that does not know how to drive them yet.

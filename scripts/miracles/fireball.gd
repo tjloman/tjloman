@@ -193,6 +193,13 @@ func _lay_trail(delta: float) -> void:
 
 ## The narrow trail catches trees, fields, and any soul it brushes.
 func _ignite_trail(pos: Vector3, reach: float) -> void:
+	# ANYTHING THAT CAN SEE IT GOES. Fleeing reaches much further than burning:
+	# a beast does not wait to find out whether the fire rolling past will
+	# actually touch it.
+	for h in get_tree().get_nodes_in_group("herds"):
+		var herd := h as Herd
+		if is_instance_valid(herd):
+			herd.flee_fire(pos, reach)
 	for t in get_tree().get_nodes_in_group("trees"):
 		var tree := t as WildTree
 		if is_instance_valid(tree) and tree.global_position.distance_to(pos) < reach:
@@ -204,9 +211,15 @@ func _ignite_trail(pos: Vector3, reach: float) -> void:
 	for grp in ["villagers", "animals"]:
 		for n in get_tree().get_nodes_in_group(grp):
 			var node := n as Node3D
-			if is_instance_valid(node) and node.global_position.distance_to(pos) < reach \
-					and node.has_method("ignite"):
+			if not is_instance_valid(node):
+				continue
+			var d := node.global_position.distance_to(pos)
+			if d < reach and node.has_method("ignite"):
 				node.call("ignite")
+			# Wider than it burns: they run from the flame rolling past them
+			# whether or not it is going to touch them.
+			if d < reach * Herd.FIRE_FLEES and node.has_method("scare"):
+				node.call("scare", pos)
 
 
 ## SET IT OFF WHERE IT STANDS, without waiting for it to get there.
@@ -256,10 +269,23 @@ func _go_off() -> void:
 		var d := animal.global_position.distance_to(pos)
 		if d < kill:
 			animal.die()
-		elif d < reach * 2.0:
+		elif d < reach * Herd.FIRE_FLEES:
 			if d < reach:
 				animal.ignite()
 			animal.scare(pos)
+
+	# THE HERDS, WHICH ARE MOST OF THE ANIMALS IN THE WORLD. The loop above
+	# reaches a herd's promoted few and nothing else — a couple of dozen head
+	# out of however many hundred — so until now a blast thrown into two hundred
+	# caribou killed the handful that happened to be real and the rest did not
+	# look up. Herd.scorched counts them where they actually stand.
+	var caught := 0
+	for h in get_tree().get_nodes_in_group("herds"):
+		var herd := h as Herd
+		if is_instance_valid(herd):
+			caught += herd.scorched(pos, reach, kill)
+	if caught > 0 and kill > 0.0:
+		GameState.shift_alignment(KARMA_PER_KILL * 0.25 * float(caught))
 
 	for h in get_tree().get_nodes_in_group("houses"):
 		var house := h as House

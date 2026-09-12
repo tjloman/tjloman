@@ -621,6 +621,29 @@ func ignite_trees_near(pos: Vector3, radius: float) -> void:
 			tree.ignite()
 
 
+## AND THE BEASTS IN IT. The sister of the above, and it was simply missing —
+## a firestorm set every tree on the hillside alight and walked through a herd
+## of cattle without singeing one of them. It reaches the herds too, which is
+## where nearly all the animals in the world actually are.
+##
+## Everything that can see it runs, much further out than it burns: an animal
+## does not wait to learn whether the fire is going to reach it.
+func ignite_animals_near(pos: Vector3, radius: float) -> void:
+	for a in get_tree().get_nodes_in_group("animals"):
+		var animal := a as Animal
+		if not is_instance_valid(animal):
+			continue
+		var d := animal.global_position.distance_to(pos)
+		if d < radius:
+			animal.ignite()
+		if d < radius * Herd.FIRE_FLEES:
+			animal.scare(pos)
+	for h in get_tree().get_nodes_in_group("herds"):
+		var herd := h as Herd
+		if is_instance_valid(herd):
+			herd.scorched(pos, radius)
+
+
 func _cast_heal(pos: Vector3, potency := 1.0) -> void:
 	var reach := 8.0 * potency
 	var torus := TorusMesh.new()
@@ -1527,9 +1550,11 @@ func _cast_firestorm(pos: Vector3, potency: float, momentum: Vector3) -> void:
 	_cast_gust(pos, potency * 1.4, momentum)
 	var radius := 14.0 + potency * 6.0
 	ignite_trees_near(pos, radius)
+	ignite_animals_near(pos, radius)
 	for i in 5:
 		var spot := pos + Vector3(randf_range(-radius, radius), 0, randf_range(-radius, radius))
 		ignite_trees_near(spot, 7.0)
+		ignite_animals_near(spot, 7.0)
 	SoundBank.play_at("boom", pos, 2.0, 0.7)
 
 

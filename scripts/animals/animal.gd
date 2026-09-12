@@ -79,6 +79,16 @@ const SPECIES := {
 		"speed": 3.4, "meat": 1, "skittish": true},
 }
 
+## HOW LONG A BURNING BEAST LASTS, and how often it changes its mind about which
+## way to run while it does. Eight seconds is long enough that setting an animal
+## alight is something you watch happen rather than something that resolves
+## before you have looked up — which is the point of it being cruel.
+const BURN_SECONDS := 8.0
+const BURN_PANIC := 0.7
+## How far a beast that is alight frightens everything else. It is a fire that
+## moves, and it is treated as one.
+const BURN_TERROR := 9.0
+
 var species := "sheep"
 var spec: Dictionary
 var health := 30.0
@@ -111,6 +121,9 @@ var _gentle_drop := false
 var _spin_ang := Vector3.ZERO   # aftertouch spin axis*rate while thrown (rad/s)
 var _animator: ModelAnimator = null   # non-null only for a rigged custom model
 var _burn_visual: Node3D = null
+var _full_health := 30.0
+var _burn_rate := 0.0
+var _panic_left := 0.0
 var _rider: Node3D = null
 
 
@@ -123,6 +136,7 @@ static func create(species_name: String) -> Animal:
 func _ready() -> void:
 	spec = SPECIES[species]
 	health = 20.0 + spec["body"].length() * 15.0
+	_full_health = health
 	add_to_group("animals")
 	add_to_group("pickable")
 	collision_layer = 2
@@ -596,9 +610,22 @@ func _tick_hazards(delta: float) -> void:
 				die()
 				return
 	if burning:
-		health -= 10.0 * delta
+		health -= _burn_rate * delta
 		if is_instance_valid(_burn_visual):
 			_burn_visual.scale.y = 1.0 + sin(Time.get_ticks_msec() / 60.0) * 0.2
+		# TORTURED SCURRYING. A beast on fire does not flee a THING — there is
+		# nothing to get away from — so it bolts, and then bolts somewhere else,
+		# and keeps doing it until it goes down. It overrides a hunt: a wolf
+		# that is alight has stopped being interested in dinner.
+		_panic_left -= delta
+		if _panic_left <= 0.0:
+			_panic_left = BURN_PANIC
+			if state != State.HELD:
+				var a := randf() * TAU
+				state = State.FLEE
+				_flee_from = global_position - Vector3(cos(a), 0.0, sin(a)) * 9.0
+				_action_time = BURN_PANIC * 2.0
+			_terrify_nearby()
 		if health <= 0.0:
 			die()
 
@@ -610,9 +637,36 @@ func ignite() -> void:
 	if world != null and world.is_underwater(global_position.x, global_position.z):
 		return
 	burning = true
+	# BURNING IS A CLOCK, not a damage rate. It used to take ten health a
+	# second, and health is sized off the body — so a chicken burned out in
+	# under three seconds and an ox took over five, which made how long an
+	# animal suffered an accident of its measurements. It is eight seconds for
+	# everything now, from full health; a beast already hurt goes sooner, which
+	# is the one variation worth keeping.
+	_burn_rate = _full_health / BURN_SECONDS
+	_panic_left = 0.0
 	var body: Vector3 = spec["body"]
 	_burn_visual = Util.small_flame(body.y + spec["leg"])
 	add_child(_burn_visual)
+
+
+## A BURNING BEAST IS ITSELF A FIRE, and everything near it goes. This is what
+## makes one lit animal running into a herd a disaster rather than a curiosity:
+## it panics the mass it runs through, which then runs, which is the whole
+## reason setting one animal alight in the middle of a herd is a cruel thing to
+## do rather than a small one. Only on the panic tick, so the cost is bounded
+## by how many things are actually alight.
+func _terrify_nearby() -> void:
+	for a in get_tree().get_nodes_in_group("animals"):
+		var other := a as Animal
+		if other == self or not is_instance_valid(other) or other.burning:
+			continue
+		if other.global_position.distance_to(global_position) < BURN_TERROR:
+			other.scare(global_position)
+	for h in get_tree().get_nodes_in_group("herds"):
+		var herd := h as Herd
+		if is_instance_valid(herd):
+			herd.flee_fire(global_position, BURN_TERROR / Herd.FIRE_FLEES)
 
 
 func extinguish() -> void:
