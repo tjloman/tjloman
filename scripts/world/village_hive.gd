@@ -112,6 +112,14 @@ func witness(what: String, where: Vector3, weight := 1.0) -> void:
 			regard("grave", null, where, 0.5)
 		"plenty":
 			_stir("joy", 14.0 * w)
+		# THE EVENING CIRCLE. The town dancing at the creature's nest — its own
+		# doing, not the creature's, and the one kind of joy here that the
+		# village makes for itself. It stirs a little awe as well: they are
+		# dancing at a shrine, and some of what they feel is aimed upward.
+		"circle":
+			_stir("joy", 9.0 * w)
+			_stir("awe", 4.0 * w)
+			regard("wonder", null, where, 0.3 + 0.2 * w)
 
 
 ## COME AND JOIN IN. The creature dancing, leading prayers or holding court in

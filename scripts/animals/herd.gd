@@ -156,6 +156,43 @@ const FED_PER_HEAD := 4.0
 const LARDER_PER_MEAL := 0.05
 const LARDER_FADE := 0.30
 
+## WHAT A HERD NOTICES, and how often it looks up.
+##
+## It noticed NOTHING before this. `scattered` and `lost_one` were only ever
+## called from outside, so a pack could walk to the edge of a grazing herd and
+## stand there, and the herd went on eating until something died. That is the
+## one thing a herd animal is actually for.
+##
+## Looking is deliberately slow and deliberately short-sighted. A herd is not a
+## radar: it catches what is close, it is slower to notice than a predator is to
+## approach, and the whole scan is over the `herds` group — a few dozen nodes —
+## on a timer of its own rather than on the formation tick.
+const WATCH_EVERY := 2.5
+const NOTICE := 46.0
+const BOLT_WITHIN := 22.0
+## How much of a fright one pack is, scaled by how many of them there are and
+## how close. A lone bear across the meadow is a raised head; a wolf pack at
+## twenty metres is the whole herd running.
+const DREAD_PER_HEAD := 0.012
+
+## AND WHAT A PACK DOES ABOUT IT. Predators are herds too, and this is the other
+## half of the same tick: a pack picks the nearest worthwhile herd and closes on
+## it, which is what stalking IS at the scale a herd is simulated at.
+const STALK_WITHIN := 90.0
+const STALK_STEP := 9.0
+## HOW FULL A PACK HAS TO BE BEFORE IT LEAVES OFF. Without this a pack that
+## found a herd never stopped following it: wolves outrun cattle, so the gap
+## closed to nothing and stayed there, the herd sat at maximum fright for ever
+## and never calved again, and every herd a pack ever met was doomed. A fed pack
+## lies up instead, which is both true of wolves and the only thing that gives a
+## hunted herd its seasons back.
+const HUNTS_BELOW := 9.0
+
+## HOW MUCH FASTER A FRIGHTENED HERD MOVES than a grazing one. Grazing pace is a
+## fifth of the animal's speed; running is most of it, which is what makes the
+## distance a herd opens up actually depend on what it is.
+const BOLT_PACE := 0.8
+
 ## How far a herd drifts from where it was seeded, and how long it grazes one
 ## patch before moving on.
 const ROAM := 26.0
@@ -195,6 +232,7 @@ var _fear := 0.0
 var _fed := 0.0
 var _larder := 0.0
 var _season_left := 0.0
+var _watch_left := 0.0
 
 
 ## Roll the head count for a species. Public so the seeding code and the smoke
@@ -282,6 +320,10 @@ func _process(delta: float) -> void:
 	_graze_left -= delta
 	if _graze_left <= 0.0:
 		_pick_pasture()
+	_watch_left -= delta
+	if _watch_left <= 0.0:
+		_watch_left = WATCH_EVERY * float(stride)
+		_look_about()
 	_season_left -= delta
 	if _season_left <= 0.0:
 		_season_left = SEASON
@@ -294,6 +336,83 @@ func _process(delta: float) -> void:
 		_redeal(REDEAL_PER_TICK)
 		_write_transforms()
 		_tend_agents()
+
+
+## LOOKING UP. Prey herds find whatever is hunting nearby and answer it; packs
+## find whatever is worth hunting and go towards it. One scan serves both,
+## because a herd and a pack are the same object asking opposite questions.
+func _look_about() -> void:
+	if alive() <= 0:
+		return
+	var hunter: bool = Animal.SPECIES[species].get("predator", false)
+	var closest: Herd = null
+	var gap := INF
+	for h in get_tree().get_nodes_in_group("herds"):
+		var other := h as Herd
+		if other == self or not is_instance_valid(other) or other.alive() <= 0:
+			continue
+		var theirs: bool = Animal.SPECIES[other.species].get("predator", false)
+		if hunter == theirs:
+			continue          # packs ignore packs; grazers ignore grazers
+		if hunter and not _worth_hunting(other):
+			continue
+		var d := other.global_position.distance_to(global_position) - other.spread()
+		if d < gap:
+			gap = d
+			closest = other
+	if closest == null:
+		return
+	if hunter:
+		_stalk(closest, gap)
+	else:
+		_take_fright(closest, gap)
+
+
+## A pack only bothers with what it actually eats. The prey list is the same one
+## a single Animal hunts from, so a wolf pack and a wolf want the same things.
+func _worth_hunting(prey: Herd) -> bool:
+	var eats: Array = Animal.SPECIES[species].get("prey", [])
+	return eats.has(prey.species)
+
+
+## CLOSING. The pack's pasture moves toward the herd, which means its members
+## drift that way and its promoted beasts arrive with prey in front of them —
+## hunting at the scale a herd is simulated at, without a second set of rules.
+func _stalk(prey: Herd, gap: float) -> void:
+	if gap > STALK_WITHIN or gap < 2.0:
+		return
+	if _larder >= HUNTS_BELOW:
+		return          # fed. It lies up rather than working a herd it cannot eat.
+	var to := prey.global_position - global_position
+	to.y = 0.0
+	if to.length() < 0.5:
+		return
+	_home += to.normalized() * STALK_STEP
+	_target = _home
+	_graze_left = GRAZE_MOST
+	set_mood("move")
+
+
+## NOTICING. Nearer and more numerous is worse; past a point they simply go. The
+## fright itself is what suppresses breeding, so a herd worked by a pack that
+## never catches anything still pays for being hunted.
+func _take_fright(pack: Herd, gap: float) -> void:
+	if gap > NOTICE:
+		return
+	var dread := float(pack.alive()) * DREAD_PER_HEAD * (1.0 - gap / NOTICE)
+	_fear = minf(_fear + dread, 1.0)
+	if gap < BOLT_WITHIN:
+		set_mood("flee")
+		# Away, not anywhere: a herd that bolts toward the wolves is a herd
+		# nobody will believe.
+		var away := global_position - pack.global_position
+		away.y = 0.0
+		if away.length() < 0.5:
+			away = Vector3(randf() - 0.5, 0.0, randf() - 0.5)
+		_target = global_position + away.normalized() * ROAM
+		_graze_left = GRAZE_LEAST
+	else:
+		set_mood("alert")
 
 
 ## WHERE THE HERD IS HEADED. Grazing is not wandering: a herd settles on a patch
@@ -313,7 +432,9 @@ func _pick_pasture() -> void:
 
 func _drift(delta: float) -> void:
 	var spec: Dictionary = Animal.SPECIES[species]
-	var pace: float = spec["speed"] * 0.18      # grazing, not running
+	# Grazing is a stroll; bolting is most of what the animal can do. A herd that
+	# fled at grazing pace was a herd that could never open any distance at all.
+	var pace: float = spec["speed"] * (BOLT_PACE if mood == "flee" else 0.18)
 	var to := _target - global_position
 	to.y = 0.0
 	if to.length() < 0.5:

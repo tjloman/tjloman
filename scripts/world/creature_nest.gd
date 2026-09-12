@@ -47,6 +47,10 @@ const RECARVE := 6.0
 ## breathes together instead of sparkling like a fairground.
 const FLICKER := 1.0 / 9.0
 
+## How often the circle reports itself to the crowd mind. Not every frame: the
+## hive's feelings are stirred in lumps and sixty lumps a second would peg it.
+const CHEER_EVERY := 3.0
+
 var village: Village
 var creature: Creature
 
@@ -56,6 +60,7 @@ var _scratches: Array[Node3D] = []
 var _flames: Array[Node3D] = []
 var _recarve_left := 0.0
 var _flicker_left := 0.0
+var _cheer_left := 0.0
 
 
 ## A NEST IS RAISED FOR SOMEBODY, not for something — so a village only wants one
@@ -307,9 +312,19 @@ func dance_tick(dancers: int, delta: float) -> void:
 	if dancers <= 0:
 		return
 	GameState.add_prayer_power(PRAYER_PER_DANCER * float(dancers) * delta)
-	if village != null and is_instance_valid(village):
-		village.belief = minf(
-			village.belief + BELIEF_PER_DANCER * float(dancers) * delta, 100.0)
+	if village == null or not is_instance_valid(village):
+		return
+	village.belief = minf(
+		village.belief + BELIEF_PER_DANCER * float(dancers) * delta, 100.0)
+	# AND THE TOWN FEELS IT. The crowd mind knew nothing of any of this — it
+	# could watch its own village dance round a fire all evening and record no
+	# joy at all. Stirred at a rate rather than per dancer per frame, so a long
+	# circle warms the town and a circle of two barely registers.
+	_cheer_left -= delta
+	if _cheer_left <= 0.0:
+		_cheer_left = CHEER_EVERY
+		village.hive.witness("circle", global_position,
+			clampf(float(dancers) / float(DANCERS), 0.2, 1.5))
 
 
 ## THE WHOLE WALL, IN WORDS — what a long press on the stone brings up.
