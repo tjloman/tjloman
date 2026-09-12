@@ -52,6 +52,11 @@ const TAME_MORALITY := 40.0    # benevolent and saintly souls only
 ## can reach, rather than waiting for a god to carry believers there by hand.
 ## This is the longest journey anybody in the game makes, which is what finally
 ## makes a horse an honest need rather than a convenience.
+## How far from their own door people bed down, and how much that widens per
+## head the house holds — see _go_sleep.
+const BERTH_LEAST := 1.0
+const BERTH_PER_HEAD := 0.25
+
 ## HOW MUCH TIMBER AND STONE A TOWN KEEPS OVER what its next house costs.
 ## Small on purpose: the reserve that matters is the house's own price, and
 ## this is only so the one after it does not start from an empty yard.
@@ -1099,7 +1104,13 @@ func _swept_along() -> bool:
 func _go_sleep() -> void:
 	state = State.GO_SLEEP
 	if home != null and is_instance_valid(home):
-		_target = home.global_position + Vector3(randf_range(-1, 1), 0, randf_range(-1, 1))
+		# BERTH BY HOW MANY SLEEP THERE. A fixed metre round the door was fine
+		# for a hut with two in it; twelve people bedding down in the same
+		# two-metre box is a heap, not a household. Sleepers lie down over
+		# ground that widens with the roof they belong to.
+		var berth := BERTH_LEAST + float(home.capacity()) * BERTH_PER_HEAD
+		_target = home.global_position \
+			+ Vector3(randf_range(-berth, berth), 0, randf_range(-berth, berth))
 	else:
 		# Homeless: a patch of dirt near the totem.
 		_target = village.totem.global_position + Vector3(randf_range(-4, 4), 0, randf_range(-4, 4))

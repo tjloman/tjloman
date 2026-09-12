@@ -10,10 +10,19 @@ enum Size { HUT, HOUSE, LONGHOUSE }
 ## Bigger dwellings cost more AND take longer: `effort` is total
 ## builder-seconds of work to raise it (a hut is a weekend, a longhouse a
 ## season).
+##
+## THESE HOLD WHAT THEY LOOK LIKE THEY HOLD NOW. Two, four and six were the
+## numbers of a village of eight people, and they made every roof in a town of
+## fifty a rationed thing: housing was the binding constraint on everything the
+## settlement did, and the seams showed everywhere — people sleeping in the dirt,
+## breeding stopped at the housing cap, half the town's labour going into walls.
+## A longhouse is a HALL. Twelve sleep in it, six in a house, three in a hut, at
+## the same price and the same labour as before, which is the whole point: the
+## town spends less of itself on shelter and more on being a town.
 const SPECS := {
-	Size.HUT: {"capacity": 2, "lumber": 5, "stone": 3, "width": 2.0, "effort": 45.0},
-	Size.HOUSE: {"capacity": 4, "lumber": 12, "stone": 7, "width": 2.8, "effort": 95.0},
-	Size.LONGHOUSE: {"capacity": 6, "lumber": 22, "stone": 14, "width": 3.6, "effort": 180.0},
+	Size.HUT: {"capacity": 3, "lumber": 5, "stone": 3, "width": 2.0, "effort": 45.0},
+	Size.HOUSE: {"capacity": 6, "lumber": 12, "stone": 7, "width": 2.8, "effort": 95.0},
+	Size.LONGHOUSE: {"capacity": 12, "lumber": 22, "stone": 14, "width": 3.6, "effort": 180.0},
 }
 
 const BUILD_RATE := 6.0         # construction progress per builder-second

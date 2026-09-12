@@ -116,7 +116,9 @@ const FOUNDING_SIZES: Array[int] = [
 const FOUNDING_MOST := 24
 const FOUNDING_PER_RING := 7
 const FOUNDING_RING := 9.5
-const FOUNDING_RING_STEP := 5.0
+const FOUNDING_RING_STEP := 7.0
+## Clear ground kept round a dwelling, on top of its own footprint.
+const ROOM_ROUND_A_HOUSE := 3.2
 
 ## THE TOWN'S OWN NUMBERS, WORKED OUT ONCE FOR EVERYBODY.
 ##
@@ -507,7 +509,13 @@ func _founding_spot(i: int) -> Vector3:
 ## raise its first houses by one set of rules and its later ones by another.
 func _spot_blocked(pos: Vector3) -> bool:
 	for h in houses:
-		if is_instance_valid(h) and h.global_position.distance_to(pos) < 4.5:
+		# ROOM FOR THE ROOF THAT IS ALREADY THERE. A flat four and a half metres
+		# was a hut's clearance, and a longhouse is five and three quarters long
+		# — so longhouses could be placed overlapping each other, and with
+		# twelve people bedding down round each one they slept in each other's
+		# doorways. The gap now widens with whatever is already standing.
+		var apart: float = ROOM_ROUND_A_HOUSE + float(House.SPECS[h.size]["width"])
+		if is_instance_valid(h) and h.global_position.distance_to(pos) < apart:
 			return true
 	if totem != null and totem.global_position.distance_to(pos) < 6.0:
 		return true
