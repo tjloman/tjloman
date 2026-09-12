@@ -110,6 +110,9 @@ func settle() -> void:
 	_grace = SETTLE
 	_frame = 0.016
 	_pressure = 0.0
+	# Nobody is holding anything in a world that has just been rebuilt, and a
+	# flag left set here would cost the far world a stride for good.
+	hands_busy = false
 
 
 ## THE TIER EVERY KNOB ACTUALLY READS. A struggling device is treated as a

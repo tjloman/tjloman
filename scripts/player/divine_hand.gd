@@ -650,6 +650,13 @@ func _on_release() -> void:
 						c.receive_gift(held_body)
 						held_body = null
 						state = HandState.IDLE
+						# AND THE ROPE GOES WITH IT. This branch returns early,
+						# so it has to stow the sling itself — without this the
+						# rope and the arc stay drawn over a thing that is no
+						# longer in your hand, and `hands_busy` never clears,
+						# which quietly leaves the far half of the world running
+						# a stride slow for the rest of the session.
+						_stow_sling()
 						return
 					_release_body(held_body, Vector3.ZERO, true)
 					_stow_sling()
