@@ -1,12 +1,18 @@
 class_name WildTree
 extends StaticBody3D
-## A living, growing tree. Saplings hold 1 lumber and stand knee-high;
-## over the days they grow to 30-lumber giants, the whole model scaling
-## with maturity. Mature trees replant themselves — seedlings spring up
-## nearby, so a forest logged with restraint is a forest forever.
-## Lumberjacks fell them for their CURRENT lumber; felled trees are gone.
+## A living, growing tree. Saplings stand knee-high at size 1; over the days
+## they grow to size 10 giants, the whole model scaling with maturity. Mature
+## trees replant themselves — seedlings spring up nearby, so a forest logged with
+## restraint is a forest forever. Felled trees are gone.
+##
+## WHAT A TREE IS WORTH is not its size but the RUNNING SUM of the Fibonacci
+## sequence up to it — see TIMBER. A tree is worth everything it has been.
 
 const MAX_LUMBER := 10.0
+## The running sum of Fibonacci, one entry per whole size: 1, 1+1, +2, +3, +5...
+## Written out rather than computed because it is ten numbers that will never
+## change, and a table can be read at a glance by anyone balancing the economy.
+const TIMBER := [1, 2, 4, 7, 12, 20, 33, 54, 88, 143]
 ## Growth SLOWS as the tree matures: each unit of lumber takes longer than
 ## the last, so mature timber is genuinely worth more than a thicket of
 ## saplings. lumber advances by GROWTH_BASE / (1 + lumber * GROWTH_TAPER).
@@ -541,20 +547,33 @@ func fell() -> int:
 	return timber()
 
 
-## WHAT A TREE IS ACTUALLY WORTH, which goes as the SQUARE of its size.
+## WHAT A TREE IS ACTUALLY WORTH: the running sum of the Fibonacci sequence up
+## to its size. A TREE IS WORTH EVERYTHING IT HAS BEEN — the sum of all the
+## growth that got it there is literally what you are cutting down.
 ##
-## It used to be worth its size flat: a sapling one, a giant ten. So ten
-## saplings paid exactly as well as the tree it took a week to grow, and a
-## village stripped every stick within reach the moment it wanted a hut,
-## starting with the nearest — which were always the small ones.
+## It used to be worth its size flat: a sapling one, a giant ten. So ten saplings
+## paid exactly as well as the tree it took a week to grow, and a village
+## stripped every stick within reach the moment it wanted a hut, starting with
+## the nearest, which were always the small ones.
 ##
-## Squared, a sapling is worth one and a giant a hundred. Cutting the little
-## ones stops being worth the walk, and a wood is a thing a village lets stand
-## and comes back to. It also means a well-tended forest — rained on, blessed,
-## left alone — is worth ENORMOUSLY more than a scrubby one, which is the
-## lever a god actually has over a logging town.
+## Now a sapling is one and a giant is a hundred and forty-three. Cutting the
+## little ones stops being worth the walk; a wood becomes a thing a village lets
+## stand and comes back to; and a well-tended forest — rained on, blessed, left
+## alone — is worth enormously more than a scrubby one, which is the lever a god
+## actually has over a logging town.
+##
+## Fibonacci rather than the square because the curve is steeper where it should
+## be. The square doubles between size 7 and 10; this nearly triples, so the last
+## stretch of waiting is the part that pays best, which is the whole point of
+## waiting at all.
 func timber() -> int:
-	return maxi(int(round(lumber * lumber)), 1)
+	var size := clampf(lumber, 1.0, MAX_LUMBER)
+	var low := int(floorf(size))
+	var high := mini(low + 1, TIMBER.size())
+	# Interpolated between whole sizes, so a tree half-way to its next size is
+	# worth half-way more. Felling is not quantised to birthdays.
+	return maxi(int(round(lerpf(
+		float(TIMBER[low - 1]), float(TIMBER[high - 1]), size - float(low)))), 1)
 
 
 func is_felled() -> bool:
