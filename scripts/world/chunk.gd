@@ -296,6 +296,28 @@ func _scatter() -> void:
 			_scatter_deposits(rng, rng.randi_range(2, 4))
 			_scatter_bushes(rng, rng.randi_range(0, 2))
 			_scatter_animals(rng, {"reindeer": 0.03, "llama": 0.12, "elk": 0.1})
+		# THE HOT DRY COUNTRY. Almost nothing grows and almost nothing lives here,
+		# which is the point of it — a desert should be a place you cross.
+		"desert":
+			_scatter_trees(rng, rng.randi_range(0, 1), "savanna")
+			_scatter_deposits(rng, rng.randi_range(1, 2))
+			_scatter_animals(rng, {"llama": 0.1, "giraffe": 0.06, "lion": 0.05,
+				"dog": 0.03})
+		# THE FAR COLD. Open, flat and full of big grazing beasts with wolves
+		# and bears working them — the meat wall at its plainest.
+		"tundra":
+			_scatter_trees(rng, rng.randi_range(0, 2), "forest")
+			_scatter_deposits(rng, rng.randi_range(1, 2))
+			_scatter_animals(rng, {"reindeer": 0.07, "bison": 0.12, "elk": 0.14,
+				"deer": 0.12, "wolf": 0.07, "bear": 0.05, "dog": 0.03})
+		# WHERE WETLAND MEETS FOREST. The densest, loudest, most crowded ground
+		# in the world: everything small, everything at once, and a tiger in it.
+		"rainforest":
+			_scatter_trees(rng, rng.randi_range(7, 11), "wetland")
+			_scatter_bushes(rng, rng.randi_range(3, 5))
+			_scatter_flowers(rng, rng.randi_range(4, 8))
+			_scatter_animals(rng, {"coati": 0.2, "anteater": 0.16, "deer": 0.14,
+				"frog": 0.7, "tiger": 0.05, "chicken": 0.14, "pig": 0.12})
 		"wetland":
 			_scatter_trees(rng, rng.randi_range(1, 3), "wetland")
 			_scatter_bushes(rng, rng.randi_range(2, 4))

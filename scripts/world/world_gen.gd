@@ -4,8 +4,13 @@ extends Node3D
 ## elevation, biome, and everything scattered on a chunk is deterministic
 ## from the world seed, so the same hill is always in the same place.
 ##
-## Biomes (from two low-frequency noise fields, temperature and moisture):
+## Biomes (from two low-frequency noise fields — temperature and moisture — and
+## one coin of its own for the jungle; see `biome_at`):
+##   desert      – hot AND dry: llamas, giraffes, lions, the odd stray dog
 ##   savanna     – hot: acacias, giraffes, lions, llamas, oxen
+##   tundra      – the far cold: reindeer, bison, elk, and what hunts them
+##   rainforest  – where wetland meets forest, half the time: coatis, anteaters,
+##                 tigers, frogs, and everything small and loud
 ##   wetland     – soggy lowlands: frogs, pigs, sparse swamp trees
 ##   forest      – damp: dense trees, deer, bears, wolves, the odd tiger
 ##   rocky_hills – cold and steep: stone deposits, llamas
@@ -28,6 +33,15 @@ const SEA_CELLS := 240            # ~30m of connected water
 ## four-minute weathering that follows. See `_tick_burns`.
 const BURN_REFRESH := 2.0
 const BURN_REFRESH_HOT := 0.5
+
+## WHERE THE EXTREMES BEGIN. Desert wants heat AND dryness together, so a wet
+## hot place stays savanna; tundra is the far cold, leaving rocky hills to the
+## merely chilly. Rainforest starts a little below the forest line so it takes
+## from both its neighbours rather than only from the marsh.
+const DESERT_HEAT := 0.52
+const DESERT_DRY := 0.0
+const TUNDRA_COLD := -0.52
+const RAINFOREST_WET := 0.30
 
 ## How much world stays live around the focus. Set from the graphics tier
 ## at boot: a budget phone keeps a tight 5x5 so it doesn't drown in
@@ -64,6 +78,7 @@ var _height_noise := FastNoiseLite.new()
 var _detail_noise := FastNoiseLite.new()
 var _temp_noise := FastNoiseLite.new()
 var _wet_noise := FastNoiseLite.new()
+var _jungle_noise := FastNoiseLite.new()
 var _chunks := {}                 # Vector2i -> Chunk
 var _village_cells := {}          # Vector2i -> Village (spawned, persistent)
 var _wolf_raid_cooldown := 0.0
@@ -84,6 +99,12 @@ func _ready() -> void:
 	_temp_noise.frequency = 0.0035
 	_wet_noise.seed = world_seed + 2
 	_wet_noise.frequency = 0.0042
+	# THE RAINFOREST COIN. A third noise purely so the jungle can appear in half
+	# of the wet forest edge without being a corner of the same two axes — and
+	# at a higher frequency than either, so a rainforest breaks into patches
+	# inside the wet country rather than claiming all of one side of it.
+	_jungle_noise.seed = world_seed + 3
+	_jungle_noise.frequency = 0.0065
 
 
 func _process(delta: float) -> void:
@@ -153,6 +174,16 @@ func seeded_height_at(x: float, z: float) -> float:
 			amp = 4.0
 		"savanna":
 			amp = 7.0
+		# Dunes: gentler than hills and rounder than grass, so a desert reads as
+		# swells rather than as either a plain or a mountain range.
+		"desert":
+			amp = 9.0
+		# The cold flats. Tundra is the flattest country in the game on purpose —
+		# it is meant to feel like somewhere with nothing to hide behind.
+		"tundra":
+			amp = 5.0
+		"rainforest":
+			amp = 10.0
 	var h := _height_noise.get_noise_2d(x, z) * amp + 2.2
 	h += _detail_noise.get_noise_2d(x, z) * 0.7
 	# The cradle: land near the origin is gently flattened so the player's
@@ -161,11 +192,33 @@ func seeded_height_at(x: float, z: float) -> float:
 	return lerpf(2.0, h, smoothstep(28.0, 80.0, d))
 
 
+## WHAT KIND OF PLACE THIS IS, from two noises and a coin.
+##
+## A first-match ladder, and the ORDER IS THE DESIGN: it is asked hottest and
+## coldest first, so the extremes carve their territory out of the milder biomes
+## rather than the other way round. A hot marsh is desert, not wetland.
+##
+## THE RAINFOREST IS THE ODD ONE. It is not a corner of the temperature/wetness
+## plane like the rest — it is what happens WHERE WETLAND AND FOREST MEET, and
+## only half the time. That band is `w` from a little under the forest line to
+## well past the wetland one, and a third noise of its own decides, which is a
+## fair coin because simplex is symmetric about zero. It has to be a NOISE and
+## not a random roll: this function must give the same answer for the same
+## ground forever, or chunks would come back different every time they loaded
+## and the save that stores villages as counts would have nothing to stand on.
 func biome_at(x: float, z: float) -> String:
 	var t := _temp_noise.get_noise_2d(x, z)
 	var w := _wet_noise.get_noise_2d(x, z)
+	# The hot dry heart of the warm country. Savanna keeps the rest of the heat.
+	if t > DESERT_HEAT and w < DESERT_DRY:
+		return "desert"
 	if t > 0.4:
 		return "savanna"
+	# And the far cold. Rocky hills keep the merely chilly.
+	if t < TUNDRA_COLD:
+		return "tundra"
+	if w > RAINFOREST_WET and _jungle_noise.get_noise_2d(x, z) > 0.0:
+		return "rainforest"
 	if w > 0.45:
 		return "wetland"
 	if w > 0.15:
@@ -441,6 +494,12 @@ func ground_color(x: float, z: float, h: float, slope := -1.0) -> Color:
 			base = Color(0.28, 0.46, 0.26)
 		"rocky_hills":
 			base = Color(0.5, 0.48, 0.45)
+		"desert":
+			base = Color(0.84, 0.74, 0.5)
+		"tundra":
+			base = Color(0.62, 0.66, 0.66)
+		"rainforest":
+			base = Color(0.17, 0.38, 0.2)
 		_:
 			base = Color(0.4, 0.58, 0.32)
 	if h < WATER_LEVEL + 0.5:
