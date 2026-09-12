@@ -253,6 +253,19 @@ func critters() -> int:
 	return [10, 22, 34][effective_tier()]
 
 
+## HOW MANY HEAD OF A HERD ARE REAL ANIMALS at once, across the whole world.
+##
+## This is the number that decides whether herds are affordable at all. Drawing
+## them is nearly free — one MultiMesh instance a head, so two hundred reindeer
+## are one draw call — but an Animal is a CharacterBody3D that runs physics
+## every frame and thinks every second, and that cost is per beast. So the mass
+## is numbers and only the nearest few are animals: the ones close enough to
+## pick up, throw, hunt or butcher. Past this many, a herd is scenery, which up
+## a hillside is all it ever was.
+func herd_agents() -> int:
+	return [8, 16, 24][effective_tier()]
+
+
 func load_radius() -> int:
 	return [2, 3, 3][effective_tier()]
 

@@ -277,27 +277,30 @@ func _scatter() -> void:
 			_scatter_trees(rng, rng.randi_range(5, 8), "forest")
 			_scatter_deposits(rng, rng.randi_range(0, 1))
 			_scatter_bushes(rng, rng.randi_range(1, 3))
-			_scatter_animals(rng, {"deer": 0.9, "bear": 0.12, "wolf": 0.12, "tiger": 0.04})
+			_scatter_animals(rng, {"deer": 0.22, "elk": 0.18, "bear": 0.05,
+				"wolf": 0.05, "tiger": 0.02})
 		"grassland":
 			_scatter_trees(rng, rng.randi_range(1, 3), "grassland")
 			_scatter_flowers(rng, rng.randi_range(6, 12))
 			_scatter_deposits(rng, rng.randi_range(0, 1))
 			_scatter_bushes(rng, rng.randi_range(2, 3))
-			_scatter_animals(rng, {"sheep": 0.8, "horse": 0.25, "chicken": 0.3,
-				"pig": 0.2, "dog": 0.1})
+			_scatter_animals(rng, {"sheep": 0.12, "horse": 0.1, "chicken": 0.12,
+				"pig": 0.08, "dog": 0.04, "bison": 0.12})
 		"savanna":
 			_scatter_trees(rng, rng.randi_range(2, 4), "savanna")
 			_scatter_bushes(rng, rng.randi_range(1, 3))
-			_scatter_animals(rng, {"giraffe": 0.3, "lion": 0.15, "llama": 0.3, "ox": 0.25})
+			_scatter_animals(rng, {"giraffe": 0.12, "lion": 0.06, "llama": 0.12,
+				"ox": 0.05, "anteater": 0.1, "coati": 0.12})
 		"rocky_hills":
 			_scatter_trees(rng, rng.randi_range(0, 1), "forest")
 			_scatter_deposits(rng, rng.randi_range(2, 4))
 			_scatter_bushes(rng, rng.randi_range(0, 2))
-			_scatter_animals(rng, {"llama": 0.15})
+			_scatter_animals(rng, {"reindeer": 0.03, "llama": 0.12, "elk": 0.1})
 		"wetland":
 			_scatter_trees(rng, rng.randi_range(1, 3), "wetland")
 			_scatter_bushes(rng, rng.randi_range(2, 4))
-			_scatter_animals(rng, {"frog": 1.4, "pig": 0.25})
+			_scatter_animals(rng, {"frog": 0.9, "pig": 0.12, "anteater": 0.12,
+				"coati": 0.1})
 
 
 func _random_spot(rng: RandomNumberGenerator) -> Vector3:
@@ -423,17 +426,28 @@ func _scatter_flowers(rng: RandomNumberGenerator, count: int) -> void:
 	add_child(mmi)
 
 
+## HERDS, NOT INDIVIDUALS. The numbers in each table are now the chance of a
+## HERD being seeded here, not of one beast — so they are much smaller than they
+## were and the world is much fuller, which is the whole point. A chunk used to
+## scatter about one and a fifth beasts and stop at four; a single reindeer herd
+## now averages a hundred and one head.
+##
+## What makes that affordable is that a herd draws as one MultiMesh and promotes
+## only the nearest handful to real Animals — see Herd. The cap that used to sit
+## here is gone because it was counting the wrong thing: what has to be bounded
+## is ANIMALS, and that is bounded globally by Quality.herd_agents() rather than
+## locally by how many bodies one patch of grass may hold.
 func _scatter_animals(rng: RandomNumberGenerator, table: Dictionary) -> void:
-	var spawned := 0
+	var herds := 0
 	for species: String in table:
-		var expected: float = table[species]
-		var count := int(expected) + (1 if rng.randf() < fmod(expected, 1.0) else 0)
-		for i in count:
-			if spawned >= 4:
-				return
+		var chance: float = table[species]
+		var many := int(chance) + (1 if rng.randf() < fmod(chance, 1.0) else 0)
+		for i in many:
+			if herds >= 2:
+				return          # two herds to a chunk; the world is wide
 			var spot := _random_spot(rng)
 			if not _spot_ok(spot):
 				continue
-			var animal := Animal.create(species)
-			_place(animal, spot, -0.4)
-			spawned += 1
+			var herd := Herd.create(species, Herd.roll_for(species, rng), world)
+			_place(herd, spot, 0.0)
+			herds += 1

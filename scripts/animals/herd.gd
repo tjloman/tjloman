@@ -1,0 +1,316 @@
+class_name Herd
+extends Node3D
+## A HERD IS WHAT THE WORLD SIMULATES. The beasts in it are mostly numbers.
+##
+## The world was empty, and the reason was arithmetic. Every chunk scattered
+## about one and a fifth beasts and stopped at four, so a 336-metre window of
+## forest held fifty-eight animals and a stretch of highland held seven. A god
+## game wants herds on the ridge. Herds are not four.
+##
+## But a herd cannot be a hundred CharacterBody3Ds. An Animal runs physics every
+## frame and thinks once a second, and reindeer roll 2d100 — an average of a
+## hundred and one head, nearly twice everything the world used to hold, in a
+## single herd. So the HERD is the unit of simulation: it has a position, a
+## heading and a purpose, and its members are rows of numbers that keep
+## formation around it, drawn as ONE MultiMesh however many of them there are.
+##
+## Only the few head nearest the camera become real Animals — the ones you can
+## pick up and throw, the ones a wolf can actually chase, the ones that can be
+## butchered. That few is a fixed budget, so a herd of two hundred costs very
+## nearly what a herd of twenty costs. The rest are a shape on the hillside,
+## which is what they are to the player anyway until they are close enough to
+## matter.
+##
+## EVERY PER-FRAME COST HERE IS BOUNDED BY A CONSTANT, not by the head count.
+## Ground heights are re-sampled a slice at a time, round-robin, because
+## `height_at` is noise plus a scar walk and two hundred of those a frame would
+## undo the whole point of the exercise.
+
+## HOW MANY COME AT ONCE, as dice: [how many, how many sides, flat bonus].
+##
+## These are the numbers the design asks for, kept as a table precisely so they
+## can be argued with later without touching any code. Bison and elk herd in
+## life; they are listed as solitary here because that is what was asked for,
+## and changing one's mind about that is a one-line edit.
+const SOCIAL := {
+	# THE GREAT HERDS.
+	"ox": [7, 10, 0],          # cattle: 7-70, the rolling dice of a full herd
+	"reindeer": [2, 100, 0],   # 2-200, and they really do gather like that
+	"sheep": [3, 10, 0],
+	"deer": [2, 8, 0],
+	"llama": [2, 6, 0],
+	"giraffe": [1, 6, 1],
+	"horse": [1, 8, 1],
+	"chicken": [2, 6, 0],
+	"pig": [1, 6, 0],
+	"frog": [1, 4, 0],
+	# PACKS AND PREDATORS. A wolf pack is a real society; the big cats and the
+	# bear travel in ones and twos and threes.
+	"wolf": [1, 18, 6],        # 7-24
+	"lion": [1, 6, 0],
+	"tiger": [1, 6, 0],
+	"bear": [1, 6, 0],
+	"dog": [1, 2, 0],
+	# THE SOLITARY ONES, who keep their own company.
+	"anteater": [1, 1, 0],
+	"coati": [1, 1, 0],
+	"bison": [1, 1, 0],
+	"elk": [1, 1, 0],
+}
+
+## HOW CLOSE A BEAST MUST BE to stop being a number and become an animal, and
+## how far it must wander back out before it is demoted again. The gap between
+## the two is not fussiness: without it a beast hovering exactly on the line
+## would be built and freed on alternate frames.
+const PROMOTE_WITHIN := 40.0
+const DEMOTE_BEYOND := 54.0
+
+## ROOM PER HEAD, in metres. The spread grows as the square root of the count so
+## that a herd of two hundred is a wide dark mass rather than two hundred beasts
+## standing in each other.
+const SPACING := 2.3
+const SPREAD_LEAST := 3.0
+
+## How often the whole formation is rewritten, and how many ground heights are
+## re-sampled per tick. Both are constants, and that is the point.
+const SHUFFLE_EVERY := 0.2
+const GROUNDS_PER_TICK := 12
+
+## How far a herd drifts from where it was seeded, and how long it grazes one
+## patch before moving on.
+const ROAM := 26.0
+const GRAZE_LEAST := 14.0
+const GRAZE_MOST := 34.0
+
+## HOW MANY HEAD ARE REAL ANIMALS ANYWHERE IN THE WORLD. Static on purpose: a
+## per-herd count would let every herd spend the whole budget, and twenty-five
+## herds each promoting two dozen head is six hundred CharacterBody3Ds — which
+## is the exact thing this class exists to prevent. Only herds near the camera
+## promote at all, so in practice two or three are ever bidding for it, but a
+## budget that is only respected in practice is not a budget.
+static var _agents_afoot := 0
+
+var species := ""
+var world: WorldGen = null
+var head := 0
+
+var _members: Array[Dictionary] = []
+var _mm: MultiMesh = null
+var _mmi: MultiMeshInstance3D = null
+var _home := Vector3.ZERO
+var _target := Vector3.ZERO
+var _graze_left := 0.0
+var _shuffle_left := 0.0
+var _ground_cursor := 0
+var _spread := 0.0
+
+
+## Roll the head count for a species. Public so the seeding code and the smoke
+## tests can ask the same question the herd asks itself.
+static func roll_for(species_name: String, rng: RandomNumberGenerator) -> int:
+	var dice: Array = SOCIAL.get(species_name, [1, 1, 0])
+	var total: int = dice[2]
+	for i in int(dice[0]):
+		total += rng.randi_range(1, int(dice[1]))
+	return maxi(total, 1)
+
+
+static func create(species_name: String, count: int, home: WorldGen) -> Herd:
+	var h := Herd.new()
+	h.species = species_name
+	h.head = maxi(count, 1)
+	h.world = home
+	return h
+
+
+func _ready() -> void:
+	add_to_group("herds")
+	_home = global_position
+	_target = _home
+	_spread = maxf(SPACING * sqrt(float(head)), SPREAD_LEAST)
+	_build_members()
+	_build_multimesh()
+	_shuffle_left = randf() * SHUFFLE_EVERY
+
+
+## Each member is a standing offset from the herd's heart plus a slow private
+## sway, so the mass breathes instead of moving as one welded sheet.
+func _build_members() -> void:
+	for i in head:
+		var a := randf() * TAU
+		# Square-rooted radius, or every herd is a ring with a hollow middle.
+		var r := sqrt(randf()) * _spread
+		_members.append({
+			"offset": Vector2(cos(a) * r, sin(a) * r),
+			"sway": randf() * TAU,
+			"rate": randf_range(0.25, 0.6),
+			"facing": randf() * TAU,
+			# Started at the herd's own ground rather than at zero, and refined
+			# by the round-robin afterwards. Sampling two hundred heights in the
+			# frame a chunk loads would be a visible hitch, and the difference
+			# across a herd's width is a step, not a storey.
+			"ground": global_position.y,
+			"agent": null,
+			"dead": false,
+		})
+
+
+func _build_multimesh() -> void:
+	var spec: Dictionary = Animal.SPECIES[species]
+	var body: Vector3 = spec["body"]
+	var leg: float = spec["leg"]
+	_mm = MultiMesh.new()
+	_mm.transform_format = MultiMesh.TRANSFORM_3D
+	_mm.use_colors = true
+	# One box for the whole beast. At the distance these are seen from, legs are
+	# a few pixels of nothing, and one instance per head is the entire budget.
+	_mm.mesh = Util._pooled_box_mesh(Vector3(body.x, body.y, body.z))
+	_mm.instance_count = head
+	_mmi = MultiMeshInstance3D.new()
+	_mmi.multimesh = _mm
+	_mmi.material_override = Util.shared_mat(spec["color"])
+	_mmi.position = Vector3(0, leg + body.y * 0.5, 0)
+	add_child(_mmi)
+	Util.apply_lod(_mmi, Quality.camera_far())
+	_resample_grounds(GROUNDS_PER_TICK * 4)
+	_write_transforms()
+
+
+func _process(delta: float) -> void:
+	# The herd itself thinks on the same distance stride everything else does:
+	# a herd three hundred metres off does not need its formation rewritten
+	# sixty times a second, or indeed five.
+	var stride := Util.sim_stride(global_position)
+	_graze_left -= delta
+	if _graze_left <= 0.0:
+		_pick_pasture()
+	_drift(delta)
+	_shuffle_left -= delta
+	if _shuffle_left <= 0.0:
+		_shuffle_left = SHUFFLE_EVERY * stride
+		_resample_grounds(GROUNDS_PER_TICK)
+		_write_transforms()
+		_tend_agents()
+
+
+## WHERE THE HERD IS HEADED. Grazing is not wandering: a herd settles on a patch
+## and works it over before moving, which is why the interval is long and the
+## step is short.
+func _pick_pasture() -> void:
+	_graze_left = randf_range(GRAZE_LEAST, GRAZE_MOST)
+	var a := randf() * TAU
+	var r := sqrt(randf()) * ROAM
+	var want := _home + Vector3(cos(a) * r, 0.0, sin(a) * r)
+	# Never graze out into the water, and never onto a bank so steep the mass
+	# would be half-buried in it.
+	if world != null and world.is_underwater(want.x, want.z):
+		return
+	_target = want
+
+
+func _drift(delta: float) -> void:
+	var spec: Dictionary = Animal.SPECIES[species]
+	var pace: float = spec["speed"] * 0.18      # grazing, not running
+	var to := _target - global_position
+	to.y = 0.0
+	if to.length() < 0.5:
+		return
+	global_position += to.normalized() * minf(pace * delta, to.length())
+
+
+## Ground heights, a slice at a time. `height_at` is noise plus a walk over
+## every scar in range, and calling it for two hundred head every tick would
+## cost more than the animals it is standing in for.
+func _resample_grounds(how_many: int) -> void:
+	if world == null or _members.is_empty():
+		return
+	for i in mini(how_many, _members.size()):
+		var m := _members[_ground_cursor % _members.size()]
+		var p := global_position + Vector3(m["offset"].x, 0.0, m["offset"].y)
+		m["ground"] = world.height_at(p.x, p.z)
+		_ground_cursor += 1
+
+
+func _write_transforms() -> void:
+	if _mm == null:
+		return
+	var t := float(Time.get_ticks_msec()) * 0.001
+	var here := global_position
+	for i in _members.size():
+		var m := _members[i]
+		# Collapsed to nothing in two cases: a real Animal is standing here
+		# instead, or this one was eaten. Scaling the instance away beats
+		# rebuilding the MultiMesh, which would mean reallocating it every time
+		# anybody walked past a herd or a wolf took one.
+		if m["agent"] != null or m["dead"]:
+			_mm.set_instance_transform(i, Transform3D().scaled(Vector3.ZERO))
+			continue
+		var sway: float = m["sway"] + t * float(m["rate"])
+		var off: Vector2 = m["offset"]
+		var p := Vector3(off.x + cos(sway) * 0.35,
+			float(m["ground"]) - here.y,
+			off.y + sin(sway * 0.8) * 0.35)
+		var turn := Basis(Vector3.UP, float(m["facing"]) + cos(sway * 0.5) * 0.25)
+		_mm.set_instance_transform(i, Transform3D(turn, p))
+		_mm.set_instance_color(i, Color(1, 1, 1))
+
+
+## PROMOTION. The handful of head nearest the camera become real beasts, up to
+## the device's budget; the rest stay numbers. Demotion runs first so a herd
+## walking past you hands its budget on rather than hoarding it.
+func _tend_agents() -> void:
+	var focus := GameState.camera_focus
+	var budget := Quality.herd_agents()
+	for i in _members.size():
+		var m := _members[i]
+		var agent: Animal = m["agent"]
+		if agent == null:
+			continue
+		if not is_instance_valid(agent) or agent.is_queued_for_deletion():
+			# Eaten, butchered, or thrown into the sea. It does not come back,
+			# and the herd is one head smaller for good.
+			m["agent"] = null
+			m["dead"] = true
+			_agents_afoot -= 1
+			continue
+		# Keep the row in step with where the animal actually walked to, so
+		# demoting it does not teleport it back into formation.
+		var local := agent.global_position - global_position
+		m["offset"] = Vector2(local.x, local.z)
+		m["ground"] = agent.global_position.y
+		if agent.global_position.distance_to(focus) > DEMOTE_BEYOND:
+			agent.queue_free()
+			m["agent"] = null
+			_agents_afoot -= 1
+	for i in _members.size():
+		if _agents_afoot >= budget:
+			return
+		var m := _members[i]
+		if m["agent"] != null or m["dead"]:
+			continue
+		var p := global_position + Vector3(m["offset"].x, 0.0, m["offset"].y)
+		p.y = float(m["ground"])
+		if p.distance_to(focus) > PROMOTE_WITHIN:
+			continue
+		var born := Animal.create(species)
+		born.global_position = p
+		# Parented to the world, not to the herd: it is a free animal now, and
+		# if it runs off it should not be dragged about by the formation.
+		get_parent().add_child(born)
+		born.global_position = p
+		m["agent"] = born
+		_agents_afoot += 1
+
+
+## How many head are still standing, promoted or not — what the herd would tell
+## you if you asked how big it was.
+func alive() -> int:
+	var n := 0
+	for m in _members:
+		if not m["dead"]:
+			n += 1
+	return n
+
+
+func hover_text() -> String:
+	return "A herd of %d %s" % [alive(), species]

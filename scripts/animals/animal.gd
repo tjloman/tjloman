@@ -15,7 +15,8 @@ const MEAT_NAMES := {
 	"sheep": "mutton", "pig": "pork", "chicken": "chicken", "deer": "venison",
 	"ox": "beef", "giraffe": "giraffe steak", "llama": "llama chop",
 	"bear": "bear flank", "wolf": "wolf flesh", "lion": "lion flesh",
-	"tiger": "tiger flesh",
+	"tiger": "tiger flesh", "reindeer": "reindeer haunch", "bison": "bison chuck",
+	"elk": "elk loin",
 }
 
 ## body = torso box size; leg = leg height; meat = granary yield when
@@ -54,6 +55,20 @@ const SPECIES := {
 	"tiger": {"body": Vector3(0.6, 0.6, 1.5), "leg": 0.5, "color": Color(0.85, 0.5, 0.2),
 		"speed": 5.5, "meat": 3, "predator": true, "prey": ["deer", "pig", "sheep"],
 		"attacks_villagers": true},
+	# THE GREAT HERD, and the ones who walk alone. Reindeer gather in numbers
+	# nothing else here comes near — see Herd.SOCIAL, where they roll 2d100 —
+	# which is exactly why the herd had to stop being a pile of separate beasts
+	# before any of these could be added.
+	"reindeer": {"body": Vector3(0.55, 0.75, 1.4), "leg": 0.75, "color": Color(0.62, 0.55, 0.46),
+		"speed": 5.0, "meat": 3, "skittish": true, "neck": 0.3},
+	"bison": {"body": Vector3(1.0, 1.1, 2.1), "leg": 0.65, "color": Color(0.32, 0.24, 0.2),
+		"speed": 4.5, "meat": 6},
+	"elk": {"body": Vector3(0.7, 0.95, 1.7), "leg": 0.95, "color": Color(0.5, 0.38, 0.26),
+		"speed": 5.2, "meat": 4, "skittish": true, "neck": 0.5},
+	"anteater": {"body": Vector3(0.35, 0.4, 1.0), "leg": 0.22, "color": Color(0.4, 0.35, 0.34),
+		"speed": 1.8, "meat": 1},
+	"coati": {"body": Vector3(0.25, 0.28, 0.65), "leg": 0.2, "color": Color(0.55, 0.4, 0.28),
+		"speed": 3.4, "meat": 1, "skittish": true},
 }
 
 var species := "sheep"
