@@ -66,6 +66,17 @@ const SKILL_STEP := 0.25
 ## A fumble teaches too. It simply teaches less — and a creature that only ever
 ## learned from its successes would never get past the things it is bad at.
 const SKILL_FUMBLE := 0.3
+## AND SO DOES WATCHING SOMEBODY ELSE. Worth about a third of an attempt of its
+## own — you cannot learn to throw by watching a man throw, but you do not start
+## from nothing either — and it is the only way a creature ever picks up a
+## technique it has never tried. This is what makes the imitation REAL: your
+## example used to teach it what to WANT and nothing about how to do it, so a
+## beast could spend its whole life watching a god hurl oxen over the treetops
+## and still throw like something that had never seen it done.
+##
+## It runs one way only. The creature learns from the player; the player learns
+## from playing.
+const WATCH_SHARE := 0.35
 
 ## CHARACTER IS A RUNNING IMPRESSION OF RECENT DEEDS, not a bank balance. The
 ## creature IS what it has been DOING lately: each act pulls its character a
@@ -459,6 +470,16 @@ func practise(verb: String, went_well := true) -> void:
 	skill[verb] = minf(now + gain, SKILL_CAP)
 
 
+## TECHNIQUE, PICKED UP BY WATCHING. The same curve `practise` climbs and the
+## same diminishing returns, at a fraction of the step and scaled by how far it
+## trusts the hand it is watching — a beloved god is STUDIED, a feared one is
+## merely observed.
+func watch_technique(verb: String, faith: float) -> void:
+	var now: float = float(skill.get(verb, 0.0))
+	var gain := SKILL_STEP * WATCH_SHARE * clampf(faith, 0.0, 1.0) / (1.0 + now)
+	skill[verb] = minf(now + gain, SKILL_CAP)
+
+
 ## How good it is, as a fraction of the whole climb — which is what most callers
 ## actually want, since they are scaling something by it.
 func knack(verb: String) -> float:
@@ -503,6 +524,11 @@ func witness_god_deed(verb: String, type: String, trust: float) -> void:
 	if faith < 0.15:
 		return          # it is no longer taking its cues from you
 	teach(verb, type, MIMIC_REWARD * faith, MIMIC_LR * faith)
+	# AND THE TECHNIQUE, not merely the appetite. `teach` writes what it WANTS;
+	# this writes what it CAN. A player who spends an afternoon hurling things
+	# where their creature can see is teaching it to throw, and eventually to
+	# juggle — see CreatureThrowing for the ladder that knack unlocks.
+	watch_technique(verb, faith)
 	witness_practice("mimic", PRACTICE_STEP * 0.5)
 	# Copying is itself a habit: the more it watches a god worth watching, the
 	# more it thinks to look in the first place.

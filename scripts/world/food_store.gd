@@ -112,6 +112,7 @@ func _process(delta: float) -> void:
 		# — see VillageWonder.given.
 		var flew := rb.linear_velocity.length()
 		var by_beast := rb.has_meta("hurled_by_creature")
+		var by_god := rb.has_meta("hurled_by_god")
 		if rb is FoodItem:
 			var f := rb as FoodItem
 			var many := maxi(f.count, 1)
@@ -119,7 +120,7 @@ func _process(delta: float) -> void:
 			add(f.food_type, many)  # a bundle banks all its units
 			rb.queue_free()
 			_thank_the_giver()
-			_marvel(word, many, flew, by_beast)
+			_marvel(word, many, flew, by_beast, by_god)
 		elif rb is ResourceItem:
 			var r := rb as ResourceItem
 			var many := maxi(r.count, 1)
@@ -129,17 +130,17 @@ func _process(delta: float) -> void:
 				add_stone(many)
 			rb.queue_free()
 			_thank_the_giver()
-			_marvel(r.kind, many, flew, by_beast)
+			_marvel(r.kind, many, flew, by_beast, by_god)
 
 
 ## THE TOWN TAKES NOTE. A storehouse is a child of its village, so it does not
 ## have to go looking for one — and a store standing on nobody's ground (they do
 ## exist, briefly, while a village is being raised) simply says nothing.
-func _marvel(what: String, many: int, flew: float, by_beast: bool) -> void:
+func _marvel(what: String, many: int, flew: float, by_beast: bool, by_god := false) -> void:
 	var town := get_parent() as Village
 	if town == null or not is_instance_valid(town):
 		return
-	town.wonder.given(town, what, many, flew, by_beast)
+	town.wonder.given(town, what, many, flew, by_beast, by_god)
 
 
 ## A gift to the storehouse gladdens whoever's nearby — the villagers

@@ -1218,6 +1218,28 @@ func _run_smoke_test() -> void:
 			was_running, "calm" if scared.state != Animal.State.FLEE else "STILL RUNNING"])
 		scared.queue_free()
 
+	# WATCHING TEACHES TECHNIQUE, and it runs ONE WAY. The creature picks up the
+	# knack from the player's hand; nothing anywhere gives the player the
+	# creature's arm back.
+	var pupil := Creature.new()
+	add_child(pupil)
+	pupil.global_position = village.global_position + Vector3(20, 0, 20)
+	pupil.trust = 100.0
+	var knew := pupil.mind.skill_level("throw")
+	for i in 60:
+		pupil.mind.watch_technique("throw", 1.0)
+	var watched := pupil.mind.skill_level("throw")
+	var doubted := Creature.new()
+	add_child(doubted)
+	doubted.global_position = pupil.global_position
+	for i in 60:
+		doubted.mind.watch_technique("throw", 0.25)
+	print("SMOKE TEST: watching — 60 throws seen: a trusting beast reaches %d (from %d), a wary one %d" % [
+		watched, knew, doubted.mind.skill_level("throw")])
+	print("SMOKE TEST: watching — %s" % CreatureLook.arm_word(pupil))
+	pupil.queue_free()
+	doubted.queue_free()
+
 	# THE SLING. Weight must change how a thing follows the hand and how hard it
 	# leaves it, and the arc drawn must be the shot actually taken.
 	var chick := Animal.create("chicken")

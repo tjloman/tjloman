@@ -60,6 +60,9 @@ const KIN_PAY := 1.5           # it was one of their own
 ## meals per head, matched to the number the job board calls fed.
 const HUNGRY_AT := 1.0
 
+## How near the storehouse a creature has to be to have SEEN the shot go in.
+const WATCHING_FROM := 55.0
+
 var _heat := {}
 
 
@@ -173,7 +176,7 @@ static func spectacle(tree: SceneTree, kind: String, feel: String,
 ## `flown` is how fast it was moving when the granary caught it, which is the
 ## difference between a careful gift and a shot from the halfway line.
 func given(town: Village, what: String, amount: int, flown: float,
-		by_creature := false) -> void:
+		by_creature := false, by_god := false) -> void:
 	if town == null or not is_instance_valid(town) or amount <= 0:
 		return
 	# WHAT IT WAS WORTH TO THEM. A sack of grain into a full barn is a sack of
@@ -199,6 +202,13 @@ func given(town: Village, what: String, amount: int, flown: float,
 		pay *= HURLED_PAY
 		feel = "wonder"
 		word = "%s watches %d %s sail into the storehouse." % [town.village_name, amount, what]
+	# YOUR OWN SHOT, AND SOMEBODY WAS WATCHING. A god who lobs an armful of
+	# grain into the granary in front of their creature has just demonstrated
+	# the one trick in the game the creature most wants to be shown — and it
+	# picks up the technique the same way it picks up any other, by having seen
+	# it done. See CreatureMind.watch_technique.
+	if by_god and not by_creature:
+		_teach_the_watcher(town)
 	marvel(town, "given_" + what, feel, town.store.global_position, pay, word)
 	# And it is a kindness on top of a wonder: the people who were hungry are
 	# the ones cheering, and they are cheering at somebody in particular.
@@ -210,6 +220,20 @@ func given(town: Village, what: String, amount: int, flown: float,
 ## the granary is told, plainly and at once, that this went well — and the
 ## knack it practises here is the same one it rolls against next time it is
 ## holding something and standing in sight of a storehouse.
+## IT SAW YOU DO IT. Nothing is given away: the knack climbs by watching at a
+## third of the rate it climbs by doing, and only if the creature was near
+## enough to see and trusts the hand it was watching.
+func _teach_the_watcher(town: Village) -> void:
+	var beast := town.get_tree().get_first_node_in_group("creature") as Creature
+	if beast == null or not is_instance_valid(beast):
+		return
+	if beast.global_position.distance_to(town.store.global_position) > WATCHING_FROM:
+		return
+	beast.mind.watch_technique("larder", clampf(beast.trust / 100.0, 0.0, 1.0))
+	beast.mind.watch_technique("throw", clampf(beast.trust / 100.0, 0.0, 1.0))
+	beast.heart.stir("wonder", 0.15)
+
+
 func _teach_the_thrower(town: Village) -> void:
 	var beast := town.get_tree().get_first_node_in_group("creature") as Creature
 	if beast == null or not is_instance_valid(beast):

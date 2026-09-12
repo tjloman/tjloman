@@ -772,6 +772,10 @@ func _compute_throw() -> Dictionary:
 ## Hand off a released body to physics — a thrown velocity for RigidBodies,
 ## or the object's own drop() for the custom flyers (trees, folk, beasts).
 func _release_body(body: Node3D, vel: Vector3, gentle: bool) -> void:
+	# MARKED AS YOUR OWN SHOT. If this one lands in a storehouse the creature
+	# learns the trick from having watched you do it — see VillageWonder.given.
+	if not gentle and is_instance_valid(body):
+		body.set_meta("hurled_by_god", true)
 	if body is RigidBody3D:
 		var rb := body as RigidBody3D
 		rb.freeze = false
