@@ -1242,6 +1242,20 @@ func _burn_word(age: float) -> String:
 	return "SCRUB "
 
 
+## A FIREBLAST, WHERE I SAY, NOW. The tests below measure what the digging
+## leaves behind, and they cannot wait for a ball to be thrown and roll to a
+## stop to find out. They used to ask the manager to resolve a "fireball" at a
+## point, which resolves nothing — a thrown ball does its own work when it
+## lands, so there is no such case in the match and both tests were measuring
+## an untouched hillside and passing on it.
+func _shell(at: Vector3) -> void:
+	var ball := Fireball.new()
+	ball.kind = "fireblast"
+	add_child(ball)
+	ball.global_position = at + Vector3(0, 0.5, 0)
+	ball.burst()
+
+
 func _worst_relief(around: Vector2, reach: float) -> float:
 	var worst := 0.0
 	for gz in 25:
@@ -1329,7 +1343,7 @@ func _smoke_test_earth() -> void:
 	var dry := Vector3(150, 0, 250)
 	var before_shelling := world_gen.scars.count()
 	for throws in 5:
-		miracles.resolve("fireball", dry)
+		_shell(dry)
 		await get_tree().create_timer(0.2).timeout
 	var dug := world_gen.height_at(dry.x, dry.z)
 	var cut := world_gen.scars.count() - before_shelling
@@ -1348,7 +1362,7 @@ func _smoke_test_earth() -> void:
 	# shelling the pool would have proved nothing.
 	var shelled := Vector3(150, 0, 190)
 	for throws in 16:
-		miracles.resolve("fireball", shelled)
+		_shell(shelled)
 		await get_tree().create_timer(0.12).timeout
 	var sunk := world_gen.scars.offset_at(shelled.x, shelled.z)
 	print("SMOKE TEST: sixteen throws on one spot — dug %.2fm (floor %.1fm), %d scar(s) in all, burn %.2f"

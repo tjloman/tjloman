@@ -84,6 +84,17 @@ const RECIPES := {
 	"force+force+water": "lightning_storm",
 	"force+fury+water": "lightning_storm",
 	"force+force+fury+water": "tempest",
+	# FIRE, AND FIRE MEANT. Bare fire is a GOUT — a thrown lick of flame that
+	# skids to a stop and guts out, lighting what it touched and leaving the
+	# ground as it found it. That matters because setting something alight used
+	# to be available only from a miracle that also cratered the field it hit,
+	# so a player who wanted a fire had no way to ask for only a fire.
+	#
+	# Fury is the rune of violence done to a thing — it is what turns earth into
+	# an earthquake and molten rock into a volcano — so fire under fury is the
+	# detonation: the FIREBLAST, which is what `fire` alone used to be. Wanting
+	# the ground to remember takes a second stroke now.
+	"fire+fury": "fireblast",
 	# Wind, and what wind becomes.
 	"air+air": "tornado",
 	"air+air+fury": "tornado",
@@ -112,10 +123,10 @@ const RECIPES := {
 	"calm+life": "heal",
 	# FLIGHT, TWICE OVER, and the second one is not decoration.
 	#
-	# Fireballs gouge craters, and a crater is a hole a creature can genuinely
-	# be standing in and unable to walk out of. That is fine — it is the terrain
-	# being real — but only if the way out exists by then. Fire is a tier-3
-	# rune, so a fireball is castable at three villages; flight through
+	# Digging miracles gouge craters, and a crater is a hole a creature can
+	# genuinely be standing in and unable to walk out of. That is fine — it is
+	# the terrain being real — but only if the way out exists by then, and it
+	# did not: fire is a tier-3 rune, the fireball dug, and flight through
 	# `air+calm` needs AIR, which is tier 4. For one whole tier of the game you
 	# could dig a pit you could not lift your creature out of.
 	#
@@ -123,6 +134,10 @@ const RECIPES := {
 	# So calm and a rune of the heavens — either of them — means flight, and the
 	# way out is never learned later than the way in. tools/rune_sheet.py
 	# asserts that invariant so it cannot quietly break again.
+	#
+	# Splitting the fire miracles has since closed the same gap from the other
+	# side: what a tier-3 god can throw is a GOUT, which leaves the ground as it
+	# found it, and the digging waits on fury at tier 4 along with the flight.
 	"calm+sky": "flight",
 	# Ward is shelter held over something; over water it is footing. Rain that
 	# is also calm and life is not weather at all, it is a mercy.

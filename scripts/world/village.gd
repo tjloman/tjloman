@@ -47,7 +47,8 @@ const FARM_HALF := 3.9              # a field's clearance radius (no overlaps)
 ## for their blood — once it passes GRUDGE_HOSTILE they will fight it too.
 ## The miracles the crowd mind reads as a terror rather than a blessing.
 const TERRORS := [
-	"lightning", "fireball", "thunderclap", "lightning_storm", "tornado",
+	"lightning", "fireball", "fireblast", "thunderclap", "lightning_storm",
+	"tornado",
 	"thunderstorm", "tempest", "firestorm", "hurricane",
 ]
 ## TORCHES. Anyone still out after dark carries one, and they are the reason a
@@ -1214,7 +1215,19 @@ func witness_miracle(type: String, pos: Vector3) -> void:
 					v.witness_horror(3.0)
 				if dist < 14.0:
 					v.scare(pos)
+		# A GOUT and a BLAST are both fire from the sky, and both frighten them —
+		# but one of them left a crater in the field, and a town knows the
+		# difference between a god who set the wood alight and a god who took a
+		# bite out of the hill.
 		"fireball":
+			change_belief(4.0)
+			GameState.announce("Fire falls on %s, and catches. They watch it burn."
+				% village_name)
+			for v in my_villagers():
+				if v.global_position.distance_to(pos) < 13.0:
+					v.witness_horror(1.5)
+					v.scare(pos)
+		"fireblast":
 			change_belief(7.0)
 			GameState.announce("Fire from the sky over %s! They kneel in the ash." % village_name)
 			for v in my_villagers():

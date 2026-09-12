@@ -18,7 +18,10 @@ const MIRACLES := {
 	"rain": {"cost": 25.0, "color": Color(0.5, 0.7, 1.0)},
 	"heal": {"cost": 15.0, "color": Color(0.4, 1.0, 0.5)},
 	"lightning": {"cost": 30.0, "color": Color(1.0, 1.0, 0.7)},
-	"fireball": {"cost": 25.0, "color": Color(1.0, 0.5, 0.15)},
+	# A GOUT is kindling: cheap, because setting something alight is now its own
+	# small miracle rather than a side effect of a bombardment.
+	"fireball": {"cost": 18.0, "color": Color(1.0, 0.55, 0.2)},
+	"fireblast": {"cost": 32.0, "color": Color(1.0, 0.5, 0.15)},
 	"forest_seed": {"cost": 45.0, "color": Color(0.3, 0.7, 0.3)},
 	"forage_thicket": {"cost": 30.0, "color": Color(0.5, 0.75, 0.3)},
 	"lightning_storm": {"cost": 90.0, "color": Color(0.8, 0.85, 1.0)},
@@ -63,7 +66,10 @@ const KARMA := {
 	"lightning": {"player": -4.0, "creature": -3.0},
 	"lightning_storm": {"player": -7.0, "creature": -5.0},
 	"tornado": {"player": -8.0, "creature": -6.0},
-	"fireball": {"player": -2.5, "creature": -2.0},
+	# Kindling a fire is cruel; blowing a crater through the middle of it is
+	# worse, and it was one number for both when it was one miracle.
+	"fireball": {"player": -1.5, "creature": -1.0},
+	"fireblast": {"player": -2.5, "creature": -2.0},
 	"gust": {"player": 0.0, "creature": 0.5},
 	"thunderclap": {"player": -1.0, "creature": -0.5},
 	"cloudburst": {"player": 1.5, "creature": 1.5},
@@ -377,8 +383,10 @@ func _make_orb(miracle: String, potency: float) -> bool:
 	if not MIRACLES.has(miracle):
 		return false
 	var body: RigidBody3D
-	if miracle == "fireball":
-		body = Fireball.new()
+	if Fireball.KINDS.has(miracle):
+		var ball := Fireball.new()
+		ball.kind = miracle
+		body = ball
 	else:
 		var orb := MiracleOrb.new()
 		orb.miracle_name = miracle

@@ -527,7 +527,7 @@ aim at the sky to wind up high, arcing throws.
 It's how you move in the LAST INSTANT that shapes the shot: pull back
 as you let go to loft it into a high, slow arc; jerk to one side to
 bend the throw that way, the projectile spinning as it curves. Every
-throw — fireball, beast, tree, or villager — is a skill you sharpen.
+throw — fire, beast, tree, or villager — is a skill you sharpen.
 
 READING THE WORLD (there are almost no bars)
 Each village's ring: SIZE is its population, COLOR its belief — gray

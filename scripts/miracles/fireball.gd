@@ -1,16 +1,45 @@
 class_name Fireball
 extends RigidBody3D
-## A miraculous ball of fire, conjured into the divine hand. Throw it: it
-## flies with real momentum, arcs under gravity, and detonates on impact —
-## killing at the core, burning and terrifying around it. Terror converts.
-## The gods of peace do not learn this one.
+## A miraculous ball of fire, conjured into the divine hand. Throw it: it flies
+## with real momentum and arcs under gravity. What happens when it lands is the
+## difference between the two miracles this one class casts.
+##
+## SETTING SOMETHING ALIGHT SHOULD NOT COST YOU THE FIELD IT WAS STANDING IN.
+## For a long time the only fire in the spellbook was the one that cratered the
+## ground it hit, so burning a wood meant digging it up as well, and a player
+## who wanted a fire had no way to ask for one that was only a fire. That is
+## backwards: deforming the land is a bigger, angrier thing than kindling, and
+## it should take more saying.
+##
+## So bare FIRE is a GOUT — a thrown lick of flame that skids to a stop and guts
+## out where it settles, lighting what it touched on the way and leaving the
+## earth exactly as it found it. FIRE AND FURY is the FIREBLAST: the old
+## detonation, the crater, the killing core. Fury is already the rune of
+## violence done to a thing (see earth+fury, the earthquake), so the second
+## stroke is the player saying out loud that they want the ground to remember.
+const KINDS := {
+	# The gout. No crater, no killing core — it burns, and that is all it does,
+	# which is exactly why it exists. It skids to a halt far faster than the
+	# blast does, because a gout of flame that rolled across the county would
+	# be a blast with extra steps.
+	"fireball": {
+		"reach": 3.2, "kill": 0.0, "hurt": 18.0, "house": 14.0,
+		"trail": 2.2, "digs": false, "grip": 9.0, "roll": 1.0,
+		"fuse": 14.0, "loud": 1.2, "flare": 0.55,
+		"label": "Gout of flame (throw it!)",
+	},
+	# The blast, unchanged in every number: what `fire` used to be, now asked
+	# for with a second stroke.
+	"fireblast": {
+		"reach": 6.0, "kill": 2.2, "hurt": 45.0, "house": 50.0,
+		"trail": 1.7, "digs": true, "grip": 3.6, "roll": 2.5,
+		"fuse": 25.0, "loud": 4.0, "flare": 1.0,
+		"label": "Fireblast (throw it!)",
+	},
+}
 
-const BLAST_RADIUS := 6.0
-const KILL_RADIUS := 2.2
-const FUSE_SECONDS := 25.0
 const KARMA_PER_KILL := -3.0
 const TRAIL_INTERVAL := 0.09     # seconds between flames dropped in flight
-const TRAIL_IGNITE_RADIUS := 1.7  # a narrow lick of fire along the path
 const REST_SPEED := 1.2           # below this it has come to rest -> bursts
 
 ## THE ROLLING PROBLEM. A fireball is a sphere, and `friction` on a physics
@@ -20,15 +49,14 @@ const REST_SPEED := 1.2           # below this it has come to rest -> bursts
 ##
 ## So it is braked BY HAND, and only once it is actually on the ground: damping
 ## it in flight would flatten the ballistic arc that makes throwing feel like
-## throwing. GRIP is per second and exponential, so a 20 m/s roll is down to a
-## walking pace inside a second.
-const GROUND_GRIP := 3.6
+## throwing. The grip is per second and exponential — see KINDS, where the gout
+## takes a far harder one than the blast — so a 20 m/s roll is down to a walking
+## pace inside a second, and for the gout inside a third of one.
 const SPIN_GRIP := 4.5
 ## How close to the ground counts as rolling rather than flying.
 const TOUCHING := 0.7
-## And a hard stop: however gentle the slope, it bursts after this long on the
-## ground. Nothing rolls out of the shot the player actually took.
-const ROLL_SECONDS := 2.5
+## And a hard stop: however gentle the slope, it goes off after `roll` seconds
+## on the ground. Nothing rolls out of the shot the player actually took.
 
 ## HOW DEEP IT DIGS. A fireball does not only scorch — it takes a divot out of
 ## the earth and blackens what is left, and the mark stays in the world.
@@ -51,6 +79,10 @@ const GOUGE_CHAR := 0.9
 ## that are actually about moving earth.
 const DIG_FLOOR := 1.6
 
+## Which of the two this one is — a key of KINDS. Set by MiracleManager before
+## the body enters the tree.
+var kind := "fireblast"
+
 var _armed := false
 var _exploded := false
 var _trail_time := 0.0
@@ -69,6 +101,7 @@ func _init() -> void:
 
 func _ready() -> void:
 	add_to_group("pickable")
+	var spec: Dictionary = KINDS[kind]
 
 	var col := CollisionShape3D.new()
 	var shape := SphereShape3D.new()
@@ -95,7 +128,7 @@ func _ready() -> void:
 	embers.gravity = Vector3(0, 1.5, 0)
 	add_child(embers)
 
-	get_tree().create_timer(FUSE_SECONDS).timeout.connect(_explode)
+	get_tree().create_timer(float(spec["fuse"])).timeout.connect(_go_off)
 
 
 ## Two triangles, glowing, always facing you. It was a full 64x32 UV sphere.
@@ -112,9 +145,10 @@ func _physics_process(delta: float) -> void:
 	if _armed:
 		_lay_trail(delta)
 		_brake(delta)
-		# It rolls until it stops, then bursts where it settles.
-		if linear_velocity.length() < REST_SPEED or _rolling > ROLL_SECONDS:
-			_explode()
+		# It rolls until it stops, then goes off where it settles.
+		if linear_velocity.length() < REST_SPEED \
+				or _rolling > float(KINDS[kind]["roll"]):
+			_go_off()
 
 
 ## Slow the roll — but only once it is down. In the air it keeps every bit of
@@ -128,7 +162,7 @@ func _brake(delta: float) -> void:
 	if global_position.y > ground + TOUCHING:
 		return                       # still flying: leave the arc alone
 	_rolling += delta
-	var drag := exp(-GROUND_GRIP * delta)
+	var drag := exp(-float(KINDS[kind]["grip"]) * delta)
 	linear_velocity.x *= drag
 	linear_velocity.z *= drag
 	angular_velocity *= exp(-SPIN_GRIP * delta)
@@ -154,81 +188,107 @@ func _lay_trail(delta: float) -> void:
 	flame.position = Vector3(gp.x, ground_y, gp.z)
 	scene.add_child(flame)
 	get_tree().create_timer(2.2).timeout.connect(flame.queue_free)
-	_ignite_trail(gp)
+	_ignite_trail(gp, float(KINDS[kind]["trail"]))
 
 
 ## The narrow trail catches trees, fields, and any soul it brushes.
-func _ignite_trail(pos: Vector3) -> void:
+func _ignite_trail(pos: Vector3, reach: float) -> void:
 	for t in get_tree().get_nodes_in_group("trees"):
 		var tree := t as WildTree
-		if is_instance_valid(tree) and tree.global_position.distance_to(pos) < TRAIL_IGNITE_RADIUS:
+		if is_instance_valid(tree) and tree.global_position.distance_to(pos) < reach:
 			tree.ignite()
 	for f in get_tree().get_nodes_in_group("farms"):
 		var farm := f as Farm
-		if is_instance_valid(farm) and farm.global_position.distance_to(pos) < TRAIL_IGNITE_RADIUS:
+		if is_instance_valid(farm) and farm.global_position.distance_to(pos) < reach:
 			farm.ignite()
 	for grp in ["villagers", "animals"]:
 		for n in get_tree().get_nodes_in_group(grp):
 			var node := n as Node3D
-			if is_instance_valid(node) and node.global_position.distance_to(pos) < TRAIL_IGNITE_RADIUS \
+			if is_instance_valid(node) and node.global_position.distance_to(pos) < reach \
 					and node.has_method("ignite"):
 				node.call("ignite")
 
 
-func _explode() -> void:
+## SET IT OFF WHERE IT STANDS, without waiting for it to get there.
+##
+## Landing reaches the same code — this is the door for anything that needs the
+## effect at a chosen point, which in practice means the smoke tests. They used
+## to ask MiracleManager.resolve("fireball", spot) for it, and resolve has no
+## fireball case: a thrown ball does its own work when it lands. So the two
+## tests that claimed to prove the digging floor and the merging of scars were
+## measuring nothing at all, and passing on it, for as long as they have existed.
+func burst() -> void:
+	_go_off()
+
+
+## WHERE IT SETTLES. Both kinds land the same way and differ in what landing
+## means: the gout scorches a small ring and guts out, the blast detonates,
+## kills at the core and takes a bowl out of the earth. Every number below comes
+## off the KINDS row, so the difference between a kindling and a bombardment is
+## a table rather than two copies of this function.
+func _go_off() -> void:
 	if _exploded or freeze:  # never in the player's grip
 		return
 	_exploded = true
+	var spec: Dictionary = KINDS[kind]
+	var reach: float = spec["reach"]
+	var kill: float = spec["kill"]
 	var pos := global_position
-	SoundBank.play_at("boom", pos, 4.0)
-	_blast_visuals(pos)
+	SoundBank.play_at("boom", pos, float(spec["loud"]))
+	_blast_visuals(pos, reach * float(spec["flare"]))
 
 	for v in get_tree().get_nodes_in_group("villagers"):
 		var villager := v as Villager
 		var d := villager.global_position.distance_to(pos)
-		if d < KILL_RADIUS:
+		# A gout has no killing core at all — `kill` is zero and this never
+		# fires. Being set alight can still finish somebody; it just is not
+		# instant, and it is survivable if the town is quick.
+		if d < kill:
 			GameState.shift_alignment(KARMA_PER_KILL)
 			villager.take_damage(999.0, true, true)  # point-blank is instant
-		elif d < BLAST_RADIUS:
-			villager.take_damage(45.0, true)
-			villager.ignite()  # the blast sets them alight
+		elif d < reach:
+			villager.take_damage(float(spec["hurt"]), true)
+			villager.ignite()  # the fire sets them alight
 			villager.scare(pos)
 
 	for a in get_tree().get_nodes_in_group("animals"):
 		var animal := a as Animal
 		var d := animal.global_position.distance_to(pos)
-		if d < KILL_RADIUS:
+		if d < kill:
 			animal.die()
-		elif d < BLAST_RADIUS * 2.0:
-			if d < BLAST_RADIUS:
+		elif d < reach * 2.0:
+			if d < reach:
 				animal.ignite()
 			animal.scare(pos)
 
 	for h in get_tree().get_nodes_in_group("houses"):
 		var house := h as House
-		if house.global_position.distance_to(pos) < BLAST_RADIUS:
-			house.damage(50.0)
+		if house.global_position.distance_to(pos) < reach:
+			house.damage(float(spec["house"]))
 
-	# Fire catches on the trees it touches — and spreads from there.
+	# Fire catches on the trees it touches — and spreads from there. This is
+	# the whole of what a gout is FOR.
 	for t in get_tree().get_nodes_in_group("trees"):
 		var tree := t as WildTree
-		if is_instance_valid(tree) and tree.global_position.distance_to(pos) < BLAST_RADIUS:
+		if is_instance_valid(tree) and tree.global_position.distance_to(pos) < reach:
 			tree.ignite()
 
-	# A field in the blast goes up too.
+	# A field in reach goes up too.
 	for f in get_tree().get_nodes_in_group("farms"):
 		var farm := f as Farm
-		if is_instance_valid(farm) and farm.global_position.distance_to(pos) < BLAST_RADIUS:
+		if is_instance_valid(farm) and farm.global_position.distance_to(pos) < reach:
 			farm.ignite()
 
 	# THE EARTH ITSELF. A bowl gouged out of the ground with a lip of thrown
 	# spoil around it, and the whole of it burned black — and unlike everything
 	# else here, it stays. Come back in an hour and the crater is still there.
-	_gouge(pos)
+	# The gout does not do this, which is its entire reason for existing.
+	if bool(spec["digs"]):
+		_gouge(pos)
 
-	# The blast is the sermon: terror converts where the fireball LANDS.
+	# The blast is the sermon: terror converts where the fire LANDS.
 	for v in get_tree().get_nodes_in_group("village"):
-		(v as Village).witness_miracle("fireball", pos)
+		(v as Village).witness_miracle(kind, pos)
 
 	queue_free()
 
@@ -265,17 +325,20 @@ func _gouge(pos: Vector3) -> void:
 		GameState.announce("The ground breaks below the waterline, and the water comes in.")
 
 
-func _blast_visuals(pos: Vector3) -> void:
+func _blast_visuals(pos: Vector3, size: float) -> void:
 	var scene := get_tree().current_scene
 	if scene == null:
 		return
 	var fire := Util.sphere(0.5, Color(1.0, 0.55, 0.1, 0.9), Vector3.ZERO, true)
 	fire.position = pos
 	scene.add_child(fire)
+	# The flash is sized off the same number, so a gout guttering out is a warm
+	# flicker and a blast is still the thing that lights up the valley.
+	var lit := clampf(size / 6.0, 0.2, 1.0)
 	var flash := OmniLight3D.new()
 	flash.light_color = Color(1.0, 0.6, 0.2)
-	flash.light_energy = 7.0
-	flash.omni_range = 22.0
+	flash.light_energy = 7.0 * lit
+	flash.omni_range = 22.0 * lit
 	flash.position = pos + Vector3(0, 2, 0)
 	scene.add_child(flash)
 	# There used to be a black disc laid on the ground here, faded out after
@@ -283,7 +346,7 @@ func _blast_visuals(pos: Vector3) -> void:
 	# itself (see `_gouge`), so it is a real feature of the world rather than a
 	# decal with a timer, and it does not vanish while you are looking at it.
 	var tween := scene.create_tween()
-	tween.tween_property(fire, "scale", Vector3.ONE * BLAST_RADIUS, 0.45) \
+	tween.tween_property(fire, "scale", Vector3.ONE * size, 0.45) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	tween.parallel().tween_property(fire, "transparency", 1.0, 0.45)
 	tween.parallel().tween_property(flash, "light_energy", 0.0, 0.5)
@@ -292,4 +355,4 @@ func _blast_visuals(pos: Vector3) -> void:
 
 
 func hover_text() -> String:
-	return "Fireball (throw it!)"
+	return str(KINDS[kind]["label"])

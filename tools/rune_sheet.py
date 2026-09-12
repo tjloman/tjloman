@@ -280,8 +280,11 @@ def summarize(data):
 ## who can dig a pit at three villages and only lift the creature out at four
 ## has a trap in the shape of a miracle.
 ESCAPES = [
-    ("fireball", "flight",
-     "a fireball gouges a crater the creature can be standing in"),
+    # The GOUT (bare fire) is not here on purpose: it leaves the ground exactly
+    # as it found it, so there is no hole to be stuck in. Digging is the
+    # FIREBLAST's, which fury asks for.
+    ("fireblast", "flight",
+     "a fireblast gouges a crater the creature can be standing in"),
     ("firestorm", "flight", "the same, in bulk"),
     ("volcano", "flight", "a volcano raises ground the creature may be under"),
 ]
