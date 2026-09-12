@@ -809,6 +809,14 @@ func _tend_agents() -> void:
 		var local := agent.global_position - global_position
 		m["offset"] = Vector2(local.x, local.z)
 		m["ground"] = agent.global_position.y
+		# NEVER OUT OF SOMEBODY'S HAND. A beast that is held or in flight is the
+		# one beast the player is certainly paying attention to, and demotion
+		# frees the node — so a sheep carried or thrown past the demote range
+		# simply vanished from the hand that was holding it. It is also the one
+		# beast whose distance from the camera means nothing about whether it
+		# matters.
+		if agent.state == Animal.State.HELD or agent.state == Animal.State.FALLING:
+			continue
 		if agent.global_position.distance_to(focus) > DEMOTE_BEYOND:
 			# And hands back what it was doing, so the seam is silent in both
 			# directions: a beast that ran off keeps running as a number.
@@ -1094,6 +1102,32 @@ func absorb(beast: Animal) -> void:
 	_grow(1)
 	_members[_members.size() - 1]["ground"] = beast.global_position.y
 	beast.queue_free()
+
+
+## PICKED UP. A beast in a god's hand has left the herd.
+##
+## It used to stay a member, and the herd went on treating its row as part of
+## the formation — so carrying one home stretched the herd across the map, with
+## the mass drawing an instance wherever the beast had been put down, and
+## setting it down two hundred metres away left a lone box standing in a field
+## belonging to a herd on the far side of the valley.
+##
+## So it is released outright: the row goes, the slot goes back to the budget,
+## and what is left in the hand is an ordinary animal that happens to have come
+## out of a herd. The herd is one head down and frightened by it, which is the
+## same reckoning as anything else being taken from them — a hand reaching out
+## of the sky and lifting one away is not a thing they shrug off.
+func release(beast: Animal) -> void:
+	for m in _members:
+		if m["agent"] == beast:
+			m["agent"] = null
+			m["dead"] = true
+			_agents_afoot = maxi(_agents_afoot - 1, 0)
+			break
+	if beast.has_meta("herd"):
+		beast.remove_meta("herd")
+	lost_one()
+	_spread = maxf(SPACING * sqrt(float(alive())), SPREAD_LEAST)
 
 
 ## AND ONE TAKEN OUT FOR THE TABLE, without ever building it. A butcher does
