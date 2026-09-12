@@ -359,6 +359,11 @@ func _describe(target: Node3D) -> String:
 		return ""
 	if target.has_method("hover_text"):
 		return str(target.call("hover_text"))
+	if target is CreatureNest:
+		# THE ONE THING IN THE WORLD THAT ANSWERS A LONG PRESS WITH WORDS, and
+		# nothing anywhere said so. A player who does not already know holds
+		# nothing, because there is no reason to try.
+		return "The Nest — hold on the stone wall to read it"
 	if target.has_meta("hover_name"):
 		return str(target.get_meta("hover_name"))
 	return target.name
@@ -428,7 +433,13 @@ func _on_pointer_button(event: InputEventMouseButton) -> void:
 		_reading = hover_target is CreatureNest and state == HandState.IDLE
 		_charging = _touch_only() and state == HandState.IDLE \
 			and not _on_something_grabbable() and not _reading
-		if not _charging:
+		# NOT WHILE READING. The nest is not grabbable and not a store, so
+		# _on_grab fell through to its last branch and started a LAND DRAG —
+		# press the stone wall and the world swung out from under your
+		# finger. On a mouse that is merely confusing; on a thumb, where the
+		# drag and the hold are the same gesture, it makes the stone simply
+		# unreadable. That is why it was so hard to bring up.
+		if not _charging and not _reading:
 			_on_grab()
 		return
 	# Released.
@@ -727,11 +738,22 @@ func _tick_press_charge(delta: float) -> void:
 	if _reading:
 		if not _pointer_down or not is_instance_valid(hover_target):
 			_reading = false
+			hover_info_changed.emit(_describe(hover_target))
 			return
 		_press_time += delta
 		if _press_time >= READ_HOLD:
 			_reading = false
+			hover_info_changed.emit(_describe(hover_target))
 			GameState.stone_read.emit((hover_target as CreatureNest).chronicle())
+			return
+		# THE HOLD, FILLING. There was no feedback of any kind: you pressed the
+		# wall, nothing happened for seven tenths of a second, and you let go —
+		# which is exactly what everybody did. charge_fraction() was written for
+		# a ring under the finger and nothing has ever drawn it, so the hover
+		# line does the work instead, and it works the same on a thumb as on a
+		# mouse.
+		hover_info_changed.emit("Reading the stone... %d%%"
+			% int(charge_fraction() * 100.0))
 		return
 	if not _charging:
 		return
@@ -744,7 +766,10 @@ func _tick_press_charge(delta: float) -> void:
 ## How far through the opening press we are, 0..1 — for the ring the HUD draws
 ## under the finger, so the player can see the summons coming.
 func charge_fraction() -> float:
+	if _reading:
+		return clampf(_press_time / READ_HOLD, 0.0, 1.0)
 	return clampf(_press_time / OPEN_HOLD, 0.0, 1.0) if _charging else 0.0
+
 
 
 func _open_casting() -> void:

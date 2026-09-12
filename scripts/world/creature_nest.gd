@@ -27,9 +27,35 @@ extends StaticBody3D
 ## list would only drift from the first.
 const FACES := ["mercy", "bounty", "order", "fellowship", "daring", "devotion"]
 
+## HOW BIG THE NEST IS: big enough for the biggest creature there can ever BE,
+## from the day the village raises it.
+##
+## It used to be a seven-metre hut, which fitted the creature you had on the
+## afternoon you got it and nothing after. A creature at full growth stands
+## CreatureBody.FULL_HEIGHT tall — and a thing that tall lying down is about
+## that long — so the bed is measured off that and everything else is measured
+## off the bed. Nobody ever outgrows their own home, and a village that raises
+## one is making a promise about what its god's beast may become.
+##
+## It is also why there is NO ROOF. A lodge with a ceiling has a height the
+## creature can exceed; an open bed under the sky has none, and a den is what
+## this was always meant to be rather than a house.
+const BED_LONG := CreatureBody.FULL_HEIGHT * 1.1
+const BED_DEEP := BED_LONG * 0.5
+const BED_MID := -(BED_DEEP * 0.5 + 5.0)
+const WALL_HIGH := 4.2
+const WALL_AT := BED_MID - BED_DEEP * 0.5 - 0.8
+const POOL_R := BED_DEEP * 0.18
+
 ## How wide the clearing is, how far the dance stands from the fire, and how
-## many may join a circle before it is full.
-const GROUNDS := 13.0
+## many may join a circle before it is full. The clearing follows the bed; the
+## DANCE does not, because a dance is villager-sized whatever the creature is —
+## eight people round a fire stand the same distance apart in any world.
+const GROUNDS := BED_LONG * 0.8
+## What other buildings must keep clear of. Smaller than the grounds on purpose:
+## the grounds are how far away you still count as BEING here, and that is a
+## social question, not a question of what the bed is standing on.
+const FOOTPRINT := BED_LONG * 0.55
 const RING := 4.2
 const DANCERS := 8
 
@@ -98,11 +124,14 @@ func _ready() -> void:
 	set_meta("hover_name", "The Nest")
 	collision_layer = 4
 	collision_mask = 0
+	# THE WALL IS THE THING YOU TOUCH. The collider is the whole stone face and
+	# nothing else — it is what a long press reads, and at seven metres it was a
+	# hard thing to put a thumb on. It is the length of the bed now.
 	var col := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(7.0, 3.0, 2.0)
+	shape.size = Vector3(BED_LONG, WALL_HIGH, 1.8)
 	col.shape = shape
-	col.position = Vector3(0, 1.5, -3.4)
+	col.position = Vector3(0, WALL_HIGH * 0.5, WALL_AT)
 	add_child(col)
 	var custom := ModelBank.instantiate("nest")
 	if custom != null:
@@ -119,17 +148,26 @@ func _ready() -> void:
 
 ## THE LODGE: a long low hall open to the fire, banked with the comfortable
 ## things — bushes to flop into and a couple of trees for shade.
+## A BROAD OPEN BED WITH A STONE WALL BEHIND IT, and nothing over it. No roof
+## and no side walls: a creature that may end up thirty-eight metres tall does
+## not want a hut, it wants somewhere to lie down that is unmistakably HIS, and
+## walls it would have to step over are only an insult at that size.
 func _build_lodge() -> void:
-	add_child(Util.box(Vector3(7.0, 0.5, 4.4), Color(0.42, 0.4, 0.38), Vector3(0, 0.25, -3.0)))
-	add_child(Util.box(Vector3(7.0, 2.6, 0.5), Color(0.5, 0.47, 0.43), Vector3(0, 1.5, -5.0)))
-	for x: float in [-3.3, 3.3]:
-		add_child(Util.box(Vector3(0.5, 2.6, 4.4), Color(0.5, 0.47, 0.43), Vector3(x, 1.5, -3.0)))
-	add_child(Util.box(Vector3(7.6, 0.4, 5.0), Color(0.38, 0.3, 0.22), Vector3(0, 3.0, -3.0)))
+	var floor_long := BED_LONG * 1.1
+	var floor_deep := BED_DEEP * 1.2
+	add_child(Util.box(Vector3(floor_long, 0.5, floor_deep),
+		Color(0.42, 0.4, 0.38), Vector3(0, 0.25, BED_MID)))
+	# The wall of faces stands at the back of it, the full width of the bed.
+	add_child(Util.box(Vector3(BED_LONG, WALL_HIGH, 0.7),
+		Color(0.5, 0.47, 0.43), Vector3(0, WALL_HIGH * 0.5, WALL_AT)))
 	# The comfortable part. A bed of moss and two bolsters of bush, because the
 	# thing he mostly does here is lie down.
-	add_child(Util.box(Vector3(4.4, 0.3, 2.4), Color(0.3, 0.42, 0.26), Vector3(0, 0.65, -3.0)))
-	for x: float in [-2.0, 2.0]:
-		add_child(Util.lite_sphere(0.9, Color(0.24, 0.38, 0.22), Vector3(x, 0.9, -1.2)))
+	add_child(Util.box(Vector3(BED_LONG, 0.4, BED_DEEP),
+		Color(0.3, 0.42, 0.26), Vector3(0, 0.7, BED_MID)))
+	var bolster := BED_DEEP * 0.11
+	for x: float in [-BED_LONG * 0.28, BED_LONG * 0.28]:
+		add_child(Util.lite_sphere(bolster, Color(0.24, 0.38, 0.22),
+			Vector3(x, 0.9 + bolster * 0.4, BED_MID + BED_DEEP * 0.36)))
 
 
 ## THE WALL OF FACES. Six stones, and each is cut deeper and set prouder the
@@ -145,14 +183,19 @@ func _build_lodge() -> void:
 ##
 ## Hold a press on the wall and it says the whole of it in words. See `chronicle`.
 func _build_wall() -> void:
+	# Spread across the whole wall, and cut at a size you can read from the fire
+	# rather than at a size that suited a seven-metre hut.
+	var step := BED_LONG * 0.8 / float(FACES.size())
+	var wide := step * 0.62
+	var front := WALL_AT + 0.45
 	for i in FACES.size():
-		var x := -2.6 + float(i) * 1.04
-		var face := Util.box(Vector3(0.8, 0.9, 0.25),
-			Color(0.54, 0.5, 0.45), Vector3(x, 1.7, -4.7))
+		var x := (float(i) - (FACES.size() - 1) * 0.5) * step
+		var face := Util.box(Vector3(wide, wide * 1.1, 0.25),
+			Color(0.54, 0.5, 0.45), Vector3(x, WALL_HIGH * 0.58, front))
 		add_child(face)
 		_faces.append(face)
 		var marks := Node3D.new()
-		marks.position = Vector3(x, 0.95, -4.66)
+		marks.position = Vector3(x, WALL_HIGH * 0.25, front + 0.04)
 		add_child(marks)
 		_scratches.append(marks)
 
@@ -200,7 +243,7 @@ func _build_effigy() -> void:
 func _build_pool() -> void:
 	var pool := MeshInstance3D.new()
 	var plane := PlaneMesh.new()
-	plane.size = Vector2(5.0, 4.0)
+	plane.size = Vector2(POOL_R * 2.0, POOL_R * 1.6)
 	pool.mesh = plane
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color(0.16, 0.26, 0.32, 0.86)
@@ -209,8 +252,19 @@ func _build_pool() -> void:
 	mat.metallic = 0.5
 	mat.roughness = 0.12
 	pool.material_override = mat
-	pool.position = Vector3(5.4, 0.06, 2.2)
+	pool.position = Vector3(BED_LONG * 0.32, 0.06, POOL_R * 0.9)
 	add_child(pool)
+
+
+## WHERE THE TORCHES STAND, evenly along the wall however wide the wall is.
+## More of them than the old four, because four spread over forty metres is not
+## torchlight, it is four torches.
+func _torch_line() -> Array[float]:
+	var out: Array[float] = []
+	var many := maxi(int(BED_LONG / 5.0), 4)
+	for i in many:
+		out.append((float(i) - (many - 1) * 0.5) * (BED_LONG * 0.9 / float(many)))
+	return out
 
 
 ## THE FIRE they dance around, and the torches along the wall that make the
@@ -222,13 +276,13 @@ func _build_fire() -> void:
 	fire.position = Vector3(0, 0.2, 0)
 	add_child(fire)
 	_flames.append(fire)
-	for x: float in [-3.0, -1.0, 1.0, 3.0]:
+	for x: float in _torch_line():
 		var torch := Util.small_flame(0.7)
-		torch.position = Vector3(x, 2.3, -4.4)
+		torch.position = Vector3(x, WALL_HIGH * 0.78, WALL_AT + 0.6)
 		add_child(torch)
 		_flames.append(torch)
 		add_child(Util.lite_box(Vector3(0.12, 1.0, 0.12),
-			Color(0.35, 0.26, 0.18), Vector3(x, 1.9, -4.4)))
+			Color(0.35, 0.26, 0.18), Vector3(x, WALL_HIGH * 0.6, WALL_AT + 0.6)))
 
 
 func _process(delta: float) -> void:
@@ -299,11 +353,11 @@ func ring_spot(which: int) -> Vector3:
 
 ## Where he lies down, and where he drinks.
 func bed() -> Vector3:
-	return global_position + Vector3(0, 0, -3.0)
+	return global_position + Vector3(0, 0, BED_MID)
 
 
 func water() -> Vector3:
-	return global_position + Vector3(5.4, 0, 2.2)
+	return global_position + Vector3(BED_LONG * 0.32, 0, POOL_R * 0.9)
 
 
 ## AN EVENING OF IT. Called once a second by the village while a circle is

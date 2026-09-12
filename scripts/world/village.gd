@@ -556,10 +556,13 @@ func _spot_blocked(pos: Vector3, own_room := 0.0) -> bool:
 			and edubba.global_position.distance_to(pos) \
 			< maxf(ROOM_ROUND_THE_SCHOOL, own_room):
 		return true
-	# The nest is not a building but a PLACE — a pool, a fire, a ring to dance
-	# in — and its grounds are its own size, which it already declares.
+	# The nest is not a building but a PLACE — a bed, a pool, a fire, a ring to
+	# dance in — and it declares its own size. FOOTPRINT and not GROUNDS: the
+	# grounds are how far away you still count as being HERE, which is a social
+	# question; what a builder has to walk round is the thing on the ground.
 	if nest != null and is_instance_valid(nest) \
-			and nest.global_position.distance_to(pos) < maxf(CreatureNest.GROUNDS, own_room):
+			and nest.global_position.distance_to(pos) \
+			< maxf(CreatureNest.FOOTPRINT, own_room):
 		return true
 	return pen_position().distance_to(pos) < maxf(6.0, own_room)
 
@@ -1581,7 +1584,7 @@ func _rebuild(data: Dictionary) -> void:
 			add_child(shop)
 			workshops.append(shop)
 	if bool(data.get("nest", false)) and nest == null:
-		var spot := find_build_spot(world, CreatureNest.GROUNDS)
+		var spot := find_build_spot(world, CreatureNest.FOOTPRINT)
 		var beast := get_tree().get_first_node_in_group("creature") as Creature
 		if spot != Vector3.INF and beast != null:
 			var n := CreatureNest.new()

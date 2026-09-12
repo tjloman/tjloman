@@ -1386,7 +1386,7 @@ func _start_job(job: String) -> void:
 		"build_nest":
 			var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 			# The nest is grounds, not a hut: pool, fire and a ring to dance in.
-			_shop_spot = village.find_build_spot(world, CreatureNest.GROUNDS)
+			_shop_spot = village.find_build_spot(world, CreatureNest.FOOTPRINT)
 			if _shop_spot == Vector3.INF:
 				state = State.WANDER
 				_action_time = 2.0
