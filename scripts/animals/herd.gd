@@ -100,10 +100,22 @@ const DEMOTE_BEYOND := 54.0
 const SPACING := 2.3
 const SPREAD_LEAST := 3.0
 
-## How often the whole formation is rewritten, and how many ground heights are
-## re-sampled per tick. Both are constants, and that is the point.
+## How often the formation is stirred, and how much of it moves per tick. Both
+## are constants, and that is the point — nothing in this file may scale with
+## the head count.
 const SHUFFLE_EVERY := 0.2
 const GROUNDS_PER_TICK := 12
+## How many instances are rewritten per stir. Sized for the WORST CASE THAT IS
+## ACTUALLY LOOKED AT: a big herd you are standing in. At sixty-four a
+## four-hundred-head barn refreshed each beast every 1.2 seconds, which steps
+## visibly; at this it is under two thirds of a second and reads as movement.
+## Distant herds stir on a longer clock anyway, so they cost a fraction of this.
+const WRITES_PER_TICK := 128
+## How far the herd's own origin may drift in height before the whole formation
+## is rewritten rather than a slice of it. Instance heights are relative to that
+## origin, so a herd walking uphill would otherwise leave half its members
+## buried until their turn came round.
+const DRIFT_REWRITE := 0.4
 
 ## WHAT SHARE OF THE HERD ANSWERS A CHANGE OF MOOD, and how fast the answer
 ## crosses them.
@@ -240,6 +252,8 @@ var _target := Vector3.ZERO
 var _graze_left := 0.0
 var _shuffle_left := 0.0
 var _ground_cursor := 0
+var _write_cursor := 0
+var _written_y := 0.0
 var _spread := 0.0
 var _redeal_left := 0
 var _born_head := 0
@@ -312,7 +326,11 @@ func _build_multimesh() -> void:
 	var leg: float = spec["leg"]
 	_mm = MultiMesh.new()
 	_mm.transform_format = MultiMesh.TRANSFORM_3D
-	_mm.use_colors = true
+	# NO PER-INSTANCE COLOUR. Every beast in a herd is the same species and so
+	# the same colour, which the shared material already says; the channel was
+	# being written white once per member per tick and cost a Color of memory
+	# each. It comes back the day something has to look different — a branded
+	# beast, a sick one — and not before.
 	# One box for the whole beast. At the distance these are seen from, legs are
 	# a few pixels of nothing, and one instance per head is the entire budget.
 	_mm.mesh = Util._pooled_box_mesh(Vector3(body.x, body.y, body.z))
@@ -324,7 +342,7 @@ func _build_multimesh() -> void:
 	add_child(_mmi)
 	Util.apply_lod(_mmi, Quality.camera_far())
 	_resample_grounds(GROUNDS_PER_TICK * 4)
-	_write_transforms()
+	_write_transforms()          # in full: nothing is on screen until it is
 
 
 func _process(delta: float) -> void:
@@ -349,7 +367,15 @@ func _process(delta: float) -> void:
 		_shuffle_left = SHUFFLE_EVERY * stride
 		_resample_grounds(GROUNDS_PER_TICK)
 		_redeal(REDEAL_PER_TICK)
-		_write_transforms()
+		# THE GROUND MOVED UNDER THEM. Instance heights are stored relative to
+		# the herd's own origin, so walking up a hill leaves every un-rewritten
+		# member floating or buried until its turn comes round. Past a stride of
+		# drift the whole formation is rewritten at once — which is rare, because
+		# a grazing herd moves at about a fifth of a metre a second.
+		if absf(global_position.y - _written_y) > DRIFT_REWRITE:
+			_write_transforms()
+		else:
+			_write_transforms(WRITES_PER_TICK)
 		_tend_agents()
 
 
@@ -475,16 +501,30 @@ func _resample_grounds(how_many: int) -> void:
 		_ground_cursor += 1
 
 
-func _write_transforms() -> void:
-	if _mm == null:
+func _write_transforms(how_many := 0) -> void:
+	if _mm == null or _members.is_empty():
 		return
 	# ONE TABLE FOR THE WHOLE WORLD, built by whichever herd ticks first this
 	# frame. Everything below is a lookup and some adds — no trigonometry runs
 	# per member, which is the difference between a herd of two hundred costing
 	# what a herd of twenty costs and it costing ten times as much.
 	HerdMotion.refresh(float(Time.get_ticks_msec()) * 0.001)
+	# A SLICE, ROUND-ROBIN, unless somebody asked for the lot. This was the last
+	# thing in here that still scaled with the head count: four hundred head
+	# meant four hundred transform writes several times a second, and a barn
+	# holding twelve hundred meant six thousand a second. Now it is a constant,
+	# and what it costs a herd of twelve hundred is what it costs a herd of
+	# twelve.
+	#
+	# What that buys is paid for in ANIMATION RATE, and only for the far mass: a
+	# big herd's individuals bob more slowly because each one is rewritten less
+	# often. That is invisible at the distance a four-hundred-head herd is seen
+	# from, and the beasts close enough to look at are promoted to real animals
+	# with real clips anyway.
+	var todo := _members.size() if how_many <= 0 else mini(how_many, _members.size())
 	var here := global_position
-	for i in _members.size():
+	for step in todo:
+		var i := (_write_cursor + step) % _members.size()
 		var m := _members[i]
 		# Collapsed to nothing in two cases: a real Animal is standing here
 		# instead, or this one was eaten. Scaling the instance away beats
@@ -498,7 +538,8 @@ func _write_transforms() -> void:
 		var turn := Basis.from_euler(Vector3(p.y, float(m["facing"]) + p.w, p.z))
 		_mm.set_instance_transform(i, Transform3D(turn, Vector3(
 			off.x, float(m["ground"]) - here.y + p.x, off.y)))
-		_mm.set_instance_color(i, Color(1, 1, 1))
+	_write_cursor = (_write_cursor + todo) % _members.size()
+	_written_y = here.y
 
 
 ## THE MOOD CHANGED, so everybody is dealt a new motion — but NOT all in the
