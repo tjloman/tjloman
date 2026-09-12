@@ -58,6 +58,11 @@ var _roster_refresh := 0.0
 ## it, and a bar that drains once you stop drawing. Without these the session
 ## is invisible, and an invisible mode is a worse mode than a button.
 var _cast_overlay: CastOverlay
+## What the nest wall says, when somebody has held a press on it. Dismissed by
+## the next press anywhere, because a thing you read on a wall is not a menu.
+var _stone_panel: PanelContainer
+var _stone_label: Label
+var _stone_time := 0.0
 
 
 func _ready() -> void:
@@ -76,10 +81,38 @@ func _ready() -> void:
 	_cast_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_cast_overlay)
 
+	_build_stone_panel()
+	GameState.stone_read.connect(_on_stone_read)
 	GameState.announcement.connect(_on_announcement)
 	GameState.cast_hint.connect(_on_cast_hint)
 	if divine_hand != null:
 		divine_hand.hover_info_changed.connect(_on_hover_info)
+
+
+## THE STONE, READ. Same hand-wrapping and no autowrap as the creature panel,
+## for the same reason — this sits on a CanvasLayer too.
+func _build_stone_panel() -> void:
+	_stone_panel = PanelContainer.new()
+	_stone_panel.set_anchors_and_offsets_preset(
+		Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE, 16)
+	_stone_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_stone_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_stone_panel.add_theme_stylebox_override("panel", _dim_panel_style())
+	_stone_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stone_panel.visible = false
+	_stone_label = Label.new()
+	_stone_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_stone_label.add_theme_font_size_override("font_size", 15)
+	_stone_label.add_theme_color_override("font_color", Color(0.92, 0.88, 0.78))
+	_stone_panel.add_child(_stone_label)
+	add_child(_stone_panel)
+	_make_click_through(_stone_panel)
+
+
+func _on_stone_read(text: String) -> void:
+	_stone_label.text = text
+	_stone_panel.visible = true
+	_stone_time = 14.0
 
 
 func _build_bars() -> void:
@@ -570,6 +603,10 @@ it."""
 
 
 func _process(delta: float) -> void:
+	if _stone_time > 0.0:
+		_stone_time -= delta
+		if _stone_time <= 0.0:
+			_stone_panel.visible = false
 	if village != null:
 		_diet_label.text = "Diet [1-4]: %s" % village.diet_name()
 	_hover_label.position = _hover_label.get_viewport().get_mouse_position() + Vector2(18, 18)

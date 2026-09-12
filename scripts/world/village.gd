@@ -106,6 +106,9 @@ var edubba: Edubba = null      # the schoolhouse, once built
 ## THE TRADES THIS TOWN HAS RAISED. Each one is somewhere for people to work,
 ## which is the whole reason they exist — see Workshop.
 var workshops: Array[Workshop] = []
+## The place the village made for the creature, once it loved him. See
+## CreatureNest — it is the only building here that is about somebody.
+var nest: CreatureNest = null
 
 ## Militia state. `alarm` counts down while the village is roused; `threat_pos`
 ## is where the trouble was last seen; `grudge` is their anger at the creature.
@@ -488,6 +491,15 @@ func teachers() -> int:
 
 
 func _process(delta: float) -> void:
+	# THE EVENING CIRCLE. Counted here rather than by each dancer, because what
+	# the nest gathers depends on how many are round the fire TOGETHER — eight
+	# people dancing is worth more than eight people praying.
+	if nest != null and is_instance_valid(nest):
+		var dancers := 0
+		for v in my_villagers():
+			if v.state == Villager.State.CIRCLING:
+				dancers += 1
+		nest.dance_tick(dancers, delta)
 	# Ahead of the LOD gate, on the real clock: the torches are a LOOK, and a
 	# look that updates on a strided tick judders. They cost nothing when the
 	# town is far off or the sun is up, which the tick checks first thing.

@@ -78,6 +78,11 @@ var pain := 0.0        # 0..100, acute, right now
 var care := 0.0        # 0..100, a life of being fed, rested and praised
 var harm := 0.0        # 0..100, a life of being starved, worked and struck
 var tether := 0.0      # 0..100, attachment built out of pain and relief
+## HOW MANY TIMES ITS OWN GOD HAS STRUCK IT. A plain count that never decays,
+## kept because the nest wall sets it beside how much the creature trusts you,
+## and that pairing only says anything if the number is the whole truth rather
+## than a fading impression.
+var struck := 0
 var _since_hurt := 999.0
 
 
@@ -109,6 +114,7 @@ func hurt(amount: float, by_god: bool) -> void:
 	care = maxf(care - amount * 0.5, 0.0)
 	if by_god:
 		tether = minf(tether + amount * TETHER_GAIN, 100.0)
+		struck += 1
 		_since_hurt = 0.0
 
 
@@ -266,7 +272,7 @@ static func shed(who: Creature, seconds: float) -> void:
 
 
 func to_dict() -> Dictionary:
-	return {"pain": pain, "care": care, "harm": harm, "tether": tether}
+	return {"pain": pain, "care": care, "harm": harm, "tether": tether, "struck": struck}
 
 
 func from_dict(data: Dictionary) -> void:
@@ -274,3 +280,4 @@ func from_dict(data: Dictionary) -> void:
 	care = float(data.get("care", 0.0))
 	harm = float(data.get("harm", 0.0))
 	tether = float(data.get("tether", 0.0))
+	struck = int(data.get("struck", 0))

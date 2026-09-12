@@ -624,6 +624,8 @@ func _perceive() -> Array:
 	# A herd it is standing in: drive them, take one, stand watch. It is told
 	# nothing about any of them — see CreatureHerding.
 	CreatureHerding.offer(self, opts)
+	# His own place, if his village ever built him one.
+	CreatureNest.offer(self, opts)
 
 	# A FULL creature does not hunt. Appetite, not just hunger, decides.
 	var can_eat := _can_eat(1.0)

@@ -63,6 +63,9 @@ const BUNDLE_TOPUP := 0.06          # seconds between pulling each extra unit (h
 ## what you have drawn is cast; stop having drawn nothing, and it simply lets
 ## you go again.
 const OPEN_HOLD := 0.45      # seconds of firm press to open casting, on touch
+## And how long a press on a nest wall must be held before the stone is read.
+## Longer than opening a casting: reading is a thing you settle in front of.
+const READ_HOLD := 0.7
 
 ## HOW A STROKE IS CAPTURED. A pointer reports every frame it moves; a rune
 ## does not change every frame. MIN_STEP drops points a finger has not really
@@ -132,6 +135,7 @@ var _steer_time := 0.0
 ## Charging the opening press (touch only): where it began and for how long.
 var _press_at := Vector2.ZERO
 var _press_time := 0.0
+var _reading := false
 var _charging := false
 
 ## The runes drawn so far this session, and the quiet since the last stroke —
@@ -418,8 +422,12 @@ func _on_pointer_button(event: InputEventMouseButton) -> void:
 			return
 		# Bare ground, pressed and held, is what opens the session under a
 		# thumb — the one place there is no second button to spare.
+		# HOLDING THE STONE READS IT. The nest wall is the one thing in the world
+		# that answers a long press with words rather than with a grab, which is
+		# what makes walking to it worth doing.
+		_reading = hover_target is CreatureNest and state == HandState.IDLE
 		_charging = _touch_only() and state == HandState.IDLE \
-			and not _on_something_grabbable()
+			and not _on_something_grabbable() and not _reading
 		if not _charging:
 			_on_grab()
 		return
@@ -716,6 +724,15 @@ func _touch_only() -> bool:
 
 ## Charging the opening press. Touch only; a mouse has a button for this.
 func _tick_press_charge(delta: float) -> void:
+	if _reading:
+		if not _pointer_down or not is_instance_valid(hover_target):
+			_reading = false
+			return
+		_press_time += delta
+		if _press_time >= READ_HOLD:
+			_reading = false
+			GameState.stone_read.emit((hover_target as CreatureNest).chronicle())
+		return
 	if not _charging:
 		return
 	_press_time += delta

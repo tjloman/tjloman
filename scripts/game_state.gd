@@ -11,6 +11,9 @@ signal announcement(text: String)
 signal cast_hint(text: String)
 ## A player-facing option changed — the tree friends being switched on or off.
 signal settings_changed
+## SOMEBODY IS READING THE STONE. Carries the whole of what is scratched on a
+## nest wall up to the HUD, which is the only place with room to show it.
+signal stone_read(text: String)
 
 ## One full day/night cycle, in real seconds. (The pace of the sun is the
 ## heartbeat of the game — tuned once, everything else derives from it.)
