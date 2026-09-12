@@ -53,6 +53,10 @@ var _praise_scold: HBoxContainer
 var _roster_panel: PanelContainer
 var _roster_list: VBoxContainer
 var _roster_button: Button
+## THE ONE WAY TO REACH THE CREATURE ON A PHONE. C does it on a keyboard and
+## there is no C on a thumb — Praise and Scold only appear once you are already
+## locked on, so until now a phone could not get locked on at all.
+var _creature_button: Button
 var _roster_refresh := 0.0
 ## The casting session's own readout: a ring that fills as you press to open
 ## it, and a bar that drains once you stop drawing. Without these the session
@@ -71,6 +75,7 @@ func _ready() -> void:
 	_build_miracle_panel()
 	_build_creature_panel()
 	_build_praise_scold()
+	_build_creature_button()
 	_build_hover_label()
 	_build_message_label()
 	_build_help_panel()
@@ -301,6 +306,28 @@ func _build_praise_scold() -> void:
 	scold.pressed.connect(_on_scold)
 	_praise_scold.add_child(scold)
 	add_child(_praise_scold)
+
+
+## Under the villages button, in the same plain style, because it is the same
+## kind of thing: somewhere to go.
+func _build_creature_button() -> void:
+	_creature_button = Button.new()
+	_creature_button.text = "Creature [C]"
+	_creature_button.position = Vector2(16, 84)
+	_creature_button.custom_minimum_size = Vector2(160, 34)
+	_creature_button.focus_mode = Control.FOCUS_NONE
+	_creature_button.add_theme_font_size_override("font_size", 15)
+	_creature_button.pressed.connect(_on_find_creature)
+	add_child(_creature_button)
+
+
+## EXACTLY WHAT C DOES, and by the same road — the key and the button must not
+## be two behaviours that happen to look alike, or one of them will quietly rot.
+func _on_find_creature() -> void:
+	var ev := InputEventAction.new()
+	ev.action = "find_creature"
+	ev.pressed = true
+	Input.parse_input_event(ev)
 
 
 func _big_button(text: String, tint: Color) -> Button:
@@ -649,8 +676,12 @@ func _update_miracle_panel(delta: float) -> void:
 ## here in plain words instead of a hover tooltip — the whole reason the
 ## lock-on exists on a phone.
 func _update_creature_panel() -> void:
+	# LOCKED ON, or holding the composed shot of him at his nest. Both are the
+	# player saying "him, now" — and losing Praise and Scold at the exact moment
+	# you are sitting in front of him watching him lie down would be perverse.
 	var locked := camera_rig != null and is_instance_valid(creature) \
-		and camera_rig.follow_target == creature
+		and (camera_rig.follow_target == creature
+			or (camera_rig.framed and CreatureNest.holding(creature) != null))
 	_creature_panel.visible = locked
 	_praise_scold.visible = locked
 	if not locked:

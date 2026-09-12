@@ -59,6 +59,14 @@ const FOOTPRINT := BED_LONG * 0.55
 const RING := 4.2
 const DANCERS := 8
 
+## THE VIEW FROM THE FRONT — see `viewing`. A shade above level so sky and
+## ground both show; far enough back that the whole stone wall is in frame and
+## near enough that the faces on it can be told apart; and an eye height that
+## clears a creature lying down without looking over the top of him.
+const VIEW_PITCH := 7.0
+const VIEW_BACK := 34.0
+const VIEW_EYE := 6.0
+
 ## What an evening of dancing is worth, per second per dancer. A circle of eight
 ## brings in rather more than a lone villager at a totem, which is the point:
 ## worship is a thing people do TOGETHER here.
@@ -332,6 +340,39 @@ func recarve() -> void:
 ## nothing else. He is told only that the place exists; whether he ever comes is
 ## between him and what he has learned — a beast raised badly may never use the
 ## house his village built him, and that is a thing worth being able to see.
+## THE NEST THE CREATURE IS STANDING ON THE GROUNDS OF, or null.
+static func holding(beast: Node3D) -> CreatureNest:
+	if beast == null or not is_instance_valid(beast):
+		return null
+	for n in beast.get_tree().get_nodes_in_group("creature_nest"):
+		var nest := n as CreatureNest
+		if nest != null and is_instance_valid(nest) \
+				and nest.global_position.distance_to(beast.global_position) <= GROUNDS:
+			return nest
+	return null
+
+
+## WHERE TO STAND TO SEE ALL OF IT: a villager's eye view from the front of the
+## grounds, low to the earth and looking up into the place.
+##
+## Deliberately not a lock-on. A lock-on centres the beast and orbits him, which
+## at forty metres tall is a wall of creature and nothing else — no stones
+## behind him, no fire, no dancers, no torches, no trees. What is wanted when
+## you ask to see him at home is the SHOT: everything that makes the nest what
+## it is, in one frame, from where somebody walking past the front of it stands.
+##
+## The aim sits between his bed and the wall so the stones read over his back
+## rather than being hidden behind him — and they are the thing you have to be
+## able to put a thumb on.
+func viewing() -> Dictionary:
+	return {
+		"aim": global_position + basis * Vector3(0.0, VIEW_EYE, BED_MID * 0.55),
+		"yaw": global_rotation.y,
+		"pitch": VIEW_PITCH,
+		"zoom": VIEW_BACK,
+	}
+
+
 static func offer(who: Creature, opts: Dictionary) -> void:
 	var nest := who.get_tree().get_first_node_in_group("creature_nest") as CreatureNest
 	if nest == null or not is_instance_valid(nest):

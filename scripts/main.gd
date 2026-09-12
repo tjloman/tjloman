@@ -335,12 +335,28 @@ func _unhandled_input(event: InputEvent) -> void:
 			creature.leash_to(divine_hand.ground_point)
 			GameState.announce("You lead your creature there. (G again to release.)")
 	elif event.is_action_pressed("find_creature") and is_instance_valid(creature):
-		# C toggles a LOCK-ON: the camera glides to the creature, keeps it
-		# centered, and orbits around it until you pan away (or press C again).
+		# C CYCLES THE THREE WAYS OF LOOKING AT HIM, in the order you want them.
+		#
+		# At his nest the first press composes THE SHOT — the whole place from
+		# the front, low down, stones and fire and dancers in one frame. A
+		# lock-on cannot do that: it centres the beast and orbits him, which at
+		# forty metres tall is a wall of creature and nothing else, with the
+		# stones you are trying to read hidden behind his back.
+		#
+		# Press again and it becomes the ordinary lock-on; again and it lets go.
+		# Away from the nest there is nothing to compose, so it is the lock-on
+		# and the release, exactly as it always was.
+		var nest := CreatureNest.holding(creature)
 		if camera_rig.follow_target == creature:
 			camera_rig.follow_target = null
+		elif nest != null and not camera_rig.framed:
+			var shot := nest.viewing()
+			camera_rig.frame_on(shot["aim"], shot["yaw"], shot["pitch"], shot["zoom"])
+			GameState.hint("His nest, from the front. Hold the stone wall to read it."
+				+ " C again to follow him instead.")
 		else:
 			camera_rig.follow_target = creature
+			camera_rig.framed = false
 			# Frame the whole beast — the lock-on distance scales with its size,
 			# so a towering full-grown creature isn't shot from inside its ankle.
 			var s := creature.scale.y

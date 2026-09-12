@@ -20,6 +20,10 @@ var divine_hand: DivineHand = null   # wired by main; touch gestures preempt it
 ## When set, the rig glides after this node (e.g. the creature) until the
 ## player pans away manually.
 var follow_target: Node3D = null
+## TRUE while the camera is holding a COMPOSED SHOT — a framing somebody asked
+## for by name rather than one the player steered to. Any touch of the controls
+## gives it back: a shot you cannot pan out of is a cutscene.
+var framed := false
 
 var _rotating := false
 var _touches := {}        # touch index -> screen position
@@ -87,6 +91,7 @@ func _process(delta: float) -> void:
 	input_dir.x = Input.get_action_strength("cam_right") - Input.get_action_strength("cam_left")
 	if input_dir != Vector2.ZERO:
 		follow_target = null  # manual panning breaks the follow
+		framed = false
 		# Pan speed scales with zoom so the world feels consistent at any height.
 		var speed := PAN_SPEED * (zoom_distance / 35.0)
 		var forward := -global_transform.basis.z
@@ -99,6 +104,7 @@ func _process(delta: float) -> void:
 
 	var rot := Input.get_action_strength("cam_rotate_right") - Input.get_action_strength("cam_rotate_left")
 	if rot != 0.0:
+		framed = false
 		_yaw_around_focus(-rot * ROTATE_SPEED * delta)
 
 	# The camera only ever sits back along its own +Z. Forcing x/y to zero
@@ -209,7 +215,24 @@ func _focus_point() -> Vector3:
 ## Zoom by a factor, keeping the focus point fixed in frame: the rig
 ## origin slides toward (zoom in) or away from (zoom out) the hand by the
 ## same ratio as the zoom distance — standard dolly-to-cursor.
+## STAND HERE AND LOOK THAT WAY. Everything the rig needs to hold one composed
+## shot: where the eye aims, which way round it is, how far above level it
+## looks, and how far back it stands. It arrives outright rather than gliding in
+## — this is somebody pressing a key that means "show me", and a slow swoop from
+## wherever they happened to be is a worse answer than the picture.
+func frame_on(aim: Vector3, yaw: float, pitch: float, zoom: float) -> void:
+	follow_target = null
+	framed = true
+	global_position = aim
+	rotation.y = yaw
+	pitch_node.rotation_degrees.x = pitch
+	zoom_distance = clampf(zoom, MIN_ZOOM, MAX_ZOOM)
+	camera.position.z = zoom_distance
+	camera.rotation = Vector3.ZERO
+
+
 func _zoom_toward(factor: float) -> void:
+	framed = false
 	var new_zoom := clampf(zoom_distance * factor, MIN_ZOOM, MAX_ZOOM)
 	var ratio := new_zoom / zoom_distance
 	zoom_distance = new_zoom
@@ -237,6 +260,7 @@ func _yaw_around_focus(angle: float) -> void:
 ## height so the whole settlement sits in frame.
 func snap_to(world_pos: Vector3) -> void:
 	follow_target = null
+	framed = false
 	global_position.x = world_pos.x
 	global_position.z = world_pos.z
 	zoom_distance = clampf(zoom_distance, 22.0, 45.0)
@@ -245,6 +269,7 @@ func snap_to(world_pos: Vector3) -> void:
 ## Pan by a world-space delta (used by DivineHand's grab-the-land drag).
 func pan_world(delta_vec: Vector3) -> void:
 	follow_target = null  # grabbing the land breaks the follow
+	framed = false
 	delta_vec.y = 0
 	global_position += delta_vec
 
