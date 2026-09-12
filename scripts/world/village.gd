@@ -114,11 +114,18 @@ const FOUNDING_SIZES: Array[int] = [
 	House.Size.LONGHOUSE, House.Size.HOUSE, House.Size.HUT, House.Size.HOUSE,
 ]
 const FOUNDING_MOST := 24
-const FOUNDING_PER_RING := 7
-const FOUNDING_RING := 9.5
-const FOUNDING_RING_STEP := 7.0
-## Clear ground kept round a dwelling, on top of its own footprint.
+## HOW A TOWN LAYS ITSELF OUT: the innermost band a building may stand on, how
+## far each band steps outward, and how many bearings are tried round each one.
+const BUILD_NEAREST := 7.5
+const BUILD_BAND := 3.5
+const BUILD_ANGLES := 24
+
+## Clear ground kept round a dwelling, on top of its own footprint — and round
+## the other things a village raises, which have no footprint table of their own.
 const ROOM_ROUND_A_HOUSE := 3.2
+const ROOM_ROUND_A_SHOP := 7.0
+const ROOM_ROUND_A_FARM := 7.0
+const ROOM_ROUND_THE_SCHOOL := 9.0
 
 ## THE TOWN'S OWN NUMBERS, WORKED OUT ONCE FOR EVERYBODY.
 ##
@@ -233,9 +240,13 @@ func _ready() -> void:
 	farms.append(farm)
 
 	_build_influence_ring()
-	_build_starting_houses()
+	# PEOPLE, THEN ROOFS. The builder lays out within the town's reach, and the
+	# reach is worked out from how many people there are — so founding the
+	# houses first meant laying out a town of fifty inside the ring of a hamlet.
+	# _build_starting_houses hands out the beds when it is done.
 	_spawn_villagers(STARTING_SOULS if is_player_home else STARTING_SOULS * 2 / 3)
 	_update_influence()
+	_build_starting_houses()
 	GameState.alignment_changed.connect(_on_alignment_changed)
 	# If a saved game remembers a town that stood here, this IS that town —
 	# take back its name, its faith, its stocks and its people.
@@ -462,20 +473,26 @@ func _build_influence_ring() -> void:
 
 
 func _build_starting_houses() -> void:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	var souls := STARTING_SOULS if is_player_home else STARTING_SOULS * 2 / 3
 	var beds_wanted := int(float(souls) * FOUNDING_HOUSED)
 	var beds := 0
 	var raised := 0
 	while beds < beds_wanted and raised < FOUNDING_MOST:
-		var spot := _founding_spot(raised)
+		# THE SAME RULE THE TOWN WILL USE FOREVER AFTER. A village founded by one
+		# set of rules and extended by another is a village with a seam in it,
+		# and the founding rings had exactly that seam: they packed tight and
+		# neat, and then the first thing anybody built went forty metres out.
+		var size: int = FOUNDING_SIZES[raised % FOUNDING_SIZES.size()]
+		var spot := find_build_spot(world, ROOM_ROUND_A_HOUSE
+			+ float(House.SPECS[size]["width"]))
 		if spot == Vector3.INF:
 			break          # the ground round here will not take another one
-		var size: int = FOUNDING_SIZES[raised % FOUNDING_SIZES.size()]
 		var house := House.new()
 		house.size = size as House.Size
 		house.village = self
 		house.age = randf_range(5.0, 20.0)
-		house.position = spot
+		house.position = to_local(spot)
 		# Face the totem — computed off-tree, so no look_at here.
 		house.basis = Basis.looking_at(
 			-Vector3(house.position.x, 0, house.position.z), Vector3.UP)
@@ -483,6 +500,7 @@ func _build_starting_houses() -> void:
 		houses.append(house)
 		beds += int(House.SPECS[size]["capacity"])
 		raised += 1
+	_assign_housing()
 
 
 ## WHERE THE i-TH FOUNDING HOUSE STANDS: rings widening out from the totem,
@@ -490,42 +508,55 @@ func _build_starting_houses() -> void:
 ## behind the first. Anything that would land on the market, the field or the
 ## pen is stepped over rather than shuffled about at random, which is what makes
 ## the founding town look laid out instead of scattered.
-func _founding_spot(i: int) -> Vector3:
-	for tries in FOUNDING_MOST:
-		var n := i + tries
-		var ring := floori(float(n) / float(FOUNDING_PER_RING))
-		var step := n % FOUNDING_PER_RING
-		var radius := FOUNDING_RING + float(ring) * FOUNDING_RING_STEP
-		var angle := (float(step) / float(FOUNDING_PER_RING) + float(ring) * 0.37) * TAU
-		var spot := Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
-		var settled := _grounded(spot, 2.0)
-		if not _spot_blocked(global_position + settled):
-			return settled
-	return Vector3.INF
-
-
 ## IS THIS GROUND ALREADY SPOKEN FOR? One answer, in world space, shared by the
 ## founding rings and by every build spot chosen afterwards — so a town cannot
 ## raise its first houses by one set of rules and its later ones by another.
-func _spot_blocked(pos: Vector3) -> bool:
+## `own_room` is how much space the thing being PLACED needs. Without it the
+## check was one-sided — it asked only how big what was already there was — so
+## the creature's nest, whose grounds are thirteen metres of pool and fire,
+## could be dropped six metres from somebody's door, and only then did it start
+## keeping houses away from itself. A clearance is the larger of the two claims.
+func _spot_blocked(pos: Vector3, own_room := 0.0) -> bool:
 	for h in houses:
 		# ROOM FOR THE ROOF THAT IS ALREADY THERE. A flat four and a half metres
 		# was a hut's clearance, and a longhouse is five and three quarters long
 		# — so longhouses could be placed overlapping each other, and with
 		# twelve people bedding down round each one they slept in each other's
 		# doorways. The gap now widens with whatever is already standing.
-		var apart: float = ROOM_ROUND_A_HOUSE + float(House.SPECS[h.size]["width"])
+		var apart: float = maxf(
+			ROOM_ROUND_A_HOUSE + float(House.SPECS[h.size]["width"]), own_room)
 		if is_instance_valid(h) and h.global_position.distance_to(pos) < apart:
 			return true
-	if totem != null and totem.global_position.distance_to(pos) < 6.0:
+	if totem != null and totem.global_position.distance_to(pos) < maxf(6.0, own_room):
 		return true
 	for f in farms:
-		if is_instance_valid(f) and f.global_position.distance_to(pos) < 7.0:
+		if is_instance_valid(f) and f.global_position.distance_to(pos) < maxf(7.0, own_room):
 			return true
 	# The round market is wide — houses keep extra distance from it.
-	if store != null and store.global_position.distance_to(pos) < 8.5:
+	if store != null and store.global_position.distance_to(pos) < maxf(8.5, own_room):
 		return true
-	return pen_position().distance_to(pos) < 6.0
+	# EVERYTHING ELSE THE TOWN HAS BUILT. This check knew about houses, the
+	# totem, the fields, the market and the pen — which was the whole village
+	# when it was written, and is now about half of it. Workshops, the school
+	# and the creature's nest were invisible to it, so every one of those was
+	# placed with no regard for the others or for itself: wells inside mills,
+	# a school through a barn, huts standing in the creature's fire. That is
+	# the odd spacing. A building the town raised is a building the town has
+	# to walk round.
+	for w in workshops:
+		if is_instance_valid(w) and w.global_position.distance_to(pos) \
+				< maxf(ROOM_ROUND_A_SHOP, own_room):
+			return true
+	if edubba != null and is_instance_valid(edubba) \
+			and edubba.global_position.distance_to(pos) \
+			< maxf(ROOM_ROUND_THE_SCHOOL, own_room):
+		return true
+	# The nest is not a building but a PLACE — a pool, a fire, a ring to dance
+	# in — and its grounds are its own size, which it already declares.
+	if nest != null and is_instance_valid(nest) \
+			and nest.global_position.distance_to(pos) < maxf(CreatureNest.GROUNDS, own_room):
+		return true
+	return pen_position().distance_to(pos) < maxf(6.0, own_room)
 
 
 func _spawn_villagers(count: int) -> void:
@@ -934,24 +965,79 @@ func on_house_destroyed(house: House) -> void:
 
 
 ## Picks a build spot with clearance from other structures, dry and flat.
-func find_build_spot(world: WorldGen) -> Vector3:
-	for attempt in 20:
-		var angle := randf() * TAU
-		var dist := randf_range(6.5, maxf(influence_radius * 0.8, 12.0))
-		var pos := global_position + Vector3(cos(angle) * dist, 0, sin(angle) * dist)
-		if world != null:
-			if world.slope_at(pos.x, pos.z) > 0.9:
+## A TOWN GROWS OUTWARD FROM ITS TOTEM, and fills each ring before it starts
+## the next.
+##
+## Twenty darts thrown anywhere between six metres and fifty is how this used to
+## choose, and it is why the village looked scattered: with the near ground
+## taken, a dart that lands forty metres out is as good an answer as one that
+## lands eight, so the school ended up further from the totem than the fields
+## and the workshops were flung to the edge of the influence ring with nothing
+## between them and the houses.
+##
+## It sweeps bands instead, innermost first, so nothing is ever put further out
+## than it had to be. And WITHIN a band it takes the most open place rather than
+## the first legal one, which is what stops a row of buildings bunching into one
+## arc while the other side of the town stays bare — the first-legal rule always
+## put the next thing next to the last thing.
+func find_build_spot(world: WorldGen, own_room := 0.0) -> Vector3:
+	var reach := maxf(influence_radius * 0.8, 12.0)
+	var band := BUILD_NEAREST
+	# The whole sweep is turned by a random amount per call so a town does not
+	# end up with every building it ever raises on the same handful of bearings.
+	var turn := randf() * TAU
+	while band <= reach:
+		var best := Vector3.INF
+		var best_room := -1.0
+		for step in BUILD_ANGLES:
+			var angle := turn + TAU * float(step) / float(BUILD_ANGLES)
+			var pos := global_position + Vector3(cos(angle) * band, 0, sin(angle) * band)
+			if world != null:
+				if world.slope_at(pos.x, pos.z) > 0.9:
+					continue
+				# The WHOLE footprint must be dry — no floating over an inlet.
+				if not world.footprint_dry(pos.x, pos.z, 2.2):
+					continue
+				# And the way there must stay on land — never build across a lake.
+				if not world.line_dry(global_position.x, global_position.z, pos.x, pos.z):
+					continue
+				pos.y = world.settle_height(pos.x, pos.z, 2.2)
+			if _spot_blocked(pos, own_room):
 				continue
-			# The WHOLE footprint must be dry — no floating over an inlet.
-			if not world.footprint_dry(pos.x, pos.z, 2.2):
-				continue
-			# And the way there must stay on land — never build across a lake.
-			if not world.line_dry(global_position.x, global_position.z, pos.x, pos.z):
-				continue
-			pos.y = world.settle_height(pos.x, pos.z, 2.2)
-		if not _spot_blocked(pos):
-			return pos
+			var room := _room_at(pos)
+			if room > best_room:
+				best_room = room
+				best = pos
+		if best != Vector3.INF:
+			return best
+		band += BUILD_BAND
 	return Vector3.INF
+
+
+## HOW OPEN A PIECE OF GROUND IS: the distance to the nearest thing the town has
+## already put down. Used to choose between legal spots in the same band, which
+## is the whole of what makes a village spread out instead of clumping.
+func _room_at(pos: Vector3) -> float:
+	var room := INF
+	if totem != null:
+		room = minf(room, totem.global_position.distance_to(pos))
+	if store != null:
+		room = minf(room, store.global_position.distance_to(pos))
+	room = minf(room, pen_position().distance_to(pos))
+	for h in houses:
+		if is_instance_valid(h):
+			room = minf(room, h.global_position.distance_to(pos))
+	for f in farms:
+		if is_instance_valid(f):
+			room = minf(room, f.global_position.distance_to(pos))
+	for w in workshops:
+		if is_instance_valid(w):
+			room = minf(room, w.global_position.distance_to(pos))
+	if edubba != null and is_instance_valid(edubba):
+		room = minf(room, edubba.global_position.distance_to(pos))
+	if nest != null and is_instance_valid(nest):
+		room = minf(room, nest.global_position.distance_to(pos))
+	return room
 
 
 ## What the next house should be, sized to the homelessness problem.
@@ -972,7 +1058,8 @@ func start_construction(world: WorldGen) -> House:
 	var spec: Dictionary = House.SPECS[size]
 	if not store.try_spend_materials(spec["lumber"], spec["stone"]):
 		return null
-	var spot := find_build_spot(world)
+	var spot := find_build_spot(world,
+		ROOM_ROUND_A_HOUSE + float(spec["width"]))
 	if spot == Vector3.INF:
 		store.add_lumber(spec["lumber"])
 		store.add_stone(spec["stone"])
@@ -1428,11 +1515,15 @@ func _rebuild(data: Dictionary) -> void:
 		if is_instance_valid(spare):
 			spare.queue_free()
 	for i in range(houses.size(), want_houses.size()):
-		var spot := find_build_spot(world)
+		# int() because the size comes back out of a save file as a number, not
+		# as the enum it went in as — and SPECS is keyed by the enum.
+		var want: int = int(want_houses[i])
+		var spot := find_build_spot(world,
+			ROOM_ROUND_A_HOUSE + float(House.SPECS[want]["width"]))
 		if spot == Vector3.INF:
 			break
 		var h := House.new()
-		h.size = int(want_houses[i]) as House.Size
+		h.size = want as House.Size
 		h.village = self
 		h.age = randf_range(5.0, 20.0)
 		h.position = to_local(spot)
@@ -1446,12 +1537,12 @@ func _rebuild(data: Dictionary) -> void:
 		if is_instance_valid(spare_farm):
 			spare_farm.queue_free()
 	for i in range(farms.size(), want_farms):
-		var spot := find_build_spot(world)
+		var spot := find_build_spot(world, ROOM_ROUND_A_FARM)
 		if spot == Vector3.INF:
 			break
 		spawn_farm_at(spot)
 	if bool(data.get("edubba", false)) and not has_edubba():
-		var spot := find_build_spot(world)
+		var spot := find_build_spot(world, ROOM_ROUND_THE_SCHOOL)
 		if spot != Vector3.INF:
 			# Raised free: the materials were spent in the life being restored,
 			# and charging for it again would quietly rob every reloaded town.
@@ -1465,7 +1556,7 @@ func _rebuild(data: Dictionary) -> void:
 		if not Workshop.TRADES.has(which):
 			continue          # a trade this build no longer has
 		for i in int(trades[which]):
-			var spot := find_build_spot(world)
+			var spot := find_build_spot(world, ROOM_ROUND_A_SHOP)
 			if spot == Vector3.INF:
 				break
 			var shop := Workshop.create(which, self)
@@ -1473,7 +1564,7 @@ func _rebuild(data: Dictionary) -> void:
 			add_child(shop)
 			workshops.append(shop)
 	if bool(data.get("nest", false)) and nest == null:
-		var spot := find_build_spot(world)
+		var spot := find_build_spot(world, CreatureNest.GROUNDS)
 		var beast := get_tree().get_first_node_in_group("creature") as Creature
 		if spot != Vector3.INF and beast != null:
 			var n := CreatureNest.new()

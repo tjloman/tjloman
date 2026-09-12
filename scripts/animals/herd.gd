@@ -410,14 +410,29 @@ func _build_multimesh() -> void:
 	# being written white once per member per tick and cost a Color of memory
 	# each. It comes back the day something has to look different — a branded
 	# beast, a sick one — and not before.
-	# One box for the whole beast. At the distance these are seen from, legs are
-	# a few pixels of nothing, and one instance per head is the entire budget.
-	_mm.mesh = Util._pooled_box_mesh(Vector3(body.x, body.y, body.z))
+	# THE SPECIES' OWN MODEL, if the project has one for it. A herd is one mesh
+	# drawn many times over, so the low-poly beast costs exactly what the box
+	# cost — and the seam between a numbered member and the real Animal standing
+	# next to it stops being the difference between a sheep and a crate.
+	#
+	# The model keeps its own material: overriding it with the species colour is
+	# right for a box and wrong for anything with a texture on it. And it sits
+	# at the herd's own origin, because a model's pivot is at its FEET (the
+	# models README asks for that, and Animal adds its custom model at the body
+	# origin on the same understanding) — while the box has to be lifted by half
+	# its height plus the legs it does not have.
 	_mm.instance_count = head
 	_mmi = MultiMeshInstance3D.new()
 	_mmi.multimesh = _mm
-	_mmi.material_override = Util.shared_mat(spec["color"])
-	_mmi.position = Vector3(0, leg + body.y * 0.5, 0)
+	var model := ModelBank.mesh_for(species)
+	if model != null:
+		_mm.mesh = model
+	else:
+		# One box for the whole beast. At the distance these are seen from, legs
+		# are a few pixels of nothing, and one instance per head is the budget.
+		_mm.mesh = Util._pooled_box_mesh(Vector3(body.x, body.y, body.z))
+		_mmi.material_override = Util.shared_mat(spec["color"])
+		_mmi.position = Vector3(0, leg + body.y * 0.5, 0)
 	add_child(_mmi)
 	Util.apply_lod(_mmi, Quality.camera_far())
 	_resample_grounds(GROUNDS_PER_TICK * 4)
@@ -834,6 +849,29 @@ func _tend_agents() -> void:
 		born.set_meta("herd", self)
 		m["agent"] = born
 		_agents_afoot += 1
+
+
+## GOING. A herd leaves when its chunk unloads, and it takes its promoted
+## beasts with it — they are parented to that same chunk, not to the herd.
+##
+## The agent budget is a STATIC count for the whole world, so every one of those
+## had to be handed back, and nothing handed them back. The count only ever went
+## one way: stand near three or four herds, walk away from them, and the world
+## has spent its entire allowance on animals that no longer exist. Nothing
+## anywhere promotes again for the rest of the session — and a herd that cannot
+## promote is a picture. It has no collider, so the hand's raycast goes straight
+## through it: no mouse-over, nothing to pick up. It puts no Animal in the
+## "animals" group, so nobody hunts it, tames it or herds it. And the only thing
+## left to see is the MultiMesh, which is why the beasts stopped wearing their
+## models. All of that from a counter that never came down.
+func _exit_tree() -> void:
+	for m in _members:
+		if m["agent"] != null:
+			m["agent"] = null
+			_agents_afoot -= 1
+	# The beasts are going too — freed with the chunk — so this is a release of
+	# SLOTS, not a demotion, and it does not care whether the node is still valid.
+	_agents_afoot = maxi(_agents_afoot, 0)
 
 
 ## How many head are still standing, promoted or not — what the herd would tell

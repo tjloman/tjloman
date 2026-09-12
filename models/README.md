@@ -19,7 +19,7 @@ Nothing here is required — the game ships and runs with this folder empty.
 | `school` | the Edubba (schoolhouse) |
 | `store` | the food store / granary |
 | `hand` | the divine hand |
-| `sheep`, `wolf`, `deer`, `horse`, `ox`, `pig`, `chicken`, `dog`, `llama`, `giraffe`, `bear`, `lion`, `tiger`, `frog` | that animal species |
+| `sheep`, `wolf`, `deer`, `horse`, `ox`, `pig`, `chicken`, `dog`, `llama`, `giraffe`, `bear`, `lion`, `tiger`, `frog`, `caribou`, `reindeer`, `bison`, `elk`, `anteater`, `coati` | that animal species |
 
 Extensions checked, in order: `.glb` `.gltf` `.obj` `.scn` `.tscn` `.tres` `.res`
 (`.glb` is the usual Blender export.)
@@ -27,7 +27,11 @@ Extensions checked, in order: `.glb` `.gltf` `.obj` `.scn` `.tscn` `.tres` `.res
 ## Rules so the framerate holds and everything lines up
 
 - **One mesh, one material per model** — that's one draw call. This matters
-  more than triangle count on mobile.
+  more than triangle count on mobile. For **animals this is not advice but a
+  requirement**: a herd is drawn as one MultiMesh of a single mesh, so only the
+  first mesh in the file is used at herd range. A beast split across several
+  meshes will be missing its other parts until it comes close enough to be
+  promoted to a real animal, and the seam will be obvious.
 - **Triangle ceilings** (staying under these keeps the current framerate):
   villager 400 · animal 300 · creature 6000 · tree 150 · bush 400 · rock 350 ·
   house 300 · school 500 · store 1800 · hand 600 · flower 150 (it's drawn many

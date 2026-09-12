@@ -1294,7 +1294,7 @@ func _start_job(job: String) -> void:
 			state = State.GO_FEED
 		"build_farm":
 			var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-			_farm_spot = village.find_build_spot(world)
+			_farm_spot = village.find_build_spot(world, Village.ROOM_ROUND_A_FARM)
 			if _farm_spot == Vector3.INF or not village.store.try_spend_materials(4, 0):
 				_farm_spot = Vector3.INF
 				state = State.WANDER
@@ -1304,7 +1304,7 @@ func _start_job(job: String) -> void:
 			_maybe_mount()
 		"build_edubba":
 			var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-			_edubba_spot = village.find_build_spot(world)
+			_edubba_spot = village.find_build_spot(world, Village.ROOM_ROUND_THE_SCHOOL)
 			if _edubba_spot == Vector3.INF:
 				state = State.WANDER
 				_action_time = 2.0
@@ -1340,7 +1340,8 @@ func _start_job(job: String) -> void:
 			state = State.GO_WORK
 		"build_nest":
 			var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-			_shop_spot = village.find_build_spot(world)
+			# The nest is grounds, not a hut: pool, fire and a ring to dance in.
+			_shop_spot = village.find_build_spot(world, CreatureNest.GROUNDS)
 			if _shop_spot == Vector3.INF:
 				state = State.WANDER
 				_action_time = 2.0
@@ -1370,7 +1371,8 @@ func _start_job(job: String) -> void:
 		"build_shop":
 			_shop_kind = Workshop.short_of(village)
 			var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-			_shop_spot = village.find_build_spot(world) if _shop_kind != "" else Vector3.INF
+			_shop_spot = village.find_build_spot(world, Village.ROOM_ROUND_A_SHOP) \
+				if _shop_kind != "" else Vector3.INF
 			if _shop_spot == Vector3.INF:
 				state = State.WANDER
 				_action_time = 2.0
