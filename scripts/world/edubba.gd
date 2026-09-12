@@ -115,6 +115,38 @@ func spot_for(which: int, many: int) -> Vector3:
 	return yard + Vector3(cos(e), 0.0, sin(e)) * _ring_radius(count)
 
 
+## WHICH ONE OF THE CHILDREN THIS IS, in the village's own order. Stable for as
+## long as the class is, which is all a formation needs — and asked once, on
+## arriving, because a seat recomputed every frame is a child that swaps places
+## with its neighbours forever.
+func seat_of(child: Villager) -> int:
+	var seat := 0
+	if village == null or not is_instance_valid(village):
+		return seat
+	for v in village.my_villagers():
+		if v == child:
+			return seat
+		if not v.is_adult():
+			seat += 1
+	return seat
+
+
+## WHICH ONE OF THE CHILDREN THIS IS, in the village's own order. Stable for as
+## long as the class is, which is all a formation needs — and asked once, on
+## arriving, because a seat recomputed every frame is a child that swaps places
+## with its neighbours forever.
+func seat_of(child: Villager) -> int:
+	var seat := 0
+	if village == null or not is_instance_valid(village):
+		return seat
+	for v in village.my_villagers():
+		if v == child:
+			return seat
+		if not v.is_adult():
+			seat += 1
+	return seat
+
+
 ## A ring wide enough that everybody in it has room to sit.
 func _ring_radius(count: int) -> float:
 	return maxf(SEAT_GAP * float(count) / TAU, RING_LEAST)

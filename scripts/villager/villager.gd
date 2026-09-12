@@ -18,7 +18,7 @@ enum State {
 	GO_BUILD_EDUBBA, BUILDING_EDUBBA,
 	GO_WORK, WORKING, GO_BUILD_SHOP, BUILDING_SHOP,
 	GO_BUILD_NEST, BUILDING_NEST, GO_CIRCLE, CIRCLING,
-	HAULING, GO_ARM, FIGHT, HIDE,
+	MUSTERING, HAULING, GO_ARM, FIGHT, HIDE,
 	FLEE, HELD, FALLING, DYING,
 }
 
@@ -551,6 +551,15 @@ func _physics_process(delta: float) -> void:
 			_action_time -= delta
 			if _action_time <= 0.0 or not village.has_edubba():
 				_decide()
+		State.MUSTERING:
+			# Standing about at the totem until enough have come. What the party
+			# decides it IS depends on who turns up — see VillageParty.
+			_move_toward(_target, WALK_SPEED * _speed_factor(), delta, 1.6)
+			_action_time -= delta
+			if village.party.settled():
+				_set_out()
+			elif _action_time <= 0.0:
+				_decide()          # nobody came; do not wait at a totem forever
 		State.GO_HUNT:
 			_process_go_target(_target_animal, delta, State.HUNTING, 2.0)
 		State.HUNTING:
@@ -1035,6 +1044,10 @@ func _decide() -> void:
 	_dismount()
 	_release_farm()  # re-deciding drops any field claim, so others may take it
 	_target_herd = null
+	# AND ANY PARTY THEY STOOD IN. One frightened off the muster would otherwise
+	# stay on its books, and a party that never empties never stands down.
+	if village != null and is_instance_valid(village):
+		village.party.leave(self)
 	if _carry_kind != "":
 		_clear_carry()  # a load abandoned mid-haul is lost (interrupted by fear, etc.)
 	# Survival first.
@@ -1052,7 +1065,7 @@ func _decide() -> void:
 	if not is_adult():
 		if village.has_edubba():
 			state = State.AT_SCHOOL
-			_school_seat = _seat_among_children()
+			_school_seat = village.edubba.seat_of(self)
 			return
 		if mother != null and is_instance_valid(mother) and mother.village == village:
 			state = State.FOLLOW_MOM
@@ -1312,20 +1325,26 @@ func _pick_job() -> bool:
 	if eats_meat and store.meat_food < 5:
 		if abandoned and Workshop.any_meat(village):
 			scores["butcher_pen"] = _wants(FOOD_CEIL, want_food)
-		# THE HUNT sits just under the plough for a farming town and just over
-		# it for one that has given up the plough — near enough either way that
-		# both happen, which is what a hunting party in a farming village is.
-		if watch.game != null:
-			scores["hunt"] = _wants(FOOD_CEIL + (6.0 if abandoned else -6.0), want_food)
+		# THE EXPEDITION sits just under the plough for a farming town and just
+		# over it for one that has given up the plough — near enough either way
+		# that both happen, which is what a hunting party in a farming village
+		# is. Whether it comes home with meat or with livestock is not scored
+		# here and is not this villager's to decide: it depends on who else the
+		# board sends. See VillageParty.
+		if village.party.mustering(village):
+			scores["expedition"] = _wants(
+				FOOD_CEIL + (6.0 if abandoned else -6.0), want_food)
 		# The shore feeds anyone patient enough to stand on it.
 		if watch.shore != Vector3.INF:
 			scores["fish"] = _wants(FOOD_CEIL - 10.0, want_food)
 
-	# Taming: a privilege of the good, pointless for the fallen. An empty
-	# pen makes it urgent — a dog and a mount change everything.
-	if morality >= TAME_MORALITY and not abandoned and village.tamed_count() < Workshop.stalls(village):
-		if watch.tamable != null or watch.stock != null:
-			scores["tame"] = 24.0 + (12.0 if village.tamed_count() == 0 else 0.0)
+	# A LOOSE BEAST STANDING ABOUT is still gentled by whoever walks past it —
+	# that is not an expedition, it is picking something up. Cutting stock out
+	# of a wild herd is the expedition's business now.
+	if morality >= TAME_MORALITY and not abandoned and watch.tamable != null \
+			and village.tamed_count() < Workshop.stalls(village):
+		scores["tame"] = _wants(GROWTH_FLOOR + 8.0,
+			1.0 if village.tamed_count() == 0 else 0.4)
 
 	if scores.is_empty():
 		return false
@@ -1417,10 +1436,6 @@ func _start_job(job: String) -> void:
 				return
 			state = State.GO_BUILD_EDUBBA
 			_maybe_mount()
-		"hunt":
-			_target_animal = _nearest_huntable()
-			state = State.GO_HUNT
-			_maybe_mount()
 		"fish":
 			_fish_spot = _find_shore()
 			state = State.GO_FISH
@@ -1434,16 +1449,18 @@ func _start_job(job: String) -> void:
 			_target_animal = village.best_penned_meat()
 			state = Workshop.butchery(self, _target_animal) as State
 		"tame":
-			# A loose beast first — it is nearer and nobody has to cut it out of
-			# anything. Failing that, the herd the town has its eye on.
 			_target_animal = _nearest_tamable()
 			if _target_animal == null:
-				_target_herd = village.watch.stock
-				if _target_herd == null or not is_instance_valid(_target_herd):
-					state = State.WANDER
-					_action_time = 2.0
-					return
+				state = State.WANDER
+				_action_time = 2.0
+				return
 			state = State.GO_TAME
+		"expedition":
+			village.party.join(self)
+			_target = village.totem.global_position \
+				+ Vector3(randf_range(-3, 3), 0, randf_range(-3, 3))
+			_action_time = VillageParty.MUSTER_SECONDS * 2.5
+			state = State.MUSTERING
 		"work":
 			workshop = Workshop.with_room(village, global_position)
 			if workshop == null:
@@ -1673,6 +1690,7 @@ func current_job() -> String:
 		State.GO_BUILD_FARM, State.BUILDING_FARM: return "build_farm"
 		State.GO_BUILD_EDUBBA, State.BUILDING_EDUBBA: return "build_edubba"
 		State.GO_HUNT, State.HUNTING: return "hunt"
+		State.MUSTERING: return "expedition"
 		State.GO_FISH, State.FISHING: return "fish"
 		State.GO_BUTCHER, State.BUTCHERING: return "butcher"
 		State.GO_TAME, State.TAMING: return "tame"
@@ -1994,14 +2012,18 @@ func _process_follow_mom(delta: float) -> void:
 ## where any other child is standing. See Edubba.spot_for.
 ## WHICH ONE OF THE CHILDREN THIS IS, in the village's own order — stable for
 ## as long as the class is, which is all a formation needs.
-func _seat_among_children() -> int:
-	var seat := 0
-	for v in village.my_villagers():
-		if v == self:
-			return seat
-		if not v.is_adult():
-			seat += 1
-	return seat
+## THE PARTY HAS MADE UP ITS MIND, and this is what that means for one of its
+## members. Two saints in the muster and the hunt is off; they go for the flock
+## instead, and the machinery for both is the machinery that was always there.
+func _set_out() -> void:
+	if village.party.means == "herd":
+		_target_herd = village.party.flock
+		state = State.GO_TAME
+	else:
+		_target_animal = village.party.game
+		state = State.GO_HUNT
+	village.party.leave(self)
+	_maybe_mount()
 
 
 func _process_at_school(delta: float) -> void:
@@ -2412,6 +2434,7 @@ func _status_word() -> String:
 		State.GO_SLEEP, State.SLEEPING: return "sleeping" if home != null else "sleeping rough"
 		State.GO_FARM, State.FARMING: return "working the farm"
 		State.GO_HUNT, State.HUNTING: return "hunting"
+		State.MUSTERING: return "waiting on the party"
 		State.GO_BUTCHER, State.BUTCHERING: return "butchering the dead"
 		State.GO_CHOP, State.CHOPPING: return "felling timber"
 		State.GO_QUARRY, State.QUARRYING: return "quarrying stone"

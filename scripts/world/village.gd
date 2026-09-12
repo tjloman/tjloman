@@ -201,6 +201,9 @@ var hive := VillageHive.new()
 ## WHAT THE TOWN CAN SEE. The same bargain as the crowd mind, for the country
 ## round the village rather than for its mood — see VillageWatch.
 var watch := VillageWatch.new()
+## THE EXPEDITION. One job, and who turns up for it decides whether the town
+## comes home with meat or with livestock — see VillageParty.
+var party := VillageParty.new()
 var attention := 0.0
 ## 0..100 — hard-won nerve. See RESOLVE_* above.
 var resolve := RESOLVE_START
@@ -720,6 +723,7 @@ func _process(delta: float) -> void:
 		_retally()
 	hive.tick(delta, self)
 	watch.tick(delta, self)
+	party.tick(delta, self)
 
 	_housing_timer -= delta
 	if _housing_timer <= 0.0:
