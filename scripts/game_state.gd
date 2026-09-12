@@ -62,6 +62,11 @@ var alignment := 0.0
 ## entities read it to throttle their own simulation — the farther from what
 ## the player is looking at, the fewer physics frames they spend.
 var camera_focus := Vector3.ZERO
+## WHERE THE CREATURE IS, for everything that has to care about the world around
+## IT rather than the world around the camera. Infinite while there is no
+## creature, so a reader can tell "nowhere" from "the origin". Written by the
+## creature itself each frame, exactly as the camera rig writes its own.
+var creature_at := Vector3(INF, INF, INF)
 
 ## WHAT THE CREATURE IS CALLED, once its god has named it. Every message in the
 ## game was written saying "Your creature", and rather than rewrite thirty

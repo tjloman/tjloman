@@ -32,6 +32,10 @@ const AMONG := 9.0
 ## floor is deliberately not zero: a hopeless creature must succeed occasionally
 ## or it can never learn that the deed is worth anything, and the whole thing
 ## dies in its first minute.
+## What one beast's worth of meat is, as a meal. The creature eats in these
+## until it has had enough or the carcass is done.
+const MEAL_UNITS := 1.0
+
 const DRIVE_WORST := 0.18
 const DRIVE_BEST := 0.94
 
@@ -139,9 +143,28 @@ static func _cull(who: Creature, herd: Herd) -> float:
 		return -0.3
 	var meat: int = int(Animal.SPECIES[herd.species].get("meat", 1))
 	herd.take_one()
+	# IT EATS FIRST, IF IT IS HUNGRY. Every kill went straight into the granary
+	# and the creature got a lesson and nothing else — so the one deed that
+	# connects it to the herds could not feed it, and a beast that hunted well
+	# all night starved doing it. An animal that brings down prey eats; what it
+	# does not need is what it carries home, and carrying it home is what makes
+	# it a creature of the village rather than a wolf.
+	var ate := 0
+	while ate < meat and who.hungry_enough() and who.can_swallow(MEAL_UNITS):
+		who.feed_on(MEAL_UNITS)
+		ate += 1
+	var left := meat - ate
 	var store := CreatureEyes.nearest_store(who.get_tree(), who.global_position)
-	if store != null and meat > 0:
-		store.add(FoodItem.FoodType.MEAT, meat)
+	if store != null and left > 0:
+		store.add(FoodItem.FoodType.MEAT, left)
+	if ate > 0 and left > 0:
+		GameState.announce(GameState.named(
+			"Your creature brought down a %s, ate its fill, and carried the rest home."
+			% herd.species))
+	elif ate > 0:
+		GameState.announce(GameState.named(
+			"Your creature brought down a %s and ate." % herd.species))
+	elif store != null:
 		GameState.announce(GameState.named(
 			"Your creature brought down a %s for the stores." % herd.species))
 	_pay("cull")

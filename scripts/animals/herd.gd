@@ -831,7 +831,19 @@ func _redeal(how_many: int) -> void:
 ## the device's budget; the rest stay numbers. Demotion runs first so a herd
 ## walking past you hands its budget on rather than hoarding it.
 func _tend_agents() -> void:
+	# TWO EYES ON THE WORLD, not one. Promotion followed the camera and nothing
+	# else, so a creature left to itself a field away from where the player
+	# parked stood in a herd of two hundred and could not touch one of them:
+	# they were all numbers, and a number has no collider to grab, no body to
+	# eat, and puts nothing in the "animals" group for the beast to notice.
+	#
+	# The budget is still one budget for the whole world. When the creature is
+	# beside the camera — which is most of the time, because the player follows
+	# it — the two foci are the same place and nothing changes at all. When it
+	# is not, some of the allowance goes where the creature is, and that is
+	# right: those are the animals the simulation actually needs bodies for.
 	var focus := GameState.camera_focus
+	var beast := GameState.creature_at
 	var budget := Quality.herd_agents()
 	for i in _members.size():
 		var m := _members[i]
@@ -871,7 +883,7 @@ func _tend_agents() -> void:
 		# matters.
 		if agent.state == Animal.State.HELD or agent.state == Animal.State.FALLING:
 			continue
-		if agent.global_position.distance_to(focus) > DEMOTE_BEYOND:
+		if _watched_from(agent.global_position, focus, beast) > DEMOTE_BEYOND:
 			# And hands back what it was doing, so the seam is silent in both
 			# directions: a beast that ran off keeps running as a number.
 			m["motion"] = AS_MOTION.get(agent.state, mood if mood != "move" else "walk")
@@ -886,7 +898,7 @@ func _tend_agents() -> void:
 			continue
 		var p := global_position + Vector3(m["offset"].x, 0.0, m["offset"].y)
 		p.y = float(m["ground"])
-		if p.distance_to(focus) > PROMOTE_WITHIN:
+		if _watched_from(p, focus, beast) > PROMOTE_WITHIN:
 			continue
 		var born := Animal.create(species)
 		# ITS PLACE IS SET AFTER IT IS IN THE TREE, below — a Node3D that has no
@@ -938,6 +950,16 @@ func _exit_tree() -> void:
 	# The beasts are going too — freed with the chunk — so this is a release of
 	# SLOTS, not a demotion, and it does not care whether the node is still valid.
 	_agents_afoot = maxi(_agents_afoot, 0)
+
+
+## HOW FAR THIS SPOT IS FROM ANYBODY WHO MATTERS: the camera, or the creature,
+## whichever is nearer. An infinite creature position means there is no creature
+## in the world, and the camera answers alone.
+static func _watched_from(spot: Vector3, focus: Vector3, beast: Vector3) -> float:
+	var gap := spot.distance_to(focus)
+	if is_inf(beast.x):
+		return gap
+	return minf(gap, spot.distance_to(beast))
 
 
 ## THE ANIMAL PROMOTED INTO THIS ROW, or null — including when it was there a

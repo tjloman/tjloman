@@ -22,6 +22,12 @@ extends Node3D
 const CHUNK_SIZE := 48.0
 const WATER_LEVEL := 0.0
 const CHUNKS_PER_FRAME := 1      # one chunk a frame: gentle, no startup stall
+## How many chunks either side of the creature stay loaded wherever it is. One
+## is a three-by-three of them — about a hundred and fifty metres across, which
+## is more than its senses reach — and it is deliberately far smaller than the
+## camera's ring, because this is ground for the beast to LIVE on rather than
+## ground for anyone to look at.
+const CREATURE_KEEP := 1
 const VILLAGE_CELL_CHANCE := 0.05
 const VILLAGE_MIN_CELL_DIST := 3  # chunks from origin before rivals appear
 ## The grid the sea's flood fill walks, and how far it walks before it gives up
@@ -612,7 +618,18 @@ func blooms_near(at: Vector3, within: float) -> Array[Vector3]:
 func _stream_chunks() -> void:
 	var focus := focus_node.global_position
 	var center := Vector2i(floori(focus.x / CHUNK_SIZE), floori(focus.z / CHUNK_SIZE))
-
+	# THE GROUND THE CREATURE IS STANDING ON IS NEVER UNLOADED.
+	#
+	# Streaming followed the camera and nothing else, so a creature left to
+	# itself while the player looked elsewhere fell out of the world: its chunk
+	# unloaded, and with it every tree, bush, animal and herd for a hundred
+	# metres in each direction. It did not starve because the world was harsh.
+	# It starved because there was nothing there — it was standing in a void,
+	# with its wits about it and not one thing to use them on.
+	#
+	# A small ring, kept alive wherever it wanders, is what lets it go on being
+	# a creature when nobody is watching.
+	var kept := _creature_cells()
 	var made := 0
 	for dz in range(-load_radius, load_radius + 1):
 		for dx in range(-load_radius, load_radius + 1):
@@ -623,12 +640,37 @@ func _stream_chunks() -> void:
 			made += 1
 			if made >= CHUNKS_PER_FRAME:
 				return
+	for cell: Vector2i in kept:
+		if _chunks.has(cell):
+			continue
+		_spawn_chunk(cell)
+		made += 1
+		if made >= CHUNKS_PER_FRAME:
+			return
 
 	for cell: Vector2i in _chunks.keys():
 		var away := (cell - center).abs()
-		if maxi(away.x, away.y) > unload_radius:
+		if maxi(away.x, away.y) > unload_radius and not kept.has(cell):
 			_chunks[cell].queue_free()
 			_chunks.erase(cell)
+
+
+## THE CELLS TO KEEP ALIVE FOR THE CREATURE, as a set. Empty when there is no
+## creature, so a world without one streams exactly as it always did.
+##
+## Deliberately a much tighter ring than the camera's: this is enough ground for
+## the beast to have a world to act in, not enough to be a second view.
+func _creature_cells() -> Dictionary:
+	var kept := {}
+	var beast := get_tree().get_first_node_in_group("creature") as Node3D
+	if beast == null or not is_instance_valid(beast):
+		return kept
+	var here := beast.global_position
+	var mid := Vector2i(floori(here.x / CHUNK_SIZE), floori(here.z / CHUNK_SIZE))
+	for dz in range(-CREATURE_KEEP, CREATURE_KEEP + 1):
+		for dx in range(-CREATURE_KEEP, CREATURE_KEEP + 1):
+			kept[mid + Vector2i(dx, dz)] = true
+	return kept
 
 
 func _spawn_chunk(cell: Vector2i) -> void:

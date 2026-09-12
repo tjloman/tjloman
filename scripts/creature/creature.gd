@@ -56,6 +56,13 @@ const DEED_FLOOR := 0.5
 const AMENDS_SECONDS := 120.0
 const AMENDS_TRUST := 45.0
 
+## HOW HUNGRY IT HAS TO BE to eat what it has rather than carry it home. The
+## same number for a fish, for a thing in its hands, and for a beast it has just
+## brought down out of a herd — it was written twice as a bare 45 and missing
+## entirely from the third, which is how a creature ended up hunting all night
+## and stocking a granary while it starved.
+const FEEDS_ITSELF_ABOVE := 45.0
+
 ## WHAT ITS GOD CALLED IT. Chosen when the profile is made; empty until then,
 ## and every message simply says "your creature" instead.
 var creature_name := ""
@@ -304,7 +311,19 @@ func _ready() -> void:
 	_apply_stature()
 
 
+## Gone — eaten by a god, or the scene torn down. Nothing should go on holding
+## ground loaded for a creature that is not there any more.
+func _exit_tree() -> void:
+	GameState.creature_at = Vector3(INF, INF, INF)
+
+
 func _physics_process(delta: float) -> void:
+	# WHERE IT IS, published for the world to stream and promote around — the
+	# same anchor the camera rig writes for itself. Without it a creature left
+	# alone falls out of the world: its chunk unloads and every beast near it
+	# stays a number it cannot touch. See WorldGen._creature_cells and
+	# Herd._tend_agents.
+	GameState.creature_at = global_position
 	_tick_feelings(delta)
 	_tick_watchdogs(delta)
 
@@ -1089,7 +1108,7 @@ func receive_gift(item: Node3D) -> void:
 ## What would the creature DO with this thing?
 func _intent_for(item: Node3D) -> String:
 	if item is FoodItem:
-		return "eat" if hunger > 45.0 else "deliver"
+		return "eat" if hunger > FEEDS_ITSELF_ABOVE else "deliver"
 	if item is ResourceItem or item is WildTree:
 		return "deliver"
 	if item is Animal:
@@ -1249,7 +1268,7 @@ func _land_a_fish() -> void:
 	get_parent().add_child(fish)
 	fish.global_position = global_position + Vector3(0, 1.0, 0)
 	_last_deed = "fish"
-	_pick_up_thing(fish, "eat" if hunger > 45.0 else "deliver")
+	_pick_up_thing(fish, "eat" if hunger > FEEDS_ITSELF_ABOVE else "deliver")
 
 
 func _eat_from_store(store: FoodStore) -> void:
@@ -2193,6 +2212,21 @@ func _swallow_units(units: float) -> void:
 ## Has it room (and appetite) for a meal of roughly this size?
 func _can_eat(units: float) -> bool:
 	return body.has_room_for(units, growth)
+
+
+## THE SAME THREE QUESTIONS, asked from outside. CreatureHerding needs to know
+## whether a kill should be eaten or carried home, and a static helper has no
+## business reaching into a creature's private appetite to find out.
+func can_swallow(units: float) -> bool:
+	return _can_eat(units)
+
+
+func hungry_enough() -> bool:
+	return hunger > FEEDS_ITSELF_ABOVE
+
+
+func feed_on(units: float) -> void:
+	_swallow_units(units)
 
 
 ## Pain: the creature has no health bar, but it FEELS being hurt — fright rises,
