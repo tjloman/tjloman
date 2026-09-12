@@ -233,5 +233,5 @@ func _tick_awe(delta: float) -> void:
 		return
 	_until_awe = AWE_EVERY
 	VillageWonder.spectacle(get_tree(), "shroud", "wonder", creature.global_position,
-		AWE_PAY, "Your creature walks in a storm of its own. Nobody is working.")
+		AWE_PAY, "Your creature walks in a storm of its own. Nobody is working.", creature)
 	creature.heart.stir("pride", 0.2)

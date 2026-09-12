@@ -1468,7 +1468,7 @@ func _process_smash(delta: float) -> void:
 	# whole village is not a god nobody believes in — see VillageWonder. The
 	# outrage this also earns is raised separately, by whatever it hit.
 	VillageWonder.spectacle(get_tree(), "tantrum", "horror", global_position, 2.4,
-		"Your creature is smashing things in the village. They watch, and they believe.")
+		"Your creature is smashing things in the village. They watch, and they believe.", self)
 	# A release, yes — but not inherently more satisfying than honest work, or
 	# every creature drifts into vandalism whatever its nature.
 	var thrill := 0.15 + boredom / 260.0

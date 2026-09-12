@@ -202,5 +202,5 @@ func _tick_awe(delta: float) -> void:
 		return
 	_until_awe = AWE_EVERY
 	VillageWonder.spectacle(get_tree(), "blessed", "wonder", creature.global_position,
-		AWE_PAY, "Light is falling on your creature out of a clear sky.")
+		AWE_PAY, "Light is falling on your creature out of a clear sky.", creature)
 	creature.heart.stir("relief", 0.2)

@@ -87,29 +87,31 @@ func regard(kind: String, what: Node3D, where: Vector3, pull: float) -> void:
 
 
 ## THE TOWN SEES SOMETHING. `weight` is 0..1 of a whole event's worth.
-func witness(what: String, where: Vector3, weight := 1.0) -> void:
+## `who` is the THING it happened to or because of, when there is one. Pass it
+## whenever the wonder can walk — see `looking_at`.
+func witness(what: String, where: Vector3, weight := 1.0, who: Node3D = null) -> void:
 	var w := clampf(weight, 0.0, 2.0)
 	match what:
 		"wonder":
 			_stir("awe", 34.0 * w)
 			_stir("joy", 12.0 * w)
-			regard("wonder", null, where, 0.55 + 0.35 * w)
+			regard("wonder", who, where, 0.55 + 0.35 * w)
 		"horror":
 			_stir("terror", 40.0 * w)
 			_stir("awe", 14.0 * w)
-			regard("threat", null, where, 0.8)
+			regard("threat", who, where, 0.8)
 		"outrage":
 			# Something was done TO them by something they could actually fight.
 			_stir("anger", 26.0 * w)
 			_stir("terror", 10.0 * w)
-			regard("threat", null, where, 0.7)
+			regard("threat", who, where, 0.7)
 		"kindness":
 			_stir("awe", 12.0 * w)
 			_stir("joy", 20.0 * w)
 		"death":
 			_stir("sorrow", 30.0 * w)
 			_stir("terror", 8.0 * w)
-			regard("grave", null, where, 0.5)
+			regard("grave", who, where, 0.5)
 		"plenty":
 			_stir("joy", 14.0 * w)
 		# THE EVENING CIRCLE. The town dancing at the creature's nest — its own
@@ -215,9 +217,19 @@ func grip() -> float:
 	return 0.0
 
 
-## Where the crowd's attention is pointing, or INF if it is on nothing.
+## WHERE THE CROWD'S ATTENTION IS POINTING, or INF if it is on nothing.
+##
+## A WONDER THAT WALKS IS FOLLOWED. The focus used to be a fixed point, which is
+## right for a lightning strike and wrong for everything the creature does: a
+## village would turn and stare at the patch of grass where their god's beast
+## had been juggling, while the beast itself wandered off. If the thing itself
+## is still here, the crowd looks at IT.
 func looking_at() -> Vector3:
-	return focus_at if lock > 0.05 else Vector3.INF
+	if lock <= 0.05:
+		return Vector3.INF
+	if focus != null and is_instance_valid(focus):
+		return focus.global_position
+	return focus_at
 
 
 func _stir(name: String, amount: float) -> void:

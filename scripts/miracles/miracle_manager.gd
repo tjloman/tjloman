@@ -1330,7 +1330,7 @@ func _cast_blessed_relief(pos: Vector3, potency := 1.0) -> void:
 	_ease_the_creature(creature)
 	peace_upon(creature.global_position, RELIEF_PEACE * potency)
 	VillageWonder.spectacle(get_tree(), "repose", "kindness", creature.global_position,
-		RELIEF_AWE, "Your creature sits down in the sun, entirely at peace.")
+		RELIEF_AWE, "Your creature sits down in the sun, entirely at peace.", creature)
 	GameState.announce(GameState.named(
 		"%s lets out a long, contented sigh. All is well with the world."))
 

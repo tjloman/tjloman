@@ -43,11 +43,17 @@ const SETTLE := 8.0
 ## How heavily the frame-time average leans on the frame just past. Slow on
 ## purpose — this is a trend, not a measurement.
 const FRAME_BLEND := 0.02
+## What a full hand costs the far half of the world, in simulation strides.
+const HANDS_RELIEF := 1
 
 var tier := Tier.MEDIUM
 ## Plain int rather than the enum's own type, so every comparison, subtraction
 ## and array index below is unambiguously legal.
 var heat: int = Heat.EASY
+
+## TRUE WHILE THE PLAYER HAS SOMETHING IN THEIR HAND. Set by DivineHand; read
+## only by `sim_relief`. Nothing else in the game is allowed to care.
+var hands_busy := false
 
 var _frame := 0.016
 var _pressure := 0.0     # seconds the current condition has held
@@ -125,8 +131,15 @@ func struggling() -> bool:
 ## How much less often the far half of the world should be simulated. Distant
 ## villagers and beasts are the cheapest thing to slow down and the least
 ## noticeable, so they take the first cut.
+##
+## AND THEY TAKE ANOTHER ONE WHILE THE HAND IS FULL. Input delay is never the
+## answer to a struggling device: if a hot phone cannot do everything, the
+## thing it stops doing is simulating a village over the hill, not answering
+## the finger. So a wind-up costs the far world a stride and buys the hand the
+## frames — see `hands_busy` and DivineHand._on_pointer_motion, which no longer
+## waits for a physics tick to move what you are holding.
 func sim_relief() -> int:
-	return [1, 2, 3][heat]
+	return [1, 2, 3][heat] + (HANDS_RELIEF if hands_busy else 0)
 
 
 func frame_ms() -> float:

@@ -32,6 +32,16 @@ const MAX_THROW_SPEED := 55.0
 const THROW_MIN_STROKE := 60.0      # pixels of continuous drag
 const THROW_ACTIVE_WINDOW := 0.13   # seconds; must still be moving at release
 
+## HOW MANY HAND SAMPLES ARE KEPT, and how long a gap in the pointer's own
+## reporting before the physics tick fills one in. Twenty-four is about a third
+## of a second of a fast touch drag, which is the length of a throwing sweep.
+const HAND_SAMPLES := 24
+const QUIET_SAMPLE := 0.02
+## How much of the trailing samples count as "the flick", as a SHARE of what was
+## gathered rather than a fixed count — because how many samples a sweep
+## produces now depends on the device, and three of eighty is not three of six.
+const FLICK_SHARE := 0.3
+
 ## AFTERTOUCH (a Black & White throwback). The POWER and DIRECTION of a throw
 ## come from the whole sweep of the motion (the momentum); the final flick
 ## only SHAPES it — never overrides it, contributing about half the character
@@ -117,8 +127,27 @@ var ground_point := Vector3.ZERO
 var live_shape := "none"
 var live_confidence := 0.0
 
-# Recent hand positions, for computing throw velocity on release.
+## RECENT HAND POSITIONS, and WHEN each was seen.
+##
+## These used to be gathered once a physics frame and divided by a hard-coded
+## sixty, which is two separate lies: the sample rate is the PHYSICS rate
+## whatever the screen is doing, and the divisor is a guess at it. A touchscreen
+## reports finger moves far faster than sixty a second, and on a phone that is
+## dropping frames the physics tick is the slowest clock in the building — so
+## the one thing a throw is made of was being measured with the coarsest ruler
+## available, and then mislabelled.
+##
+## Now every pointer move adds a sample the moment it arrives (see _on_motion),
+## the physics tick only tops up when the finger is still, and every velocity is
+## measured against the clock rather than against 60.
 var _pos_history: Array[Vector3] = []
+var _pos_times: Array[float] = []
+## The held thing lags behind the hand by its weight, and its own velocity is
+## real momentum at release — see Sling.
+var _held_at := Vector3.INF
+var _held_vel := Vector3.ZERO
+var _carried_at := 0.0
+var _sling: Sling = null
 
 # The current unbroken pointer stroke while HOLDING: screen positions and the
 # time each was seen. Reset on every press (so a fresh poke can't inherit the
@@ -288,9 +317,13 @@ func _physics_process(delta: float) -> void:
 	if _animator != null:
 		_animator.play(_anim_state())
 
-	_pos_history.append(global_position)
-	if _pos_history.size() > 10:
-		_pos_history.pop_front()
+	# TOP UP ONLY WHEN THE POINTER IS QUIET. While a finger is moving, _on_motion
+	# is already sampling at the rate the screen reports — far faster than this
+	# — and adding a duplicate here on every physics tick would flatten the
+	# very velocity we are trying to read.
+	if _pos_times.is_empty() \
+			or Time.get_ticks_msec() / 1000.0 - _pos_times[_pos_times.size() - 1] > QUIET_SAMPLE:
+		_sample_hand()
 
 	# Aftertouch: keep bending a freshly thrown projectile for a short window.
 	if _steer_time > 0.0:
@@ -310,18 +343,86 @@ func _physics_process(delta: float) -> void:
 			var plane_point := _mouse_on_plane(mouse_pos, drag_anchor.y)
 			camera_rig.pan_world(drag_anchor - plane_point)
 		HandState.HOLDING:
+			# The pointer already carried it if a finger moved this frame; this
+			# keeps it coming when the finger is STILL and the hand is not.
+			var now := Time.get_ticks_msec() / 1000.0
+			_carry_held(minf(now - _carried_at, 0.1))
+			_carried_at = now
 			if is_instance_valid(held_body):
-				var carry := ground_point + Vector3(0, HOVER_HEIGHT - 0.6, 0)
-				held_body.global_position = held_body.global_position.lerp(
-					carry, minf(delta * 16.0, 1.0))
 				_tick_bundle_grab(delta)
-			else:
-				held_body = null
-				state = HandState.IDLE
 		HandState.GESTURING:
 			trail.points = gesture_points
 			trail.queue_redraw()
 			_tick_peek(delta)
+
+
+## ONE HAND SAMPLE, stamped with the real clock.
+func _sample_hand() -> void:
+	_pos_history.append(global_position)
+	_pos_times.append(Time.get_ticks_msec() / 1000.0)
+	while _pos_history.size() > HAND_SAMPLES:
+		_pos_history.pop_front()
+		_pos_times.pop_front()
+
+
+## THE SLUNG THING, moved. Called from the physics tick AND from every pointer
+## move, because INPUT LAG IS NOT ACCEPTABLE: what you are holding must answer
+## the finger at the rate the finger reports, not at the rate a hot phone
+## happens to be simulating. When the device is struggling the answer is less
+## simulation (see Quality.report_frame), never a slower hand.
+func _carry_held(delta: float) -> void:
+	if not is_instance_valid(held_body):
+		held_body = null
+		state = HandState.IDLE
+		_stow_sling()
+		return
+	if delta <= 0.0:
+		return
+	var carry := ground_point + Vector3(0, HOVER_HEIGHT - 0.6, 0)
+	if _held_at == Vector3.INF:
+		_held_at = held_body.global_position
+	var weight := Sling.heft(held_body)
+	var was := _held_at
+	_held_at = Sling.follow(_held_at, carry, weight, delta)
+	# ITS OWN VELOCITY, which is the momentum a wind-up builds and the plain
+	# reason a swung ox goes further than a jabbed one.
+	var moved := (_held_at - was) / delta
+	_held_vel = _held_vel.lerp(moved, minf(delta * 12.0, 1.0))
+	held_body.global_position = _held_at
+	_show_sling(weight)
+
+
+## THE ROPE AND THE ARC. Everything the arc draws comes out of the same
+## `Sling.launch` the release uses, so what you are shown is what you get.
+func _show_sling(weight: float) -> void:
+	if _sling == null or not is_instance_valid(_sling):
+		_sling = Sling.new()
+		_sling.hand = self
+		get_tree().current_scene.add_child(_sling)
+	var shot := Sling.launch(_sweep_velocity(), _held_vel - _sweep_velocity(), weight)
+	_sling.show_it(global_position, _held_at, shot, weight)
+
+
+## A FRESH GRIP. The rope starts where the thing is, not where the last one was
+## let go of, and the sweep is measured from now — inheriting either would throw
+## the new object with the old one's momentum.
+func _begin_carry() -> void:
+	# The far world takes a stride off so the hand can have the frames.
+	Quality.hands_busy = true
+	_held_at = held_body.global_position if is_instance_valid(held_body) else Vector3.INF
+	_held_vel = Vector3.ZERO
+	_carried_at = Time.get_ticks_msec() / 1000.0
+	_pos_history.clear()
+	_pos_times.clear()
+	_sample_hand()
+
+
+func _stow_sling() -> void:
+	Quality.hands_busy = false
+	_held_at = Vector3.INF
+	_held_vel = Vector3.ZERO
+	if is_instance_valid(_sling):
+		_sling.hide_it()
 
 
 func _update_hover(mouse_pos: Vector2) -> void:
@@ -461,6 +562,22 @@ func _on_pointer_motion(event: InputEventMouseMotion) -> void:
 	elif state == HandState.HOLDING:
 		_stroke_pts.append(event.position)
 		_stroke_times.append(Time.get_ticks_msec() / 1000.0)
+		# THE HAND ANSWERS THE FINGER HERE, not on the next physics tick.
+		#
+		# This is the whole of "no input delay, ever". A phone that is
+		# overheating runs its physics slower, and everything that waited for
+		# the physics tick got slower with it — so the hand, the thing being
+		# held, and the samples a throw is measured from all lagged exactly
+		# when the player could least afford it. None of them wait now: the
+		# hover ray, the carry and the sample all happen on the event, at
+		# whatever rate the screen reports. The device gets made to do LESS
+		# (Quality.report_frame drops the graphics tier and lengthens the
+		# simulation stride); it never gets to make the hand slower.
+		_update_hover(event.position)
+		_sample_hand()
+		var now := Time.get_ticks_msec() / 1000.0
+		_carry_held(minf(now - _carried_at, 0.1))
+		_carried_at = now
 
 
 func _on_grab() -> void:
@@ -484,6 +601,7 @@ func _on_grab() -> void:
 				and GameState.alignment >= 0.0:
 			(held_body as Villager).rescue()
 		state = HandState.HOLDING
+		_begin_carry()
 		if held_body is RigidBody3D:
 			(held_body as RigidBody3D).freeze = true
 		elif held_body.has_method("pick_up"):
@@ -534,15 +652,22 @@ func _on_release() -> void:
 						state = HandState.IDLE
 						return
 					_release_body(held_body, Vector3.ZERO, true)
+					_stow_sling()
 				else:
 					# Aftertouch shapes the shot from the final flick: a lofted
 					# and/or curving launch, plus a lingering in-flight steer.
 					var shot := _compute_throw()
+					# FLOATER AIR TIME. The game's gravity is twice the world's,
+					# so a thrown villager came down like a dropped brick and
+					# the whole pleasure of hurling somebody — watching them
+					# HANG — was missing. See Sling.gravity_for.
+					Sling.loft(held_body)
 					_release_body(held_body, shot["vel"], false)
 					_begin_aftertouch(held_body, shot["curve"], shot["angular"])
 					last_thrown = held_body
 			held_body = null
 			state = HandState.IDLE
+			_stow_sling()
 
 
 func _reset_stroke(pos: Vector2) -> void:
@@ -572,10 +697,18 @@ func _sweep_velocity() -> Vector3:
 	var n := _pos_history.size()
 	if n < 2:
 		return Vector3.ZERO
-	var last := maxi(n - 1 - FLICK_SAMPLES, 1)   # end of the sweep, before the flick
-	var span := last / 60.0
+	var last := maxi(n - 1 - _flick_count(), 1)   # end of the sweep, before the flick
+	var span := _pos_times[last] - _pos_times[0]
+	if span < 0.001:
+		return Vector3.ZERO
 	var vel := (_pos_history[last] - _pos_history[0]) / span * THROW_BOOST
 	return vel.limit_length(MAX_THROW_SPEED)
+
+
+## How many trailing samples are "the flick". A share rather than a count,
+## because how many samples a sweep produces is now the device's business.
+func _flick_count() -> int:
+	return clampi(int(_pos_history.size() * FLICK_SHARE), 1, FLICK_SAMPLES * 4)
 
 
 ## The velocity of the trailing FLICK itself (the last few frames). Its
@@ -584,17 +717,28 @@ func _sweep_velocity() -> Vector3:
 ## still moving forward) shapes nothing — only a deliberate yank does.
 func _flick_velocity() -> Vector3:
 	var n := _pos_history.size()
-	if n < FLICK_SAMPLES + 2:
+	var back := _flick_count()
+	if n < back + 2:
 		return Vector3.ZERO
-	var last := n - 1 - FLICK_SAMPLES
-	return (_pos_history[n - 1] - _pos_history[last]) / (FLICK_SAMPLES / 60.0)
+	var last := n - 1 - back
+	var span := _pos_times[n - 1] - _pos_times[last]
+	if span < 0.001:
+		return Vector3.ZERO
+	return (_pos_history[n - 1] - _pos_history[last]) / span
 
 
 ## Turns momentum + flick into a shaped shot:
 ## { vel: launch velocity, curve: in-flight lateral accel, angular: rad/s vec }.
 ## Momentum owns power and azimuth; the flick only lofts the ANGLE and curves.
 func _compute_throw() -> Dictionary:
-	var momentum := _sweep_velocity()
+	# THE SLING FIRST. The hand's sweep and the held thing's OWN motion relative
+	# to it are both real momentum, and how much of each survives depends on
+	# what you are throwing — see Sling.launch. This is also exactly the shot
+	# the arc has been drawing over the ground while you wound up, because it
+	# is the same function; a prediction that is not the real shot is a lie.
+	var weight := Sling.heft(held_body)
+	var momentum := Sling.launch(_sweep_velocity(),
+		_held_vel - _sweep_velocity(), weight).limit_length(MAX_THROW_SPEED)
 	var speed := momentum.length()
 	var flat := Vector3(momentum.x, 0.0, momentum.z)
 	if speed < 0.5 or flat.length() < 0.4:
@@ -695,6 +839,8 @@ func cancel_touch_interaction() -> void:
 		return
 	if state == HandState.DRAG_LAND:
 		state = HandState.IDLE
+	if state != HandState.HOLDING:
+		_stow_sling()
 	_charging = false
 
 
@@ -706,6 +852,7 @@ func force_hold(body: PhysicsBody3D) -> bool:
 	body.global_position = global_position + Vector3(0, -0.6, 0)
 	held_body = body
 	state = HandState.HOLDING
+	_begin_carry()
 	if body is RigidBody3D:
 		(body as RigidBody3D).freeze = true
 	return true

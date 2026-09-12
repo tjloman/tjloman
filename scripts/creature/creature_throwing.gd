@@ -379,7 +379,7 @@ func _impress(who: Creature) -> void:
 	VillageWonder.spectacle(who.get_tree(), "juggle_fire" if fire else "juggle",
 		"horror" if fire else "wonder", who.global_position,
 		SHOW_PAY * float(count) * (1.4 if fire else 1.0),
-		"Your creature is juggling %s over the village." % _cargo_word(count))
+		"Your creature is juggling %s over the village." % _cargo_word(count), who)
 
 
 func _cargo_word(count: int) -> String:

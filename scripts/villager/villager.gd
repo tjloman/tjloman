@@ -324,7 +324,11 @@ func _physics_process(delta: float) -> void:
 			return
 		State.FALLING:
 			_fall_speed = velocity.length()
-			velocity.y -= GRAVITY * delta
+			# FLOATER AIR TIME. A thing the hand threw falls at a fraction of
+			# its weight for a couple of seconds, easing back to full — see
+			# Sling.gravity_for. This game's gravity is twice the world's, so
+			# a hurled villager used to come down like a dropped brick.
+			velocity.y -= Sling.gravity_for(self, GRAVITY) * delta
 			move_and_slide()
 			if _spin_ang.length() > 0.001:  # aftertouch tumble about a 3D axis
 				_visuals.global_rotate(_spin_ang.normalized(), _spin_ang.length() * delta)

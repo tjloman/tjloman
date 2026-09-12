@@ -1218,6 +1218,36 @@ func _run_smoke_test() -> void:
 			was_running, "calm" if scared.state != Animal.State.FLEE else "STILL RUNNING"])
 		scared.queue_free()
 
+	# THE SLING. Weight must change how a thing follows the hand and how hard it
+	# leaves it, and the arc drawn must be the shot actually taken.
+	var chick := Animal.create("chicken")
+	var bull := Animal.create("bison")
+	add_child(chick)
+	add_child(bull)
+	var light := Sling.heft(chick)
+	var heavy := Sling.heft(bull)
+	print("SMOKE TEST: sling — chicken heft %.2f (pull %.1f/s), bison %.2f (pull %.1f/s)" % [
+		light, Sling.pull(light), heavy, Sling.pull(heavy)])
+	# At a real throwing sweep the lag is metres, which is what the rope draws.
+	var sweep := Vector3(30, 0, 0)
+	print("SMOKE TEST: sling — at 30 m/s the chicken trails %.1f m, the bison %.1f m" % [
+		30.0 / Sling.pull(light), 30.0 / Sling.pull(heavy)])
+	print("SMOKE TEST: sling — same sweep launches them at %.0f and %.0f m/s" % [
+		Sling.launch(sweep, Vector3.ZERO, light).length(),
+		Sling.launch(sweep, Vector3.ZERO, heavy).length()])
+	# The ballista: a steep sweep gets its power back.
+	var flat_shot := Sling.launch(Vector3(30, 5, 0), Vector3.ZERO, light).length()
+	var steep := Sling.launch(Vector3(15, 26, 0), Vector3.ZERO, light).length()
+	print("SMOKE TEST: sling — a flat sweep leaves at %.0f m/s, a 60-degree one at %.0f" % [
+		flat_shot, steep])
+	# And floater air time, which is a meta on the body and must expire.
+	Sling.loft(chick)
+	print("SMOKE TEST: sling — gravity on a thrown thing %.1f, on a dropped one %.1f" % [
+		Sling.gravity_for(chick, Villager.GRAVITY),
+		Sling.gravity_for(bull, Villager.GRAVITY)])
+	chick.queue_free()
+	bull.queue_free()
+
 	# THE ARM. Reach must climb with size, strength and practice; the ladder
 	# must gate what it can do; and a juggle interrupted must come down.
 	var thrower := Creature.new()

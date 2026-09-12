@@ -67,7 +67,7 @@ static func dance(who: Creature, delta: float) -> void:
 		if who._audience(18.0) > 0:
 			VillageWonder.spectacle(who.get_tree(), "dance", "wonder",
 				who.global_position, 2.8,
-				"Your creature dances for them, and they will not look away.")
+				"Your creature dances for them, and they will not look away.", who)
 		who._last_deed = "dance"
 		# The bigger the crowd, the better it felt. Nobody watching is a
 		# lesson too — it may well decide dancing is not worth the effort.
@@ -100,7 +100,7 @@ static func pray(who: Creature, delta: float) -> void:
 		if faithful > 0:
 			VillageWonder.spectacle(who.get_tree(), "pray", "wonder",
 				who.global_position, 1.8 + float(mini(faithful, 6)) * 0.5,
-				"Your creature kneels and prays with them.")
+				"Your creature kneels and prays with them.", who)
 		who._last_deed = "pray"
 		who._finish_choice(0.5 + faithful * 0.4)
 

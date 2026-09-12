@@ -254,7 +254,7 @@ func _physics_process(delta: float) -> void:
 			return
 		State.FALLING:
 			_fall_speed = velocity.length()
-			velocity.y -= GRAVITY * delta
+			velocity.y -= Sling.gravity_for(self, GRAVITY) * delta   # see Sling
 			move_and_slide()
 			if _spin_ang.length() > 0.001:  # aftertouch tumble about a 3D axis
 				global_rotate(_spin_ang.normalized(), _spin_ang.length() * delta)

@@ -81,8 +81,11 @@ func novelty(kind: String) -> float:
 ## THE ONE DOOR. Everything below arrives here: a kind (which is what the
 ## novelty ledger counts), how the town should FEEL about it, and what it is
 ## worth before the ledger takes its cut.
+## `who` is the thing it is happening to or because of — pass the creature
+## whenever it is the creature, so the crowd follows it about instead of
+## staring at the grass it was standing on. See VillageHive.looking_at.
 func marvel(town: Village, kind: String, feel: String, where: Vector3,
-		pay: float, say := "") -> void:
+		pay: float, say := "", who: Node3D = null) -> void:
 	if town == null or not is_instance_valid(town):
 		return
 	var fresh := novelty(kind)
@@ -94,7 +97,7 @@ func marvel(town: Village, kind: String, feel: String, where: Vector3,
 	# The crowd takes it as ONE event, as it takes a miracle — the weight is the
 	# belief it was worth, so a burning pine lands on the town's mood about as
 	# hard as it lands on the square.
-	town.hive.witness(feel, where, clampf(pay * fresh / 5.0, 0.15, 2.0))
+	town.hive.witness(feel, where, clampf(pay * fresh / 5.0, 0.15, 2.0), who)
 	if say != "" and town.is_player_home and fresh > 0.5:
 		GameState.announce(say)
 
@@ -157,11 +160,11 @@ static func landed(tree: SceneTree, kind: String, where: Vector3,
 ## of grief in the middle of the square. `pay` is what that sort of thing is
 ## worth before the ledger; `feel` is how the town takes it.
 static func spectacle(tree: SceneTree, kind: String, feel: String,
-		where: Vector3, pay: float, say := "") -> void:
+		where: Vector3, pay: float, say := "", who: Node3D = null) -> void:
 	var town := town_at(tree, where)
 	if town == null:
 		return
-	town.wonder.marvel(town, kind, feel, where, pay, say)
+	town.wonder.marvel(town, kind, feel, where, pay, say, who)
 
 
 ## PROVISION. Something edible or useful has gone into the storehouse, and this

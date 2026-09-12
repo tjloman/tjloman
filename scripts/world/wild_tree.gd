@@ -69,6 +69,10 @@ const LEAN_DAMP := 9.0
 const LEAN_DECAY := 3.0     # how fast the push fades once the creature has passed
 const MAX_LEAN := 1.1       # radians (~63°) — a giant's shove can bend it right over
 
+## The pull on a tree in flight. The same as everything else here falls at,
+## and named so that Sling can float it for a moment after a throw.
+const TREE_GRAVITY := 20.0
+
 var style := "forest"
 var rng_seed := 0
 var lumber := 1.0
@@ -365,7 +369,7 @@ func drop(throw_velocity: Vector3, gentle := false) -> void:
 
 
 func _fly(delta: float) -> void:
-	_fly_velocity.y -= 20.0 * delta
+	_fly_velocity.y -= Sling.gravity_for(self, TREE_GRAVITY) * delta   # see Sling
 	global_position += _fly_velocity * delta
 	if _spin_ang.length() > 0.001:
 		global_rotate(_spin_ang.normalized(), _spin_ang.length() * delta)
