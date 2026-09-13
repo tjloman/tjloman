@@ -100,6 +100,10 @@ const AS_MOTION := {
 ## would be built and freed on alternate frames.
 ## How far off a herd's name still draws. See `_build_multimesh`.
 const HERD_TAG_REACH := 180.0
+## THE HAND'S OWN RESERVE. How near counts as under it, and how many heads it
+## may make real regardless of the world's allowance. See `_reach_of_the_hand`.
+const HAND_REACH := 6.0
+const HAND_TAKES := 3
 const PROMOTE_WITHIN := 40.0
 const DEMOTE_BEYOND := 54.0
 
@@ -590,6 +594,12 @@ func _process(delta: float) -> void:
 			return
 		delta *= float(turn)
 	_sim_last = Scheduler.now()
+	# ON THE HERD'S OWN TICK, not on the formation shuffle. `_tend_agents` runs
+	# every SHUFFLE_EVERY seconds, and a third of a second between putting your
+	# hand on a sheep and the sheep existing is the difference between reaching
+	# working and reaching sometimes working. Costs one distance check on a herd
+	# the hand is nowhere near, which is all of them but one.
+	_reach_of_the_hand()
 	_graze_left -= delta
 	if _graze_left <= 0.0:
 		_pick_pasture()
@@ -1071,38 +1081,83 @@ func _tend_agents() -> void:
 		var m := _members[i]
 		if m["agent"] != null or m["dead"]:
 			continue
-		var p := global_position + Vector3(m["offset"].x, 0.0, m["offset"].y)
-		p.y = float(m["ground"])
+		var p := _stands_at(m)
 		if _watched_from(p, focus, beast) > PROMOTE_WITHIN:
 			continue
-		var born := Animal.create(species)
-		# ITS PLACE IS SET AFTER IT IS IN THE TREE, below — a Node3D that has no
-		# parent has no global transform to write to, and Godot says so, loudly,
-		# once per promoted beast. This line used to be here as well and did
-		# nothing but fill the log; it only started showing when promotion began
-		# working again.
-		# A BARN'S BEAST COMES BACK TAMED. Promotion has to restore what the
-		# animal WAS, or every time you walked up to the barn its stock would
-		# turn feral in front of you.
-		if keeper != null and is_instance_valid(keeper):
-			born.tamed_by = keeper
-		# Parented to the world, not to the herd: it is a free animal now, and
-		# if it runs off it should not be dragged about by the formation.
-		get_parent().add_child(born)
-		born.global_position = p
-		# IT CARRIES ON DOING WHAT IT WAS DOING. Without this a grazing member
-		# stands up and wanders the moment it crosses forty metres, which is a
-		# visible seam exactly where the player is closest and most likely to
-		# be looking. The motion names are ModelAnimator's own vocabulary, so
-		# the far pose and the near clip are the same word.
-		born.state = AS_STATE.get(m["motion"], Animal.State.IDLE)
-		# THE WAY HOME. A promoted beast carries a handle on the herd it came
-		# from, so a kill can be credited to the killer's pack and charged to
-		# the victim's — which is the whole food chain in one reference.
-		born.set_meta("herd", self)
-		m["agent"] = born
-		_agents_afoot += 1
-		_afoot_here += 1
+		_promote(m, p)
+
+
+## WHAT THE PLAYER'S HAND IS OVER, WHATEVER ELSE IS GOING ON.
+##
+## Promotion is rationed because a thousand real animals is a thousand
+## CharacterBody3Ds, and that ration is right — for the world at large. It is
+## flatly wrong for the one beast a player has put their hand on. Reaching for a
+## sheep and finding nothing there is not a performance trade-off the player
+## agreed to; it is the game refusing an instruction, and which sheep you may
+## pick up is not a question a frame budget gets to answer.
+##
+## So the hand takes its few come what may, ahead of everything, and they are
+## still CHARGED to the budget — the ration goes on being honest, it simply
+## spends itself somewhere less important first. The overshoot is bounded by
+## HAND_TAKES against the one or two herds a six-metre reach can touch.
+##
+## Every species, no exceptions: nothing here asks what it is.
+func _reach_of_the_hand() -> void:
+	var hand := GameState.hand_at
+	if is_inf(hand.x):
+		return
+	# The whole mass, at arm's length — one check before any thought of walking
+	# two hundred rows.
+	if global_position.distance_to(hand) > _spread + HAND_REACH:
+		return
+	var took := 0
+	for i in _members.size():
+		if took >= HAND_TAKES:
+			return
+		var m := _members[i]
+		if m["agent"] != null or m["dead"]:
+			continue
+		var p := _stands_at(m)
+		if p.distance_to(hand) > HAND_REACH:
+			continue
+		_promote(m, p)
+		took += 1
+
+
+## Where a row is standing, in world space.
+func _stands_at(m: Dictionary) -> Vector3:
+	var p := global_position + Vector3(m["offset"].x, 0.0, m["offset"].y)
+	p.y = float(m["ground"])
+	return p
+
+
+## A ROW BECOMES A BEAST.
+func _promote(m: Dictionary, p: Vector3) -> void:
+	var born := Animal.create(species)
+	# A BARN'S BEAST COMES BACK TAMED. Promotion has to restore what the animal
+	# WAS, or every time you walked up to the barn its stock would turn feral in
+	# front of you.
+	if keeper != null and is_instance_valid(keeper):
+		born.tamed_by = keeper
+	# Parented to the world, not to the herd: it is a free animal now, and if it
+	# runs off it should not be dragged about by the formation. Its place is set
+	# AFTER it is in the tree — a Node3D with no parent has no global transform
+	# to write to, and Godot says so, loudly, once per promoted beast.
+	get_parent().add_child(born)
+	born.global_position = p
+	# IT CARRIES ON DOING WHAT IT WAS DOING. Without this a grazing member stands
+	# up and wanders the moment it crosses forty metres, which is a visible seam
+	# exactly where the player is closest and most likely to be looking. The
+	# motion names are ModelAnimator's own vocabulary, so the far pose and the
+	# near clip are the same word.
+	born.state = AS_STATE.get(m["motion"], Animal.State.IDLE)
+	# THE WAY HOME. A promoted beast carries a handle on the herd it came from,
+	# so a kill can be credited to the killer's pack and charged to the
+	# victim's — which is the whole food chain in one reference.
+	born.set_meta("herd", self)
+	m["agent"] = born
+	_agents_afoot += 1
+	_afoot_here += 1
 
 
 ## GOING. A herd leaves when its chunk unloads, and it takes its promoted

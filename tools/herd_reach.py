@@ -20,6 +20,7 @@ reach a Herd.
 
 Run with --check to fail the build on a regression.
 """
+import os
 import re
 import sys
 
@@ -109,6 +110,28 @@ def survey():
     return rows
 
 
+def promotable():
+    """EVERY KIND OF HERD MUST HAVE A BEAST IT CAN BECOME.
+
+    A herd draws as a MultiMesh and only PROMOTES the few heads somebody is
+    near — and promotion is `Animal.create(species)`. A species that can be
+    scattered or rolled as a herd but has no entry in Animal.SPECIES is
+    therefore a mass you can see, walk up to, put your hand on, and never
+    touch: no collider, nothing to pick up, nothing to hunt. It is the exact
+    shape of "you cannot interact with that herd", and the only thing standing
+    between the two tables is somebody remembering.
+    """
+    herd = open("scripts/animals/herd.gd").read()
+    chunk = open("scripts/world/chunk.gd").read()
+    animal = open("scripts/animals/animal.gd").read()
+    social = herd[herd.index("const SOCIAL := {"):]
+    social = set(re.findall(r'^\t"(\w+)":', social[:social.index("\n}\n")], re.M))
+    scattered = set(re.findall(r'"(\w+)": 0\.\d+', chunk))
+    spec = animal[animal.index("const SPECIES"):]
+    have = set(re.findall(r'^\t"(\w+)": \{', spec, re.M))
+    return sorted((social | scattered) - have), len(social | scattered)
+
+
 def main():
     rows = survey()
     broken = [n for n, live, mass in rows if live and not mass]
@@ -127,6 +150,12 @@ def main():
               % (len(broken), ", ".join(broken)))
         return 1
     print("\nEvery miracle that touches something alive reaches the mass too.")
+    orphans, total = promotable()
+    if orphans:
+        print("\n%d herd species have no Animal to promote into, so nothing in "
+              "them can ever be touched: %s" % (len(orphans), ", ".join(orphans)))
+        return 1
+    print("All %d herd species have a beast they can become." % total)
     return 0
 
 
