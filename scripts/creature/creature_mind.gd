@@ -130,8 +130,8 @@ const VERB_TRAITS := {
 	"rest": {"calms": 1.0},
 	"play": {"thrill": 0.9, "effort": 0.6, "social": 0.3},
 	"watch": {"social": 0.6, "calms": 0.3, "thrill": 0.2},
-	"smash": {"thrill": 0.7, "effort": 0.8},
-	"throw": {"thrill": 0.7, "effort": 0.7},
+	"smash": {"thrill": 0.7, "effort": 0.8, "fight": 1.0},
+	"throw": {"thrill": 0.7, "effort": 0.7, "fight": 0.6},
 	# JUGGLING. Pure amusement with people in it, and hard work — it is the
 	# most strenuous thing on this list that produces absolutely nothing. That
 	# a creature does it at all is the clearest sign it has energy to spare and
@@ -147,7 +147,7 @@ const VERB_TRAITS := {
 	# And taking one for the table is work that ends in meat, which is the same
 	# thing gathering is. That it happens to be a killing is a matter for its
 	# conscience (see CreatureEthos), not for its appetite.
-	"cull": {"feeds": 0.45, "effort": 0.6, "thrill": 0.25},
+	"cull": {"feeds": 0.45, "effort": 0.6, "thrill": 0.25, "fight": 0.5},
 	"gift": {"social": 0.6, "effort": 0.4},
 	"guard": {"social": 0.4, "effort": 0.3, "calms": 0.2},
 	"rescue": {"social": 0.7, "effort": 0.7},
@@ -311,7 +311,24 @@ func _drive_fit(verb: String, drive: Dictionary) -> float:
 	fit += float(traits.get("calms", 0.0)) * (tired * 2.4 + lazy * 1.0 + full * 0.4)
 	fit += float(traits.get("thrill", 0.0)) * (bored * 1.5 + low * 0.6)
 	fit += float(traits.get("social", 0.0)) * (0.2 + lonely * 1.1)
-	fit += float(traits.get("escape", 0.0)) * (afraid * 2.4 + uneasy * 1.2)
+	# FRIGHT IS NOT ONLY FLIGHT, and which of the two it is was never asked.
+	# Fear fed exactly one thing — the pull toward running — so every creature
+	# in the game was a coward by construction, however it had been raised and
+	# whatever it had grown into. A frightened animal is in a heightened state,
+	# and a heightened state resolves one of two ways.
+	#
+	# WHICH WAY IS ITS OWN. `nerve` is its DARING, the standing it has earned on
+	# one of the six stones by what it has actually done (see CreatureEthos), so
+	# a creature raised bold turns and faces the thing and a creature raised
+	# timid bolts — and neither is written here as a species fact. Raise it
+	# differently and it behaves differently, which is the whole game.
+	var nerve: float = clampf(drive.get("nerve", 0.0), -1.0, 1.0)
+	fit += float(traits.get("escape", 0.0)) * (afraid * 2.4 + uneasy * 1.2) \
+		* (1.0 - nerve * 0.65)
+	# And the same fear, in a bold one, is what makes it dangerous. Only while
+	# it is actually afraid: this is not an appetite for violence, it is what
+	# being cornered does.
+	fit += float(traits.get("fight", 0.0)) * afraid * maxf(nerve, 0.0) * 2.2
 	# And it is less inclined to make its own excitement in a moment it already
 	# expects to go badly.
 	fit -= float(traits.get("thrill", 0.0)) * uneasy * 0.5

@@ -523,8 +523,7 @@ func _physics_process(delta: float) -> void:
 		_animator.play(_anim_state())
 	else:
 		_animate_waddle(delta)
-	_apply_appearance()
-	_tick_expression(delta)
+	CreatureLook.wear(self, delta)
 	_tick_flight(delta)
 	var status := _status_text()
 	if _label.text != status:
@@ -667,6 +666,9 @@ func _decide() -> void:
 		"omen": mind.beliefs.foretaste(here) + mind.beliefs.place_feel(global_position),
 		"hunger": hunger, "energy": energy, "boredom": boredom,
 		"mood": mood, "fear": fear, "wounded": CreatureEyes.wounded_near(self),
+		# WHETHER FEAR MAKES IT RUN OR MAKES IT TURN. See CreatureMind's
+		# appraisal: its daring is a thing it earned, not a thing it was given.
+		"nerve": mind.ethos.standing("daring"),
 		"full": body.fullness(growth), "lazy": body.laziness(),
 		"pressed": body.pressed(),   # how badly it needs to go
 		# Being alone is a need like any other. A creature with nobody about
@@ -2322,29 +2324,6 @@ func feel(emotion: String, force := 0.6, linger := 1.8) -> void:
 func express(emotion: String, dur := 1.6) -> void:
 	_expression = emotion
 	_expr_time = dur
-
-
-## The hide and eyes reflect the soul (see CreatureLook). Throttled to changes.
-func _apply_appearance() -> void:
-	var align := clampf(morality / 100.0, -1.0, 1.0)
-	if absf(align - _shown_align) < 0.02:
-		return
-	_shown_align = align
-	CreatureLook.apply_alignment(align, _fur_mat, _pupils, _model_meshes)
-
-
-## A flashed face wins while it lasts; underneath, the creature wears whatever
-## its heart is actually holding. A beast carrying last night's grief around
-## LOOKS like it, even while it goes about its business — which is most of what
-## makes it read as a thing with an inner life rather than a state machine.
-func _tick_expression(delta: float) -> void:
-	if _expr_time > 0.0:
-		_expr_time -= delta
-		if _expr_time <= 0.0:
-			_expression = heart.face()
-	elif _expression != heart.face():
-		_expression = heart.face()
-	CreatureLook.apply_expression(_expression, delta, _eyes, _model_meshes)
 
 
 ## Apply this frame's ROOT MOTION from a one-shot action clip (a lunge into a

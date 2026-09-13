@@ -21,6 +21,22 @@ const EXPR_CODE := {
 	"scared": 4.0, "curious": 5.0, "love": 6.0, "hurt": 7.0,
 }
 
+## HOW FAT READS ON A BODY. A ratio applied to the visual's width and depth
+## only — never to the creature's own `scale`, which is its SIZE and is read all
+## over the game for reach, lifting, carrying and how far it can be seen. A fat
+## creature must not gain arms.
+##
+## Height is left alone on purpose: the eating bounce drives `_body.scale.y` and
+## a beast that got shorter as it ate would look like a bug rather than like a
+## beast. Broad and narrow is what fat actually looks like anyway.
+const GIRTH_LEAN := 0.84
+const GIRTH_FULL := 1.26
+const GIRTH_EASE := 0.6
+
+## How frightened it has to be before fear is the face it wears even when its
+## heart is holding something else. Below this the heart has it.
+const FEAR_SHOWS := 45.0
+
 ## How bright the creature's own light burns at night, how far it reaches at
 ## its smallest and largest, and how fast it eases. See `radiance`.
 const RADIANCE := 2.4
@@ -293,3 +309,46 @@ static func anim_for(state_name: String, moving: bool) -> String:
 	if ANIM.has(state_name):
 		return ANIM[state_name]
 	return "walk" if moving else "idle"
+
+
+## EVERYTHING ABOUT HOW IT LOOKS THIS FRAME, in one call — the hide's alignment,
+## the girth its fat has earned it, and the face it is wearing.
+##
+## Gathered here rather than in Creature because that file lives permanently on
+## its line limit, and because these three were the same question asked three
+## ways: what has happened to this animal, and can you see it.
+static func wear(who: Creature, delta: float) -> void:
+	var align := clampf(who.morality / 100.0, -1.0, 1.0)
+	if absf(align - who._shown_align) >= 0.02:
+		who._shown_align = align
+		apply_alignment(align, who._fur_mat, who._pupils, who._model_meshes)
+	_wear_girth(who, delta)
+	_wear_face(who, delta)
+
+
+## FAT ON THE SILHOUETTE. Fat was a number in a readout and nothing else: a
+## creature stuffed to ninety looked exactly like one starved to four, so the
+## one statistic a player is most able to DO something about was the one they
+## could not see. Now you can tell across a field, which is the only place the
+## telling is any use.
+static func _wear_girth(who: Creature, delta: float) -> void:
+	if who._body == null or not is_instance_valid(who._body):
+		return
+	var want := lerpf(GIRTH_LEAN, GIRTH_FULL, clampf(who.body.fat / 100.0, 0.0, 1.0))
+	# Eased, and slowly: fat is earned over a long afternoon and a body that
+	# swelled the instant a meal went down would read as a balloon.
+	var girth := lerpf(who._body.scale.x, want, clampf(GIRTH_EASE * delta, 0.0, 1.0))
+	who._body.scale.x = girth
+	who._body.scale.z = girth
+
+
+## THE FACE. A flashed expression wins while it lasts; under that, a frightened
+## creature looks frightened whatever else its heart is carrying — because fear
+## is the one feeling that is ABOUT THE NEXT MOMENT, and a beast that is about
+## to bolt should not be wearing yesterday's grief while it does.
+static func _wear_face(who: Creature, delta: float) -> void:
+	if who._expr_time > 0.0:
+		who._expr_time -= delta
+	else:
+		who._expression = "scared" if who.fear >= FEAR_SHOWS else who.heart.face()
+	apply_expression(who._expression, delta, who._eyes, who._model_meshes)
