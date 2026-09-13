@@ -20,7 +20,15 @@ extends StaticBody3D
 ## LESSONS[i] is a Variant and `var next := LESSONS[i]` has nothing to infer
 ## from — which this project builds as an error that stops every dependent
 ## script loading, and took the whole village down with it.
-const LESSONS: Array[String] = ["circle", "horseshoe", "line", "dance", "huddle"]
+const LESSONS: Array[String] = [
+	"circle", "horseshoe", "square", "line", "dance", "huddle"]
+## WHICH OF THEM ARE SAT DOWN. A seated class does not drift, does not turn and
+## does not spin: the children walk to their places once and then STAY there,
+## which is what sitting looks like and is also the cheapest thing a crowd of
+## seventy-seven can possibly be doing. Half the lessons are still on their feet
+## — following, dancing, crowding the teacher — so a school still moves; it just
+## does not move ALL the time.
+const SEATED: Array[String] = ["circle", "horseshoe", "square"]
 ## ONE CLASS PER TEACHER. Seventy-seven children in a single follow-the-leader
 ## is not a school, it is a conga line across a village — and a school with
 ## three staff standing in one circle is three people doing one person's job.
@@ -94,11 +102,6 @@ func _ready() -> void:
 		add_child(Util.box(Vector3(0.5, 0.7, 0.08), Color(0.72, 0.64, 0.5), Vector3(1.5, 0.9, 1.2)))
 
 
-## Where children and the teacher gather — the yard just outside the door.
-func yard_position() -> Vector3:
-	return yard_for(0)
-
-
 ## HOW MANY CLASSES ARE RUNNING — one per teacher actually standing in the
 ## yard, so an unstaffed school still gathers its children into one group
 ## rather than none. Reaches the village's own tally directly: it is the one
@@ -159,6 +162,18 @@ func spot_for(which: int, many: int) -> Vector3:
 			var d := _ring_radius(count)
 			var b := float(seat) * TAU / float(count) + spin
 			return yard + Vector3(cos(b), 0.0, sin(b)) * d
+		"square":
+			# SAT ROUND FOUR SIDES, facing in. The sides fill evenly rather than
+			# one at a time, so a class of nine is three, two, two and two and
+			# not five and four and nobody.
+			var per := maxi((count + 3) / 4, 1)
+			var side := (seat / per) % 4
+			var reach := maxf(SEAT_GAP * float(per) * 0.5, RING_LEAST)
+			var out: Vector3 = [Vector3(0, 0, 1), Vector3(1, 0, 0),
+				Vector3(0, 0, -1), Vector3(-1, 0, 0)][side]
+			var run := Vector3(out.z, 0.0, -out.x)
+			var along := (float(seat % per) + 0.5) / float(per) - 0.5
+			return yard + basis * (out * reach + run * (along * reach * 2.0))
 		"horseshoe":
 			# The ring with its mouth open toward the door, so every face is
 			# turned the same way and there is a place to stand and be listened
@@ -167,8 +182,9 @@ func spot_for(which: int, many: int) -> Vector3:
 			var step := open / float(maxi(count - 1, 1))
 			var c := -open * 0.5 + float(seat) * step
 			return yard + Vector3(sin(c), 0.0, -cos(c)) * _ring_radius(count)
-	# "circle" — the plain story ring.
-	var e := float(seat) * TAU / float(count) + drift * 0.15
+	# "circle" — the plain story ring, and it is one of the sat-down ones, so it
+	# does not turn under them. A story circle that rotates is a carousel.
+	var e := float(seat) * TAU / float(count)
 	return yard + Vector3(cos(e), 0.0, sin(e)) * _ring_radius(count)
 
 
@@ -287,14 +303,28 @@ func attend(child: Node, delta: float) -> void:
 		child.velocity.y -= Villager.GRAVITY * delta
 		child.move_and_slide()
 		child.look_at(at - Vector3(step.x, 0.0, step.y), Vector3.UP)
+	elif SEATED.has(_lesson[klass]) and child.is_on_floor():
+		# SAT DOWN, AND THEREFORE DOING NOTHING. `_apply_gravity_only` ends in a
+		# move_and_slide, which is a physics query per body per frame — the last
+		# thing a school of seventy-seven was still paying for once the routing
+		# went. A child sitting on the ground in a ring is not falling and is
+		# not walking, so it does not need to be asked.
+		child.velocity = Vector3.ZERO
+		_face_the_middle(child, at)
 	else:
 		child._apply_gravity_only(delta)
 		# Facing the middle of its OWN class — a ring of backs is not a class.
 		# Bodies are modelled facing +Z and look_at aims -Z, so this looks at
 		# the point opposite, the same way _move_toward does.
-		var mid := middle_for(int(child._school_seat))
-		var away := at - Vector3(mid.x, 0.0, mid.z)
-		if Vector2(away.x, away.z).length() > 0.05:
-			child.look_at(at + Vector3(away.x, 0.0, away.z), Vector3.UP)
+		_face_the_middle(child, at)
 	child.social = minf(float(child.social) + 3.0 * delta, 100.0)
 	child.happiness = minf(float(child.happiness) + 0.5 * delta, 100.0)
+
+
+## Turned toward its own class, wherever that class is standing. Bodies are
+## modelled facing +Z and look_at aims -Z, so this looks at the point opposite.
+func _face_the_middle(child: Node, at: Vector3) -> void:
+	var mid := middle_for(int(child._school_seat))
+	var away := at - Vector3(mid.x, 0.0, mid.z)
+	if Vector2(away.x, away.z).length() > 0.05:
+		child.look_at(at + Vector3(away.x, 0.0, away.z), Vector3.UP)
