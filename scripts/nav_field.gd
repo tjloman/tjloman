@@ -56,6 +56,13 @@ const ROUTE_BUDGET := 380       # cells expanded before a search gives up
 ## found, and asks again on the next one.
 const ROUTES_PER_FRAME := 6
 const ROUTE_REACH := 400.0      # no route is planned further than this
+## WHEN A MOVER IS ALREADY IN TROUBLE, and how it finds its way out. Deliberately
+## shallower than Villager.DROWN_DEPTH (1.1) so it turns for shore while the
+## water is still only unpleasant, and a wide sweep because the way out of a
+## lake can be behind you.
+const OUT_OF_DEPTH := 0.6
+const DRY_SWEEP := 16
+const DRY_PROBE := 5.0
 const WADE_COST := 4.0          # per metre of depth: passable, and unpleasant
 const CLIMB_COST := 2.2         # per metre of rise between neighbouring cells
 const THICKET_COST := 0.7       # per obstacle standing in a cell
@@ -166,6 +173,11 @@ func water_route(mover: Node, pos: Vector3, desired: Vector3, world: WorldGen,
 		probe := 1.7, drop := SHEER) -> Vector3:
 	if world == null or desired == Vector3.ZERO:
 		return desired
+	# WET FEET FIRST. See `_least_bad` — if it is already standing in water deep
+	# enough to kill it, there is no safe heading and the question is not which
+	# way is safe but which way is OUT.
+	if _depth_at(world, pos.x, pos.z) > OUT_OF_DEPTH:
+		return _least_bad(world, pos, desired)
 	if not _bad_step(world, pos, desired, probe, drop):
 		if mover != null:
 			mover.set_meta("shore_side", 0)  # open water ahead cleared — drop the commit
@@ -179,7 +191,21 @@ func water_route(mover: Node, pos: Vector3, desired: Vector3, world: WorldGen,
 			if mover != null:
 				mover.set_meta("shore_side", 1 if deg > 0.0 else -1)
 			return d
-	return Vector3.ZERO
+	# NOTHING WAS CLEAN — SO TAKE THE LEAST BAD ONE. This returned ZERO, and
+	# every caller reads ZERO as "hold still".
+	#
+	# That is the one answer that is always wrong. Fourteen headings all failing
+	# is not rare on a real shoreline: `_bad_step` refuses a step that is wet OR
+	# that falls more than SHEER, and a cove, a spit or a steep bank fails the
+	# lot. The villager stopped. The stuck watchdog re-decided it, `_decide`
+	# picked the same granary, the steer returned ZERO again, and it stood on
+	# the beach until it starved — which is what a row of motionless people
+	# strung along one shore actually is. They were not drowning. They were
+	# queued at a heading that did not exist.
+	#
+	# Wading is survivable and a scramble down a bank is survivable. Standing
+	# still with an empty belly is not.
+	return _least_bad(world, pos, desired)
 
 
 ## IS THE GROUND THAT WAY WORTH STEPPING ONTO?
@@ -204,6 +230,54 @@ func _bad_step(world: WorldGen, pos: Vector3, dir: Vector3, probe: float,
 			and world.height_at(pos.x, pos.z) - world.height_at(x, z) > drop * 0.5:
 		return true
 	return world.height_at(pos.x, pos.z) - world.height_at(x, z) > drop
+
+
+## HOW DEEP THE WATER IS OVER THE GROUND HERE — the sea, or a pond standing in a
+## flooded crater, or nothing at all.
+func _depth_at(world: WorldGen, x: float, z: float) -> float:
+	var surface := world.water_level_at(x, z)
+	if surface == -INF:
+		return 0.0
+	return maxf(surface - world.height_at(x, z), 0.0)
+
+
+## THE LEAST BAD HEADING THERE IS — the way out of the water, and the way out of
+## a corner the sweep could not solve.
+##
+## THE SWEEP IN `water_route` HAS NO ANSWER FOR A BODY THAT IS ALREADY IN. Every
+## heading out of the middle of a lake is a bad step, so it found none, returned
+## ZERO, and the caller — Villager._move_toward, Animal._move_toward — read that
+## as "hold still". Standing still in deep water is drowning. So a villager that
+## got in at all could not get out again: dropped there by the hand, shoved off
+## a bank in a crowd, or walked in down a shelf gentle enough that the probe
+## ahead still read as dry. And every one that followed did it in the same
+## place, because they were all walking the same way for the same reason. A line
+## of bodies along one shore is not a routing mistake repeated; it is one
+## routing mistake with no way back out of it.
+##
+## THE WATER IS LEVEL, SO SHALLOWEST IS UPHILL IS SHOREWARD. That holds in the
+## middle of a lake as well as at its edge, which is what makes this work
+## without a search: minimising depth over the sweep is walking out, and it
+## never returns ZERO — there is always a best heading, even when every one of
+## them is still wet.
+func _least_bad(world: WorldGen, pos: Vector3, desired: Vector3) -> Vector3:
+	var want := desired.normalized()
+	var best := Vector3.ZERO
+	var best_score := -INF
+	for i in DRY_SWEEP:
+		var a := TAU * float(i) / float(DRY_SWEEP)
+		var d := Vector3(cos(a), 0.0, sin(a))
+		var x := pos.x + d.x * DRY_PROBE
+		var z := pos.z + d.z * DRY_PROBE
+		var deep := _depth_at(world, x, z)
+		# Shallower wins, then flatter, and among equals it keeps going the way
+		# it wanted — so wading a ford does not turn into pacing on the spot.
+		var fall := maxf(world.height_at(pos.x, pos.z) - world.height_at(x, z), 0.0)
+		var score := -deep - fall * 0.25 + d.dot(want) * 0.05
+		if score > best_score:
+			best_score = score
+			best = d
+	return best
 
 
 ## The order of turn angles to try when hugging a shore, committed side first

@@ -589,7 +589,12 @@ func _move_toward(target: Vector3, speed: float, delta: float) -> bool:
 	# Beasts don't swim: route along the shore around water (frogs excepted —
 	# they belong to both worlds).
 	if not spec.get("hops", false):
-		dir = NavField.water_route(self, global_position, dir, _world())
+		# ...and the probe reaches as far as THIS STEP will actually carry it. The
+		# probe was a fixed 1.7m while velocity is scaled by `_sim_scale`, so a body
+		# on a coarse clock covers several metres in one physics step and can step
+		# clean over the only warning it gets. Three frames of its real travel.
+		dir = NavField.water_route(self, global_position, dir, _world(),
+			maxf(1.7, speed * _sim_scale * 0.05))
 		if dir == Vector3.ZERO:
 			_apply_gravity_only(delta)
 			return false

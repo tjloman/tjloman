@@ -33,6 +33,10 @@ const LABEL_PAD := "          "   # the hanging indent, matching "Miracles: "
 ## screen. Wrapped like everything else, and capped: past a dozen the list
 ## stops being a thing you read and becomes a count.
 const MIRACLES_SHOWN := 12
+## How long the chronicle stays up while you are still at the nest, and how
+## quickly it clears once you have left it.
+const STONE_HOLD := 14.0
+const STONE_LEAVE := 1.6
 
 var village: Village
 var divine_hand: DivineHand
@@ -67,6 +71,8 @@ var _cast_overlay: CastOverlay
 var _stone_panel: PanelContainer
 var _stone_label: Label
 var _stone_time := 0.0
+## Where the wall that was read is standing. See `_tick_stone`.
+var _stone_at := Vector3.INF
 
 
 func _ready() -> void:
@@ -122,7 +128,49 @@ func _build_stone_panel() -> void:
 func _on_stone_read(text: String) -> void:
 	_stone_label.text = text
 	_stone_panel.visible = true
-	_stone_time = 14.0
+	_stone_time = STONE_HOLD
+	_stone_at = _nest_read_from()
+
+
+## Which nest was read. The chronicle is a thing SCRATCHED ON A WALL, and you
+## read it by standing at the wall — so it belongs to that wall and not to the
+## screen. Held as a position rather than a reference so a nest that is razed,
+## or whose village is wiped out, takes its panel with it and does not keep a
+## dead node alive to do it.
+func _nest_read_from() -> Vector3:
+	var near := Vector3.INF
+	var best := INF
+	for n in get_tree().get_nodes_in_group("creature_nest"):
+		var nest := n as CreatureNest
+		if nest == null or not is_instance_valid(nest):
+			continue
+		var gap := nest.global_position.distance_to(GameState.camera_focus)
+		if gap < best:
+			best = gap
+			near = nest.global_position
+	return near
+
+
+## THE STONE GOES OFF THE SCREEN WHEN YOU WALK AWAY FROM THE STONE.
+##
+## It was a flat fourteen seconds wherever you went, which is a long time to
+## carry a wall of text across a valley — and the one thing the player is
+## certain to do after reading a nest is leave it. So the timer is now a
+## backstop rather than the rule: past the nest's own grounds it fades in
+## STONE_LEAVE seconds instead, and while you are still standing there the hold
+## keeps being renewed and it stays up as long as you want it.
+func _tick_stone(delta: float) -> void:
+	if _stone_time <= 0.0:
+		return
+	if _stone_at != Vector3.INF:
+		var gap := _stone_at.distance_to(GameState.camera_focus)
+		if gap <= CreatureNest.GROUNDS:
+			_stone_time = STONE_HOLD          # still at the wall: it keeps
+		elif _stone_time > STONE_LEAVE:
+			_stone_time = STONE_LEAVE         # walked off: it goes, shortly
+	_stone_time -= delta
+	if _stone_time <= 0.0:
+		_stone_panel.visible = false
 
 
 func _build_bars() -> void:
@@ -635,10 +683,7 @@ it."""
 
 
 func _process(delta: float) -> void:
-	if _stone_time > 0.0:
-		_stone_time -= delta
-		if _stone_time <= 0.0:
-			_stone_panel.visible = false
+	_tick_stone(delta)
 	if village != null:
 		_diet_label.text = "Diet [1-4]: %s" % village.diet_name()
 	_hover_label.position = _hover_label.get_viewport().get_mouse_position() + Vector2(18, 18)

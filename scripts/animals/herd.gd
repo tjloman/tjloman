@@ -359,6 +359,8 @@ var mood := "graze"
 
 var _members: Array[Dictionary] = []
 var _mm: MultiMesh = null
+## The name over the herd. See `_build_multimesh`.
+var _tag: Label3D = null
 var _mmi: MultiMeshInstance3D = null
 var _home := Vector3.ZERO
 var _target := Vector3.ZERO
@@ -495,6 +497,20 @@ func _build_multimesh() -> void:
 		_mmi.position = Vector3(0, leg + body.y * 0.5, 0)
 	add_child(_mmi)
 	Util.apply_lod(_mmi, Quality.camera_far())
+	# WHAT THEY ARE, said out loud over the herd.
+	#
+	# `hover_text` has always known — "A herd of 46 reindeer, thriving" — and
+	# nothing could ever reach it, because a herd is a MultiMesh and a MultiMesh
+	# has no collider for the hand's ray to land on. Only a PROMOTED member is
+	# hoverable, and promotion is capped globally at Quality.herd_agents, so a
+	# herd standing past PROMOTE_WITHIN, or one that lost the bidding for the
+	# budget, is a field of unlabelled boxes with no way to ask what it is. This
+	# is a Label3D, so it adds no collider and blocks nothing: the real animals
+	# standing inside the herd can still be pointed at and picked up.
+	_tag = Util.status_label("", 0.012)
+	_tag.position = Vector3(0, leg + body.y + 1.4, 0)
+	add_child(_tag)
+	_retag()
 	_resample_grounds(GROUNDS_PER_TICK * 4)
 	_write_transforms()          # in full: nothing is on screen until it is
 
@@ -1197,6 +1213,7 @@ func _grow(many: int) -> void:
 		})
 	head = _members.size()
 	_spread = maxf(SPACING * sqrt(float(alive())), SPREAD_LEAST)
+	_retag()   # a calf is a head more
 	if _mm != null:
 		_mm.instance_count = _members.size()
 		_write_transforms()
@@ -1269,6 +1286,7 @@ func release(beast: Animal) -> void:
 ## herd is one smaller and frightened by it: a hand reaching in and carrying one
 ## off is not a thing the rest of them shrug at.
 func give_one(at: Vector3) -> Animal:
+	_retag.call_deferred()   # one head lighter, once it has actually gone
 	for m in _members:
 		if m["dead"] or m["agent"] != null:
 			continue
@@ -1296,6 +1314,15 @@ func slaughter() -> int:
 ## herd does not calve. Cruelty therefore costs a herd far more than the beast.
 func lost_one() -> void:
 	_fear = minf(_fear + FEAR_PER_LOSS, 1.0)
+	_retag()
+
+
+## Kept in step with the count rather than written every tick: a herd's number
+## changes when something is born, taken or eaten, and not otherwise.
+func _retag() -> void:
+	if _tag == null or not is_instance_valid(_tag):
+		return
+	_tag.text = "%d %s" % [alive(), species]
 
 
 ## A PREDATOR ATE. Kills bank toward the pack's own next head, which is how a

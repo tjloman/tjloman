@@ -458,6 +458,28 @@ func ring_spot(which: int) -> Vector3:
 
 
 ## Where he lies down, and where he drinks.
+## IS THIS SPOT INSIDE THE NEST? Asked by Village._spot_blocked before it puts
+## a building down.
+##
+## IT WAS A RADIUS FROM THE NODE'S ORIGIN, AND THE NEST IS NOT ROUND AND NOT
+## CENTRED ON ITS ORIGIN. The bed is BED_LONG by BED_DEEP — forty-two metres by
+## twenty-one — and it sits BED_MID behind the origin, with the wall of faces a
+## further BED_DEEP/2 + 0.8 back again. So the far edge of the stonework is 27.7
+## metres from the origin while FOOTPRINT, the circle builders were told to keep
+## out of, is 23.1. Four and a half metres of the nest was fair ground to build
+## on, and it is the deepest part of it — which is why a town would put a hut
+## through the back wall and a mill in the fire pit.
+##
+## The real shape is a rectangle in the nest's own frame, so this asks it in the
+## nest's own frame. Cheap, exact, and it turns with the nest.
+func covers(world_spot: Vector3, room := 0.0) -> bool:
+	var here := to_local(world_spot)
+	var half_long := BED_LONG * 0.55 + room
+	var near_z := BED_MID + BED_DEEP * 0.6 + room
+	var far_z := WALL_AT - 0.9 - room
+	return absf(here.x) <= half_long and here.z <= near_z and here.z >= far_z
+
+
 func bed() -> Vector3:
 	return global_position + Vector3(0, 0, BED_MID)
 

@@ -263,6 +263,23 @@ static func blossom_mesh() -> ArrayMesh:
 	return m
 
 
+## AN UP VECTOR THAT IS NOT THE WAY YOU ARE LOOKING.
+##
+## `look_at` needs an up that is not parallel to the aim, and Godot says so —
+## loudly, once per call, with a stack trace. A rope drawn between the hand and
+## the thing hanging under it is exactly vertical whenever the hand is directly
+## above what it is carrying, which is most of the time anyone carries anything,
+## so a single held object filled ten minutes of log with ninety-five identical
+## warnings. Any rope, beam or bolt drawn between two arbitrary points wants
+## this rather than a bare Vector3.UP.
+static func steady_up(from: Vector3, to: Vector3) -> Vector3:
+	var aim := to - from
+	if aim.length_squared() < 0.000001:
+		return Vector3.UP
+	return Vector3.UP if absf(aim.normalized().dot(Vector3.UP)) < 0.999 \
+		else Vector3.FORWARD
+
+
 ## THE ONE MATERIAL EVERY CHUNK OF GROUND IS DRAWN WITH. Vertex colour as
 ## albedo, fully rough, nothing else — which is to say it was identical on all
 ## of them already, and every chunk was building its own copy of it.

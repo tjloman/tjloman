@@ -166,7 +166,7 @@ func _draw_rope(who: Creature) -> void:
 		return
 	_rope.visible = true
 	_rope.global_position = from.lerp(to, 0.5)
-	_rope.look_at(to, Vector3.UP)
+	_rope.look_at(to, Util.steady_up(_rope.global_position, to))
 	# Taut when it is at the end of its reach, slack and dipped when it is not.
 	_rope.scale = Vector3(1.0, 1.0, span)
 	_rope.global_position.y -= (1.0 - clampf(span / TETHER, 0.0, 1.0)) * 0.9

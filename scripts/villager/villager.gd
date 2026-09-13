@@ -2037,7 +2037,11 @@ func _move_toward(target: Vector3, speed: float, delta: float, arrive := ARRIVE_
 	# Villagers cannot swim: route ALONG the shore around open water rather
 	# than stepping in. Only a body hemmed in by water on every side stalls
 	# (and the stuck watchdog re-decides them).
-	dir = NavField.water_route(self, global_position, dir, _world())
+	# ...probing as far as THIS step will carry it: velocity is scaled by
+	# `_sim_scale`, so a body on a coarse clock can stride clean over a fixed
+	# 1.7m probe. Three frames of its real travel.
+	dir = NavField.water_route(self, global_position, dir, _world(),
+		maxf(1.7, speed * _sim_scale * 0.05))
 	if dir == Vector3.ZERO:
 		_apply_gravity_only(delta)
 		return false

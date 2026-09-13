@@ -229,7 +229,7 @@ func _draw_rope(at: Vector3, held: Vector3, weight: float) -> void:
 		return
 	_rope.visible = true
 	_rope.global_position = at.lerp(held, 0.5)
-	_rope.look_at(held, Vector3.UP)
+	_rope.look_at(held, Util.steady_up(_rope.global_position, held))
 	var taut := clampf(span / TAUT_AT, 0.0, 1.0)
 	_rope.scale = Vector3(1.0 + taut * 1.6, 1.0 + taut * 1.6, span)
 	var heavy := clampf(weight, 0.0, 1.0)

@@ -586,12 +586,11 @@ func _spot_blocked(pos: Vector3, own_room := 0.0) -> bool:
 			< maxf(ROOM_ROUND_THE_SCHOOL, own_room):
 		return true
 	# The nest is not a building but a PLACE — a bed, a pool, a fire, a ring to
-	# dance in — and it declares its own size. FOOTPRINT and not GROUNDS: the
-	# grounds are how far away you still count as being HERE, which is a social
-	# question; what a builder has to walk round is the thing on the ground.
-	if nest != null and is_instance_valid(nest) \
-			and nest.global_position.distance_to(pos) \
-			< maxf(CreatureNest.FOOTPRINT, own_room):
+	# dance in — and it knows its own shape. It is asked rather than measured
+	# from here, because it is a long rectangle sitting well behind its own
+	# origin and a radius from that origin leaves the back of it buildable. See
+	# CreatureNest.covers.
+	if nest != null and is_instance_valid(nest) and nest.covers(pos, own_room):
 		return true
 	return pen_position().distance_to(pos) < maxf(6.0, own_room)
 

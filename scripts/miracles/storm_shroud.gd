@@ -200,7 +200,7 @@ func _strike_between(a: Vector3, b: Vector3) -> void:
 	bar.size = Vector3(BAR_BORE, BAR_BORE, span)
 	var arc := Util.mesh_node(bar, LIT, a.lerp(b, 0.5), true)
 	get_tree().current_scene.add_child(arc)
-	arc.look_at(b, Vector3.UP)
+	arc.look_at(b, Util.steady_up(arc.global_position, b))
 	get_tree().create_timer(BAR_HOLD).timeout.connect(arc.queue_free)
 
 
