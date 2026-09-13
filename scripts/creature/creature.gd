@@ -1413,6 +1413,21 @@ func _eat_carried() -> void:
 		state = State.EATING
 		_action_time = 2.0
 		return
+	# FOOD, which this could not do at all — a loaf fell through to
+	# `_release_carried` and was PUT DOWN. See CreatureFeeding.
+	var meal := _carried as FoodItem
+	if meal != null:
+		_swallow_units(1.5 * maxf(float(meal.count), 1.0))
+		_last_deed = "eat"
+		# The KIND as well as the act, so praise teaches a diet. See
+		# CreatureFeeding.
+		_deed_verb = "eat"
+		_deed_type = "person" if meal.is_human_meat else "food"
+		meal.queue_free()
+		_carried = null
+		state = State.EATING
+		_action_time = 1.5
+		return
 	var animal := _carried as Animal
 	if animal == null:
 		_release_carried(true)
@@ -1761,7 +1776,10 @@ func praise() -> void:
 	mood = minf(mood + 12.0, 100.0)
 	# Kindness is what buys the right to be listened to.
 	earn_trust(5.0)
-	attention = minf(attention + 8.0, 100.0)
+	# A hand on the flank while it is holding something is a SENTENCE about the
+	# thing in its hands. See CreatureFeeding.
+	if CreatureFeeding.stroked(self):
+		return
 	if _last_deed == "catch":
 		catch_skill = clampf(catch_skill + 0.25, 0.1, 2.5)
 	feel("affection", 0.85)
@@ -1792,6 +1810,9 @@ func scold() -> void:
 		return
 	bond = maxf(bond - 2.0, 0.0)
 	mood = maxf(mood - 14.0, 0.0)
+	# And the other half of the same sentence. See CreatureFeeding.
+	if CreatureFeeding.scolded(self):
+		return
 	if _last_deed == "catch":
 		catch_skill = clampf(catch_skill - 0.3, 0.1, 2.5)
 	# Your disapproval teaches the mind that deed is not worth repeating.

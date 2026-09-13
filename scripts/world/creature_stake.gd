@@ -56,13 +56,26 @@ var _rope: MeshInstance3D = null
 static func plant(who: Creature) -> CreatureStake:
 	if _here != null and is_instance_valid(_here):
 		return _here
-	# ONCE PER CREATURE, NOT ONCE PER BOOT. main._ready drove this in every time
-	# the game started, so a player who had finished the lesson months ago came
-	# back to a creature on a rope with no lesson left to take it off — and the
-	# only thing that pulls it is a tutorial that has already been marked done.
-	# The rope is the first thing a creature knows, and a thing you know is not
-	# unlearned by closing the window.
+	# ONCE PER CREATURE, NOT ONCE PER BOOT. main._ready drives this in every time
+	# the game starts, so a player who finished the lesson months ago comes back
+	# to a creature on a rope with no lesson left to take it off.
+	#
+	# AND THE PROFILE FLAG ALONE DID NOT FIX IT, which is the part worth
+	# writing down. `RETIRED` is only ever written by `pull_up`, `pull_up` is
+	# only ever called by the tutorial's last step, and a player who has already
+	# been tutored never runs the tutorial again — Tutorial._ready sees its own
+	# flag and returns before any of it. So the one path that could clear the
+	# rope was behind the very condition that made the rope wrong. Anybody
+	# already past the lessons was roped for good, and a fix that only counted
+	# forward could never reach them.
+	#
+	# So the rope asks the lesson directly as well. Having been taught IS having
+	# retired the rope, whether or not this build was the one that wrote it
+	# down, and it is recorded here so the question is only ever asked once.
 	if SaveGame.recalls(RETIRED):
+		return null
+	if Tutorial.was_taught():
+		SaveGame.remember(RETIRED, true)
 		return null
 	var stake := CreatureStake.new()
 	stake.creature = who

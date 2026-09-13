@@ -77,6 +77,12 @@ func restart() -> void:
 
 
 func _already_tutored() -> bool:
+	return was_taught()
+
+
+## HAS THIS PLAYER EVER BEEN THROUGH THE LESSONS? Public because the ROPE has to
+## be able to ask. See CreatureStake.plant.
+static func was_taught() -> bool:
 	return FileAccess.file_exists(FLAG_PATH)
 
 
