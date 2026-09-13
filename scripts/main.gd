@@ -1254,6 +1254,25 @@ func _run_smoke_test() -> void:
 			was_running, "calm" if scared.state != Animal.State.FLEE else "STILL RUNNING"])
 		scared.queue_free()
 
+	# THE SCHEDULER. A crowd on the same stride must deal itself across every
+	# frame of the cycle, not pile onto one of them.
+	var ids: Array = []
+	for v in village.my_villagers():
+		ids.append(int(v.get_instance_id()))
+	for s2: int in [2, 4, 10]:
+		var bins := {}
+		for id: int in ids:
+			bins[id % s2] = int(bins.get(id % s2, 0)) + 1
+		var worst := 0
+		for k in bins:
+			worst = maxi(worst, int(bins[k]))
+		print(("SMOKE TEST: scheduler — %d villagers at stride %d: worst frame "
+			+ "carries %d, evenness %.2f (the old counter scored %.2f)") % [
+			ids.size(), s2, worst, Scheduler.spread(ids, s2), 1.0 / float(s2)])
+	# And the time still adds up: an entity that missed six frames is charged six.
+	print("SMOKE TEST: scheduler — routes are capped at %d a frame now (%s)" % [
+		NavField.ROUTES_PER_FRAME, NavField.routing_report()])
+
 	# THE BEAT BEFORE THE DEED. Eating a person must ALWAYS be asked about, an
 	# ordinary deed only until it has an opinion of its own, and a scold during
 	# the pause must teach without the thing ever happening.

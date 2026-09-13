@@ -32,11 +32,24 @@ const SAVE_PATH := "user://quality.cfg"
 ## oscillate between two looks every few seconds.
 const FRAME_WARM := 0.022
 const FRAME_HOT := 0.033
-const FRAME_COOL := 0.019
+## AND IT MUST BE GENUINELY FINE BEFORE IT EASES OFF AGAIN.
+##
+## This was 0.019 — three milliseconds under the WARM line. That is not
+## hysteresis, it is a hair, and any machine sitting anywhere near 45fps drifts
+## straight through it: four seconds over, announce; four seconds under,
+## announce; forever. On a desktop that was perfectly healthy the world spent
+## the whole session breathing out and working hard by turns.
+##
+## Sixteen and a half milliseconds is sixty frames a second. If it is easing
+## off, it is because the device is actually keeping up.
+const FRAME_COOL := 0.0165
 ## How long a condition must hold before anything changes. A chunk streaming in,
 ## a scene reload or a tornado is a HITCH, not a hot phone, and must never be
 ## mistaken for one.
 const HEAT_HOLD := 4.0
+## AND EASING OFF IS SLOWER THAN CLAMPING DOWN, on purpose. Protecting the frame
+## should be quick; believing the trouble has passed should take real evidence.
+const COOL_HOLD := 14.0
 ## And nothing is judged at all for the first few seconds after a load, when the
 ## world is being built and slow frames are expected.
 const SETTLE := 8.0
@@ -58,6 +71,8 @@ var hands_busy := false
 var _frame := 0.016
 var _pressure := 0.0     # seconds the current condition has held
 var _grace := SETTLE
+## Which heat levels have already explained themselves this session.
+var _announced := {}
 
 
 func _ready() -> void:
@@ -90,7 +105,7 @@ func _process(delta: float) -> void:
 		_pressure = 0.0
 		return
 	_pressure += delta
-	if _pressure < HEAT_HOLD:
+	if _pressure < (HEAT_HOLD if want > heat else COOL_HOLD):
 		return
 	_pressure = 0.0
 	heat = want
@@ -98,6 +113,12 @@ func _process(delta: float) -> void:
 	# Everything that reads a knob reads it through `effective_tier`, so the
 	# existing re-apply path does the whole job.
 	quality_changed.emit()
+	# SAID ONCE, NOT EVERY TIME. A player is owed an explanation the first time
+	# the game visibly changes under them; after that it is a machine narrating
+	# its own thermostat, and it was doing it every few seconds.
+	if _announced.has(heat):
+		return
+	_announced[heat] = true
 	if heat == Heat.HOT:
 		GameState.announce("The world eases off — your device is working hard.")
 	elif heat == Heat.EASY:

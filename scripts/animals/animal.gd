@@ -120,7 +120,7 @@ var _prey: Node3D = null
 var _water_target := Vector3.INF
 var _bush: ForageBush = null
 var _action_time := 2.0
-var _sim_skip := 0
+var _sim_last := 0   # see Scheduler
 ## Ground one throttled step must cover to match real time (see Villager).
 var _sim_scale := 1.0
 var _state_time := 0.0
@@ -215,14 +215,14 @@ func _physics_process(delta: float) -> void:
 		var stride := Util.sim_stride(global_position)
 		_sim_scale = 1.0
 		if stride > 1:
-			_sim_skip += 1
-			if _sim_skip < stride:
+			var turn := Scheduler.turn(self, stride, _sim_last)
+			if turn == 0:
 				return
-			delta *= _sim_skip
+			_sim_last = Scheduler.now()
+			delta *= float(turn)
 			# See Villager: move_and_slide() runs on the engine's frame, so a
 			# throttled beast crawls unless the stride is folded into velocity.
-			_sim_scale = float(_sim_skip)
-			_sim_skip = 0
+			_sim_scale = float(turn)
 
 	if _animator != null:
 		_animator.play(_anim_state())

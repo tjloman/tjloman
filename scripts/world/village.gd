@@ -233,7 +233,7 @@ var _influence_ring: MeshInstance3D
 var _ring_material: StandardMaterial3D
 var _pen_center := Vector3(0, 0, -11)
 var _housing_timer := 0.0
-var _sim_skip := 0                  # frames skipped while far from the camera
+var _sim_last := 0                  # the frame it last ticked on; see Scheduler
 var _breed_timer := 30.0
 ## Population, sampled now and then. A village dying of demographics dies
 ## SILENTLY — the flock thins over hours and nothing announces it — so the
@@ -706,11 +706,11 @@ func _process(delta: float) -> void:
 	# priciest thing here, and distant towns needn't pay it every frame.
 	var stride := Util.sim_stride(global_position)
 	if stride > 1:
-		_sim_skip += 1
-		if _sim_skip < stride:
+		var turn := Scheduler.turn(self, stride, _sim_last)
+		if turn == 0:
 			return
-		delta *= _sim_skip
-		_sim_skip = 0
+		_sim_last = Scheduler.now()
+		delta *= float(turn)
 	var worshippers := _worshippers
 	if worshippers > 0:
 		if converted:

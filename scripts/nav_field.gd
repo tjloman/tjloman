@@ -35,6 +35,22 @@ const AVOID_RANGE := 2.2
 ## which is what it had before.
 const ROUTE_CELL := 6.0
 const ROUTE_BUDGET := 380       # cells expanded before a search gives up
+## AND HOW MANY SEARCHES ONE FRAME WILL PAY FOR.
+##
+## Each search was capped; the number of them was not. So fifty villagers all
+## re-deciding on the same frame — which is what happens when an alarm goes up,
+## or a tally lands, or (until Scheduler) simply because every one of them
+## counted its skipped frames from zero — asked for fifty routes at once, up to
+## nineteen thousand cell expansions in a single frame, and then nothing at all
+## for seconds. That is the shape that spikes a frame time, and a spiked frame
+## time is what drops the graphics tier.
+##
+## Six a frame is three hundred and sixty a second, which is far more routing
+## than a world of this size ever really wants, and it is SPREAD. A refused
+## search is not a failure and is not recorded as one: the caller steers
+## locally this frame, exactly as it does when a route genuinely cannot be
+## found, and asks again on the next one.
+const ROUTES_PER_FRAME := 6
 const ROUTE_REACH := 400.0      # no route is planned further than this
 const WADE_COST := 4.0          # per metre of depth: passable, and unpleasant
 const CLIMB_COST := 2.2         # per metre of rise between neighbouring cells
@@ -52,9 +68,12 @@ var _terrain := {}       # Vector2i route cell -> {"h": float, "wet": float, "sl
 var _world: WorldGen = null
 var _routes_asked := 0
 var _routes_failed := 0
+var _routes_deferred := 0
+var _spent_this_frame := 0
 
 
 func _process(delta: float) -> void:
+	_spent_this_frame = 0
 	_timer -= delta
 	if _timer <= 0.0:
 		_timer = REBUILD_PERIOD
@@ -196,6 +215,13 @@ func water_steer(pos: Vector3, desired: Vector3, world: WorldGen, probe := 1.7) 
 ## the same gully every afternoon.
 func route(from: Vector3, to: Vector3, wade := 2.0, shun := {}) -> PackedVector3Array:
 	_routes_asked += 1
+	# THIS FRAME HAS DONE ENOUGH SEARCHING. Not a failure — the caller falls
+	# back to steering straight at the thing, which is what it does for an
+	# unroutable target anyway, and it will ask again next frame.
+	if _spent_this_frame >= ROUTES_PER_FRAME:
+		_routes_deferred += 1
+		return PackedVector3Array()
+	_spent_this_frame += 1
 	var world := _world_gen()
 	var span := Vector2(to.x - from.x, to.z - from.z).length()
 	if world == null or span > ROUTE_REACH:
@@ -352,4 +378,5 @@ func _world_gen() -> WorldGen:
 ## How the router is doing, for the workshop panel.
 func routing_report() -> String:
 	return "routes asked %d, unplannable %d, terrain cells remembered %d" % [
-		_routes_asked, _routes_failed, _terrain.size()]
+		_routes_asked, _routes_failed, _terrain.size()] \
+		+ ("  (%d put off to the next frame)" % _routes_deferred if _routes_deferred > 0 else "")

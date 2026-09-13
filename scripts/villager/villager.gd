@@ -188,7 +188,9 @@ var _mission_village: Village = null
 var _ground_check_time := randf_range(1.0, 3.0)
 var _wd_pos := Vector3.ZERO       # last spot we made real headway from
 var _wd_still := 0.0             # seconds of a travel state spent going nowhere
-var _sim_skip := 0               # physics frames skipped while far from the camera
+## The physics frame this one last ticked on. See Scheduler: the phase spreads
+## a crowd across the cycle, and this makes the delta it is charged exact.
+var _sim_last := 0
 ## How much ground one throttled step must cover to match real time. See the
 ## note in _physics_process — this is what keeps distant villages fed.
 var _sim_scale := 1.0
@@ -276,18 +278,21 @@ func _physics_process(delta: float) -> void:
 		var stride := Util.sim_stride(global_position)
 		_sim_scale = 1.0
 		if stride > 1:
-			_sim_skip += 1
-			if _sim_skip < stride:
+			# WHOSE TURN IS IT. Every villager used to count from zero, so fifty
+			# of them ticked on the same frame and idled for the next three —
+			# see Scheduler for why that made the whole device throttle.
+			var turn := Scheduler.turn(self, stride, _sim_last)
+			if turn == 0:
 				return
-			delta *= _sim_skip
+			_sim_last = Scheduler.now()
+			delta *= float(turn)
 			# MOVEMENT MUST BE PAID FOR TOO. move_and_slide() integrates over
 			# the ENGINE's frame, not the delta we were handed — so running on
 			# a slower clock silently moved them at a tenth speed while hunger
 			# ticked at full rate. Villages the player wasn't near starved on
 			# the way to the granary. The stride is folded into velocity so
 			# they cover the same ground either way.
-			_sim_scale = float(_sim_skip)
-			_sim_skip = 0
+			_sim_scale = float(turn)
 	# PINNED suspends everything, and for the same reason DYING does: they are
 	# not doing anything, they are being done to. No hunger, no ageing, no
 	# watchdog — the ONLY clock that runs is the Mauling's, and the village
