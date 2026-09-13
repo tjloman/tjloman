@@ -21,6 +21,22 @@ extends StaticBody3D
 ## from — which this project builds as an error that stops every dependent
 ## script loading, and took the whole village down with it.
 const LESSONS: Array[String] = ["circle", "horseshoe", "line", "dance", "huddle"]
+## ONE CLASS PER TEACHER. Seventy-seven children in a single follow-the-leader
+## is not a school, it is a conga line across a village — and a school with
+## three staff standing in one circle is three people doing one person's job.
+## The roll is split between whoever is teaching, each class gets its own
+## corner of the yard and its own lesson, and a passer-by sees a school.
+const CLASSES_MOST := 3
+## WHERE EACH CLASS STANDS: three fixed stations, not a computed ring — the
+## yard at the door, and one along each side of the hall. A class should have a
+## PLACE, so that the same teacher is found in the same corner and the school
+## reads as a building with three things going on round it rather than as a
+## crowd that happens to be near a door.
+const STATIONS: Array[Vector3] = [
+	Vector3(0.0, 0.0, 4.6),      # the yard, at the door
+	Vector3(-5.4, 0.0, 0.4),     # along the west wall
+	Vector3(5.4, 0.0, 0.4),      # along the east wall
+]
 const LESSON_LEAST := 14.0
 const LESSON_MOST := 26.0
 ## How far apart the children stand in each. A ring's radius grows with the
@@ -36,17 +52,21 @@ var village: Village
 var health := 100.0
 var kindling := Kindling.new()
 
-var _lesson := "circle"
-var _left := 0.0
+## One per class, so the three of them are never doing the same thing at the
+## same moment. Sized once, to CLASSES_MOST, and indexed by class.
+var _lesson: Array[String] = []
+var _left: Array[float] = []
 ## Turns slowly under the dance, and gives the other formations a little life
 ## so a class is never a diagram.
-var _drift := 0.0
+var _drift: Array[float] = []
 
 func _ready() -> void:
 	add_to_group("edubba")
 	add_to_group("burnable")
-	_left = randf_range(LESSON_LEAST, LESSON_MOST)
-	_lesson = LESSONS[randi() % LESSONS.size()]
+	for i in CLASSES_MOST:
+		_lesson.append(LESSONS[randi() % LESSONS.size()])
+		_left.append(randf_range(LESSON_LEAST, LESSON_MOST))
+		_drift.append(randf() * TAU)
 	set_meta("hover_name", "Edubba (school)")
 	collision_layer = 4  # hoverable; villagers pass through
 	collision_mask = 0
@@ -76,22 +96,52 @@ func _ready() -> void:
 
 ## Where children and the teacher gather — the yard just outside the door.
 func yard_position() -> Vector3:
-	return global_position + Vector3(0, 0, 3.0)
+	return yard_for(0)
 
 
-## The lesson under way. Changes on its own clock — see `_process`.
-func lesson() -> String:
-	return _lesson
+## HOW MANY CLASSES ARE RUNNING — one per teacher actually standing in the
+## yard, so an unstaffed school still gathers its children into one group
+## rather than none. Reaches the village's own tally directly: it is the one
+## number that says how many grown-ups are here to run a class, and wrapping it
+## in another accessor would only move the same read.
+func classes() -> int:
+	if village == null or not is_instance_valid(village):
+		return 1
+	return clampi(village._teachers, 1, CLASSES_MOST)
+
+
+## Where a given class gathers. One at the door; two or three spread around it,
+## far enough apart that the rings do not overlap.
+func yard_for(klass: int) -> Vector3:
+	return global_position + basis * STATIONS[clampi(klass, 0, STATIONS.size() - 1)
+		% STATIONS.size()]
+
+
+## The middle of the class this child belongs to — what it turns to face.
+func middle_for(which: int) -> Vector3:
+	return yard_for(which % classes())
+
+
+## The lesson under way for a class. Changes on its own clock — see `_process`.
+func lesson(klass := 0) -> String:
+	return _lesson[klass % _lesson.size()]
 
 
 ## WHERE THE i-TH CHILD OF `many` STANDS. Everything is worked out from the two
 ## numbers a child actually knows about itself: which one it is, and how many
 ## there are. No child needs to be told where any other one is.
 func spot_for(which: int, many: int) -> Vector3:
-	var count := maxi(many, 1)
-	var seat := clampi(which, 0, count - 1)
-	var yard := yard_position()
-	match _lesson:
+	# DEALT ROUND LIKE CARDS. Taking every third child rather than the first
+	# third keeps a class the same size as its neighbours whatever the roll is,
+	# and keeps a child in the same class as the roll grows under it.
+	var groups := classes()
+	var klass := maxi(which, 0) % groups
+	var seat := maxi(which, 0) / groups
+	var count := maxi((maxi(many, 1) - klass + groups - 1) / groups, 1)
+	seat = clampi(seat, 0, count - 1)
+	var yard := yard_for(klass)
+	var drift: float = _drift[klass]
+	match _lesson[klass]:
 		"line":
 			# Follow the leader: a column facing the door, the smallest at the
 			# back because that is where the smallest always ends up.
@@ -101,11 +151,11 @@ func spot_for(which: int, many: int) -> Vector3:
 				+ across * (sin(float(seat) * 1.7) * 0.35)
 		"huddle":
 			# Round the teacher, close enough to be fussed over.
-			var a := float(seat) * TAU / float(count) + _drift
+			var a := float(seat) * TAU / float(count) + drift
 			var r := 0.8 + fmod(float(seat) * 0.37, 1.0) * 1.1
 			return yard + Vector3(cos(a), 0.0, sin(a)) * r
 		"dance":
-			var spin := _drift * DANCE_SPIN * 6.0
+			var spin := drift * DANCE_SPIN * 6.0
 			var d := _ring_radius(count)
 			var b := float(seat) * TAU / float(count) + spin
 			return yard + Vector3(cos(b), 0.0, sin(b)) * d
@@ -118,7 +168,7 @@ func spot_for(which: int, many: int) -> Vector3:
 			var c := -open * 0.5 + float(seat) * step
 			return yard + Vector3(sin(c), 0.0, -cos(c)) * _ring_radius(count)
 	# "circle" — the plain story ring.
-	var e := float(seat) * TAU / float(count) + _drift * 0.15
+	var e := float(seat) * TAU / float(count) + drift * 0.15
 	return yard + Vector3(cos(e), 0.0, sin(e)) * _ring_radius(count)
 
 
@@ -151,15 +201,16 @@ func _ring_radius(count: int) -> float:
 ## thing rather than a crowd flickering between five.
 func _process(delta: float) -> void:
 	_tick_fire(delta)
-	_drift += delta
-	_left -= delta
-	if _left > 0.0:
-		return
-	_left = randf_range(LESSON_LEAST, LESSON_MOST)
-	var next := LESSONS[randi() % LESSONS.size()]
-	if next == _lesson:
-		next = LESSONS[(LESSONS.find(_lesson) + 1) % LESSONS.size()]
-	_lesson = next
+	for k in CLASSES_MOST:
+		_drift[k] += delta
+		_left[k] -= delta
+		if _left[k] > 0.0:
+			continue
+		_left[k] = randf_range(LESSON_LEAST, LESSON_MOST)
+		var next := LESSONS[randi() % LESSONS.size()]
+		if next == _lesson[k]:
+			next = LESSONS[(LESSONS.find(_lesson[k]) + 1) % LESSONS.size()]
+		_lesson[k] = next
 
 
 func hover_text() -> String:
@@ -168,7 +219,14 @@ func hover_text() -> String:
 		for v in village.my_villagers():
 			if not v.is_adult():
 				n += 1
-	return "Edubba (school) — %d children learning" % n
+	var groups := classes()
+	if n <= 0:
+		return "Edubba (school) — empty"
+	var doing := PackedStringArray()
+	for k in groups:
+		doing.append(lesson(k))
+	return "Edubba (school) — %d children in %d %s (%s)" % [
+		n, groups, "class" if groups == 1 else "classes", ", ".join(doing)]
 
 ## Fire ------------------------------------------------------------------------
 
@@ -201,3 +259,42 @@ func burn_down() -> void:
 		village.edubba = null
 	GameState.announce("The school burns down. The children scatter.")
 	queue_free()
+
+
+## ONE CHILD, ONE FRAME OF SCHOOL.
+##
+## Lives here rather than in Villager for two reasons: that file is permanently
+## on its line cap, and where a child stands is the school's business — it is
+## the only thing that knows what the class is doing.
+##
+## `child` is untyped for the same reason `seat_of` is: naming Villager in a
+## signature here closes a parse circle that takes the whole village down.
+func attend(child: Node, delta: float) -> void:
+	var at: Vector3 = child.global_position
+	var seat := spot_for(int(child._school_seat), maxi(village.child_count(), 1))
+	var gap := Vector2(seat.x - at.x, seat.z - at.z)
+	if gap.length() > 0.5:
+		# NO ROUTING IN A SCHOOL YARD. `_move_toward` runs the obstacle steer
+		# and the shore probe for every body that uses it, every frame, and a
+		# probe is terrain samples. Seventy-seven children shuffling round a
+		# ring inside a village's own yard — on ground the village has already
+		# built on, two metres from where they are going, with nothing in
+		# between — need none of it. Straight at it instead.
+		var pace: float = Villager.WALK_SPEED * child._speed_factor() * 0.8
+		var step := gap.normalized() * pace * float(child._sim_scale)
+		child.velocity.x = step.x
+		child.velocity.z = step.y
+		child.velocity.y -= Villager.GRAVITY * delta
+		child.move_and_slide()
+		child.look_at(at - Vector3(step.x, 0.0, step.y), Vector3.UP)
+	else:
+		child._apply_gravity_only(delta)
+		# Facing the middle of its OWN class — a ring of backs is not a class.
+		# Bodies are modelled facing +Z and look_at aims -Z, so this looks at
+		# the point opposite, the same way _move_toward does.
+		var mid := middle_for(int(child._school_seat))
+		var away := at - Vector3(mid.x, 0.0, mid.z)
+		if Vector2(away.x, away.z).length() > 0.05:
+			child.look_at(at + Vector3(away.x, 0.0, away.z), Vector3.UP)
+	child.social = minf(float(child.social) + 3.0 * delta, 100.0)
+	child.happiness = minf(float(child.happiness) + 0.5 * delta, 100.0)

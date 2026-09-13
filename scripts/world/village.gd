@@ -701,11 +701,14 @@ func spawn_edubba_at(world_spot: Vector3) -> void:
 ## `_retally` still recomputes it from the roster, which keeps it honest across
 ## anything that removes a teacher without saying so — a death, a chunk unload,
 ## a school burning down.
-func claim_teaching_post() -> bool:
+## Returns WHICH post was taken — 0, 1 or 2 — or -1 if the school is full. The
+## number is the class: it decides which corner of the yard this teacher stands
+## in, so the same person is found in the same place. See Edubba.STATIONS.
+func claim_teaching_post() -> int:
 	if _teachers >= _teaching_posts():
-		return false
+		return -1
 	_teachers += 1
-	return true
+	return _teachers - 1
 
 
 ## HOW MANY POSTS THE SCHOOL HAS OPEN — set by the CHILDREN, because that is

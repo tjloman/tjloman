@@ -206,6 +206,9 @@ var _carry_kind := ""            # non-empty while hauling a gathered load home
 var _carry_amount := 0
 ## The job whose place this is holding. See VillageJobs.
 var _held_post := ""
+## Which class this one teaches, and so which corner of the school yard it
+## stands in. See Edubba.STATIONS.
+var _class := 0
 var _carry_job := ""             # the job this load came from (for crowd tally)
 var _carry_announce := ""        # spoken on delivery, if the player's home
 var _carry_visual: Node3D = null
@@ -1111,13 +1114,15 @@ func _decide() -> void:
 	if is_teacher and not village.holds_teaching_post():
 		is_teacher = false
 	# Asked and taken in ONE act. See Village.claim_teaching_post.
-	if not is_teacher and not _has_dependent_child() \
-			and village.claim_teaching_post():
-		is_teacher = true
+	if not is_teacher and not _has_dependent_child():
+		var post := village.claim_teaching_post()
+		if post >= 0:
+			is_teacher = true
+			_class = post
 	if is_teacher and village.has_edubba():
 		state = State.TEACH
 		_action_time = randf_range(8.0, 16.0)
-		_target = village.edubba.yard_position()
+		_target = village.edubba.yard_for(_class)   # this teacher's own corner
 		return
 	# Breeding is a high drive once of age, when body and larder allow.
 	if wants_to_breed():
@@ -2005,20 +2010,7 @@ func _process_at_school(delta: float) -> void:
 	if not village.has_edubba() or is_adult():
 		_decide()
 		return
-	var seat := village.edubba.spot_for(_school_seat, maxi(village.child_count(), 1))
-	if global_position.distance_to(seat) > 0.5:
-		_move_toward(seat, WALK_SPEED * _speed_factor() * 0.8, delta, 0.4)
-	else:
-		_apply_gravity_only(delta)
-		# Facing the middle of whatever it is — a ring of backs is not a class.
-		# Bodies are modelled facing +Z and look_at aims -Z, so this looks at
-		# the point opposite, the same way _move_toward does.
-		var mid := village.edubba.yard_position()
-		var away := global_position - Vector3(mid.x, 0.0, mid.z)
-		if Vector2(away.x, away.z).length() > 0.05:
-			look_at(global_position + Vector3(away.x, 0.0, away.z), Vector3.UP)
-	social = minf(social + 3.0 * delta, 100.0)
-	happiness = minf(happiness + 0.5 * delta, 100.0)
+	village.edubba.attend(self, delta)
 	_action_time -= delta
 	if _action_time <= 0.0:
 		_decide()  # re-check needs now and then
