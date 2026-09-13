@@ -68,6 +68,12 @@ var _heat := {}
 
 ## Heat bleeds off. Called from the village's own clock.
 func tick(delta: float) -> void:
+	# A TOWN THAT HAS SEEN NOTHING COSTS NOTHING. `.keys()` builds a fresh Array
+	# every call, and this runs once a frame for every village in the world —
+	# so an empty ledger was allocating and freeing a throwaway array per town
+	# per frame, forever, to iterate nothing.
+	if _heat.is_empty():
+		return
 	for kind: String in _heat.keys():
 		var left: float = float(_heat[kind]) - COOL_RATE * delta
 		if left <= 0.0:

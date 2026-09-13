@@ -127,6 +127,7 @@ var _state_time := 0.0
 var _prev_state := State.IDLE
 var _think_time := 0.0
 var _flee_from := Vector3.ZERO
+var _world_cache: WorldGen = null
 var _fall_speed := 0.0
 var _gentle_drop := false
 var _spin_ang := Vector3.ZERO   # aftertouch spin axis*rate while thrown (rad/s)
@@ -241,7 +242,7 @@ func _physics_process(delta: float) -> void:
 		state = State.IDLE
 		_action_time = 2.0
 	if global_position.y < -12.0:
-		var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+		var world := _world()
 		if world != null:
 			global_position.y = world.height_at(global_position.x, global_position.z) + 0.5
 			velocity = Vector3.ZERO
@@ -377,7 +378,7 @@ func _think() -> void:
 		return
 
 	# Buried waist-deep in a hillside (bad spawn, collision hiccup)? Pop up.
-	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	var world := _world()
 	if world != null:
 		var h := world.height_at(global_position.x, global_position.z)
 		if global_position.y < h - 1.0:
@@ -579,8 +580,7 @@ func _move_toward(target: Vector3, speed: float, delta: float) -> bool:
 	# Beasts don't swim: route along the shore around water (frogs excepted —
 	# they belong to both worlds).
 	if not spec.get("hops", false):
-		dir = NavField.water_route(
-			self, global_position, dir, get_tree().get_first_node_in_group("world_gen") as WorldGen)
+		dir = NavField.water_route(self, global_position, dir, _world())
 		if dir == Vector3.ZERO:
 			_apply_gravity_only(delta)
 			return false
@@ -608,7 +608,7 @@ func _apply_gravity_only(delta: float) -> void:
 func _stick_to_ground() -> void:
 	if state == State.HELD or state == State.FALLING:
 		return
-	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	var world := _world()
 	if world == null:
 		return
 	var h := world.height_at(global_position.x, global_position.z)
@@ -635,7 +635,7 @@ func _ambient_sound(delta: float) -> void:
 func _tick_hazards(delta: float) -> void:
 	if state == State.HELD or state == State.FALLING:
 		return
-	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	var world := _world()
 	if world != null:
 		# Against whatever water is ACTUALLY here, the same as the villagers:
 		# the sea, or a pond standing in a flooded crater — and NOT a dry pit
@@ -673,7 +673,7 @@ func _tick_hazards(delta: float) -> void:
 func ignite() -> void:
 	if burning or state == State.HELD:
 		return
-	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	var world := _world()
 	if world != null and world.is_underwater(global_position.x, global_position.z):
 		return
 	burning = true
@@ -855,6 +855,17 @@ func release_hold() -> void:
 	if state == State.MAUL:
 		state = State.IDLE
 		_action_time = randf_range(0.5, 1.5)
+
+
+## THE WORLD, FOUND ONCE. Villager has had this since the beginning; Animal
+## never did, and asked the scene tree for it afresh on every step of every
+## beast — inside `_move_toward`, which runs every frame for everything that is
+## walking anywhere. A group lookup is cheap and a group lookup per animal per
+## frame is not, and this is the busiest class in the game.
+func _world() -> WorldGen:
+	if _world_cache == null or not is_instance_valid(_world_cache):
+		_world_cache = get_tree().get_first_node_in_group("world_gen") as WorldGen
+	return _world_cache
 
 
 ## Divine hand interface ------------------------------------------------------

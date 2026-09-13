@@ -1175,6 +1175,33 @@ func _run_smoke_test() -> void:
 		if is_instance_valid(jaws):
 			jaws.queue_free()
 
+	# WHAT TIER A REAL PHONE LANDS ON. The table is the mid-range Android market
+	# this game is aimed at, plus a flagship and a budget part at either end to
+	# prove the boundaries are where they are meant to be.
+	var devices := [
+		["Adreno (TM) 619", "SD 695 — budget", Quality.Tier.LOW],
+		["Adreno (TM) 613", "SD 4 Gen 2 — budget", Quality.Tier.LOW],
+		["Adreno (TM) 710", "SD 6 Gen 1 / 7s Gen 2 — MID", Quality.Tier.MEDIUM],
+		["Adreno (TM) 720", "SD 7 Gen 3 — mid", Quality.Tier.MEDIUM],
+		["Adreno (TM) 732", "SD 8s Gen 3 — flagship", Quality.Tier.HIGH],
+		["Adreno (TM) 830", "SD 8 Elite — flagship", Quality.Tier.HIGH],
+		["Mali-G57 MC2", "Dimensity 7020 / Helio G99 — entry", Quality.Tier.LOW],
+		["Mali-G68 MP5", "Exynos 1380 — MID", Quality.Tier.MEDIUM],
+		["Mali-G610 MC4", "Dimensity 7200 / 8020 — mid", Quality.Tier.MEDIUM],
+		["Mali-G310", "entry Valhall", Quality.Tier.LOW],
+		["Mali-G715", "Dimensity 9200 — flagship", Quality.Tier.HIGH],
+		["Immortalis-G720", "Dimensity 9300 — flagship", Quality.Tier.HIGH],
+	]
+	var misseated := 0
+	for row: Array in devices:
+		var got: int = Quality.tier_for(String(row[0]))
+		if got != int(row[2]):
+			misseated += 1
+			print("SMOKE TEST: quality — %s (%s) seated %s, wanted %s" % [
+				row[0], row[1], Quality.Tier.keys()[got], Quality.Tier.keys()[int(row[2])]])
+	print("SMOKE TEST: quality — %d of %d real GPUs seated correctly" % [
+		devices.size() - misseated, devices.size()])
+
 	# THE FIVE-RUNE WORKINGS. Both must read back from the runes in any order,
 	# and neither may be reachable by a god who cannot also get its creature
 	# back out of what it just made (tools/rune_sheet.py asserts the second).

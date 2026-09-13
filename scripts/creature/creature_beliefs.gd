@@ -92,6 +92,18 @@ const WEIGHT_LR := 0.22     # how fast circumstances reshape a belief
 const WEIGHT_CLAMP := 2.5
 const BELIEF_LR := 0.25     # how fast an action->consequence rule firms up
 const CONFIDENT := 0.45     # a rule this strong is worth acting on / reporting
+## HOW FAST A DREAD LOOSENS when the thing dreaded does not happen. Slower than
+## it firms up (BELIEF_LR 0.25), because it should take more evidence to talk a
+## creature out of a fear than it took to give it one — but not so slow that a
+## fear is for life. At 0.94 a full-strength dread is down to a third of itself
+## after twenty uneventful repetitions, and gone after about sixty.
+const RELIEF := 0.94
+## Below this a rule is not a belief any more, and carrying it costs a
+## dictionary entry and a string compare forever.
+const FORGOTTEN := 0.04
+## And how fast one loosens when a NAMED expectation is specifically unmet —
+## much faster, because that is direct evidence rather than a quiet day.
+const DISCONFIRM := 0.82
 ## RITUAL. How fast "doing this AFTER that went well" firms up, and how strong
 ## a habit of sequence can get. Kept modest: a ritual should tilt a choice, not
 ## railroad one, or the creature ends up locked in a loop it cannot break.
@@ -276,15 +288,44 @@ func consequence(tag: String, reward: float) -> void:
 		share *= TRACE_DECAY
 
 
-## A deed happened and the expected consequence did NOT follow: weaken the
-## rule. This is how a creature UNLEARNS a superstition, and it is why beliefs
-## have to be able to fade as well as firm up.
+## A DEED WENT BY AND NOTHING IT DREADED HAPPENED. Weaken every dark rule
+## attached to it, a little.
+##
+## THIS IS THE HALF THAT WAS MISSING, and it was missing completely: `fade()`
+## thins the lore, the places, the rituals and the circumstance weights, and
+## never touched `rules` — and `disconfirm`, the only other thing that can
+## loosen one, was written, commented, and called by nothing at all. So a
+## creature's superstitions were PERMANENT. One mob after one prayer and it
+## dreaded praying for the rest of its life, however many hundreds of times it
+## prayed afterwards in perfect safety, because nothing in the game could ever
+## tell it otherwise.
+##
+## Only the DARK rules are loosened. A creature that expects good of a deed and
+## merely has an ordinary day should not be argued out of its optimism at the
+## same rate it is argued out of its fear — the asymmetry is the point, and it
+## is why superstition is easier to catch than to keep.
+func relieved_of(key: String) -> void:
+	var gone: Array[String] = []
+	for rule: String in rules:
+		if not rule.begins_with(key + ">"):
+			continue
+		if float(rules[rule]) >= 0.0:
+			continue
+		rules[rule] = clampf(float(rules[rule]) * RELIEF, -1.0, 1.0)
+		if absf(float(rules[rule])) < FORGOTTEN:
+			gone.append(rule)
+	for rule in gone:
+		rules.erase(rule)
+
+
+## The same, aimed at one named consequence — for a caller that knows exactly
+## which expectation went unmet.
 func disconfirm(key: String, tag: String) -> void:
 	var rule := key + ">" + tag
 	if not rules.has(rule):
 		return
-	rules[rule] = clampf(float(rules[rule]) * 0.82, -1.0, 1.0)
-	if absf(float(rules[rule])) < 0.04:
+	rules[rule] = clampf(float(rules[rule]) * DISCONFIRM, -1.0, 1.0)
+	if absf(float(rules[rule])) < FORGOTTEN:
 		rules.erase(rule)
 
 

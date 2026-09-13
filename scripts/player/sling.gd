@@ -83,12 +83,31 @@ const ARC_BORE := 0.16
 const ARC_FADE := 0.55            # how much dimmer the far end of the arc is
 const TAUT_AT := 2.5              # metres of lag that reads as a fully taut rope
 
+## HOW OFTEN THE ARC IS RECOMPUTED, and how many of its beads actually ask the
+## ground how high it is.
+##
+## THIS IS THE HOTTEST THING IN THE GAME IF YOU LET IT BE. `surface_at` is not a
+## lookup: it is up to five noise samples plus nine scar-bucket lookups, every
+## call. The arc was recomputing all twenty-six of them on every frame AND on
+## every pointer event — and a mid-range Android panel reports touch moves at
+## two to four times the frame rate, so winding up a throw was asking the
+## terrain thirty thousand noise samples a second, in GDScript, at precisely the
+## moment the player is owed a responsive hand.
+##
+## The ROPE still moves on every event, because the rope is the fast feedback
+## and it costs nothing. The ARC is an aiming aid — twenty a second is far more
+## than the eye asks of it — and it probes the ground every third bead and
+## carries that height between, which is accurate to well inside a bead.
+const ARC_EVERY := 0.05
+const ARC_PROBE := 3
+
 
 var hand: Node3D = null
 
 var _rope: MeshInstance3D = null
 var _arc: Array[MeshInstance3D] = []
 var _shown := false
+var _arc_due := 0.0
 
 
 ## HOW HEAVY, 0..1. Every other number in this file is a lerp on this one.
@@ -183,13 +202,18 @@ func _ready() -> void:
 func show_it(at: Vector3, held: Vector3, shot: Vector3, weight: float) -> void:
 	_shown = true
 	_draw_rope(at, held, weight)
-	_draw_arc(held, shot)
+	# The arc keeps its own clock; see ARC_EVERY for why it is not the hand's.
+	var now := Time.get_ticks_msec() / 1000.0
+	if now >= _arc_due:
+		_arc_due = now + ARC_EVERY
+		_draw_arc(held, shot)
 
 
 func hide_it() -> void:
 	if not _shown:
 		return
 	_shown = false
+	_arc_due = 0.0
 	_rope.visible = false
 	for dot in _arc:
 		dot.visible = false
@@ -225,6 +249,7 @@ func _draw_arc(from: Vector3, shot: Vector3) -> void:
 	var vel := shot
 	var g := Villager.GRAVITY * FLOAT_SCALE
 	var landed := false
+	var ground := 0.0
 	for i in _arc.size():
 		var dot := _arc[i]
 		if landed:
@@ -232,8 +257,9 @@ func _draw_arc(from: Vector3, shot: Vector3) -> void:
 			continue
 		vel.y -= g * ARC_STEP_TIME
 		at += vel * ARC_STEP_TIME
-		var ground := 0.0
-		if world != null:
+		# Every third bead asks; the two between carry the last answer, which
+		# over a third of a second of flight is inside the width of a bead.
+		if world != null and i % ARC_PROBE == 0:
 			ground = world.surface_at(at.x, at.z)
 		if at.y <= ground:
 			at.y = ground

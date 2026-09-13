@@ -163,20 +163,57 @@ func _adapter_name() -> String:
 func _detect_tier() -> Tier:
 	if not OS.has_feature("mobile"):
 		return Tier.HIGH   # desktop/laptop GPUs: full quality
-	var gpu := _adapter_name().to_lower()
+	return tier_for(_adapter_name())
+
+
+## THE TIER A GPU NAME DESERVES. Pure and static so it can be TESTED against a
+## table of real parts instead of against one developer's own phone — see the
+## device table in main.gd, which is where this was found to be wrong.
+##
+## IT WAS WRONG TWICE, AND BOTH TIMES FOR THE MID-RANGE ANDROID MARKET this game
+## is actually aimed at, because both families number their parts in ways a
+## plain numeric comparison reads backwards.
+##
+## ADRENO 7xx IS NOT ONE THING. The old rule said 700-and-up meant a flagship,
+## so the Adreno 710 in a Snapdragon 6 Gen 1 or 7s Gen 2 — a squarely mid-range
+## phone, and one of the commonest classes of device this game will ever run on
+## — was seated on HIGH and asked for shadows, glow and 4x MSAA. The split is at
+## 730: 710/720/725 are the mid parts, 730 and up are the flagships.
+##
+## AND MALI NUMBERS ITS PARTS IN TWO INCOMPATIBLE GENERATIONS. The older Valhall
+## names are two digits (G57, G68, G76, G78) and the newer ones are three (G310,
+## G510, G610, G715). A plain `>= 610` therefore rated a Mali-G68 — the Exynos
+## 1280/1380, a perfectly capable mid part — BELOW a Mali-G310, which is an
+## entry-level chip, and dropped it to LOW. Two digits and three are read on
+## their own scales now.
+static func tier_for(adapter: String) -> Tier:
+	var gpu := adapter.to_lower()
 	var num := _first_number(gpu)
-	if "adreno" in gpu:
-		if num >= 700:
-			return Tier.HIGH        # 7xx flagships
-		if num >= 640:
-			return Tier.MEDIUM      # upper 6xx
-		return Tier.LOW             # 610/619/6xx budget
 	if "immortalis" in gpu:
-		return Tier.HIGH
+		return Tier.HIGH            # Arm's flagship line, whatever the number
+	if "adreno" in gpu:
+		if num >= 800:
+			return Tier.HIGH        # 8xx: the current flagships
+		if num >= 730:
+			return Tier.HIGH        # 730-750: flagship 7xx
+		if num >= 700:
+			return Tier.MEDIUM      # 710/720/725: the mid-range 7xx
+		if num >= 640:
+			return Tier.MEDIUM      # 640/650: yesterday's flagships
+		return Tier.LOW             # 610/612/613/619 and below: budget
 	if "mali" in gpu:
-		if num >= 710:
+		if num >= 100:
+			# Three-digit Valhall: G310 entry, G510 low-mid, G6xx mid, G7xx high.
+			if num >= 700:
+				return Tier.HIGH
+			if num >= 600:
+				return Tier.MEDIUM
+			return Tier.LOW
+		# Two-digit Valhall and older: G76/G77/G78 were flagships, G68 is a fair
+		# mid part, G57 and below are entry.
+		if num >= 76:
 			return Tier.HIGH
-		if num >= 610:
+		if num >= 68:
 			return Tier.MEDIUM
 		return Tier.LOW
 	if "apple" in gpu or "powervr" in gpu:
@@ -184,7 +221,7 @@ func _detect_tier() -> Tier:
 	return Tier.LOW                 # unknown mobile part: play it safe
 
 
-func _first_number(s: String) -> int:
+static func _first_number(s: String) -> int:
 	var digits := ""
 	for c: String in s:
 		if c >= "0" and c <= "9":

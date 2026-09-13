@@ -396,6 +396,13 @@ func reinforce(reward: float) -> void:
 	seen[_last_key] = int(seen.get(_last_key, 0)) + 1
 	_sated[_last_key] = minf(float(_sated.get(_last_key, 0.0)) + SATIATION, 2.5)
 	beliefs.credit(reward)   # the circumstances get their share of the lesson
+	# AND THE DEED PASSED WITHOUT THE DISASTER IT FEARED. Every dark rule hung
+	# on this deed loosens a little — which is the only way a superstition ever
+	# comes off a creature. Without it they were permanent: see
+	# CreatureBeliefs.relieved_of. A deed that went BADLY teaches the opposite
+	# through `consequence` and is left well alone here.
+	if reward > -0.2:
+		beliefs.relieved_of(_last_key)
 	bonds.settle(reward)     # and so does whoever it was dealing with
 	judge(_last_verb)
 

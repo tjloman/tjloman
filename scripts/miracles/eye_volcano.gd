@@ -73,6 +73,10 @@ var _until_next := BLAST_EVERY
 var _patience := PATIENCE
 var _side := 0            # which eye fires next: 0 left, 1 right
 var _glow: Array[OmniLight3D] = []
+## Found once. Both of these are group scans, and this runs every frame for the
+## ten seconds the eyes are loaded.
+var _manager: MiracleManager = null
+var _world: WorldGen = null
 
 
 ## GRANT IT. A second casting reloads rather than stacking a second pair of
@@ -135,10 +139,11 @@ func _physics_process(delta: float) -> void:
 ## as they can, which reads as a creature straining rather than a miracle
 ## silently refusing.
 func _where_you_are_pointing() -> Vector3:
-	var manager := MiracleManager.of(get_tree())
-	if manager == null:
+	if _manager == null or not is_instance_valid(_manager):
+		_manager = MiracleManager.of(get_tree())
+	if _manager == null:
 		return Vector3.INF
-	var hand := manager.divine_hand
+	var hand := _manager.divine_hand
 	if hand == null or not is_instance_valid(hand):
 		return Vector3.INF
 	var spot: Vector3 = hand.ground_point
@@ -148,10 +153,16 @@ func _where_you_are_pointing() -> Vector3:
 	var flat := Vector3(spot.x - from.x, 0.0, spot.z - from.z)
 	if flat.length() > REACH:
 		spot = from + flat.normalized() * REACH
-	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-	if world != null:
-		spot.y = world.surface_at(spot.x, spot.z)
+	spot.y = _ground_at(spot)
 	return spot
+
+
+## The land under a point. The world is found once and kept, because this and
+## `_throw_blob` between them ask for it many times a second.
+func _ground_at(spot: Vector3) -> float:
+	if _world == null or not is_instance_valid(_world):
+		_world = get_tree().get_first_node_in_group("world_gen") as WorldGen
+	return _world.surface_at(spot.x, spot.z) if _world != null else spot.y
 
 
 ## Where one eye is, in the world, right now.
@@ -198,9 +209,7 @@ func _fire(aim: Vector3) -> void:
 ## where it lands. The arc is a single quadratic Bezier, exactly as the
 ## mountain's own globs are thrown — see MiracleManager._hurl_glob.
 func _throw_blob(from: Vector3, to: Vector3) -> void:
-	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-	if world != null:
-		to.y = world.surface_at(to.x, to.z)
+	to.y = _ground_at(to)
 	var blob := Util.sphere(randf_range(0.3, 0.55), EMBER, from, true)
 	get_tree().current_scene.add_child(blob)
 	blob.global_position = from
@@ -224,9 +233,11 @@ func _throw_blob(from: Vector3, to: Vector3) -> void:
 ## and not only the couple of dozen head that happen to be real nodes.
 ## See tools/herd_reach.py.
 func _land(at: Vector3) -> void:
-	var manager := MiracleManager.of(get_tree())
-	if manager == null:
+	if _manager == null or not is_instance_valid(_manager):
+		_manager = MiracleManager.of(get_tree())
+	if _manager == null:
 		return
+	var manager := _manager
 	manager.pour_lava_at(at, RISE * randf_range(0.8, 1.2),
 		POUR_REACH * randf_range(0.9, 1.2))
 	manager.ignite_trees_near(at, BURN_REACH)
