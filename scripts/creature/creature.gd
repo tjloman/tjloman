@@ -18,6 +18,7 @@ enum State {
 	WATCH, GO_GATHER, CARRYING, PLAY, GUARD, SULK, CATCH,
 	GO_FISH, FISHING, GO_STORE, SMASH, FLEE, CAST, LEASHED,
 	LOUNGE, DANCE, PRAY, COMMUNE, RUN, MIMIC, SHUN, DEPART, SOOTHE, HEED, JUGGLE,
+	WEIGHING,
 }
 
 const WALK_SPEED := 3.5
@@ -49,6 +50,11 @@ const THROW_MASTERY := 2.0
 ## How sharply a deed's moral weight colours how it FELT to do. This is what
 ## makes cruelty sour for a kind creature and sweet for a wicked one.
 const REMORSE := 2.0
+
+## What a unit of food is worth to a creature's sense of being cared for. Small:
+## a meal is not a kindness on the scale of being praised, it is the ordinary
+## business of being kept — but it is not nothing, which is what it was.
+const FED_IS_KINDNESS := 2.5
 ## The shortest a deed may take, in seconds. Actions that resolve the instant
 ## they begin would otherwise re-decide every frame — see `_decide`.
 const DEED_FLOOR := 0.5
@@ -105,6 +111,9 @@ var blessings := CreatureBlessings.new()
 ## THE HEAD, which runs on its own clock whatever the hands are doing: what it
 ## is looking at, and what it has to say about it. See CreatureHead.
 var head := CreatureHead.new()
+## THE BEAT BEFORE IT DOES SOMETHING IT CANNOT TAKE BACK, in which your praise
+## and your scold land on what it MEANS to do. See CreatureIntent.
+var intent := CreatureIntent.new()
 ## THE ARM — how far it can send a thing, how well it aims, and whatever it
 ## currently has in the air. See CreatureThrowing.
 var throwing := CreatureThrowing.new()
@@ -440,6 +449,8 @@ func _physics_process(delta: float) -> void:
 			_process_cast(delta)
 		State.LEASHED:
 			_process_leashed(delta)
+		State.WEIGHING:
+			intent.tick(self, delta)
 		State.JUGGLE:
 			throwing.tick(self, delta)
 		State.LOUNGE:
@@ -467,7 +478,7 @@ func _physics_process(delta: float) -> void:
 	# busy or not, and a well-kept creature with attention to spare does it
 	# oftener — while a wretched or frightened one has little left over to look
 	# up with. This is the cheapest and truest statement of what welfare buys.
-	welfare.tick(delta, hunger, energy, mood)
+	welfare.tick(delta, body.fullness(growth), body.fat, energy, mood)
 	CreatureWelfare.shed(self, delta)
 	_observe_time -= delta * welfare.watchfulness()
 	if _observe_time <= 0.0:
@@ -649,11 +660,17 @@ func _decide() -> void:
 		# leans toward whatever brings it near people — which for one creature
 		# means holding court and for another means going and finding someone
 		# to torment. The drive does not care which.
-		"lonely": 1.0 if _audience(24.0) == 0 else 0.0,
+		"lonely": 1.0 if CreatureEyes.audience(self, 24.0) == 0 else 0.0,
 	}
 	var choice := mind.choose(_perceive(), drive, here, global_position, heart.strongest())
 	_act_verb = choice["verb"]
 	_act_type = choice.get("type", "none")
+	# SOME THINGS IT ASKS ABOUT FIRST — a pause, not a permission system, in
+	# which a god who is looking answers before the thing happens rather than
+	# after it. See CreatureIntent.
+	if CreatureIntent.weighs(self, choice):
+		intent.begin(self, choice)
+		return
 	_enact(choice)
 
 
@@ -847,6 +864,11 @@ func _type_of(node: Node) -> String:
 
 
 ## Carry out the mind's choice by driving the body's existing motor states.
+## The door CreatureIntent comes back through: the same enactment, deferred.
+func enact_chosen(choice: Dictionary) -> void:
+	_enact(choice)
+
+
 func _enact(choice: Dictionary) -> void:
 	var verb: String = choice["verb"]
 	var aimed_at = choice.get("target", null)
@@ -1338,7 +1360,8 @@ func _find_shore() -> Vector3:
 func _eat_carried() -> void:
 	# The darkest meals: a villager it was handed (or ran down), or a corpse.
 	if _carried is Villager:
-		_devour_villager(_carried as Villager)
+		CreatureEyes.devour(self, _carried as Villager)
+		_last_deed = "hunt"   # stays here: the deed is the creature's, not the town's
 		_carried = null
 		state = State.EATING
 		_action_time = 2.0
@@ -1512,7 +1535,7 @@ func _process_smash(delta: float) -> void:
 		# earns nothing but a flinch. The creature learns the difference itself.
 		if was_predator:
 			thrill += 0.9
-			_cheer_nearby(10.0, 2.0)
+			CreatureEyes.cheer_near(self, 10.0, 2.0)
 		else:
 			CreatureEyes.scare_witnesses(self, 12.0, 2.0)
 	elif victim.has_method("damage"):
@@ -1589,12 +1612,6 @@ func _process_cast(delta: float) -> void:
 	_last_deed = "cast"
 	mood = minf(mood + 10.0, 100.0)
 	_finish_choice(1.6 if need != null else 0.6)
-
-
-func _cheer_nearby(radius: float, amount: float) -> void:
-	for v in get_tree().get_nodes_in_group("villagers"):
-		if v.global_position.distance_to(global_position) < radius:
-			v.cheer(amount)
 
 
 ## A chosen deed is finished: tell the mind how it FELT. The reward blends the
@@ -1690,35 +1707,19 @@ func _consume_food_target() -> void:
 	_action_time = 1.5
 
 
-func _devour_villager(victim: Villager) -> void:
-	var victim_name := victim.villager_name
-	# Eating people is the fastest way to make a village hate you enough to
-	# arm itself against your creature.
-	if victim.village != null and is_instance_valid(victim.village):
-		victim.village.raise_alarm(global_position, true)
-		victim.village.grudge = minf(victim.village.grudge + 30.0, 100.0)
-	victim.queue_free()
-	_swallow_units(3.0)
-	mind.judge("eat_kin")
-	morality = mind.temperament
-	_last_deed = "hunt"
-	GameState.announce("Your creature has eaten %s. The village will not forget this." % victim_name)
-	var village := get_tree().get_first_node_in_group("village") as Village
-	if village != null:
-		village.change_belief(4.0)  # terror is still proof of the divine
-		for v in get_tree().get_nodes_in_group("villagers"):
-			var onlooker := v as Villager
-			if onlooker.global_position.distance_to(global_position) < 15.0:
-				onlooker.scare(global_position)
-				onlooker.witness_horror(4.0)
-
-
 ## Training: the hand that pets and the hand that scolds ---------------------
 
 ## P while the hand is near: reinforce the last deed. Praising cruelty is
 ## how monsters are made — the creature learns what YOU reward.
 func praise() -> void:
 	lessons += 1
+	# STILL DECIDING? Your word lands on the DECISION — the one moment teaching
+	# has ever worked, and it used to be unreachable.
+	if intent.approve(self):
+		welfare.comfort(3.0)
+		bond = minf(bond + 4.0, 100.0)
+		earn_trust(5.0)
+		return
 	welfare.comfort(3.0)
 	bond = minf(bond + 4.0, 100.0)
 	mood = minf(mood + 12.0, 100.0)
@@ -1748,6 +1749,11 @@ func praise() -> void:
 ## L while the hand is near: discourage the last deed.
 func scold() -> void:
 	lessons += 1
+	# Likewise — and forbidding a deed costs you no trust, because nothing has
+	# been done yet and there is nothing to have been unfair about.
+	if intent.forbid(self):
+		mood = maxf(mood - 6.0, 0.0)
+		return
 	bond = maxf(bond - 2.0, 0.0)
 	mood = maxf(mood - 14.0, 0.0)
 	if _last_deed == "catch":
@@ -2107,16 +2113,6 @@ func _tick_exile(delta: float) -> void:
 
 ## How many people are actually watching it right now. Half the quiet life is
 ## worth nothing without an audience, and the creature learns that itself.
-func _audience(radius: float) -> int:
-	var count := 0
-	for v in get_tree().get_nodes_in_group("villagers"):
-		var villager := v as Villager
-		if is_instance_valid(villager) and not villager.is_afraid() \
-				and villager.global_position.distance_to(global_position) < radius:
-			count += 1
-	return count
-
-
 func _face(point: Vector3) -> void:
 	var flat := point - global_position
 	flat.y = 0.0
@@ -2224,6 +2220,11 @@ func _tick_flight(delta: float) -> void:
 ## whatever will not fit is left, and it must digest before eating again.
 func _swallow_units(units: float) -> void:
 	var taken := body.swallow(units, growth)
+	# BEING FED IS BEING LOOKED AFTER, and it counted for nothing. `comfort` is
+	# documented as "praise, food from your hand, a healing — the ordinary good
+	# of being looked after", and eating never once called it: the only things
+	# that could lift a creature's standing were a kind word and a miracle.
+	welfare.comfort(taken * FED_IS_KINDNESS)
 	if taken < units * 0.6:
 		GameState.announce("Your creature's belly is full — it leaves the rest.")
 	# Eating when it was not hungry is exactly how a creature gets fat, and the

@@ -1245,6 +1245,32 @@ func _run_smoke_test() -> void:
 			was_running, "calm" if scared.state != Animal.State.FLEE else "STILL RUNNING"])
 		scared.queue_free()
 
+	# THE BEAT BEFORE THE DEED. Eating a person must ALWAYS be asked about, an
+	# ordinary deed only until it has an opinion of its own, and a scold during
+	# the pause must teach without the thing ever happening.
+	var pupil2 := Creature.new()
+	add_child(pupil2)
+	pupil2.global_position = village.global_position + Vector3(34, 0, 10)
+	var grave := CreatureIntent.weighs(pupil2, {"verb": "eat_kin", "type": "villager"})
+	var ordinary := CreatureIntent.weighs(pupil2, {"verb": "eat", "type": "sheep"})
+	for i in CreatureIntent.SETTLED_AFTER:
+		pupil2.mind.teach("eat", "sheep", 1.0)
+	var opinionated := CreatureIntent.weighs(pupil2, {"verb": "eat", "type": "sheep"})
+	# And it stays grave however many people it has eaten.
+	for i in 20:
+		pupil2.mind.teach("eat_kin", "villager", 1.0)
+	var still_grave := CreatureIntent.weighs(pupil2, {"verb": "eat_kin", "type": "villager"})
+	print("SMOKE TEST: intent — weighs eating a person=%s (still after 20=%s), a sheep=%s, a sheep once settled=%s" % [
+		grave, still_grave, ordinary, opinionated])
+	var before_q: float = pupil2.mind.q.get("eat_kin|villager", 0.0)
+	pupil2.intent.begin(pupil2, {"verb": "eat_kin", "type": "villager", "target": null})
+	var paused := pupil2.state == Creature.State.WEIGHING
+	pupil2.scold()
+	print("SMOKE TEST: intent — held before acting=%s, scolded mid-thought: wanting %.2f -> %.2f, state %s" % [
+		paused, before_q, pupil2.mind.q.get("eat_kin|villager", 0.0),
+		Creature.State.keys()[pupil2.state]])
+	pupil2.queue_free()
+
 	# THE HEAD IS NOT THE HANDS. It must turn toward something while the body is
 	# busy elsewhere, give up when the thing goes behind it, and have a voice
 	# whose pitch is the creature's own size.

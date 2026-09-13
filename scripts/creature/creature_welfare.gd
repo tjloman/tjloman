@@ -42,7 +42,25 @@ const PAIN_FADE := 5.5
 
 ## What counts as going without. Below these the body is being neglected, and it
 ## accrues — one missed meal is nothing, a life of them is the whole story.
-const HUNGRY_AT := 70.0
+## WHAT COUNTS AS BEING STARVED — and it is NOT the hunger number.
+##
+## This read `hunger > 70`, and hunger in this game is an APPETITE: it is mostly
+## a function of the fat reserve and only a little of the belly (see
+## CreatureBody.appetite), so a lean creature reads 89 with a half-full stomach
+## and 59 with a completely full one. A creature is born at fat 0, therefore
+## born reading as starved, and nothing the player could do fixed it — a
+## chain-fed creature sat at 77 and accumulated harm at a point a second.
+##
+## Within two minutes `standing` was -1.00, which sets `growth_factor` to
+## EXACTLY ZERO and `wasting` to 0.45 stature a second. The creature could not
+## grow, ever, however much it was fed, and shrank back to 1 overnight. That is
+## the whole of the "his size stays at 1 perpetually" bug, and it came from one
+## threshold asking the wrong question.
+##
+## Being starved is having nothing in the belly AND nothing in reserve. That is
+## a fact about deprivation rather than about wanting.
+const BELLY_EMPTY := 0.08
+const RESERVE_LEAN := 12.0
 const SPENT_AT := 25.0
 
 ## THE TETHER. Pain from the god builds it; kindness with no pain lets it go
@@ -88,10 +106,13 @@ var _since_hurt := 999.0
 
 ## The slow turn of a life. Fed and rested raises care; hungry and spent raises
 ## harm; both fade, so a creature is always mostly what it has been LATELY.
-func tick(delta: float, hunger: float, energy: float, mood: float) -> void:
+## `belly` is 0..1 of the stomach and `reserve` is the fat, 0..100 — the two
+## facts that between them say whether this animal is actually going without.
+func tick(delta: float, belly: float, reserve: float, energy: float,
+		mood: float) -> void:
 	pain = maxf(pain - PAIN_FADE * delta, 0.0)
 	_since_hurt += delta
-	var wanting := hunger > HUNGRY_AT
+	var wanting := belly < BELLY_EMPTY and reserve < RESERVE_LEAN
 	var spent := energy < SPENT_AT
 	if wanting or spent:
 		harm = minf(harm + HARM_GAIN * delta * (2.0 if wanting and spent else 1.0), 100.0)

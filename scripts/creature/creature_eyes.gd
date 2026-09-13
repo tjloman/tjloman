@@ -84,6 +84,48 @@ static func scare_witnesses(who: Creature, radius: float, horror: float) -> void
 			villager.witness_horror(horror)
 
 
+## HOW MANY PEOPLE ARE WATCHING — not merely present. A frightened villager is
+## not an audience, which is why a creature dancing at a terrified village gets
+## nothing for it.
+static func audience(who: Creature, radius: float) -> int:
+	var count := 0
+	for v in who.get_tree().get_nodes_in_group("villagers"):
+		var villager := v as Villager
+		if is_instance_valid(villager) and not villager.is_afraid() \
+				and villager.global_position.distance_to(who.global_position) < radius:
+			count += 1
+	return count
+
+
+## Gladden everyone near enough to be gladdened.
+static func cheer_near(who: Creature, radius: float, amount: float) -> void:
+	for v in who.get_tree().get_nodes_in_group("villagers"):
+		if v.global_position.distance_to(who.global_position) < radius:
+			v.cheer(amount)
+
+
+## EATING A PERSON, and what it does to the village that watched. Kept with the
+## other village-facing effects rather than in the state machine: almost all of
+## what this does is to the TOWN, and only two lines of it are to the creature.
+static func devour(who: Creature, victim: Villager) -> void:
+	var victim_name := victim.villager_name
+	# Eating people is the fastest way to make a village hate you enough to
+	# arm itself against your creature.
+	if victim.village != null and is_instance_valid(victim.village):
+		victim.village.raise_alarm(who.global_position, true)
+		victim.village.grudge = minf(victim.village.grudge + 30.0, 100.0)
+	victim.queue_free()
+	who.feed_on(3.0)
+	who.mind.judge("eat_kin")
+	who.morality = who.mind.temperament
+	GameState.announce("Your creature has eaten %s. The village will not forget this."
+		% victim_name)
+	var village := who.get_tree().get_first_node_in_group("village") as Village
+	if village != null:
+		village.change_belief(4.0)  # terror is still proof of the divine
+	scare_witnesses(who, 15.0, 4.0)
+
+
 ## THE CIRCUMSTANCES a creature is in right now — the situation its beliefs are
 ## learned against. "I was starving, in their village, at night, with armed men
 ## about, and my god was nowhere near." Every value is 0..1, and the vocabulary

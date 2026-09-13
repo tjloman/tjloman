@@ -104,7 +104,23 @@ const SPREAD_LEAST := 3.0
 ## are constants, and that is the point — nothing in this file may scale with
 ## the head count.
 const SHUFFLE_EVERY := 0.2
+## HOW MANY HEADS GET THEIR GROUND RE-READ per shuffle, at rest — and how far
+## the herd may WALK before every one of them has had it re-read.
+##
+## A flat twelve was the bug. The ground under a member changes because the HERD
+## MOVED, so a fixed count means a two-hundred-head herd takes seventeen
+## shuffles — four seconds at a stride of one, twelve at a stride of three — to
+## come round, and every head is drawn at the height of wherever it was standing
+## four to twelve seconds ago. On anything but a billiard table that is a herd
+## sunk to the knees in a hillside and popping out of it, which is exactly what
+## it looked like.
+##
+## So the sweep is paid for by DISTANCE now. Standing still it costs the old
+## twelve; walking, it costs whatever keeps every head within GROUND_DRIFT of
+## the truth, capped so a stampede cannot run away with the frame.
 const GROUNDS_PER_TICK := 12
+const GROUND_DRIFT := 0.7
+const GROUNDS_MOST := 96
 ## How many instances are rewritten per stir. Sized for the WORST CASE THAT IS
 ## ACTUALLY LOOKED AT: a big herd you are standing in. At sixty-four a
 ## four-hundred-head barn refreshed each beast every 1.2 seconds, which steps
@@ -349,6 +365,9 @@ var _target := Vector3.ZERO
 var _graze_left := 0.0
 var _shuffle_left := 0.0
 var _ground_cursor := 0
+## Where the herd was when the grounds were last re-read, so the next sweep can
+## be sized by how far it has walked since.
+var _ground_from := Vector2.ZERO
 var _write_cursor := 0
 var _written_y := 0.0
 var _spread := 0.0
@@ -502,7 +521,7 @@ func _process(delta: float) -> void:
 	_shuffle_left -= delta
 	if _shuffle_left <= 0.0:
 		_shuffle_left = SHUFFLE_EVERY * stride
-		_resample_grounds(GROUNDS_PER_TICK)
+		_resample_grounds(_grounds_owed())
 		_redeal(REDEAL_PER_TICK)
 		# THE GROUND MOVED UNDER THEM. Instance heights are stored relative to
 		# the herd's own origin, so walking up a hill leaves every un-rewritten
@@ -748,13 +767,28 @@ func _drift(delta: float) -> void:
 ## Ground heights, a slice at a time. `height_at` is noise plus a walk over
 ## every scar in range, and calling it for two hundred head every tick would
 ## cost more than the animals it is standing in for.
+## HOW MANY WE OWE THIS SHUFFLE. However far the herd has walked since the last
+## one, every head should have been re-read once per GROUND_DRIFT of it.
+func _grounds_owed() -> int:
+	var moved := Vector2(global_position.x - _ground_from.x,
+		global_position.z - _ground_from.y).length()
+	_ground_from = Vector2(global_position.x, global_position.z)
+	if moved < 0.01:
+		return GROUNDS_PER_TICK
+	var sweeps := moved / GROUND_DRIFT
+	return clampi(int(float(_members.size()) * sweeps),
+		GROUNDS_PER_TICK, GROUNDS_MOST)
+
+
 func _resample_grounds(how_many: int) -> void:
 	if world == null or _members.is_empty():
 		return
 	for i in mini(how_many, _members.size()):
 		var m := _members[_ground_cursor % _members.size()]
 		var p := global_position + Vector3(m["offset"].x, 0.0, m["offset"].y)
-		m["ground"] = world.height_at(p.x, p.z)
+		# SURFACE, not height. `height_at` is the rock; a head standing in a
+		# pond was drawn at the bottom of it.
+		m["ground"] = world.surface_at(p.x, p.z)
 		_ground_cursor += 1
 
 
