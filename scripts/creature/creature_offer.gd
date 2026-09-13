@@ -55,10 +55,15 @@ const DRIFT := 2.5
 ## Creature.STUCK_SECONDS, so the stuck-state watchdog never gets there first.
 const PATIENCE := 7.0
 const SHY := 5.0
-## Below this it is not watching your hand at all, and an offer beyond arm's
-## reach means nothing to it. Within reach it always notices — a thing held
-## against its face does not require attention.
-const MINDED := 20.0
+## WHAT A STEADY OFFER IS WORTH IN ATTENTION, a second.
+##
+## This was a GATE, and the gate could not be opened. Attention only rises when
+## your hand is within about seven metres and decays at 0.6 a second, so a
+## creature twelve metres off has none, cannot get any without you closing the
+## distance yourself, and would therefore never come — which is the whole
+## behaviour, refusing to happen for want of the thing it was supposed to
+## create. An offer held out to it IS the attention-getter. It earns.
+const NOTICED := 9.0
 
 ## Seconds the hand has been steady, seconds spent walking to this offer, and
 ## seconds left of not wanting to walk to another one.
@@ -98,12 +103,12 @@ func tick(who: Creature, delta: float) -> void:
 	if gap <= REACH + who.scale.x:
 		_take(who, hand, item)
 		return
-	# BEYOND ARM'S REACH IT HAS TO WANT TO. Attention is what it thinks of your
-	# hand, and a creature that is not minding you is not going to cross a
-	# meadow because you are holding a turnip somewhere in it.
-	if gap > NOTICE or who.attention < MINDED or _shy > 0.0:
+	if gap > NOTICE or _shy > 0.0:
 		_forget(who)
 		return
+	# HOLDING SOMETHING OUT TO IT IS HOW YOU GET ITS ATTENTION, not something
+	# you need its attention for. See NOTICED.
+	who.attention = minf(who.attention + NOTICED * delta, 100.0)
 	# THE WALKING CLOCK BELONGS TO THE OFFER, NOT TO THE STATE. A stuck-state
 	# watchdog or a fright can bounce it out of TAKE and back in again, and if
 	# `_walked` restarted on every re-entry PATIENCE would never be reached.

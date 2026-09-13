@@ -1036,15 +1036,26 @@ func _enact(choice: Dictionary) -> void:
 			_wander()
 
 
+## WANDER SOMEWHERE NEARBY — and `_target` IS A WORLD POINT.
+##
+## It was not, here, and only here: every other writer sets a world position and
+## CreatureSteering.advance reads one (`target - who.global_position`, first
+## line). This set a bare offset, claimed in a comment that the field was local,
+## and converted that offset out to world and back for the tether — which
+## preserved the error in both directions instead of exposing it. So a wandering
+## creature walked toward a point within eighteen metres of the WORLD ORIGIN,
+## from wherever it stood.
+##
+## ON A ROPE THAT IS FATAL. `_enact` falls back here for anything out of reach,
+## which on a rope is most things: the creature set out for the origin, went
+## taut at twenty-two metres, and pull_in pinned it there for the whole
+## tutorial — which is why a player at the stake had nothing to hand food to.
 func _wander() -> void:
 	state = State.WANDER
 	var angle := randf() * TAU
 	var dist := randf_range(4.0, 18.0)
-	_target = Vector3(cos(angle) * dist, 0, sin(angle) * dist)
-	# A tethered creature wanders INSIDE its circle. Without this it spends its
-	# whole youth walking at the end of a rope, which looks like a bug and feels
-	# like one. (`_target` is local here; the stake thinks in world space.)
-	_target = to_local(CreatureStake.nearest_within(get_tree(), to_global(_target)))
+	_target = global_position + Vector3(cos(angle) * dist, 0, sin(angle) * dist)
+	_target = CreatureStake.nearest_within(get_tree(), _target)  # inside the rope
 
 
 ## A deed is done: remember it (for praise/scolding), feel it, move on.
