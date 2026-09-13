@@ -33,6 +33,8 @@ var divine_hand: DivineHand
 var camera_rig: CameraRig
 var creature: Creature
 var miracles: MiracleManager
+## Where the creature's own sequence goes once this is done. See `_finish`.
+var story: Storyboard
 
 var _steps: Array = []
 var _at := -1
@@ -45,6 +47,7 @@ var _hint_label: Label
 var _tick: Label
 var _origin := Vector3.INF
 var _saw_hold := false
+var _skipped := false
 
 
 func _ready() -> void:
@@ -137,34 +140,6 @@ func _build_steps() -> void:
 				return is_instance_valid(miracles) and miracles.last_rune_count >= 2,
 		},
 		{
-			"say": "You are not alone. Find your creature." if touch
-				else "You are not alone. Press C to find your creature.",
-			"hint": "The Creature button, bottom right." if touch
-				else "Press C. Press it again to let the camera go.",
-			"done": _found_creature,
-		},
-		{
-			"say": "It is on a rope, and it will stay on one until you can lead it. "
-				+ "Point somewhere and LEAD it there.",
-			"hint": "Put your hand where you want it to go, then press Lead." if touch
-				else "Put your hand where you want it to go, then press G. G again "
-					+ "lets it off.",
-			"done": func() -> bool:
-				return is_instance_valid(creature) and creature.is_leashed(),
-			# THE ROPE COMES OFF HERE. Not on a timer and not for good behaviour —
-			# the moment the player holds the tool that replaces it. See
-			# CreatureStake.
-			"then": func() -> void: CreatureStake.pull_up(get_tree()),
-		},
-		{
-			"say": "It learns from you and from nothing else. Watch what it does, then "
-				+ "PRAISE it or SCOLD it — whichever it earned.",
-			"hint": "Bring your hand near the creature and use the Praise or Scold "
-				+ "buttons." if touch
-				else "Bring your hand near the creature and press P to praise, L to scold.",
-			"done": func() -> bool: return is_instance_valid(creature) and creature.lessons > 0,
-		},
-		{
 			"say": "That is everything you cannot guess. The rest is yours to find out — "
 				+ "press F1 at any time for the full reckoning.",
 			"hint": "",
@@ -172,16 +147,6 @@ func _build_steps() -> void:
 			"linger": 7.0,
 		},
 	]
-
-
-## Found it either way: locked the camera on, or simply walked the view over
-## to where it is. A lesson should accept any honest route to the same place.
-func _found_creature() -> bool:
-	if not is_instance_valid(creature) or not is_instance_valid(camera_rig):
-		return false
-	if camera_rig.follow_target == creature:
-		return true
-	return creature.global_position.distance_to(camera_rig.global_position) < 40.0
 
 
 func _build_card() -> void:
@@ -274,11 +239,23 @@ func _advance() -> void:
 ## the rope comes off regardless. It is a safety rail on the lesson, not a
 ## lesson in itself, and leaving somebody who opted out of being taught with a
 ## tethered creature and no idea why would be the worst of both.
+## THE HAND-OFF. The tutorial teaches the god's own tools — the view, the hand,
+## the runes — and then gets out of the way, because everything after that is
+## about the CREATURE and belongs in a storyboard rather than in a list of
+## lessons. FirstLessons is that sequence, and its last beat pulls the stake.
+##
+## Skipping still pulls it: the rope is a safety rail on the lesson, not a
+## lesson itself, and leaving somebody who opted out with a tethered creature
+## and no idea why would be the worst of both.
 func _finish() -> void:
-	CreatureStake.pull_up(get_tree())
 	_mark_tutored()
 	visible = false
 	set_process(false)
+	if _skipped or story == null or not is_instance_valid(story) \
+			or not is_instance_valid(creature):
+		CreatureStake.pull_up(get_tree())
+		return
+	story.play(FirstLessons.board(creature, get_tree()))
 
 
 func _process(delta: float) -> void:
@@ -314,5 +291,6 @@ func _process(delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("skip_tutorial"):
+		_skipped = true
 		_finish()
 		GameState.announce("Lessons set aside. Press F1 for the full reckoning.")

@@ -27,6 +27,8 @@ var miracles: MiracleManager
 var world_gen: WorldGen
 var village: Village          # the player's home village
 var creature: Creature
+## The stage scripted sequences play on. See Storyboard.
+var story: Storyboard = null
 var hud: HUD
 
 var _sun: DirectionalLight3D
@@ -121,6 +123,17 @@ func _ready() -> void:
 	tutorial.camera_rig = camera_rig
 	tutorial.creature = creature
 	tutorial.miracles = miracles
+
+	# THE STORYBOARD PLAYER. Nothing is playing yet: it is the stage, and a
+	# board is data handed to `play()`. FirstLessons.board() is the creature
+	# sequence written in it — see Storyboard for the whole grammar, which is
+	# eight words long.
+	story = Storyboard.new()
+	story.camera_rig = camera_rig
+	story.divine_hand = divine_hand
+	add_child(story)
+	# The tutorial hands the creature's own sequence over to it when it is done.
+	tutorial.story = story
 	add_child(tutorial)
 
 	# THE CREATURES YOU HAVE RAISED. Above everything, because on the very first
@@ -351,6 +364,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		if creature.is_leashed():
 			creature.release_leash()
 			GameState.announce("You release your creature. It returns to its own mind.")
+		elif _lead_at() != null:
+			# POINTING AT A THING means FETCH IT. One gesture, two sentences,
+			# and which one you said is decided by what was under your hand —
+			# see CreatureLead.
+			creature.leash_to_thing(_lead_at())
 		else:
 			creature.leash_to(divine_hand.ground_point)
 			GameState.announce("You lead your creature there. (G again to release.)")
@@ -385,6 +403,18 @@ func _unhandled_input(event: InputEvent) -> void:
 
 ## Training only counts when the hand is actually AT the creature — you
 ## cannot pet from across the map.
+## WHAT THE LEAD WOULD BE TIED TO, if anything: a thing under the hand that can
+## actually be picked up. Bare ground, a building or the creature itself all
+## mean "go there" instead.
+func _lead_at() -> Node3D:
+	if not is_instance_valid(divine_hand):
+		return null
+	var under := divine_hand.hover_target
+	if under == null or not is_instance_valid(under) or under == creature:
+		return null
+	return under if under.is_in_group("pickable") else null
+
+
 func _touch_creature(kindly: bool) -> void:
 	if not is_instance_valid(creature):
 		return

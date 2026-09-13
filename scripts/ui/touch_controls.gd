@@ -74,6 +74,13 @@ func _on_leash_pressed() -> void:
 		_leash_button.text = "Lead"
 		GameState.announce("You release your creature.")
 	else:
-		creature.leash_to(divine_hand.ground_point)
+		# POINTING AT A THING means FETCH IT — the same one gesture as on a
+		# keyboard, and the same two sentences. See CreatureLead.
+		var under := divine_hand.hover_target
+		if under != null and is_instance_valid(under) and under != creature \
+				and under.is_in_group("pickable"):
+			creature.leash_to_thing(under)
+		else:
+			creature.leash_to(divine_hand.ground_point)
+			GameState.announce("Your creature is going where you pointed.")
 		_leash_button.text = "Release"
-		GameState.announce("Your creature is going where you pointed.")

@@ -30,6 +30,7 @@ BUILTIN = {
     "to_global", "look_at", "rotate_y", "global_rotate", "translate",
     "get_class", "is_class", "set_process", "set_physics_process",
     "get_child_count", "get_index", "get_groups", "is_ancestor_of", "reparent",
+    "set_process_unhandled_input", "set_process_input", "set_process_internal",
     "move_and_slide", "is_on_floor", "is_on_wall", "get_world_3d",
     "get_viewport", "add_theme_font_size_override", "propagate_call",
     "surface_get_material", "get_surface_override_material", "instantiate",

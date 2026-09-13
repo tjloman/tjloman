@@ -133,6 +133,8 @@ var walks_on_water: bool:
 ## its own wants — it goes there and waits — but it still LEARNS from whatever
 ## happens on the way, so leading it somewhere is itself a way of teaching.
 var leash_target := Vector3.INF
+## The THING the lead is tied to, if it is tied to a thing rather than a spot.
+var leash_thing: Node3D = null
 
 ## Feelings. Mood is the weather of its heart; bond is how attached it is to
 ## you; boredom is the itch that play and curiosity scratch.
@@ -448,7 +450,7 @@ func _physics_process(delta: float) -> void:
 		State.CAST:
 			_process_cast(delta)
 		State.LEASHED:
-			_process_leashed(delta)
+			CreatureLead.walk(self, delta)
 		State.WEIGHING:
 			intent.tick(self, delta)
 		State.JUGGLE:
@@ -1895,52 +1897,6 @@ func grant_water_walking(seconds: float) -> void:
 	GameState.announce("Your creature steps onto the water, and does not sink.")
 
 
-## Order it to a spot (the hand's ground point). It drops what it is doing.
-func leash_to(pos: Vector3) -> void:
-	# A creature that has walked away from you does not come when called. This
-	# is the one command it will refuse, and it refuses it until amends are made.
-	if exiled:
-		GameState.announce("Your creature looks at your hand, and does not come.")
-		express("sad", 2.0)
-		return
-	# A ROPE IS STILL A ROPE. Pointing past it sends the creature as near as it
-	# can get rather than having it strain at the end for the rest of the day.
-	leash_target = CreatureStake.nearest_within(get_tree(), pos)
-	if _carried != null:
-		_release_carried(true)
-	state = State.LEASHED
-	express("curious")
-	attention = minf(attention + 25.0, 100.0)
-
-
-func release_leash() -> void:
-	if leash_target == Vector3.INF:
-		return
-	leash_target = Vector3.INF
-	if state == State.LEASHED:
-		_decide()
-
-
-func is_leashed() -> bool:
-	return leash_target != Vector3.INF
-
-
-## Walk to where it was sent and wait there. It stays put (drifting a little)
-## until you release it, so you can post it somewhere and leave it.
-func _process_leashed(delta: float) -> void:
-	if leash_target == Vector3.INF:
-		_decide()
-		return
-	if global_position.distance_to(leash_target) > 3.0:
-		_move_toward(leash_target, _run_speed() * 0.9, delta)
-		return
-	_apply_gravity_only(delta)
-	_action_time -= delta
-	if _action_time <= 0.0:
-		_action_time = 3.0
-		# Waiting where it was told, but still watching the world go by.
-		CreatureWatching.observe(self)
-
 
 ## The quiet life ---------------------------------------------------------------
 ##
@@ -2189,6 +2145,35 @@ func grant_strength(seconds: float) -> void:
 	body.boost_time = maxf(body.boost_time, seconds)
 	feel("pride", 0.8, 1.5)   # a roar of borrowed power
 	GameState.announce("Your creature swells with borrowed might!")
+
+
+## THE LEAD. The player's one direct sentence; CreatureLead is the whole of it.
+func leash_to(pos: Vector3) -> void:
+	CreatureLead.to_spot(self, pos)
+
+
+func leash_to_thing(what: Node3D) -> void:
+	CreatureLead.to_thing(self, what)
+
+
+func release_leash() -> void:
+	CreatureLead.release(self)
+
+
+func is_leashed() -> bool:
+	return leash_target != Vector3.INF
+
+
+## Set down whatever it holds, gently — the lead's door onto the private one.
+func release_carried() -> void:
+	if _carried != null:
+		_release_carried(true)
+
+
+## Take a thing up, doing with it whatever this creature would do with it.
+func take_up(what: Node3D) -> void:
+	_pick_up_thing(what, _intent_for(what))
+	mind.practise("carry", true)
 
 
 ## Is it carrying something? Hauling is harder work than walking, and the

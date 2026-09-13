@@ -34,6 +34,10 @@ const AVOID_RANGE := 2.2
 ## frame — when the cap is hit the caller simply falls back to local steering,
 ## which is what it had before.
 const ROUTE_CELL := 6.0
+## HOW FAR A THING WILL STEP DOWN without treating it as a cliff. Waist-high on
+## a villager: enough that ordinary rolling country is walkable and a sheer face
+## into the water is not. A beast or a creature passes its own.
+const SHEER := 1.5
 const ROUTE_BUDGET := 380       # cells expanded before a search gives up
 ## AND HOW MANY SEARCHES ONE FRAME WILL PAY FOR.
 ##
@@ -64,7 +68,11 @@ const _NEIGHBOURS: Array[Vector2i] = [
 
 var _grid := {}          # Vector2i cell -> Array of {p: Vector2, r: float}
 var _timer := 0.0
-var _terrain := {}       # Vector2i route cell -> {"h": float, "wet": float, "slope": float}
+## Vector2i route cell -> {"h": float, "wet": float}. There is no "slope" in it
+## and never was: steepness is the DIFFERENCE between two cells (see
+## `_step_cost`), not a property of one, and the comment claiming otherwise sent
+## me looking for a cost term that does not exist.
+var _terrain := {}
 var _world: WorldGen = null
 var _routes_asked := 0
 var _routes_failed := 0
@@ -155,10 +163,10 @@ func steer(pos: Vector3, desired: Vector3, self_radius: float,
 ## This is what lets villagers and beasts walk right around a lakeshore to reach
 ## the far side, rather than stopping dead at the edge and starving.
 func water_route(mover: Node, pos: Vector3, desired: Vector3, world: WorldGen,
-		probe := 1.7) -> Vector3:
+		probe := 1.7, drop := SHEER) -> Vector3:
 	if world == null or desired == Vector3.ZERO:
 		return desired
-	if not world.is_underwater(pos.x + desired.x * probe, pos.z + desired.z * probe):
+	if not _bad_step(world, pos, desired, probe, drop):
 		if mover != null:
 			mover.set_meta("shore_side", 0)  # open water ahead cleared — drop the commit
 		return desired
@@ -167,11 +175,35 @@ func water_route(mover: Node, pos: Vector3, desired: Vector3, world: WorldGen,
 	# (small to large), so the shoreline is followed in one consistent sense.
 	for deg: float in _shore_sweep(side):
 		var d := desired.rotated(Vector3.UP, deg_to_rad(deg))
-		if not world.is_underwater(pos.x + d.x * probe, pos.z + d.z * probe):
+		if not _bad_step(world, pos, d, probe, drop):
 			if mover != null:
 				mover.set_meta("shore_side", 1 if deg > 0.0 else -1)
 			return d
 	return Vector3.ZERO
+
+
+## IS THE GROUND THAT WAY WORTH STEPPING ONTO?
+##
+## THIS ASKED ONLY WHETHER IT WAS WET, and that is not the question. Where the
+## land meets water at a steep face the ground a stride ahead is still dry —
+## it is the top of the cliff — so every villager that walked toward the sea
+## walked straight off it, fell in at the bottom, and drowned. They were not
+## failing to avoid the water; they were never looking down.
+##
+## So a step is bad if it is wet OR if it falls away. A drop is not fatal in
+## itself and this is not a fear of heights: it is only ever consulted by
+## something that is choosing a HEADING, and there is always another heading.
+func _bad_step(world: WorldGen, pos: Vector3, dir: Vector3, probe: float,
+		drop: float) -> bool:
+	var x := pos.x + dir.x * probe
+	var z := pos.z + dir.z * probe
+	if world.is_underwater(x, z):
+		return true
+	# And what is beyond it, so a shelf one stride wide does not read as ground.
+	if world.is_underwater(pos.x + dir.x * probe * 2.0, pos.z + dir.z * probe * 2.0) \
+			and world.height_at(pos.x, pos.z) - world.height_at(x, z) > drop * 0.5:
+		return true
+	return world.height_at(pos.x, pos.z) - world.height_at(x, z) > drop
 
 
 ## The order of turn angles to try when hugging a shore, committed side first
