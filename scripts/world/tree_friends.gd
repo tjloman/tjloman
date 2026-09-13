@@ -109,7 +109,10 @@ func _cull() -> void:
 	for c in _critters:
 		if not is_instance_valid(c):
 			continue
-		var lost := c.host != null and not is_instance_valid(c.host)
+		# Same shape as Creature._enact's: `!= null` never reports a FREED host,
+		# so a bee whose tree was felled or burned went on circling a hole in
+		# the air. See there for why typeof is the question to ask.
+		var lost := typeof(c.host) == TYPE_OBJECT and not is_instance_valid(c.host)
 		if lost or c.global_position.distance_to(eye) > GONE or not _in_season(c.kind):
 			c.queue_free()
 			continue

@@ -139,7 +139,14 @@ func spot_for(which: int, many: int) -> Vector3:
 	# and keeps a child in the same class as the roll grows under it.
 	var groups := classes()
 	var klass := maxi(which, 0) % groups
+	# WHOLE CHILDREN. Every division here is deliberately a floor: a class is a
+	# count of people, and the remainder is handled by the modulo above rather
+	# than lost. Said out loud because Godot cannot tell a rounding mistake from
+	# an intended one, and an unexplained warning at startup is a warning nobody
+	# reads.
+	@warning_ignore("integer_division")
 	var seat := maxi(which, 0) / groups
+	@warning_ignore("integer_division")
 	var count := maxi((maxi(many, 1) - klass + groups - 1) / groups, 1)
 	seat = clampi(seat, 0, count - 1)
 	var yard := yard_for(klass)
@@ -166,7 +173,9 @@ func spot_for(which: int, many: int) -> Vector3:
 			# SAT ROUND FOUR SIDES, facing in. The sides fill evenly rather than
 			# one at a time, so a class of nine is three, two, two and two and
 			# not five and four and nobody.
-			var per := maxi((count + 3) / 4, 1)
+			@warning_ignore("integer_division")
+			var per := maxi((count + 3) / 4, 1)   # whole children, rounded up
+			@warning_ignore("integer_division")
 			var side := (seat / per) % 4
 			var reach := maxf(SEAT_GAP * float(per) * 0.5, RING_LEAST)
 			var out: Vector3 = [Vector3(0, 0, 1), Vector3(1, 0, 0),

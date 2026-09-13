@@ -1317,6 +1317,49 @@ def check_sim_clock(files):
     return out
 
 
+def check_null_as_alive(files):
+    """`x != null` USED AS A TEST FOR "THERE IS A LIVE OBJECT HERE".
+
+    It is not one. A Variant holding a FREED object does not behave like a live
+    one under `!=`, so `x != null and not is_instance_valid(x)` — which reads
+    exactly like "there is something here and it is dead" — never reports a
+    dead thing at all. Whatever follows then works on the corpse, and if it
+    casts it, Godot takes the game down with "Trying to cast a freed object".
+
+    That is not hypothetical: Creature._enact guarded its target this way, and a
+    choice can sit in CreatureIntent for seconds before it is enacted. Drop what
+    it was aimed at in that window and the next praise crashed the game.
+
+    `typeof(x) == TYPE_OBJECT` is the question that survives: a Variant's TYPE
+    does not change when the object it held is freed, so it separates "somebody
+    put a thing here" from "this was always null", and is_instance_valid then
+    says which sort of thing it is.
+
+    The OTHER order — `x != null and is_instance_valid(x)` — is safe and is left
+    alone: a freed object failing the first test reaches the right answer.
+    """
+    dead = re.compile(r"(\b[\w.]+)\s*!=\s*null\s+and\s+not\s+is_instance_valid\(\s*([\w.]+)\s*\)")
+    out = []
+    for path in files:
+        lines = open(path, encoding="utf-8").read().split("\n")
+        held, start = "", 0
+        for i, line in enumerate(lines, 1):
+            code = line.split("#", 1)[0].rstrip()
+            # A continuation is joined onto the line it started on, so the site
+            # is reported where a reader will find it rather than N lines early.
+            if held == "":
+                start = i
+            if code.endswith("\\"):
+                held += code[:-1] + " "
+                continue
+            stmt = held + code
+            held = ""
+            m = dead.search(stmt)
+            if m and m.group(1) == m.group(2):
+                out.append((path, start, m.group(1), stmt.strip()))
+    return out
+
+
 def main():
     root = "scripts"
     targets = sys.argv[1:] or [root]
@@ -1423,6 +1466,13 @@ def main():
               "object to a TYPED variable is itself the error, raised before "
               "that check can run. Read it untyped, guard it, then type it."
               "\n    %s" % (path, lineno, name, kind, line))
+    alive = check_null_as_alive(files)
+    for path, lineno, name, line in alive:
+        print("%s:%d: `%s != null` does not mean '%s is a live object' — a FREED "
+              "one does not compare like a live one, so this branch never fires "
+              "and whatever follows works on a corpse (a cast of it is a crash). "
+              "Ask `typeof(%s) == TYPE_OBJECT` instead."
+              "\n    %s" % (path, lineno, name, name, name, line))
     sim_clocks = check_sim_clock(files)
     for path, lineno, line in sim_clocks:
         print("%s:%d: nothing writes `_sim_last = Scheduler.now()` outside this "
@@ -1441,7 +1491,7 @@ def main():
     total = len(problems) + len(escapes) + len(formats) + len(shadowed) \
         + len(loose_arrays) + len(variants) + len(shadowed_members) \
         + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice) + len(loose_consts) + len(through) \
-        + len(class_shadows) + len(confusable) + len(sim_clocks)
+        + len(class_shadows) + len(confusable) + len(sim_clocks) + len(alive)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

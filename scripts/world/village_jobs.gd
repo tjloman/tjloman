@@ -54,7 +54,9 @@ static func room_for(town: Village, job: String) -> int:
 		"work":
 			return maxi(Workshop.posts(town), 1)
 		"chop", "quarry":
-			return maxi(town.population() / SOULS_PER_GATHERER, 1)
+			@warning_ignore("integer_division")
+			var hands := maxi(town.population() / SOULS_PER_GATHERER, 1)
+			return hands   # whole people; a fraction of a woodcutter is nobody
 	return int(ROOM.get(job, 1))
 
 

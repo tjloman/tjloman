@@ -878,7 +878,17 @@ func enact_chosen(choice: Dictionary) -> void:
 func _enact(choice: Dictionary) -> void:
 	var verb: String = choice["verb"]
 	var aimed_at = choice.get("target", null)
-	if aimed_at != null and not is_instance_valid(aimed_at):
+	# `!= null` IS NOT A TEST FOR "THERE IS AN OBJECT HERE". A choice sits in
+	# CreatureIntent for PAUSE seconds before it is enacted — the pause is the
+	# beat you get to praise or forbid it in — and in those seconds its target
+	# can be eaten, thrown into the sea, or simply dropped. A freed object in a
+	# Variant does not behave like a live one under `!=`, so this let a dead
+	# handle through and the cast below took the game down.
+	#
+	# `typeof` is unambiguous: a Variant's TYPE does not change when the object
+	# it held is freed. A target that was always null is TYPE_NIL and passes
+	# through, which every option aiming at nothing depends on.
+	if typeof(aimed_at) == TYPE_OBJECT and not is_instance_valid(aimed_at):
 		_wander()
 		return
 	var target := aimed_at as Node3D
