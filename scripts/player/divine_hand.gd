@@ -180,6 +180,14 @@ var _glow: OmniLight3D
 var _beam: SpotLight3D            # the column of light the hand casts at night
 var _beam_energy := 0.0
 var _animator: ModelAnimator = null   # non-null only for a rigged hand model
+## The knuckles of the built-in hand, and its thumb — empty when a custom model
+## is doing its own animating. See HandPose.
+var _knuckles: Array[Node3D] = []
+var _thumb_joint: Node3D = null
+var _pose := HandPose.new()
+## Seconds since the pointer last actually moved, which is what tells reaching
+## for something apart from resting on it.
+var _stirred := 99.0
 
 # The primary pointer is still pressed (for hold-to-grab-more at a store).
 var _pointer_down := false
@@ -205,17 +213,32 @@ func _build_hand_mesh() -> void:
 		_hand_material = Util.mat(GameState.alignment_color())
 		# Palm.
 		_add_hand_part(Util.box(Vector3(0.9, 0.18, 1.0), Color.WHITE, Vector3.ZERO))
-		# Four fingers.
+		# FOUR FINGERS, EACH ON A KNUCKLE. The box used to be a child of the
+		# hand at its finished position, which is fine for a hand that never
+		# moves and useless for one that has to close: rotating a box about its
+		# own middle does not bend a finger, it pinwheels one. The pivot sits at
+		# the palm's edge where a knuckle is, and the box hangs off it. See
+		# HandPose.
 		for i in 4:
 			var x := -0.33 + i * 0.22
 			var length := 0.55 if (i == 1 or i == 2) else 0.45
-			_add_hand_part(Util.box(
-				Vector3(0.16, 0.15, length), Color.WHITE,
-				Vector3(x, 0.0, -0.5 - length * 0.5)))
-		# Thumb.
-		var thumb := Util.box(Vector3(0.16, 0.15, 0.42), Color.WHITE, Vector3(0.55, 0.0, 0.05))
-		thumb.rotation_degrees.y = -40
-		_add_hand_part(thumb)
+			var knuckle := Node3D.new()
+			knuckle.position = Vector3(x, 0.0, -0.5)
+			add_child(knuckle)
+			var digit := Util.box(Vector3(0.16, 0.15, length), Color.WHITE,
+				Vector3(0.0, 0.0, -length * 0.5))
+			digit.material_override = _hand_material
+			knuckle.add_child(digit)
+			_knuckles.append(knuckle)
+		# Thumb, on its own pivot for the same reason.
+		_thumb_joint = Node3D.new()
+		_thumb_joint.position = Vector3(0.42, 0.0, 0.05)
+		_thumb_joint.rotation_degrees.y = -40
+		add_child(_thumb_joint)
+		var thumb := Util.box(Vector3(0.16, 0.15, 0.42), Color.WHITE,
+			Vector3(0.0, 0.0, -0.21))
+		thumb.material_override = _hand_material
+		_thumb_joint.add_child(thumb)
 	# Faint divine glow: the aura on the hand itself and whatever it is holding.
 	_glow = OmniLight3D.new()
 	_glow.light_color = GameState.hand_light()
@@ -316,6 +339,7 @@ func _physics_process(delta: float) -> void:
 	# A rigged hand model plays grab/cast/idle clips as the hand works.
 	if _animator != null:
 		_animator.play(_anim_state())
+	_tick_pose(delta)
 
 	# TOP UP ONLY WHEN THE POINTER IS QUIET. While a finger is moving, _on_motion
 	# is already sampling at the rate the screen reports — far faster than this
@@ -552,6 +576,7 @@ func _on_pointer_button(event: InputEventMouseButton) -> void:
 
 
 func _on_pointer_motion(event: InputEventMouseMotion) -> void:
+	_stirred = 0.0          # the hand is reaching, not resting. See `_tick_pose`.
 	if state == HandState.GESTURING:
 		_add_stroke_point(event.position)
 	elif _charging:
@@ -1164,6 +1189,18 @@ func working_text() -> String:
 	if _runes.is_empty():
 		return ""
 	return Spellbook.describe(_runes)
+
+
+## THE HAND'S OWN SHAPE, every frame. What it is over, whether it is holding
+## anything and whether it is hauling the land are all already known here; this
+## is only the part where the hand admits to knowing them. See HandPose.
+func _tick_pose(delta: float) -> void:
+	_stirred += delta
+	if _knuckles.is_empty():
+		return
+	_pose.tick(HandPose.shape_for(is_instance_valid(held_body),
+		state == HandState.DRAG_LAND, hover_target, _stirred),
+		_knuckles, _thumb_joint, delta)
 
 
 ## The clip a rigged hand model plays for what the hand is doing now.
