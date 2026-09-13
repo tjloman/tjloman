@@ -35,6 +35,9 @@ const TETHER := 22.0
 ## the end reads as a rope going taut rather than a wall.
 const GIVE := 1.4
 
+## What the profile remembers once the rope has come off for good.
+const RETIRED := "rope_retired"
+
 const POST_HIGH := 2.4
 const POST_WIDE := 0.22
 const ROPE_BORE := 0.07
@@ -53,6 +56,14 @@ var _rope: MeshInstance3D = null
 static func plant(who: Creature) -> CreatureStake:
 	if _here != null and is_instance_valid(_here):
 		return _here
+	# ONCE PER CREATURE, NOT ONCE PER BOOT. main._ready drove this in every time
+	# the game started, so a player who had finished the lesson months ago came
+	# back to a creature on a rope with no lesson left to take it off — and the
+	# only thing that pulls it is a tutorial that has already been marked done.
+	# The rope is the first thing a creature knows, and a thing you know is not
+	# unlearned by closing the window.
+	if SaveGame.recalls(RETIRED):
+		return null
 	var stake := CreatureStake.new()
 	stake.creature = who
 	var parent := who.get_parent()
@@ -96,6 +107,7 @@ static func pull_up(tree: SceneTree) -> void:
 	if stake == null:
 		return
 	GameState.announce("You pull the stake from the ground. Your creature is yours to lead now.")
+	SaveGame.remember(RETIRED, true)   # and it stays pulled. See `plant`.
 	_here = null
 	stake.queue_free()
 

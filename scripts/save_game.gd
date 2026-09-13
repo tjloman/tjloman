@@ -125,6 +125,25 @@ func active_profile() -> Dictionary:
 	return profile(active)
 
 
+## SOMETHING REMEMBERED ABOUT THIS CREATURE ACROSS REBOOTS.
+##
+## Kept on the PROFILE rather than in the world file, because these are facts
+## about a creature's upbringing rather than about the land: they must survive a
+## world being reloaded, and a brand new creature must start without them. The
+## profile dictionary is the live entry in `profiles`, so writing to it and
+## re-indexing is the whole of it. See CreatureStake.
+func remember(key: String, value: Variant) -> void:
+	var entry := active_profile()
+	if entry.is_empty():
+		return
+	entry[key] = value
+	_write_index()
+
+
+func recalls(key: String) -> bool:
+	return bool(active_profile().get(key, false))
+
+
 func has_save() -> bool:
 	return active != "" and FileAccess.file_exists(_path_for(active))
 

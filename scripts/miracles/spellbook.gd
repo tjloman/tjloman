@@ -188,11 +188,20 @@ const COMBO_MULTIPLIER := 0.8
 
 ## The rudiments, taught a tier at a time by the villages that come to believe.
 ## Everything castable follows from which of these you hold.
+## AIR IS A RUDIMENT, NOT A REWARD.
+##
+## It was tier 4 — the last thing a god learned — and `air+calm` is FLIGHT, the
+## one miracle that gets a creature out of a hole. A creature arrives in this
+## world in a crater, and the first thing a player has to be taught is how to
+## lift it out of one; that lesson cannot be gated behind three conversions.
+## It is also the first TWO-RUNE miracle anybody draws, which makes it the place
+## to teach that runes combine at all. `calm+sky` still reaches flight from the
+## other side, so nothing about the old route is taken away.
 const RUNE_TIERS: Array[Array] = [
-	["water", "life", "calm"],
+	["water", "life", "calm", "air"],
 	["earth", "force", "ward"],
 	["fire", "sky"],
-	["air", "fury"],
+	["fury"],
 ]
 
 ## Plain names for the readout, so the player can learn the alphabet by using it.

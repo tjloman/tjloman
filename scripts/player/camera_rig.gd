@@ -7,6 +7,14 @@ extends Node3D
 
 const MIN_ZOOM := 1.2   # close enough to stand at a villager's feet
 const MAX_ZOOM := 70.0
+## HOW THE ZOOM SETTLES, per second. One rate for the dolly and the sideways
+## recentre together, because they are one motion and the jerk was them
+## disagreeing — see `_zoom_toward` and `_tick_zoom_drift`.
+const ZOOM_EASE := 9.0
+## And how fast the rig lifts off a hill it is about to clip into. Fast, but
+## not instant: instant is a snap, and a zoom that shortens the cushion fires
+## it on and off every frame. See `_update_rig_height`.
+const LIFT_EASE := 14.0
 const PAN_SPEED := 22.0
 const ROTATE_SPEED := 1.6
 ## How fast a camera shake dies away, per second (see `shake`).
@@ -25,6 +33,9 @@ var follow_target: Node3D = null
 ## gives it back: a shot you cannot pan out of is a cutscene.
 var framed := false
 
+## The sideways recentre a zoom has asked for and not yet been given. See
+## `_zoom_toward`.
+var _zoom_drift := Vector3.ZERO
 var _rotating := false
 var _touches := {}        # touch index -> screen position
 var _pinch_dist := 0.0
@@ -112,7 +123,13 @@ func _process(delta: float) -> void:
 	# global position) so zoom-to-hand and rotation stay true.
 	camera.position.x = 0.0
 	camera.position.y = 0.0
-	camera.position.z = lerpf(camera.position.z, zoom_distance, minf(delta * 8.0, 1.0))
+	# FRAMERATE-INDEPENDENT, and at the same rate the recentre uses. `delta * k`
+	# is not: at 30fps it eases twice as far per frame as at 60, so the same
+	# zoom lands differently depending on what else the frame was doing — which
+	# on a device whose frame time moves around is felt as judder rather than as
+	# speed. 1 - exp(-k*dt) is the same curve at any framerate.
+	camera.position.z = lerpf(camera.position.z, zoom_distance, _ease(ZOOM_EASE, delta))
+	_tick_zoom_drift(delta)
 	_tick_shake(delta)
 
 	_update_rig_height(delta)
@@ -140,15 +157,24 @@ func _update_rig_height(delta: float) -> void:
 	# Cushion shrinks as you zoom in, so a close camera sits at ankle
 	# height and looks up — without entering the ground.
 	var cushion := clampf(zoom_distance * 0.06, 0.3, 2.0)
-	var floor_y := maxf(
-		_world_cache.height_at(cam.x, cam.z), WorldGen.WATER_LEVEL) + cushion
-	if cam.y < floor_y:
-		global_position.y += (floor_y - cam.y) + 0.01   # lift so the camera clears
+	var hard := maxf(_world_cache.height_at(cam.x, cam.z), WorldGen.WATER_LEVEL)
+	var floor_y := hard + cushion
+	if cam.y < hard + 0.05:
+		# INSIDE THE LAND. Nothing eases here: the only wrong answer is a frame
+		# spent looking at the underside of a hill.
+		global_position.y += (hard + 0.05 - cam.y)
+	elif cam.y < floor_y:
+		# Inside the CUSHION but still above the ground — which is a comfort
+		# problem, not a correctness one, so it is eased. It used to snap, and
+		# the cushion shrinks as you zoom in (see above), so zooming toward the
+		# ground fired this hard lift on and off every single frame. Half the
+		# judder people read as "the zoom" was the rig hopping vertically.
+		global_position.y += (floor_y - cam.y) * _ease(LIFT_EASE, delta)
 	elif cam.y > floor_y + 0.5:
 		# Comfortably clear: ease the pivot down to ride the land under it.
 		var terrain := maxf(
 			_world_cache.height_at(global_position.x, global_position.z), 0.0)
-		global_position.y = lerpf(global_position.y, terrain, minf(delta * 5.0, 1.0))
+		global_position.y = lerpf(global_position.y, terrain, _ease(5.0, delta))
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -231,6 +257,15 @@ func frame_on(aim: Vector3, yaw: float, pitch: float, zoom: float) -> void:
 	camera.rotation = Vector3.ZERO
 
 
+## ZOOMING PULLS THE RIG TOWARD WHAT YOU ARE LOOKING AT, and that pull used to
+## be INSTANT while the dolly behind it eased. So one wheel notch teleported the
+## pivot sideways in a single frame and then spent the next dozen frames sliding
+## the camera in along its own axis: two motions, different speeds, starting
+## together. That is the jerk, and it is why it reads as being yanked to one
+## side rather than as zooming.
+##
+## The sideways part is banked as drift now and bled off at exactly the rate the
+## dolly uses, so the whole thing is one movement.
 func _zoom_toward(factor: float) -> void:
 	framed = false
 	var new_zoom := clampf(zoom_distance * factor, MIN_ZOOM, MAX_ZOOM)
@@ -239,7 +274,26 @@ func _zoom_toward(factor: float) -> void:
 	if follow_target == null and not is_equal_approx(ratio, 1.0):
 		var focus := _focus_point()
 		var offset := (global_position - focus) * ratio
-		global_position = Vector3(focus.x + offset.x, global_position.y, focus.z + offset.z)
+		_zoom_drift += Vector3(focus.x + offset.x - global_position.x, 0.0,
+			focus.z + offset.z - global_position.z)
+
+
+## The banked recentre, paid out a little each frame. Panning writes
+## `global_position` directly and this adds on top of it, so dragging the world
+## about during a zoom does what you would expect rather than fighting it.
+func _tick_zoom_drift(delta: float) -> void:
+	if _zoom_drift.length_squared() < 0.0001:
+		_zoom_drift = Vector3.ZERO
+		return
+	var step := _zoom_drift * _ease(ZOOM_EASE, delta)
+	global_position += step
+	_zoom_drift -= step
+
+
+## The share of the remaining distance to close this frame, at `rate` per
+## second — the same however long the frame took.
+func _ease(rate: float, delta: float) -> float:
+	return clampf(1.0 - exp(-rate * delta), 0.0, 1.0)
 
 
 ## Yaw the rig, orbiting around the hand's ground point rather than

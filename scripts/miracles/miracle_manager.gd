@@ -1745,7 +1745,12 @@ func _cast_flight(pos: Vector3, potency := 1.0) -> void:
 	if creature.global_position.distance_to(pos) > 60.0:
 		GameState.hint("Cast it nearer your creature to lift it.")
 		return
-	creature.grant_flight(35.0 + potency * 25.0)
+	# A JUMP, NOT A JOURNEY. Thirty-five to sixty seconds was long enough to
+	# cross the map with, which made flight the answer to every distance problem
+	# in the game and stopped it being the answer to the one it is for: the
+	# creature is in a hole and cannot walk out. Ten seconds is over the lip and
+	# down the other side, and you cast it again if you meant to go further.
+	creature.grant_flight(10.0 + potency * 2.0)
 	var swirl := CPUParticles3D.new()
 	swirl.amount = Quality.particles(60)
 	swirl.lifetime = 1.6
