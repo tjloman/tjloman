@@ -135,7 +135,10 @@ func _physics_process(delta: float) -> void:
 ## as they can, which reads as a creature straining rather than a miracle
 ## silently refusing.
 func _where_you_are_pointing() -> Vector3:
-	var hand := MiracleManager.divine_hand
+	var manager := MiracleManager.of(get_tree())
+	if manager == null:
+		return Vector3.INF
+	var hand := manager.divine_hand
 	if hand == null or not is_instance_valid(hand):
 		return Vector3.INF
 	var spot: Vector3 = hand.ground_point
@@ -221,10 +224,13 @@ func _throw_blob(from: Vector3, to: Vector3) -> void:
 ## and not only the couple of dozen head that happen to be real nodes.
 ## See tools/herd_reach.py.
 func _land(at: Vector3) -> void:
-	MiracleManager.pour_lava_at(at, RISE * randf_range(0.8, 1.2),
+	var manager := MiracleManager.of(get_tree())
+	if manager == null:
+		return
+	manager.pour_lava_at(at, RISE * randf_range(0.8, 1.2),
 		POUR_REACH * randf_range(0.9, 1.2))
-	MiracleManager.ignite_trees_near(at, BURN_REACH)
-	MiracleManager.ignite_animals_near(at, BURN_REACH)
+	manager.ignite_trees_near(at, BURN_REACH)
+	manager.ignite_animals_near(at, BURN_REACH)
 	for v in get_tree().get_nodes_in_group("villagers"):
 		var villager := v as Villager
 		if not is_instance_valid(villager):

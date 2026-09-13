@@ -313,7 +313,7 @@ func _physics_process(delta: float) -> void:
 				var over := pinning.global_position - global_position
 				over.y = 0.0
 				if over.length() > 1.2:
-					_move_toward(pinning.global_position, spec["speed"], delta, 1.0)
+					_move_toward(pinning.global_position, spec["speed"], delta)
 				elif over.length() > 0.05:
 					rotation.y = atan2(over.x, over.z)
 		State.GO_DRINK:

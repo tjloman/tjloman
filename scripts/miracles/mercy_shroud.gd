@@ -193,7 +193,9 @@ func _tick_work(delta: float) -> void:
 	if _until_work > 0.0:
 		return
 	_until_work = WORK_EVERY
-	MiracleManager.mercy_upon(creature.global_position, _reach())
+	var manager := MiracleManager.of(get_tree())
+	if manager != null:
+		manager.mercy_upon(creature.global_position, _reach())
 
 
 func _tick_awe(delta: float) -> void:

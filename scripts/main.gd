@@ -1210,7 +1210,7 @@ func _run_smoke_test() -> void:
 		scared.global_position = beast.global_position + Vector3(4, 0, 0)
 		scared.scare(beast.global_position)
 		var was_running := scared.state == Animal.State.FLEE
-		MiracleManager.resolve("blessed_relief", beast.global_position)
+		miracles.resolve("blessed_relief", beast.global_position)
 		var muck := get_tree().get_nodes_in_group("poop").size()
 		print("SMOKE TEST: relief — @' V O ) = %s, muck dropped=%d, fear %.0f, mood %.0f" % [
 			eased.get("miracle", "NOTHING"), muck, beast.fear, beast.mood])

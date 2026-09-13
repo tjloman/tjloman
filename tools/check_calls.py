@@ -65,6 +65,14 @@ own_call_re = re.compile(r"(?<![\w.$\"])(_\w+)\s*\(")
 
 # A whole function signature, so the declared type of each parameter is known.
 signature_re = re.compile(r"^(?:static\s+)?func\s+(\w+)\s*\(([^)]*)\)", re.M)
+static_func_re = re.compile(r"^static\s+func\s+(\w+)\s*\(", re.M)
+# `SomeClass.method(` — a call made THROUGH a class name rather than an object.
+through_class_re = re.compile(r"(?<![\w.])([A-Z]\w*)\.(\w+)\s*\(")
+# `SomeClass.field` with no call after it — reaching an instance VARIABLE
+# through a class name, which fails for exactly the same reason.
+through_class_var_re = re.compile(r"(?<![\w.])([A-Z]\w*)\.(\w+)\s*(?!\s*\()")
+# A call with nothing before it: this script calling its own method.
+bare_call_re = re.compile(r"(?<![\w.$])([a-z_]\w*)\s*\(")
 # A whole dotted path before a call: `mind.judge(`, `wronged.mind.judge(`,
 # `creature.mind.beliefs.creed(`. Resolved left to right, one member at a time,
 # which is what it takes to catch a bad argument two levels down.
@@ -212,6 +220,10 @@ def collect(root):
             classes[m.group(1)] = (members, base.group(1) if base else None)
             for fname, raw in signature_re.findall(src):
                 SIGNATURES[(m.group(1), fname)] = parse_params(raw)
+            OWN_FUNCS[m.group(1)] = set(func_re.findall(src))
+            for fname in static_func_re.findall(src):
+                STATICS.add((m.group(1), fname))
+            OWN_VARS[m.group(1)] = set(var_re.findall(src))
             here = dict(typed_var_re.findall(src))
             here.update(dict(typed_decl_re.findall(src)))
             MEMBER_TYPES[m.group(1)] = here
@@ -220,6 +232,13 @@ def collect(root):
 
 # (class, method) -> [(param name, declared type or None)]. Filled by collect().
 SIGNATURES = {}
+# (class, method) pairs declared `static func`. Filled by collect().
+STATICS = set()
+# Every func a class declares, static or not. Filled by collect().
+OWN_FUNCS = {}
+# Every INSTANCE var a class declares (static vars and consts excluded — those
+# are reachable through the class name and always were). Filled by collect().
+OWN_VARS = {}
 # class -> {member name -> class}, so a dotted call chain can be followed.
 MEMBER_TYPES = {}
 
@@ -289,6 +308,8 @@ def check(paths, classes):
     for path in paths:
         src = open(path, encoding="utf-8").read()
         mine = own_members(path, src, classes)
+        own = decl_re.search(src)
+        mine_class = own.group(1) if own else None
         # `var mind := CreatureMind.new()` tells us what `mind.judge(...)` is a
         # call to, which is what makes argument checking possible at all. Locals
         # count, so a smoke test's `var wronged := Creature.new()` resolves too.
@@ -326,6 +347,19 @@ def check(paths, classes):
             for m in static_call_re.finditer(line) or []:
                 _flag_args(problems, path, lineno, line, classes,
                            m.group(1), m.group(2), line[m.end():])
+            # AND A CALL THE SCRIPT MAKES ON ITSELF. `_move_toward(a, b, c, d)`
+            # inside the class that declares `_move_toward(a, b, c)` was never
+            # argument-checked at all: the class was only ever "known" for a
+            # dotted call, so the one kind of call a file makes most of the time
+            # was the one kind nobody looked at. Godot rejects it at parse time,
+            # and it is exactly the mistake of copying a line from a sibling
+            # class whose version of the method takes one more parameter.
+            if mine_class:
+                for m in bare_call_re.finditer(line):
+                    if (mine_class, m.group(1)) not in SIGNATURES:
+                        continue
+                    _flag_args(problems, path, lineno, line, classes,
+                               mine_class, m.group(1), line[m.end():])
             for m in member_call_re.finditer(line):
                 chain = [p.strip() for p in m.group(1).split(".")]
                 cls = _walk_chain(chain, typed, classes)
@@ -1052,6 +1086,62 @@ def check_twice_declared(files):
     return problems
 
 
+def autoloads(path="project.godot"):
+    """The singletons Godot installs as global names. A call through one of
+    THESE is an ordinary instance call and is perfectly legal."""
+    found, inside = set(), False
+    try:
+        for line in open(path, encoding="utf-8"):
+            line = line.strip()
+            if line.startswith("["):
+                inside = line == "[autoload]"
+                continue
+            if inside and "=" in line:
+                found.add(line.split("=", 1)[0].strip())
+    except OSError:
+        pass
+    return found
+
+
+def check_static_calls(files, singletons):
+    """AN INSTANCE METHOD CALLED THROUGH ITS CLASS NAME.
+
+    `MiracleManager.resolve(...)` is a STATIC call. Godot refuses it for a
+    method that is not static, and refuses it at PARSE time — so one line of it
+    takes every script that depends on that class down with it, and the error
+    names the caller rather than the mistake.
+
+    It is an easy line to write and a very easy one to believe: a class with a
+    manager-ish name reads exactly like an autoload, and the six autoloads in
+    this project ARE called that way, legally, everywhere. Three new miracles
+    were written against a MiracleManager that is not one, in one afternoon,
+    and none of the other checks here had anything to say about it.
+    """
+    out = []
+    for path in files:
+        src = open(path, encoding="utf-8").read()
+        for i, line in enumerate(src.split("\n"), 1):
+            code = line.split("#", 1)[0]
+            for cls, method in through_class_re.findall(code):
+                if cls in singletons or cls not in OWN_FUNCS:
+                    continue
+                if method not in OWN_FUNCS[cls] or (cls, method) in STATICS:
+                    continue
+                out.append((path, i, cls, method, "method", line.strip()))
+            # And the same mistake made against a FIELD rather than a method.
+            # `MiracleManager.divine_hand` was in the very same log, and it
+            # fails the same way and for the same reason.
+            for cls, field in through_class_var_re.findall(code):
+                if cls in singletons or cls not in OWN_VARS:
+                    continue
+                if field not in OWN_VARS[cls]:
+                    continue
+                if re.search(r"\b%s\.%s\s*\(" % (cls, field), code):
+                    continue        # already reported above as a call
+                out.append((path, i, cls, field, "field", line.strip()))
+    return out
+
+
 def main():
     root = "scripts"
     targets = sys.argv[1:] or [root]
@@ -1102,6 +1192,13 @@ def main():
               "%s() — Godot warns and carries on, so this never gets fixed, and "
               "the real %s() is unreachable from inside this scope"
               "\n    %s" % (path, lineno, kind, name, name, name, line))
+    through = check_static_calls(files, autoloads())
+    for path, lineno, cls, name, kind, line in through:
+        shown = name + "()" if kind == "method" else name
+        print("%s:%d: %s.%s is an INSTANCE %s reached through the class name — %s "
+              "is not an autoload. Godot rejects this at parse time and takes every "
+              "dependent script with it. Get the object first."
+              "\n    %s" % (path, lineno, cls, shown, kind, cls, line))
     undeclared = check_undeclared_names(files)
     for path, lineno, name, where, line in undeclared:
         print("%s:%d: '%s' is not declared in the scope of %s — nothing in this "
@@ -1142,7 +1239,7 @@ def main():
               % (path, lineno, name, name, line))
     total = len(problems) + len(escapes) + len(formats) + len(shadowed) \
         + len(loose_arrays) + len(variants) + len(shadowed_members) \
-        + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice) + len(loose_consts)
+        + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice) + len(loose_consts) + len(through)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

@@ -271,6 +271,21 @@ var _clouds: Array[StormCloud] = []
 
 ## Your reach: 1.0 alone, rising with converted villages and their belief.
 ## Scales the extent of the grander miracles.
+## THE ONE IN THE WORLD.
+##
+## THIS IS NOT AN AUTOLOAD. Main builds it and it joins the "miracles" group, so
+## anything outside its own file has to go and find it — and `MiracleManager.foo()`
+## is a STATIC call on the class, which Godot refuses for an instance method and
+## refuses at parse time, taking every dependent script down with it. Three new
+## miracles were written that way in one afternoon because the name reads like an
+## autoload. It has a door of its own now, and tools/check_calls.py fails the
+## build on anyone who calls an instance method through the class name again.
+static func of(tree: SceneTree) -> MiracleManager:
+	if tree == null:
+		return null
+	return tree.get_first_node_in_group("miracles") as MiracleManager
+
+
 func _ready() -> void:
 	add_to_group("miracles")
 	# Draw the cloud texture now, while the world is being built and a few

@@ -221,7 +221,9 @@ func _tick_work(delta: float) -> void:
 	if _until_work > 0.0:
 		return
 	_until_work = WORK_EVERY
-	MiracleManager.rain_upon(creature.global_position, _reach(), BLESS)
+	var manager := MiracleManager.of(get_tree())
+	if manager != null:
+		manager.rain_upon(creature.global_position, _reach(), BLESS)
 
 
 ## A GOD'S BEAST WALKING IN ITS OWN THUNDERSTORM. There is no miracle going off
