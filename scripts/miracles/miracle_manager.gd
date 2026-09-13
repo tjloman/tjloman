@@ -1361,6 +1361,7 @@ func _ease_the_creature(who: Creature) -> void:
 	who.heart.stir("relief", 0.85)
 	who.heart.stir("contentment", 0.7)
 	who.express("happy", 4.0)
+	who.head.sound(who, "delight", -4.0)
 	# It LEARNS that this was good, through the same door every other deed is
 	# learned through — a beast that has been eased once will go looking for
 	# somewhere pleasant to do it again.

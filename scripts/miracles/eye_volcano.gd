@@ -201,6 +201,7 @@ func _fire(aim: Vector3) -> void:
 	creature.witness(LESSON)
 	creature.heart.stir("fury", 0.12)
 	creature.express("angry", 1.2)
+	creature.head.sound(creature, "fury", 1.0)
 	if left <= 0:
 		GameState.announce("The last of the fire leaves your creature's eyes.")
 

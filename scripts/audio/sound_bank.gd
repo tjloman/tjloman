@@ -21,7 +21,7 @@ const SPLICE := 0.25
 const ONE_SHOTS: Array[String] = [
 	"baa", "cluck", "oink", "neigh", "bark", "howl", "croak", "saw", "pick",
 	"hammer", "murmur", "chatter", "boom", "coo", "caw", "screech", "drum",
-	"whisper",
+	"whisper", "roar",
 ]
 ## THE SMALL VOICES. Everything above is a one-shot; these are LOOPS, because
 ## a cricket is not an event. See `_make_loop` and `voice`.
@@ -69,7 +69,11 @@ func _ensure(sound: String) -> void:
 
 
 ## Plays a named sound at a world position, then cleans itself up.
-func play_at(sound: String, pos: Vector3, volume_db := 0.0, pitch_jitter := 0.12) -> void:
+## `pitch` is an ABSOLUTE multiplier on top of the jitter — for a voice that has
+## to belong to a body. One roar waveform covers a creature that grows fifteen
+## times over only if the thing sounding it can say how big it is.
+func play_at(sound: String, pos: Vector3, volume_db := 0.0, pitch_jitter := 0.12,
+		pitch := 1.0) -> void:
 	if _active >= MAX_CONCURRENT:
 		return
 	_ensure(sound)
@@ -81,7 +85,7 @@ func play_at(sound: String, pos: Vector3, volume_db := 0.0, pitch_jitter := 0.12
 	var p := AudioStreamPlayer3D.new()
 	p.stream = _bank[sound]
 	p.volume_db = volume_db
-	p.pitch_scale = 1.0 + randf_range(-pitch_jitter, pitch_jitter)
+	p.pitch_scale = maxf(pitch + randf_range(-pitch_jitter, pitch_jitter), 0.05)
 	p.max_distance = 50.0
 	p.unit_size = 8.0
 	scene.add_child(p)
@@ -219,6 +223,41 @@ func _make_howl() -> AudioStreamWAV:
 		phase += freq / SAMPLE_RATE
 		var tone := sin(phase * TAU) + 0.25 * sin(phase * 2.0 * TAU)
 		samples[i] = tone * _env(t, dur, 0.35, 0.5) * 0.4
+	return _make_wav(samples)
+
+
+## THE CREATURE'S OWN VOICE, and it never had one — it borrowed a dog's bark to
+## warn people off and a thunderclap to smash things, which is two things that
+## are not a voice. This is the one sound in the bank that belongs to a single
+## character, and it is deliberately the LOWEST: a fundamental under eighty
+## hertz, three stacked harmonics to give it a chest, and a band of noise over
+## the top for the rasp. Pitched down it is a giant; pitched up it is a whelp,
+## which is how one waveform covers a creature that grows fifteenfold.
+##
+## It is sounded by the HEAD, on the head's own clock, whatever the hands are
+## doing — see CreatureHead.
+func _make_roar() -> AudioStreamWAV:
+	var dur := 1.25
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var phase := 0.0
+	var rasp := 0.0
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var frac := t / dur
+		# Up into the shout, then down and away as the breath runs out.
+		var freq := 62.0 + 46.0 * sin(minf(frac * 2.1, 1.0) * PI) - frac * 14.0
+		phase += freq / SAMPLE_RATE
+		var chest := sin(phase * TAU) \
+			+ 0.55 * sin(phase * 2.0 * TAU) \
+			+ 0.3 * sin(phase * 3.0 * TAU) \
+			+ 0.14 * sin(phase * 5.0 * TAU)
+		# The rasp: noise smoothed into a growl rather than left as hiss, and
+		# loudest in the middle where the shout is.
+		rasp = rasp * 0.82 + (randf() * 2.0 - 1.0) * 0.18
+		var throat := rasp * (0.35 + 0.45 * sin(frac * PI))
+		samples[i] = (chest * 0.34 + throat) * _env(t, dur, 0.06, 0.45) * 0.72
 	return _make_wav(samples)
 
 

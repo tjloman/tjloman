@@ -102,6 +102,9 @@ var growth: float:
 ## See CreatureBlessings; `walks_on_water` below is the one answer the steering
 ## needs, kept here so every reader does not have to know about the module.
 var blessings := CreatureBlessings.new()
+## THE HEAD, which runs on its own clock whatever the hands are doing: what it
+## is looking at, and what it has to say about it. See CreatureHead.
+var head := CreatureHead.new()
 ## THE ARM — how far it can send a thing, how well it aims, and whatever it
 ## currently has in the air. See CreatureThrowing.
 var throwing := CreatureThrowing.new()
@@ -235,6 +238,7 @@ var _animator: ModelAnimator = null   # non-null only for a rigged custom model
 # a custom model is driven through instance shader params ("alignment",
 # "expression") and matching blend shapes if it has them.
 var _fur_mat: StandardMaterial3D = null
+var _head: Node3D = null                   # the neck joint, turned by CreatureHead
 var _eyes: Array[MeshInstance3D] = []      # eye whites, scaled for expressions
 var _pupils: Array[MeshInstance3D] = []    # pupils, recoloured for mood/menace
 var _model_meshes: Array[GeometryInstance3D] = []
@@ -282,16 +286,22 @@ func _ready() -> void:
 		var body_part := Util.capsule(0.6, 1.8, Color.WHITE, Vector3(0, 1.0, 0))
 		body_part.material_override = _fur_mat
 		_body.add_child(body_part)
-		var head := Util.sphere(0.45, Color.WHITE, Vector3(0, 2.1, 0.15))
+		# A NECK JOINT, and everything above it rides on the neck. The head and
+		# the eyes used to hang straight off the body, so the only way to look
+		# at anything was to turn the whole animal — see CreatureHead.
+		_head = Node3D.new()
+		_head.position = Vector3(0, 2.05, 0)
+		_body.add_child(_head)
+		var head := Util.sphere(0.45, Color.WHITE, Vector3(0, 0.05, 0.15))
 		head.material_override = _fur_mat
-		_body.add_child(head)
+		_head.add_child(head)
 		for side in [-1, 1]:
-			var white := Util.sphere(0.12, Color.WHITE, Vector3(0.18 * side, 2.25, 0.5))
+			var white := Util.sphere(0.12, Color.WHITE, Vector3(0.18 * side, 0.2, 0.5))
 			_eyes.append(white)
-			_body.add_child(white)
-			var pupil := Util.sphere(0.05, Color.BLACK, Vector3(0.18 * side, 2.25, 0.6))
+			_head.add_child(white)
+			var pupil := Util.sphere(0.05, Color.BLACK, Vector3(0.18 * side, 0.2, 0.6))
 			_pupils.append(pupil)
-			_body.add_child(pupil)
+			_head.add_child(pupil)
 		for side in [-1, 1]:
 			var arm := Util.capsule(0.15, 0.8, Color.WHITE, Vector3(0.7 * side, 1.3, 0))
 			arm.material_override = _fur_mat
@@ -464,6 +474,10 @@ func _physics_process(delta: float) -> void:
 		_observe_time = OBSERVE_PERIOD
 		CreatureWatching.observe(self)
 
+	# THE HEAD LOOKS AND SPEAKS FOR ITSELF, every frame, whatever state the body
+	# is in — which is the whole reason it is here and not in a state.
+	head.aim(self, delta)
+
 	_try_catch_throw()
 
 	# Bulldoze the meadow: nearby trees lean out of the giant's way (they spring
@@ -628,7 +642,7 @@ func _decide() -> void:
 		# the wood a wide berth. See CreatureBeliefs.foretaste and place_feel.
 		"omen": mind.beliefs.foretaste(here) + mind.beliefs.place_feel(global_position),
 		"hunger": hunger, "energy": energy, "boredom": boredom,
-		"mood": mood, "fear": fear, "wounded": _wounded_nearby(),
+		"mood": mood, "fear": fear, "wounded": CreatureEyes.wounded_near(self),
 		"full": body.fullness(growth), "lazy": body.laziness(),
 		"pressed": body.pressed(),   # how badly it needs to go
 		# Being alone is a need like any other. A creature with nobody about
@@ -1463,6 +1477,7 @@ func _process_smash(delta: float) -> void:
 	var victim := _smash_target
 	_smash_target = null
 	SoundBank.play_at("boom", global_position, -2.0)
+	head.sound(self, "fury", 2.0)   # and it is heard doing it
 	feel("fury", 0.5)
 	# THEY WATCHED THAT. A god whose beast kicks a house flat in front of the
 	# whole village is not a god nobody believes in — see VillageWonder. The
@@ -1474,7 +1489,7 @@ func _process_smash(delta: float) -> void:
 	var thrill := 0.15 + boredom / 260.0
 	if victim is House:
 		(victim as House).kick(global_position, 1.0)
-		_scare_witnesses(14.0, 3.0)
+		CreatureEyes.scare_witnesses(self, 14.0, 3.0)
 	elif victim is WildTree:
 		var tree := victim as WildTree
 		tree.sway(global_position, 1.1)
@@ -1486,7 +1501,7 @@ func _process_smash(delta: float) -> void:
 		(victim as Villager).hurt_by(self, 45.0)
 		if is_instance_valid(victim):
 			(victim as Villager).scare(global_position)
-		_scare_witnesses(14.0, 4.0)
+		CreatureEyes.scare_witnesses(self, 14.0, 4.0)
 	elif victim is Animal:
 		var beast := victim as Animal
 		var was_predator: bool = beast.spec.get("predator", false)
@@ -1499,7 +1514,7 @@ func _process_smash(delta: float) -> void:
 			thrill += 0.9
 			_cheer_nearby(10.0, 2.0)
 		else:
-			_scare_witnesses(12.0, 2.0)
+			CreatureEyes.scare_witnesses(self, 12.0, 2.0)
 	elif victim.has_method("damage"):
 		victim.call("damage", 40.0)
 	_last_deed = "smash"
@@ -1564,7 +1579,7 @@ func _process_cast(delta: float) -> void:
 	energy = maxf(energy - toll, 0.0)
 	# Aim where the miracle is WANTED — over the hurt, if any — rather than at a
 	# random patch of grass. A miracle that helps somebody teaches it far more.
-	var need := _neediest_villager()
+	var need := CreatureEyes.neediest_near(self)
 	var spot := global_position + Vector3(randf_range(-6, 6), 0, randf_range(-6, 6))
 	if need != null:
 		spot = need.global_position
@@ -1574,48 +1589,6 @@ func _process_cast(delta: float) -> void:
 	_last_deed = "cast"
 	mood = minf(mood + 10.0, 100.0)
 	_finish_choice(1.6 if need != null else 0.6)
-
-
-## How badly the people nearby need help right now (0..1) — the pull behind
-## reaching for a healing miracle instead of standing about.
-func _wounded_nearby() -> float:
-	var hurt := 0
-	for v in get_tree().get_nodes_in_group("villagers"):
-		var villager := v as Villager
-		if not is_instance_valid(villager):
-			continue
-		if villager.global_position.distance_to(global_position) > 30.0:
-			continue
-		if villager.is_dying() or villager.health < 60.0 or villager.burning:
-			hurt += 1
-	return clampf(hurt / 3.0, 0.0, 1.0)
-
-
-## Whoever most needs a miracle worked over them.
-func _neediest_villager() -> Villager:
-	var best: Villager = null
-	var worst := 60.0
-	for v in get_tree().get_nodes_in_group("villagers"):
-		var villager := v as Villager
-		if not is_instance_valid(villager):
-			continue
-		if villager.global_position.distance_to(global_position) > 30.0:
-			continue
-		var state_score := 0.0 if villager.is_dying() else villager.health
-		if state_score < worst:
-			worst = state_score
-			best = villager
-	return best
-
-
-## Scare (and horrify) everyone who saw that.
-func _scare_witnesses(radius: float, horror: float) -> void:
-	for v in get_tree().get_nodes_in_group("villagers"):
-		var villager := v as Villager
-		if is_instance_valid(villager) \
-				and villager.global_position.distance_to(global_position) < radius:
-			villager.scare(global_position)
-			villager.witness_horror(horror)
 
 
 func _cheer_nearby(radius: float, amount: float) -> void:
@@ -1679,7 +1652,7 @@ func _process_guard(delta: float) -> void:
 	if wolf != null:
 		if _move_toward(wolf.global_position, WALK_SPEED * 1.2, delta):
 			wolf.scare(global_position)
-			SoundBank.play_at("bark", global_position, 2.0, 0.3)  # a deep warning woof
+			head.sound(self, "fury", -2.0)   # a warning, in its own voice
 			mood = minf(mood + 3.0, 100.0)
 		return
 	if _move_toward(_target, WALK_SPEED * 0.6, delta):
@@ -2369,6 +2342,33 @@ func _apply_root_motion() -> void:
 
 
 ## Words ----------------------------------------------------------------------
+
+## THE NECK JOINT, or null on a custom model that has no node called "Head".
+## Found once: a rigged model may name one, and if it does the gaze drives it
+## exactly as it drives the procedural one.
+func head_node() -> Node3D:
+	if _head == null or not is_instance_valid(_head):
+		_head = find_child("Head", true, false) as Node3D
+	return _head
+
+
+## What the claws are holding, if anything — so the head can look at its work.
+func held_thing() -> Node3D:
+	if _carried != null and is_instance_valid(_carried):
+		return _carried
+	if not throwing.aloft.is_empty() and is_instance_valid(throwing.aloft[0]):
+		return throwing.aloft[0]
+	if _catch_target != null and is_instance_valid(_catch_target):
+		return _catch_target
+	return null
+
+
+## Whoever it has lately been attending to, if they are still there.
+func watch_subject() -> Villager:
+	if _watch_subject != null and is_instance_valid(_watch_subject):
+		return _watch_subject
+	return null
+
 
 func state_name() -> String:
 	return State.keys()[state]

@@ -24,9 +24,18 @@ extends RefCounted
 ## block.
 
 
+## AND IT TAKES IN MOST OF WHAT IT IS ACTUALLY LOOKING AT. Everyone in reach is
+## noticed; the one the head is TURNED TOWARD is read properly. Before the
+## creature had a neck there was no way to say which of sixteen metres of
+## villagers it was attending to, so it attended to all of them equally and
+## faintly, which is not what watching is. See CreatureHead.
+const GAZED_AT := 3.0
+
+
 static func observe(who: Creature) -> void:
 	var watched_work := false
 	var souls := 0
+	var looked_at := who.head.subject
 	for v in who.get_tree().get_nodes_in_group("villagers"):
 		var villager := v as Villager
 		if not is_instance_valid(villager):
@@ -34,6 +43,7 @@ static func observe(who: Creature) -> void:
 		if villager.global_position.distance_to(who.global_position) > 16.0:
 			continue
 		souls += 1
+		var mind_on := GAZED_AT if villager == looked_at else 1.0
 		# Close enough to READ. What it makes of them is entirely its own
 		# business: a creature whose every memory of hunger is a bad one feels
 		# for a starving man, and one that has never gone hungry feels nothing.
@@ -42,21 +52,21 @@ static func observe(who: Creature) -> void:
 		# hardship takes: a cherished creature reads a starving man and is moved,
 		# a wretched one looks straight through him.
 		who.heart.sympathise(CreatureEyes.plight_of(villager),
-			who.welfare.openness() / maxf(souls, 1.0))
+			who.welfare.openness() * mind_on / maxf(souls, 1.0))
 		# And it notices WHO. Not "a villager" — this one, by name (CreatureBonds).
 		who.mind.bonds.meet(villager)
 		match villager.state:
 			Villager.State.FARMING:
-				who.mind.teach("tend", "farm", 1.0, 0.02)
+				who.mind.teach("tend", "farm", 1.0, 0.02 * mind_on)
 				watched_work = true
 			Villager.State.FISHING:
-				who.mind.teach("fish", "water", 1.0, 0.02)
+				who.mind.teach("fish", "water", 1.0, 0.02 * mind_on)
 				watched_work = true
 			Villager.State.BUILDING, Villager.State.CHOPPING, Villager.State.QUARRYING:
-				who.mind.teach("gather", "goods", 1.0, 0.015)
+				who.mind.teach("gather", "goods", 1.0, 0.015 * mind_on)
 				watched_work = true
 			Villager.State.GO_FEED, Villager.State.TAMING:
-				who.mind.teach("gift", "sheep", 1.0, 0.01)
+				who.mind.teach("gift", "sheep", 1.0, 0.01 * mind_on)
 				watched_work = true
 			# THE PRACTICES. A creature cannot dance until it has seen dancing,
 			# and cannot lead a prayer it has never watched anyone say. This is

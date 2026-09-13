@@ -1245,6 +1245,34 @@ func _run_smoke_test() -> void:
 			was_running, "calm" if scared.state != Animal.State.FLEE else "STILL RUNNING"])
 		scared.queue_free()
 
+	# THE HEAD IS NOT THE HANDS. It must turn toward something while the body is
+	# busy elsewhere, give up when the thing goes behind it, and have a voice
+	# whose pitch is the creature's own size.
+	var looker := Creature.new()
+	add_child(looker)
+	looker.global_position = village.global_position + Vector3(26, 0, 4)
+	looker.trust = 80.0
+	var neck := looker.head_node()
+	var mark := Animal.create("sheep")
+	add_child(mark)
+	# Squarely off to one side: within a neck's reach.
+	mark.global_position = looker.global_position + Vector3(9, 0, 6)
+	looker.head.subject = mark
+	for i in 30:
+		looker.head.aim(looker, 0.05)
+	var turned := rad_to_deg(neck.rotation.y) if neck != null else 0.0
+	# And now directly behind it, which no neck reaches.
+	mark.global_position = looker.global_position + Vector3(0, 0, -14)
+	for i in 40:
+		looker.head.aim(looker, 0.05)
+	var capped := rad_to_deg(neck.rotation.y) if neck != null else 0.0
+	print("SMOKE TEST: head — neck exists=%s, turned %.0f deg to look aside, %.0f deg at its limit (max %.0f)" % [
+		neck != null, turned, capped, rad_to_deg(CreatureHead.NECK_YAW)])
+	print("SMOKE TEST: head — a whelp roars at pitch %.2f, a full-grown beast at %.2f" % [
+		CreatureHead.PITCH_WHELP, CreatureHead.PITCH_GIANT])
+	mark.queue_free()
+	looker.queue_free()
+
 	# WATCHING TEACHES TECHNIQUE, and it runs ONE WAY. The creature picks up the
 	# knack from the player's hand; nothing anywhere gives the player the
 	# creature's arm back.

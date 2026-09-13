@@ -481,6 +481,7 @@ func _scatter_the_fire(who: Creature, held: Array) -> void:
 		CreatureThrowing.send(thing, CreatureThrowing.heave(who))
 	who.express("angry", 2.4)
 	who.heart.stir("fury", 0.5)
+	who.head.sound(who, "fury", 3.0)
 	GameState.announce("Your creature flings the fire it was juggling into the village.")
 
 

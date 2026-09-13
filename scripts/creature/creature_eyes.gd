@@ -9,6 +9,9 @@ extends RefCounted
 ## values differ on what to do about it.
 
 ## The nearest field with work in it.
+## How far the creature reads the mood and health of a village.
+const VILLAGER_REACH := 30.0
+
 static func nearest_farm(tree: SceneTree, from: Vector3, radius := 60.0) -> Farm:
 	var best: Farm = null
 	var best_d := radius
@@ -32,6 +35,53 @@ static func home_village(tree: SceneTree) -> Village:
 		if is_instance_valid(v) and (v as Village).is_player_home:
 			return v as Village
 	return null
+
+
+## THE PEOPLE NEARBY, AND HOW THEY ARE. Three lookups that walked the villagers
+## group asking slightly different questions, lifted out of Creature — which
+## sits permanently on its line limit — and put where every other "what can it
+## see" question already lives.
+
+## How badly the people nearby need help right now, 0..1 — the pull behind
+## reaching for a healing miracle instead of standing about.
+static func wounded_near(who: Creature, within := VILLAGER_REACH) -> float:
+	var hurt := 0
+	for v in who.get_tree().get_nodes_in_group("villagers"):
+		var villager := v as Villager
+		if not is_instance_valid(villager):
+			continue
+		if villager.global_position.distance_to(who.global_position) > within:
+			continue
+		if villager.is_dying() or villager.health < 60.0 or villager.burning:
+			hurt += 1
+	return clampf(hurt / 3.0, 0.0, 1.0)
+
+
+## Whoever most needs a miracle worked over them.
+static func neediest_near(who: Creature, within := VILLAGER_REACH) -> Villager:
+	var best: Villager = null
+	var worst := 60.0
+	for v in who.get_tree().get_nodes_in_group("villagers"):
+		var villager := v as Villager
+		if not is_instance_valid(villager):
+			continue
+		if villager.global_position.distance_to(who.global_position) > within:
+			continue
+		var state_score := 0.0 if villager.is_dying() else villager.health
+		if state_score < worst:
+			worst = state_score
+			best = villager
+	return best
+
+
+## Scare (and horrify) everyone who saw that.
+static func scare_witnesses(who: Creature, radius: float, horror: float) -> void:
+	for v in who.get_tree().get_nodes_in_group("villagers"):
+		var villager := v as Villager
+		if is_instance_valid(villager) \
+				and villager.global_position.distance_to(who.global_position) < radius:
+			villager.scare(who.global_position)
+			villager.witness_horror(horror)
 
 
 ## THE CIRCUMSTANCES a creature is in right now — the situation its beliefs are
