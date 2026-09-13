@@ -1221,11 +1221,11 @@ func _run_smoke_test() -> void:
 			storm.left, storm._reach(), MiracleManager.KARMA["storm_shroud"]["player"]])
 		storm.free()
 		var blessed := Spellbook.interpret(["ward", "life", "calm", "water"])
-		var light := MercyShroud.grant(beast, 12.0)
+		var blessing := MercyShroud.grant(beast, 12.0)
 		print("SMOKE TEST: shroud — S (rev) O ) = %s, %.0fs of light, %.1f m wide, karma %.0f" % [
-			blessed.get("miracle", "NOTHING"), light.left, light._reach(),
+			blessed.get("miracle", "NOTHING"), blessing.left, blessing._reach(),
 			MiracleManager.KARMA["healing_shroud"]["player"]])
-		light.free()
+		blessing.free()
 		# THE QUIET ONE. It must top the creature up so the moment is worth
 		# having, leave rich muck, and let go of every fright within reach.
 		var eased := Spellbook.interpret(["ward", "earth", "life", "calm"])
@@ -1301,20 +1301,20 @@ func _run_smoke_test() -> void:
 	var bull := Animal.create("bison")
 	add_child(chick)
 	add_child(bull)
-	var light := Sling.heft(chick)
+	var feather := Sling.heft(chick)
 	var heavy := Sling.heft(bull)
 	print("SMOKE TEST: sling — chicken heft %.2f (pull %.1f/s), bison %.2f (pull %.1f/s)" % [
-		light, Sling.pull(light), heavy, Sling.pull(heavy)])
+		feather, Sling.pull(feather), heavy, Sling.pull(heavy)])
 	# At a real throwing sweep the lag is metres, which is what the rope draws.
 	var sweep := Vector3(30, 0, 0)
 	print("SMOKE TEST: sling — at 30 m/s the chicken trails %.1f m, the bison %.1f m" % [
-		30.0 / Sling.pull(light), 30.0 / Sling.pull(heavy)])
+		30.0 / Sling.pull(feather), 30.0 / Sling.pull(heavy)])
 	print("SMOKE TEST: sling — same sweep launches them at %.0f and %.0f m/s" % [
-		Sling.launch(sweep, Vector3.ZERO, light).length(),
+		Sling.launch(sweep, Vector3.ZERO, feather).length(),
 		Sling.launch(sweep, Vector3.ZERO, heavy).length()])
 	# The ballista: a steep sweep gets its power back.
-	var flat_shot := Sling.launch(Vector3(30, 5, 0), Vector3.ZERO, light).length()
-	var steep := Sling.launch(Vector3(15, 26, 0), Vector3.ZERO, light).length()
+	var flat_shot := Sling.launch(Vector3(30, 5, 0), Vector3.ZERO, feather).length()
+	var steep := Sling.launch(Vector3(15, 26, 0), Vector3.ZERO, feather).length()
 	print("SMOKE TEST: sling — a flat sweep leaves at %.0f m/s, a 60-degree one at %.0f" % [
 		flat_shot, steep])
 	# And floater air time, which is a meta on the body and must expire.

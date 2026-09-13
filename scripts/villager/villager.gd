@@ -211,6 +211,9 @@ var _breed_cooldown := randf_range(4.0, 12.0)
 var _fight_target: Node3D = null   # the beast (or creature) being fought
 var _attack_cd := 0.0
 var _last_attacker: Node3D = null   # who drew blood last (for the blood debt)
+## WRITTEN BY Militia.take_up_arms, which is the other half of this pair — so
+## Godot, which only ever looks inside one class, reports it unused. It is not.
+@warning_ignore("unused_private_class_variable")
 var _weapon_visual: Node3D = null
 var _label: Label3D
 var _visuals: Node3D
@@ -1424,8 +1427,7 @@ func _start_job(job: String) -> void:
 			else:
 				_build_site = _find_damaged_house()
 				if _build_site == null:
-					var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-					_build_site = village.start_construction(world)
+					_build_site = village.start_construction(_world())
 			if _build_site == null:
 				state = State.WANDER
 				_action_time = 2.0
@@ -1453,8 +1455,7 @@ func _start_job(job: String) -> void:
 			_carrying_feed = false
 			state = State.GO_FEED
 		"build_farm":
-			var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-			_farm_spot = village.find_build_spot(world, Village.ROOM_ROUND_A_FARM)
+			_farm_spot = village.find_build_spot(_world(), Village.ROOM_ROUND_A_FARM)
 			if _farm_spot == Vector3.INF or not village.store.try_spend_materials(4, 0):
 				_farm_spot = Vector3.INF
 				state = State.WANDER

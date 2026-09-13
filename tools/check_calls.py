@@ -1086,10 +1086,85 @@ def check_twice_declared(files):
     return problems
 
 
+def check_shadowed_class_vars(files):
+    """A LOCAL WITH THE SAME NAME AS ONE OF THE CLASS'S OWN VARIABLES.
+
+    Godot warns (SHADOWED_VARIABLE) and carries on, which is the worst of both:
+    the code runs, the local wins inside that function, and every later reader
+    believes they are looking at the member. Adding `var head` to Creature
+    silently shadowed it inside the body-building block that had been using a
+    local `head` for a year.
+
+    The sibling checks cover a redeclaration in the SAME scope and a name that
+    collides with an inherited engine property; this is the third door.
+    """
+    out = []
+    for path in files:
+        src = open(path, encoding="utf-8").read()
+        own = set(re.findall(r"^var\s+(\w+)", src, re.M))
+        if not own:
+            continue
+        for i, line in enumerate(src.split("\n"), 1):
+            if not line.startswith((" ", "\t")):
+                continue
+            m = re.match(r"^[ \t]+var\s+(\w+)", line.split("#", 1)[0])
+            if m and m.group(1) in own:
+                out.append((path, i, m.group(1), line.strip()))
+    return out
+
+
+def check_confusable_locals(files):
+    """A LOCAL DECLARED INSIDE A BLOCK when the SAME name is declared later in
+    an enclosing one. Godot calls it CONFUSABLE_LOCAL_DECLARATION and warns,
+    because a reader of the inner block cannot tell which they are looking at
+    without scrolling past the end of it."""
+    out = []
+    for path in files:
+        src = open(path, encoding="utf-8").read()
+        for fname, body, start in _func_spans(src):
+            seen = {}
+            for off, line in enumerate(body.split("\n")):
+                bare = line.split("#", 1)[0]
+                m = re.match(r"^([ \t]*)var\s+(\w+)", bare)
+                if not m:
+                    continue
+                depth, name = len(m.group(1).expandtabs(4)), m.group(2)
+                if name in seen and depth < seen[name][0]:
+                    # This one encloses an earlier, deeper declaration.
+                    out.append((path, start + seen[name][1], name, fname,
+                                start + off, line.strip()))
+                seen[name] = (depth, off)
+    return out
+
+
+def _func_spans(src):
+    """(name, body, first line number) for every top-level func."""
+    out, name, buf, start = [], None, [], 0
+    for i, line in enumerate(src.split("\n"), 1):
+        h = re.match(r"^(?:static\s+)?func\s+(\w+)\s*\(", line)
+        if h:
+            if name:
+                out.append((name, "\n".join(buf), start))
+            name, buf, start = h.group(1), [], i
+        elif name is not None:
+            if line and not line[0].isspace() and not line.startswith(")"):
+                out.append((name, "\n".join(buf), start))
+                name, buf = None, []
+            else:
+                buf.append(line)
+    if name:
+        out.append((name, "\n".join(buf), start))
+    return out
+
+
 def autoloads(path="project.godot"):
-    """The singletons Godot installs as global names. A call through one of
-    THESE is an ordinary instance call and is perfectly legal."""
-    found, inside = set(), False
+    """The singletons Godot installs as global names -> the STATIC methods each
+    one's script declares.
+
+    A call through one of these is an ordinary instance call and perfectly
+    legal, with exactly one exception: a method that IS static, reached through
+    the instance, which Godot warns about from the other direction."""
+    found, inside = {}, False
     try:
         for line in open(path, encoding="utf-8"):
             line = line.strip()
@@ -1097,7 +1172,17 @@ def autoloads(path="project.godot"):
                 inside = line == "[autoload]"
                 continue
             if inside and "=" in line:
-                found.add(line.split("=", 1)[0].strip())
+                nm = line.split("=", 1)[0].strip()
+                # An autoload script has no `class_name` — the global name IS
+                # its only name — so its statics are read straight out of the
+                # file the autoload points at.
+                rel = line.split("=", 1)[1].strip().strip('"').lstrip("*")
+                rel = rel.replace("res://", "")
+                try:
+                    found[nm] = set(static_func_re.findall(
+                        open(rel, encoding="utf-8").read()))
+                except OSError:
+                    found[nm] = set()
     except OSError:
         pass
     return found
@@ -1123,7 +1208,14 @@ def check_static_calls(files, singletons):
         for i, line in enumerate(src.split("\n"), 1):
             code = line.split("#", 1)[0]
             for cls, method in through_class_re.findall(code):
-                if cls in singletons or cls not in OWN_FUNCS:
+                # THE MIRROR CASE. An autoload is an INSTANCE, so reaching a
+                # STATIC method through it is the same mistake the other way up,
+                # and Godot warns about that one too.
+                if cls in singletons:
+                    if method in singletons[cls]:
+                        out.append((path, i, cls, method, "static", line.strip()))
+                    continue
+                if cls not in OWN_FUNCS:
                     continue
                 if method not in OWN_FUNCS[cls] or (cls, method) in STATICS:
                     continue
@@ -1194,11 +1286,29 @@ def main():
               "\n    %s" % (path, lineno, kind, name, name, name, line))
     through = check_static_calls(files, autoloads())
     for path, lineno, cls, name, kind, line in through:
+        if kind == "static":
+            print("%s:%d: %s.%s() is a STATIC function reached through the "
+                  "autoload INSTANCE — Godot warns and asks for it to be called "
+                  "on the type. Either drop `static` or call it on the script."
+                  "\n    %s" % (path, lineno, cls, name, line))
+            continue
         shown = name + "()" if kind == "method" else name
         print("%s:%d: %s.%s is an INSTANCE %s reached through the class name — %s "
               "is not an autoload. Godot rejects this at parse time and takes every "
               "dependent script with it. Get the object first."
               "\n    %s" % (path, lineno, cls, shown, kind, cls, line))
+    class_shadows = check_shadowed_class_vars(files)
+    for path, lineno, name, line in class_shadows:
+        print("%s:%d: the local '%s' has the same name as a variable of this "
+              "class — Godot warns and carries on, so the local quietly wins "
+              "inside this function and every later reader believes they are "
+              "looking at the member\n    %s" % (path, lineno, name, line))
+    confusable = check_confusable_locals(files)
+    for path, lineno, name, fn, outer, line in confusable:
+        print("%s:%d: '%s' is declared again at line %d, in a block that "
+              "ENCLOSES this one — Godot calls that confusable and warns, "
+              "because a reader of %s() cannot tell them apart\n    %s"
+              % (path, lineno, name, outer, fn, line))
     undeclared = check_undeclared_names(files)
     for path, lineno, name, where, line in undeclared:
         print("%s:%d: '%s' is not declared in the scope of %s — nothing in this "
@@ -1239,7 +1349,8 @@ def main():
               % (path, lineno, name, name, line))
     total = len(problems) + len(escapes) + len(formats) + len(shadowed) \
         + len(loose_arrays) + len(variants) + len(shadowed_members) \
-        + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice) + len(loose_consts) + len(through)
+        + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice) + len(loose_consts) + len(through) \
+        + len(class_shadows) + len(confusable)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

@@ -844,16 +844,31 @@ func _within(reach: float) -> bool:
 	return GameState.camera_focus.distance_to(global_position) < reach
 
 
+## AND IT IS PRUNED ON THE WAY OUT, every time.
+##
+## The note below used to claim the roster could never be wrong about who
+## exists, because every birth and death refreshes it. That is not true and
+## cannot be made true: `queue_free()` is DEFERRED, so a villager who died this
+## frame is still in the group when the roster is rebuilt and is a freed object
+## a moment later — and anything that frees one without going through the
+## housing (a chunk unloading, a defection, a test) leaves a stale entry until
+## the next tally a third of a second away.
+##
+## An autosave lands on whatever frame the window decides to hand it over, and
+## it read `villager_name` off one of those and took the game down on the menu
+## screen. Every reader goes through here, so the guard goes here rather than in
+## the one caller that happened to crash first.
 func my_villagers() -> Array[Villager]:
 	if _roster.is_empty():
 		_refresh_roster()
+	else:
+		Util.prune(_roster)
 	return _roster
 
 
 ## WHO IS HERE. The one walk over the villagers group that everything else in
-## the town reads instead of repeating. Called outright on every birth, death
-## and adoption — all of which already go through _assign_housing — so the list
-## is never wrong about who exists.
+## the town reads instead of repeating. Rebuilt on every birth, death and
+## adoption, and pruned on every read — see `my_villagers` for why both.
 func _refresh_roster() -> void:
 	_roster.clear()
 	for v in get_tree().get_nodes_in_group("villagers"):
@@ -1669,11 +1684,11 @@ func _rebuild(data: Dictionary) -> void:
 		if not Workshop.TRADES.has(which):
 			continue          # a trade this build no longer has
 		for i in int(trades[which]):
-			var spot := find_build_spot(world, ROOM_ROUND_A_SHOP)
-			if spot == Vector3.INF:
+			var shop_spot := find_build_spot(world, ROOM_ROUND_A_SHOP)
+			if shop_spot == Vector3.INF:
 				break
 			var shop := Workshop.create(which, self)
-			shop.position = to_local(spot)
+			shop.position = to_local(shop_spot)
 			add_child(shop)
 			workshops.append(shop)
 	if bool(data.get("nest", false)) and nest == null:

@@ -279,11 +279,11 @@ static func _build_templates() -> void:
 		_add("sweep", func(t: float) -> Vector2:
 			if t < 0.62:
 				return Vector2(0.0, t / 0.62 * 200.0)
-			var k := (t - 0.62) / 0.38
+			var along := (t - 0.62) / 0.38
 			# The hook: a quarter turn away, never back over the stem.
-			var a := -PI * 0.5 * k
-			return Vector2(-sin(a * -1.0) * 95.0 * hook,
-				200.0 + (1.0 - cos(a)) * 55.0 * hook))
+			var curl := -PI * 0.5 * along
+			return Vector2(-sin(curl * -1.0) * 95.0 * hook,
+				200.0 + (1.0 - cos(curl)) * 55.0 * hook))
 	# And on the slant, which is how a hurried S usually comes out.
 	for slant: float in [PI / 4.0, -PI / 4.0]:
 		for flip: float in [1.0, -1.0]:

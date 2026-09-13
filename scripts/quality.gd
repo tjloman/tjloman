@@ -166,9 +166,11 @@ func _detect_tier() -> Tier:
 	return tier_for(_adapter_name())
 
 
-## THE TIER A GPU NAME DESERVES. Pure and static so it can be TESTED against a
-## table of real parts instead of against one developer's own phone — see the
-## device table in main.gd, which is where this was found to be wrong.
+## THE TIER A GPU NAME DESERVES. It takes the name as an ARGUMENT rather than
+## reading the live adapter, which is the whole point: it can be TESTED against
+## a table of real parts instead of against one developer's own phone, and that
+## table is where this was found to be wrong. (Not `static` — Quality is an
+## autoload, and Godot warns about reaching a static through an instance.)
 ##
 ## IT WAS WRONG TWICE, AND BOTH TIMES FOR THE MID-RANGE ANDROID MARKET this game
 ## is actually aimed at, because both families number their parts in ways a
@@ -186,7 +188,7 @@ func _detect_tier() -> Tier:
 ## 1280/1380, a perfectly capable mid part — BELOW a Mali-G310, which is an
 ## entry-level chip, and dropped it to LOW. Two digits and three are read on
 ## their own scales now.
-static func tier_for(adapter: String) -> Tier:
+func tier_for(adapter: String) -> Tier:
 	var gpu := adapter.to_lower()
 	var num := _first_number(gpu)
 	if "immortalis" in gpu:
@@ -221,7 +223,7 @@ static func tier_for(adapter: String) -> Tier:
 	return Tier.LOW                 # unknown mobile part: play it safe
 
 
-static func _first_number(s: String) -> int:
+func _first_number(s: String) -> int:
 	var digits := ""
 	for c: String in s:
 		if c >= "0" and c <= "9":

@@ -292,9 +292,9 @@ func _ready() -> void:
 		_head = Node3D.new()
 		_head.position = Vector3(0, 2.05, 0)
 		_body.add_child(_head)
-		var head := Util.sphere(0.45, Color.WHITE, Vector3(0, 0.05, 0.15))
-		head.material_override = _fur_mat
-		_head.add_child(head)
+		var skull := Util.sphere(0.45, Color.WHITE, Vector3(0, 0.05, 0.15))
+		skull.material_override = _fur_mat
+		_head.add_child(skull)
 		for side in [-1, 1]:
 			var white := Util.sphere(0.12, Color.WHITE, Vector3(0.18 * side, 0.2, 0.5))
 			_eyes.append(white)
