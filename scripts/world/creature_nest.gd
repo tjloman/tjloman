@@ -46,6 +46,10 @@ const BED_MID := -(BED_DEEP * 0.5 + 5.0)
 const WALL_HIGH := 4.2
 const WALL_AT := BED_MID - BED_DEEP * 0.5 - 0.8
 const POOL_R := BED_DEEP * 0.18
+## How wide one cell of the draped floor is. Three metres gives a forty-two
+## metre bed fourteen cells across — enough to follow a hillside honestly, few
+## enough that the whole nest is a couple of hundred triangles.
+const DRAPE_CELL := 3.0
 
 ## How wide the clearing is, how far the dance stands from the fire, and how
 ## many may join a circle before it is full. The clearing follows the bed; the
@@ -139,7 +143,7 @@ func _ready() -> void:
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(BED_LONG, WALL_HIGH, 1.8)
 	col.shape = shape
-	col.position = Vector3(0, WALL_HIGH * 0.5, WALL_AT)
+	col.position = Vector3(0, _ground_local(0.0, WALL_AT) + WALL_HIGH * 0.5, WALL_AT)
 	add_child(col)
 	var custom := ModelBank.instantiate("nest")
 	if custom != null:
@@ -161,21 +165,79 @@ func _ready() -> void:
 ## not want a hut, it wants somewhere to lie down that is unmistakably HIS, and
 ## walls it would have to step over are only an insult at that size.
 func _build_lodge() -> void:
-	var floor_long := BED_LONG * 1.1
-	var floor_deep := BED_DEEP * 1.2
-	add_child(Util.box(Vector3(floor_long, 0.5, floor_deep),
-		Color(0.42, 0.4, 0.38), Vector3(0, 0.25, BED_MID)))
-	# The wall of faces stands at the back of it, the full width of the bed.
-	add_child(Util.box(Vector3(BED_LONG, WALL_HIGH, 0.7),
-		Color(0.5, 0.47, 0.43), Vector3(0, WALL_HIGH * 0.5, WALL_AT)))
-	# The comfortable part. A bed of moss and two bolsters of bush, because the
-	# thing he mostly does here is lie down.
-	add_child(Util.box(Vector3(BED_LONG, 0.4, BED_DEEP),
-		Color(0.3, 0.42, 0.26), Vector3(0, 0.7, BED_MID)))
+	# THE FLOOR IS DRAPED OVER THE LAND, not laid across it.
+	#
+	# It was two boxes forty-two metres long, and a box is flat. So the nest cut
+	# into every hillside it was built on and hung out over the water on the
+	# other side — a grey slab floating above a valley, which is what it looked
+	# like because it is what it was. The bed of a creature that lies down
+	# outdoors should be a hollow in the ground, and it is now: a grid of
+	# triangles whose every corner sits on the real height of the land under it.
+	add_child(_drape(BED_LONG * 1.1, BED_DEEP * 1.2, BED_MID, 0.12,
+		Color(0.42, 0.4, 0.38)))
+	# The comfortable part, draped over the same ground a hand's breadth higher.
+	add_child(_drape(BED_LONG, BED_DEEP, BED_MID, 0.34, Color(0.3, 0.42, 0.26)))
+	# The wall of faces stands at the back of it, the full width of the bed, in
+	# segments that step with the ground rather than one long level lintel.
+	_build_back_wall()
 	var bolster := BED_DEEP * 0.11
 	for x: float in [-BED_LONG * 0.28, BED_LONG * 0.28]:
+		var at := BED_MID + BED_DEEP * 0.36
 		add_child(Util.lite_sphere(bolster, Color(0.24, 0.38, 0.22),
-			Vector3(x, 0.9 + bolster * 0.4, BED_MID + BED_DEEP * 0.36)))
+			Vector3(x, _ground_local(x, at) + 0.5 + bolster * 0.4, at)))
+
+
+## THE GROUND UNDER A LOCAL POINT, in this node's own space. The nest may be
+## turned to any heading and parented anywhere, so the sample has to go out to
+## the world and come back rather than assume the two frames agree.
+func _ground_local(x: float, z: float) -> float:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world == null:
+		return 0.0
+	var out := to_global(Vector3(x, 0.0, z))
+	return to_local(Vector3(out.x, world.surface_at(out.x, out.z), out.z)).y
+
+
+## A SHEET OF TRIANGLES LAID ON THE LAND. One cell every DRAPE_CELL metres, each
+## corner on the real ground, flat-shaded so it reads as the same faceted
+## country everything else here is made of.
+func _drape(long: float, deep: float, at_z: float, lift: float,
+		color: Color) -> MeshInstance3D:
+	var across := maxi(int(long / DRAPE_CELL), 2)
+	var along := maxi(int(deep / DRAPE_CELL), 2)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)     # flat shading: one normal per face
+	for i in across:
+		for j in along:
+			var x0 := -long * 0.5 + long * float(i) / float(across)
+			var x1 := -long * 0.5 + long * float(i + 1) / float(across)
+			var z0 := at_z - deep * 0.5 + deep * float(j) / float(along)
+			var z1 := at_z - deep * 0.5 + deep * float(j + 1) / float(along)
+			var a := Vector3(x0, _ground_local(x0, z0) + lift, z0)
+			var b := Vector3(x1, _ground_local(x1, z0) + lift, z0)
+			var c := Vector3(x1, _ground_local(x1, z1) + lift, z1)
+			var d := Vector3(x0, _ground_local(x0, z1) + lift, z1)
+			for v in [a, b, c, a, c, d]:
+				st.add_vertex(v)
+	st.generate_normals()
+	var sheet := MeshInstance3D.new()
+	sheet.mesh = st.commit()
+	sheet.material_override = Util.shared_mat(color)
+	return sheet
+
+
+## THE BACK WALL, in segments. One long box across a slope buries one end and
+## leaves the other in the air; a row of them each standing on its own ground
+## reads as a wall somebody built on a hillside.
+func _build_back_wall() -> void:
+	var bays := maxi(int(BED_LONG / DRAPE_CELL), 3)
+	var wide := BED_LONG / float(bays)
+	for i in bays:
+		var x := -BED_LONG * 0.5 + wide * (float(i) + 0.5)
+		var base := _ground_local(x, WALL_AT)
+		add_child(Util.box(Vector3(wide * 1.02, WALL_HIGH, 0.7),
+			Color(0.5, 0.47, 0.43), Vector3(x, base + WALL_HIGH * 0.5, WALL_AT)))
 
 
 ## THE WALL OF FACES. Six stones, and each is cut deeper and set prouder the
@@ -198,12 +260,13 @@ func _build_wall() -> void:
 	var front := WALL_AT + 0.45
 	for i in FACES.size():
 		var x := (float(i) - (FACES.size() - 1) * 0.5) * step
+		var base := _ground_local(x, front)
 		var face := Util.box(Vector3(wide, wide * 1.1, 0.25),
-			Color(0.54, 0.5, 0.45), Vector3(x, WALL_HIGH * 0.58, front))
+			Color(0.54, 0.5, 0.45), Vector3(x, base + WALL_HIGH * 0.58, front))
 		add_child(face)
 		_faces.append(face)
 		var marks := Node3D.new()
-		marks.position = Vector3(x, WALL_HIGH * 0.25, front + 0.04)
+		marks.position = Vector3(x, base + WALL_HIGH * 0.25, front + 0.04)
 		add_child(marks)
 		_scratches.append(marks)
 
@@ -260,7 +323,9 @@ func _build_pool() -> void:
 	mat.metallic = 0.5
 	mat.roughness = 0.12
 	pool.material_override = mat
-	pool.position = Vector3(BED_LONG * 0.32, 0.06, POOL_R * 0.9)
+	var pool_z := POOL_R * 0.9
+	var pool_x := BED_LONG * 0.32
+	pool.position = Vector3(pool_x, _ground_local(pool_x, pool_z) + 0.1, pool_z)
 	add_child(pool)
 
 

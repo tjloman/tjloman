@@ -144,6 +144,19 @@ func _build_steps() -> void:
 			"done": _found_creature,
 		},
 		{
+			"say": "It is on a rope, and it will stay on one until you can lead it. "
+				+ "Point somewhere and LEAD it there.",
+			"hint": "Put your hand where you want it to go, then press Lead." if touch
+				else "Put your hand where you want it to go, then press G. G again "
+					+ "lets it off.",
+			"done": func() -> bool:
+				return is_instance_valid(creature) and creature.is_leashed(),
+			# THE ROPE COMES OFF HERE. Not on a timer and not for good behaviour —
+			# the moment the player holds the tool that replaces it. See
+			# CreatureStake.
+			"then": func() -> void: CreatureStake.pull_up(get_tree()),
+		},
+		{
 			"say": "It learns from you and from nothing else. Watch what it does, then "
 				+ "PRAISE it or SCOLD it — whichever it earned.",
 			"hint": "Bring your hand near the creature and use the Praise or Scold "
@@ -257,7 +270,12 @@ func _advance() -> void:
 		_dwell = float(step["linger"])
 
 
+## AND IF THE TUTORIAL ENDS ANY OTHER WAY — skipped, or simply run through —
+## the rope comes off regardless. It is a safety rail on the lesson, not a
+## lesson in itself, and leaving somebody who opted out of being taught with a
+## tethered creature and no idea why would be the worst of both.
 func _finish() -> void:
+	CreatureStake.pull_up(get_tree())
 	_mark_tutored()
 	visible = false
 	set_process(false)
@@ -281,6 +299,11 @@ func _process(delta: float) -> void:
 	if (step["done"] as Callable).call():
 		_tick.text = "✓"
 		_dwell = DONE_DWELL
+		# A LESSON MAY CHANGE THE WORLD, not merely tick itself off. The one
+		# that does is the leash: learning it pulls the stake out of the
+		# ground. See CreatureStake.
+		if step.has("then"):
+			(step["then"] as Callable).call()
 		if is_instance_valid(camera_rig):
 			SoundBank.play_at("coo", camera_rig.global_position, -8.0, 0.15)
 		return

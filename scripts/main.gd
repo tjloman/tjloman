@@ -59,9 +59,18 @@ func _ready() -> void:
 	add_child(village)
 	world_gen.player_village = village
 
+	# WHERE IT IS RAISED, and it is not in the middle of the village.
+	#
+	# It used to stand fourteen metres from the totem, which is inside the town,
+	# so the first thing it ever did was walk into the houses. It is raised at
+	# the edge now: about forty metres out, on a stake with twenty-two metres of
+	# rope, so its whole circle runs from the outskirts to the open country. It
+	# can watch the people who come near — which is how it learns anything at
+	# all — and it cannot get in among them until you can lead it.
 	creature = Creature.new()
-	creature.position = Vector3(10, world_gen.height_at(10, 10) + 0.5, 10)
+	creature.position = Vector3(34, world_gen.height_at(34, 20) + 0.5, 20)
 	add_child(creature)
+	CreatureStake.plant(creature)
 
 	camera_rig = CameraRig.new()
 	add_child(camera_rig)

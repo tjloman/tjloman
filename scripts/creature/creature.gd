@@ -488,6 +488,8 @@ func _physics_process(delta: float) -> void:
 	# THE HEAD LOOKS AND SPEAKS FOR ITSELF, every frame, whatever state the body
 	# is in — which is the whole reason it is here and not in a state.
 	head.aim(self, delta)
+	# AND THE ROPE, while there is one. See CreatureStake.
+	CreatureStake.hold(self)
 
 	_try_catch_throw()
 
@@ -876,6 +878,12 @@ func _enact(choice: Dictionary) -> void:
 		_wander()
 		return
 	var target := aimed_at as Node3D
+	# ON A ROPE, it does not set out for things it cannot get to. Without this a
+	# tethered creature picks the nearest sheep, walks to the end of its tether
+	# and stands there straining at it for the rest of the afternoon.
+	if target != null and not CreatureStake.reachable(get_tree(), target.global_position):
+		_wander()
+		return
 	match verb:
 		"relieve":
 			CreatureRelief.go(self, String(choice.get("type", "open")))
@@ -1022,6 +1030,10 @@ func _wander() -> void:
 	var angle := randf() * TAU
 	var dist := randf_range(4.0, 18.0)
 	_target = Vector3(cos(angle) * dist, 0, sin(angle) * dist)
+	# A tethered creature wanders INSIDE its circle. Without this it spends its
+	# whole youth walking at the end of a rope, which looks like a bug and feels
+	# like one. (`_target` is local here; the stake thinks in world space.)
+	_target = to_local(CreatureStake.nearest_within(get_tree(), to_global(_target)))
 
 
 ## A deed is done: remember it (for praise/scolding), feel it, move on.
@@ -1891,7 +1903,9 @@ func leash_to(pos: Vector3) -> void:
 		GameState.announce("Your creature looks at your hand, and does not come.")
 		express("sad", 2.0)
 		return
-	leash_target = pos
+	# A ROPE IS STILL A ROPE. Pointing past it sends the creature as near as it
+	# can get rather than having it strain at the end for the rest of the day.
+	leash_target = CreatureStake.nearest_within(get_tree(), pos)
 	if _carried != null:
 		_release_carried(true)
 	state = State.LEASHED
