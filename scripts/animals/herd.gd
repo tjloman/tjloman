@@ -49,7 +49,14 @@ const SOCIAL := {
 	"frog": [1, 4, 0],
 	# PACKS AND PREDATORS. A wolf pack is a real society; the big cats and the
 	# bear travel in ones and twos and threes.
-	"wolf": [1, 18, 6],        # 7-24
+	#
+	# TWENTY-FOUR WOLVES IS TRUE AND UNPLAYABLE. It was set from what wolves
+	# actually do, and a pack that size is not a threat in a game, it is a
+	# weather event: it takes a village apart before anybody can be sent to meet
+	# it, and there is no answer to it that is not a miracle. 2d4 is four or
+	# five wolves, which a militia can lose to and can also beat — which is the
+	# only size a threat is worth having.
+	"wolf": [2, 4, 0],         # 2-8
 	"lion": [1, 6, 0],
 	"tiger": [1, 6, 0],
 	"bear": [1, 6, 0],

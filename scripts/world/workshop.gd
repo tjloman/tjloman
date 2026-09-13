@@ -43,10 +43,21 @@ const TRADES := {
 	# GRAIN GOES FURTHER GROUND. Takes plant food and gives back more of it,
 	# which is what milling is, and it gives a farming town somewhere for its
 	# surplus to go besides a heap.
+	# WHAT A TOWN DOES WITH A SURPLUS, and only with a surplus. A mill turns 4
+	# plant into 6 — it does not GROW food, it makes food that already exists go
+	# half again as far — so it is worth nothing at all to a town with none to
+	# spare, and worth building only once the fields are ahead. It ran whenever
+	# there were four grains in the store, which meant a hungry village put three
+	# people on a millstone, and three people on a millstone are three people not
+	# in the field. See `work_shift`.
+	#
+	# Two posts and one per forty souls, down from three and one per twenty-two:
+	# a village of sixty had three mills and nine milling jobs, which is a lot of
+	# a town's labour committed to a building that cannot feed it.
 	"mill": {
-		"employs": 3, "lumber": 8, "stone": 4,
+		"employs": 2, "lumber": 8, "stone": 4,
 		"takes": {"plant": 4}, "makes": {"plant": 6},
-		"wants": 1.0 / 22.0, "needs": "grain",
+		"wants": 1.0 / 40.0, "needs": "grain",
 		"label": "Mill", "tint": Color(0.74, 0.66, 0.48),
 	},
 	# STOCK. This is the one that changes what a village CAN BE. A pen holds
@@ -60,8 +71,11 @@ const TRADES := {
 		"label": "Barn", "tint": Color(0.55, 0.38, 0.26),
 	},
 	# A SECOND PLACE TO PRAY, so worship is not one queue at one totem.
+	# ONE PAIR OF HANDS. A shrine takes nothing and makes nothing; what it does
+	# is raise the town's belief and send prayer up, and a second person kneeling
+	# beside the first does not send it up twice.
 	"shrine": {
-		"employs": 2, "lumber": 4, "stone": 8,
+		"employs": 1, "lumber": 4, "stone": 8,
 		"takes": {}, "makes": {},
 		"wants": 1.0 / 30.0, "needs": "faith",
 		"label": "Shrine", "tint": Color(0.8, 0.78, 0.7),
@@ -308,6 +322,13 @@ func work_shift() -> void:
 	var store := village.store if village != null else null
 	if store == null:
 		return
+	# A MILL EATS THE SEED CORN, and only a surplus is not seed corn. Having the
+	# four grains the recipe asks for is not the same as being able to spare
+	# them: a village down to its last meals put them through the mill and got
+	# six back some seconds later, having been six short in the meantime, with
+	# three of its people at the millstone rather than in the field.
+	if trade == "mill" and not _town_has_spare():
+		return
 	var takes: Dictionary = spec["takes"]
 	# Nothing is produced unless the whole input is there. A half-fed mill
 	# simply idles, which is a truer thing for it to do than run on nothing.
@@ -336,6 +357,16 @@ func work_shift() -> void:
 			if village != null:
 				village.belief = minf(village.belief + 0.4, 100.0)
 				GameState.add_prayer_power(1.2)
+
+
+## Is the granary genuinely ahead — more than the meals its people are going to
+## want? The same measure the job board scores food by, so "this town is fed"
+## means one thing everywhere.
+func _town_has_spare() -> bool:
+	if village == null or not is_instance_valid(village):
+		return false
+	var heads := maxi(village.population(), 1)
+	return float(village.store.total_food()) / float(heads) > Villager.FED_ENOUGH
 
 
 ## A well's whole point. Fields in reach are watered exactly as rain waters

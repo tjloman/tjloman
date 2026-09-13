@@ -64,6 +64,8 @@ const MATERIAL_SPARE := 6
 
 const MISSION_RANGE := 320.0
 const MISSION_FAITH := 55.0
+## How much the town may want food before its trades close for the day.
+const TRADES_WAIT := 0.34
 
 ## COURAGE IN NUMBERS. A villager caught alone by a wolf runs (and is usually
 ## run down); it takes a BAND to stand and fight. This is the whole balance of
@@ -1331,7 +1333,18 @@ func _pick_job() -> bool:
 	# THE TRADES. A standing job at a well, a mill, a barn or a shrine — the
 	# answer to a town too big for four kinds of work. Scored modestly: nobody
 	# abandons a hungry village to mind a well, but a settled one fills them.
-	if Workshop.with_room(village, global_position) != null:
+	# AND THEY WAIT ON THE PLOUGH. A flat 22 is above nothing, which is the
+	# problem: `farm` falls to its floor of 26 when the town is fed, and then
+	# loses several points per head to the crowd penalty because its room is
+	# only twice the number of FIELDS — while `work` is docked almost nothing,
+	# because its room is every stool at every trade in town. A village that
+	# had built its trades therefore sent the fifth farmer to a millstone, and
+	# the sixth, and the seventh, and stopped growing food. That is the
+	# population collapse: not a famine, a staffing decision.
+	#
+	# Nobody minds a well while the town is hungry. Past a third of a want the
+	# trades are simply not on the board.
+	if want_food < TRADES_WAIT and Workshop.with_room(village, global_position) != null:
 		scores["work"] = 22.0
 	var raise_shop := Workshop.short_of(village)
 	if raise_shop != "":

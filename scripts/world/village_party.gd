@@ -20,8 +20,18 @@ extends RefCounted
 
 ## How long a party will stand about waiting for others before setting off with
 ## whoever came, and how many it will take.
-const MUSTER_SECONDS := 12.0
-const PARTY_MOST := 6
+## THE MUSTER WAITS FOR PEOPLE TO STOP ARRIVING, not for a fixed twelve seconds
+## from whenever the first one turned up. The clock was started once, by the
+## first joiner, and ran out while others were still walking over — so a party
+## that a whole town wanted to join left with whoever happened to be standing
+## there when it expired, which is why banding up never felt like banding up.
+##
+## Every arrival now pushes it back. The band leaves when nobody has joined for
+## MUSTER_SECONDS, or when it is twenty strong and there is no more room — and
+## twenty is a real crowd, which is the point. Bringing down something big is
+## supposed to be the thing a village does TOGETHER.
+const MUSTER_SECONDS := 10.0
+const PARTY_MOST := 20
 const PARTY_LEAST := 2
 ## How many of the saintly it takes to turn a hunt into a drive. Two is enough
 ## to argue a small party round; it is a minority, deliberately, because a
@@ -56,8 +66,8 @@ func mustering(town: Village) -> bool:
 func join(who: Villager) -> void:
 	if means != "" or _members.has(who):
 		return
-	if _members.is_empty():
-		_left = MUSTER_SECONDS
+	# EVERY ARRIVAL PUSHES THE CLOCK BACK. See MUSTER_SECONDS.
+	_left = MUSTER_SECONDS
 	_members.append(who)
 
 
