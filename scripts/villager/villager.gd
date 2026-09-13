@@ -204,6 +204,8 @@ var _target_farm: Farm = null
 var _carrying_feed := false
 var _carry_kind := ""            # non-empty while hauling a gathered load home
 var _carry_amount := 0
+## The job whose place this is holding. See VillageJobs.
+var _held_post := ""
 var _carry_job := ""             # the job this load came from (for crowd tally)
 var _carry_announce := ""        # spoken on delivery, if the player's home
 var _carry_visual: Node3D = null
@@ -1064,6 +1066,11 @@ func cheer(amount: float) -> void:
 func _decide() -> void:
 	_dismount()
 	_release_farm()  # re-deciding drops any field claim, so others may take it
+	# ...and the post itself, freed on this frame rather than at the village's
+	# next tally. See VillageJobs.
+	if village != null and is_instance_valid(village):
+		VillageJobs.release(village, _held_post)
+	_held_post = ""
 	_target_herd = null
 	# AND ANY PARTY THEY STOOD IN. One frightened off the muster would otherwise
 	# stay on its books, and a party that never empties never stands down.
@@ -1166,10 +1173,7 @@ func _decide() -> void:
 			return
 	if _pick_job():
 		return
-	state = State.WANDER
-	_action_time = randf_range(4.0, 9.0)
-	_target = village.global_position \
-		+ Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)) * village.influence_radius * 0.6
+	VillageJobs.idle(self)   # every post taken: go and be a person
 
 
 ## CARRIED ALONG BY THE CROWD. Returns true if the town's mood has taken this
@@ -1406,21 +1410,27 @@ func _pick_job() -> bool:
 	# The jobs left at one are the ones genuinely limited by the ground rather
 	# than by anything the village built: there is only so much game on a
 	# hillside, and only ever one building site.
-	var room := {
-		"farm": maxi(village.farms.size() * 2, 1),
-		"work": maxi(Workshop.posts(village), 1),
-	}
 	var best: String = ""
 	var best_score := -INF
 	for job: String in scores:
+		# A FULL JOB IS NOT A DEAR JOB, IT IS A CLOSED ONE. See VillageJobs.
+		if VillageJobs.full(village, job):
+			continue
+		var places := float(VillageJobs.room_for(village, job))
 		var jittered: float = scores[job] + randf_range(-5.0, 5.0) \
-			- CROWD_PENALTY * float(crowd.get(job, 0)) / float(room.get(job, 1))
+			- CROWD_PENALTY * float(crowd.get(job, 0)) / places
 		if jittered > best_score:
 			best_score = jittered
 			best = job
 	if best == "":
 		return false
 	_start_job(best)
+	# ...and only hold a place if that actually put us on the job. `_start_job`
+	# gives up and wanders when what it went for has gone, and a place held by
+	# somebody wandering is a place nobody else can have.
+	if current_job() == best:
+		VillageJobs.claim(village, best)
+		_held_post = best
 	return true
 
 
