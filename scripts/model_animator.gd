@@ -18,7 +18,7 @@ const BLEND := 0.15
 const LOOPING := {
 	"idle": true, "walk": true, "run": true, "sleep": true, "swim": true,
 	"graze": true, "carry": true, "fly": true, "pray": true, "guard": true,
-	"work": true, "fall": true, "dying": true,
+	"work": true, "fall": true, "dying": true, "sit": true,
 }
 
 ## Clip-name aliases per semantic state, tried in order. The last entries give
@@ -34,6 +34,12 @@ const ALIASES := {
 	"fall": ["fall", "tumble", "thrown", "flail"],
 	"attack": ["attack", "kick", "hit", "strike", "smash"],
 	"play": ["play", "cheer", "dance", "jump"],
+	# NOTHING HAS THIS CLIP YET, and asking for it costs nothing: `play` resolves
+	# the aliases once, finds none, and leaves whatever was running. The call
+	# site is what matters — a seated class asks to sit from today, so the day a
+	# rig ships with the clip it simply starts working, with nothing to wire.
+	# Falls back to a crouch or a kneel if the model has one of those first.
+	"sit": ["sit", "sitting", "seated", "crouch", "kneel"],
 	"pray": ["pray", "worship", "kneel"],
 	"swim": ["swim", "wade"],
 	"graze": ["graze", "eat", "feed"],

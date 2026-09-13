@@ -289,6 +289,11 @@ func attend(child: Node, delta: float) -> void:
 	var at: Vector3 = child.global_position
 	var seat := spot_for(int(child._school_seat), maxi(village.child_count(), 1))
 	var gap := Vector2(seat.x - at.x, seat.z - at.z)
+	var klass := maxi(int(child._school_seat), 0) % classes()
+	# DOWN ON THE DIRT once it is in its place, up again the moment the lesson
+	# is one they do on their feet. See Villager.sit_down.
+	var seated: bool = SEATED.has(_lesson[klass])
+	child.sit_down(seated and gap.length() <= 0.5)
 	if gap.length() > 0.5:
 		# NO ROUTING IN A SCHOOL YARD. `_move_toward` runs the obstacle steer
 		# and the shore probe for every body that uses it, every frame, and a
@@ -303,7 +308,7 @@ func attend(child: Node, delta: float) -> void:
 		child.velocity.y -= Villager.GRAVITY * delta
 		child.move_and_slide()
 		child.look_at(at - Vector3(step.x, 0.0, step.y), Vector3.UP)
-	elif SEATED.has(_lesson[klass]) and child.is_on_floor():
+	elif seated and child.is_on_floor():
 		# SAT DOWN, AND THEREFORE DOING NOTHING. `_apply_gravity_only` ends in a
 		# move_and_slide, which is a physics query per body per frame — the last
 		# thing a school of seventy-seven was still paying for once the routing

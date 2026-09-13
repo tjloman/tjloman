@@ -209,6 +209,10 @@ var _held_post := ""
 ## Which class this one teaches, and so which corner of the school yard it
 ## stands in. See Edubba.STATIONS.
 var _class := 0
+## TRUE WHILE IT IS SAT ON THE GROUND. Set by whatever put it there — the
+## school, for now — and read by the animation and by the eye height. See
+## Edubba.attend and `sit_down`.
+var _seated := false
 var _carry_job := ""             # the job this load came from (for crowd tally)
 var _carry_announce := ""        # spoken on delivery, if the player's home
 var _carry_visual: Node3D = null
@@ -340,7 +344,7 @@ func _physics_process(delta: float) -> void:
 	if _label.text != status:  # Label3D re-renders on every assignment
 		_label.text = status
 	if _animator != null:
-		_animator.play(_anim_state())
+		_animator.play(VillagerLook.pose(self))
 
 	match state:
 		State.HELD:
@@ -973,28 +977,13 @@ func _pitch_body(deg: float) -> void:
 
 ## The semantic clip a rigged model should play for the current state. Missing
 ## clips are ignored, so a model with only walk/idle still works.
-func _anim_state() -> String:
-	match state:
-		State.PINNED: return "fall"   # prone; no rig here has a clip for this
-		State.DYING: return "dying"
-		State.FALLING: return "fall"
-		State.HAULING: return "carry"
-		State.CIRCLING: return "play"
-		State.BUILDING_NEST, State.BUILDING_SHOP, State.WORKING: return "work"
-		State.GO_ARM: return "run"
-		State.FIGHT: return "attack"
-		State.HELD: return "idle"
-		State.FLEE: return "run"
-		State.SLEEPING: return "sleep"
-		State.EATING: return "eat"
-		State.WORSHIPPING, State.PREACHING: return "pray"
-		State.PLAY: return "play"
-		State.FARMING, State.CHOPPING, State.QUARRYING, State.BUILDING, \
-		State.BUILDING_FARM, State.BUILDING_EDUBBA, State.BUTCHERING, \
-		State.TAMING, State.HUNTING, State.FISHING, State.TEACH:
-			return "work"
-	# Everything else: walking if moving, otherwise idle.
-	return "walk" if Vector2(velocity.x, velocity.z).length() > 0.3 else "idle"
+## Down on the dirt, or back up. See VillagerLook.
+func sit_down(down: bool) -> void:
+	if _seated == down:
+		return
+	_seated = down
+	if _visuals != null and is_instance_valid(_visuals):
+		_visuals.position.y = -VillagerLook.SIT_DROP if down else 0.0
 
 
 ## Interest reawakens at adulthood and stays high while the body is fed
@@ -2031,8 +2020,11 @@ func _move_toward(target: Vector3, speed: float, delta: float, arrive := ARRIVE_
 	# stepping in — probing as far as THIS step will carry them, since velocity
 	# is scaled by `_sim_scale` and a body on a coarse clock can stride clean
 	# over a fixed 1.7m probe.
-	dir = NavField.water_route(self, global_position, dir, _world(),
-		maxf(1.7, speed * _sim_scale * 0.05))
+	#
+	# NOT INSIDE THEIR OWN VILLAGE, THOUGH — see `_both_ends_at_home`.
+	if not VillagerLook.at_home(self, target):
+		dir = NavField.water_route(self, global_position, dir, _world(),
+			maxf(1.7, speed * _sim_scale * 0.05))
 	if dir == Vector3.ZERO:
 		_apply_gravity_only(delta)
 		return false
