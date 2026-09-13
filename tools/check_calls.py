@@ -1270,6 +1270,53 @@ def check_static_calls(files, singletons):
     return out
 
 
+def check_sim_clock(files):
+    """A SCHEDULER CLOCK STAMPED ONLY ON THE FRAMES IT TICKS COARSELY.
+
+    Scheduler.turn() hands back `now - last_ran` and the caller multiplies BOTH
+    its delta and its velocity scale by that number. So `last_ran` has to mean
+    "the frame this thing last ran", and it only means that if it is written on
+    every frame the thing runs — including the fast ones, where the stride is 1
+    and Scheduler is never consulted at all.
+
+    Written inside the `if stride > 1:` branch, it means something else
+    entirely: "the frame it was last far away". A villager that spent ten
+    minutes near the camera had a `last_ran` ten minutes stale, and the first
+    frame its stride rose above 1 — the camera panning off, the heat band
+    moving, a full hand — it was charged thirty-six thousand frames at once and
+    covered nine hundred metres between two frames, through everything in the
+    way. Every villager and beast in the town did it together.
+
+    The rule is structural and cheap to check: the assignment must sit at an
+    indent no deeper than the `var stride` that decides the branch.
+    """
+    out = []
+    for path in files:
+        src = open(path, encoding="utf-8").read()
+        if "Scheduler.turn(" not in src:
+            continue
+        lines = src.split("\n")
+        for i, line in enumerate(lines):
+            if "Scheduler.turn(" not in line.split("#", 1)[0]:
+                continue
+            call_indent = len(line) - len(line.lstrip("\t"))
+            # Walk on to the end of the enclosing function looking for a stamp
+            # written at a SHALLOWER indent than the branch the call sits in.
+            stamped = False
+            for after in lines[i + 1:]:
+                code = after.split("#", 1)[0]
+                if code.strip() and not code.startswith("\t"):
+                    break                      # left the function
+                if "Scheduler.now()" not in code:
+                    continue
+                if len(code) - len(code.lstrip("\t")) < call_indent:
+                    stamped = True
+                    break
+            if not stamped:
+                out.append((path, i + 1, line.strip()))
+    return out
+
+
 def main():
     root = "scripts"
     targets = sys.argv[1:] or [root]
@@ -1376,6 +1423,14 @@ def main():
               "object to a TYPED variable is itself the error, raised before "
               "that check can run. Read it untyped, guard it, then type it."
               "\n    %s" % (path, lineno, name, kind, line))
+    sim_clocks = check_sim_clock(files)
+    for path, lineno, line in sim_clocks:
+        print("%s:%d: nothing writes `_sim_last = Scheduler.now()` outside this "
+              "branch, so the clock only advances on the frames this entity runs "
+              "COARSELY. Scheduler.turn() then charges it every frame since it "
+              "was last far from the camera — multiplied into delta AND into the "
+              "velocity scale — and it teleports. Stamp it on every frame it runs."
+              "\n    %s" % (path, lineno, line))
     loop_vars = check_untyped_loop_vars(files)
     for path, lineno, name, line in loop_vars:
         print("%s:%d: '%s' comes from an UNTYPED array literal, so it is a "
@@ -1386,7 +1441,7 @@ def main():
     total = len(problems) + len(escapes) + len(formats) + len(shadowed) \
         + len(loose_arrays) + len(variants) + len(shadowed_members) \
         + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice) + len(loose_consts) + len(through) \
-        + len(class_shadows) + len(confusable)
+        + len(class_shadows) + len(confusable) + len(sim_clocks)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

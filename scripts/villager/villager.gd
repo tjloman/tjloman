@@ -284,7 +284,6 @@ func _physics_process(delta: float) -> void:
 			var turn: int = Scheduler.turn(self, stride, _sim_last)
 			if turn == 0:
 				return
-			_sim_last = Scheduler.now()
 			delta *= float(turn)
 			# MOVEMENT MUST BE PAID FOR TOO. move_and_slide() integrates over
 			# the ENGINE's frame, not the delta we were handed — so running on
@@ -293,6 +292,16 @@ func _physics_process(delta: float) -> void:
 			# the way to the granary. The stride is folded into velocity so
 			# they cover the same ground either way.
 			_sim_scale = float(turn)
+	# THE CLOCK IS STAMPED WHENEVER IT ACTUALLY RUNS, not only on the frames it
+	# runs coarsely. This line used to live inside the `stride > 1` branch, so a
+	# villager standing near the camera — stride 1, branch skipped — went on
+	# not writing it for as long as it stayed there. `_sim_last` then meant "the
+	# frame it was last FAR AWAY", and the moment anything nudged the stride
+	# above 1 (the camera panning off, or the heat band moving, which a casting
+	# session did all by itself) Scheduler.turn handed back every frame since,
+	# multiplied it into delta AND into the velocity scale, and threw it across
+	# the field. See Scheduler.MOST_OWED.
+	_sim_last = Scheduler.now()
 	# PINNED suspends everything, and for the same reason DYING does: they are
 	# not doing anything, they are being done to. No hunger, no ageing, no
 	# watchdog — the ONLY clock that runs is the Mauling's, and the village

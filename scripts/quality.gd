@@ -87,10 +87,20 @@ func _ready() -> void:
 ## Watch the frames go by. Three floats a frame; nothing here is measured with
 ## anything more expensive than the delta the engine already handed us.
 func _process(delta: float) -> void:
+	# IN REAL SECONDS, NOT THE WORLD'S. `delta` here has already been through
+	# Engine.time_scale, and the casting session runs the world at 0.75 (see
+	# DivineHand._tick_focus). So the instant a rune is drawn, a perfectly
+	# healthy 16.6ms frame is handed to this function as 12.5ms — under
+	# FRAME_COOL — and the thermostat concludes the device just got faster.
+	# It eases a band, every stride in Util.sim_stride changes underneath
+	# everything that walks, and the whole thing happens again in reverse when
+	# the session closes. The frame time is a measurement of the DEVICE and
+	# must not be measured in a clock the game itself is bending.
+	var real := delta / maxf(Engine.time_scale, 0.01)
 	if _grace > 0.0:
-		_grace -= delta
+		_grace -= real
 		return
-	_frame = lerpf(_frame, delta, FRAME_BLEND)
+	_frame = lerpf(_frame, real, FRAME_BLEND)
 	# Climbing is immediate to the band the frames deserve; EASING OFF is one
 	# band at a time, so a device that recovers does not have shadows, glow,
 	# MSAA and every draw distance all snap back in the same frame.
@@ -104,7 +114,7 @@ func _process(delta: float) -> void:
 	if want == heat:
 		_pressure = 0.0
 		return
-	_pressure += delta
+	_pressure += real
 	if _pressure < (HEAT_HOLD if want > heat else COOL_HOLD):
 		return
 	_pressure = 0.0

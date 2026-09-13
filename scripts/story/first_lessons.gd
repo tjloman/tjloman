@@ -79,8 +79,11 @@ static func board(who: Creature, tree: SceneTree) -> Array:
 		{
 			"say": "That is the whole of it. The rope is off — it is yours to "
 				+ "lead now, and it will remember everything you do.",
+			# Typed as the common base rather than inferred: a CreatureStake and
+			# a Creature are both Node3D and nothing narrower, and leaving it to
+			# inference makes the two arms of the ternary incompatible.
 			"look": func() -> Variant:
-				var stake := CreatureStake.of(tree)
+				var stake: Node3D = CreatureStake.of(tree)
 				return stake if stake != null else who,
 			"wait": 4.0,
 			"then": func() -> void: CreatureStake.pull_up(tree),

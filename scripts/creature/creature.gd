@@ -1215,20 +1215,20 @@ func _run_speed() -> float:
 	return WALK_SPEED * (1.1 + growth * 0.9) * body.speed_factor()
 
 
-func _pick_up_thing(node: Node3D, intent: String) -> void:
+func _pick_up_thing(node: Node3D, why: String) -> void:
 	# A GOOD creature (gentle+) lifting a dying villager cradles them back to a
 	# sliver of life, same as the hand. A wild or cruel one does no such mercy —
 	# it will eat what it's handed (see _intent_for / _eat_carried).
 	if node is Villager and (node as Villager).is_dying() and morality >= 20.0:
 		(node as Villager).rescue()
 	_carried = node
-	_carry_intent = intent
+	_carry_intent = why
 	if node is RigidBody3D:
 		(node as RigidBody3D).freeze = true
 	elif node.has_method("pick_up"):
 		node.call("pick_up")
 	state = State.CARRYING
-	_action_time = 1.4 if intent in ["eat", "hurl"] else 5.0
+	_action_time = 1.4 if why in ["eat", "hurl"] else 5.0
 
 
 func _process_carrying(delta: float) -> void:

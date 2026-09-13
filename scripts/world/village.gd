@@ -709,8 +709,17 @@ func _process(delta: float) -> void:
 		var turn: int = Scheduler.turn(self, stride, _sim_last)
 		if turn == 0:
 			return
-		_sim_last = Scheduler.now()
 		delta *= float(turn)
+	# THE CLOCK IS STAMPED WHENEVER IT ACTUALLY RUNS, not only on the frames it
+	# runs coarsely. This line used to live inside the `stride > 1` branch, so a
+	# village standing near the camera — stride 1, branch skipped — went on
+	# not writing it for as long as it stayed there. `_sim_last` then meant "the
+	# frame it was last FAR AWAY", and the moment anything nudged the stride
+	# above 1 (the camera panning off, or the heat band moving, which a casting
+	# session did all by itself) Scheduler.turn handed back every frame since,
+	# multiplied it into delta AND into the velocity scale, and threw it across
+	# the field. See Scheduler.MOST_OWED.
+	_sim_last = Scheduler.now()
 	var worshippers := _worshippers
 	if worshippers > 0:
 		if converted:

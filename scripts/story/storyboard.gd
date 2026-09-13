@@ -120,8 +120,8 @@ func stop() -> void:
 
 ## THE PIN THAT SAYS GO THERE. A tall soft beam with a ring at its foot, so it
 ## reads from across a valley and from directly above it.
-func _plant_marker(at: Vector3) -> void:
-	if at == Vector3.INF:
+func _plant_marker(spot: Vector3) -> void:
+	if spot == Vector3.INF:
 		return
 	_marker = Node3D.new()
 	var beam := CylinderMesh.new()
@@ -138,7 +138,7 @@ func _plant_marker(at: Vector3) -> void:
 	if scene == null:
 		return
 	scene.add_child(_marker)
-	_marker.global_position = at
+	_marker.global_position = spot
 
 
 func _drop_marker() -> void:

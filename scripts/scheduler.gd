@@ -33,6 +33,31 @@ extends RefCounted
 ## a villager on a coarse clock walks exactly as far and gets exactly as hungry
 ## as one running every frame. That was already true and must stay true: this
 ## changes WHEN the work happens, never how much of it there is.
+##
+## WHICH PUTS AN OBLIGATION ON THE CALLER. `last_ran` must be written every
+## frame the entity actually runs — INCLUDING the frames it runs at full rate
+## and never asks this function anything. An entity that only records its turns
+## while it is on a coarse clock is not recording when it last ran, it is
+## recording when it was last far away, and the difference between those two is
+## paid out in one step the moment its stride changes. See MOST_OWED.
+
+
+## THE MOST ANY ENTITY MAY BE CHARGED IN ONE TICK, in frames.
+##
+## The worst stride in the game is Util.sim_stride's 10 multiplied by
+## Quality.sim_relief's ceiling of 4, so forty frames is the largest gap that
+## can honestly open between two turns. Anything beyond that is not a coarse
+## clock, it is a bug — and folding it into one step does not "catch up", it
+## TELEPORTS: `delta` and the velocity scale are multiplied by this number, so
+## a villager handed nine hundred frames walks fifteen metres between one
+## frame and the next, through whatever was in the way.
+##
+## That is not hypothetical. `_sim_last` was only written on the coarse branch,
+## so an entity standing near the camera — where the stride is 1 and the branch
+## is skipped — never updated it at all. The moment anything nudged its stride
+## above 1, it cashed in every frame it had spent near the camera at once. The
+## call sites keep the clock honest now; this is the floor under them.
+const MOST_OWED := 40
 
 
 ## WHOSE TURN IS IT, and for how much time?
@@ -52,7 +77,7 @@ static func turn(who: Node, stride: int, last_ran: int) -> int:
 	# Counted from when it ACTUALLY last ran, not from the stride — because the
 	# stride changes as a thing walks toward and away from the camera, and a
 	# creature that has been on a coarse clock owes the time it really missed.
-	return maxi(frames - last_ran, 1)
+	return clampi(frames - last_ran, 1, MOST_OWED)
 
 
 ## The frame an entity should remember it ran on.

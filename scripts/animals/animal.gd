@@ -218,11 +218,20 @@ func _physics_process(delta: float) -> void:
 			var turn: int = Scheduler.turn(self, stride, _sim_last)
 			if turn == 0:
 				return
-			_sim_last = Scheduler.now()
 			delta *= float(turn)
 			# See Villager: move_and_slide() runs on the engine's frame, so a
 			# throttled beast crawls unless the stride is folded into velocity.
 			_sim_scale = float(turn)
+	# THE CLOCK IS STAMPED WHENEVER IT ACTUALLY RUNS, not only on the frames it
+	# runs coarsely. This line used to live inside the `stride > 1` branch, so a
+	# beast standing near the camera — stride 1, branch skipped — went on
+	# not writing it for as long as it stayed there. `_sim_last` then meant "the
+	# frame it was last FAR AWAY", and the moment anything nudged the stride
+	# above 1 (the camera panning off, or the heat band moving, which a casting
+	# session did all by itself) Scheduler.turn handed back every frame since,
+	# multiplied it into delta AND into the velocity scale, and threw it across
+	# the field. See Scheduler.MOST_OWED.
+	_sim_last = Scheduler.now()
 
 	if _animator != null:
 		_animator.play(_anim_state())
