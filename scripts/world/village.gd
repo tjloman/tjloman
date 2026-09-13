@@ -678,15 +678,30 @@ func spawn_edubba_at(world_spot: Vector3) -> void:
 ## no bigger as the village did. Three is a staff: enough that a town of fifty
 ## has somewhere for its patient people to go, and that losing one teacher does
 ## not shut the school.
-func needs_teacher() -> bool:
-	if not has_edubba():
+## TAKE A POST AT THE SCHOOL, or find there is none to take.
+##
+## THE COUNT AND THE CLAIM HAVE TO BE THE SAME ACT. `needs_teacher` only read
+## `_teachers`, and `_teachers` is not maintained — it is recomputed once a
+## pass by `_retally`, off the roster. So every villager deciding between two
+## retallies saw the same stale zero, every one of them passed the test, and
+## every one of them set `is_teacher`. A town of forty had forty teachers and
+## nobody farming, fishing, building or minding the children, and TEACHERS_MOST
+## was never enforced at any point.
+##
+## Asking and taking in one call is the whole fix: the count moves on the frame
+## the post is taken, so the second villager to ask this second gets told no.
+## `_retally` still recomputes it from the roster, which keeps it honest across
+## anything that removes a teacher without saying so — a death, a chunk unload,
+## a school burning down.
+func claim_teaching_post() -> bool:
+	if not has_edubba() or _teachers >= TEACHERS_MOST:
 		return false
-	return teachers() < TEACHERS_MOST
+	_teachers += 1
+	return true
 
 
-## Everyone presently holding a post at the school.
-func teachers() -> int:
-	return _teachers
+func leave_teaching_post() -> void:
+	_teachers = maxi(_teachers - 1, 0)
 
 
 func _process(delta: float) -> void:

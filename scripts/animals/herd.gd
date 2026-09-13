@@ -858,8 +858,13 @@ func _drift(delta: float) -> void:
 	# swimming. And `water_route` walks a body that is already in the water back
 	# out of it, which is what recovers the ones already out there.
 	if world != null:
+		# CAPPED. `_spread` on a two-hundred-head herd is thirty metres, and
+		# `_bad_step` looks a second probe-length beyond that again — so an
+		# uncapped probe has a herd refusing every heading with water anywhere
+		# within sixty metres, which on a coast is all of them, and it then pays
+		# the full sixteen-way fallback sweep every time it moves.
 		dir = NavField.water_route(self, global_position, dir, world,
-			maxf(3.0, _spread))
+			clampf(_spread, 3.0, 12.0))
 	global_position += dir * minf(step * delta, to.length())
 
 

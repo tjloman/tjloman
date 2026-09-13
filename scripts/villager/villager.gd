@@ -1124,8 +1124,10 @@ func _decide() -> void:
 	# the first — which is why a town of any size still had exactly one.
 	if is_teacher and not village.has_edubba():
 		is_teacher = false
-	# A post is open and I am free to take it.
-	if not is_teacher and village.needs_teacher() and not _has_dependent_child():
+		village.leave_teaching_post()
+	# Asked and taken in ONE act. See Village.claim_teaching_post.
+	if not is_teacher and not _has_dependent_child() \
+			and village.claim_teaching_post():
 		is_teacher = true
 	if is_teacher and village.has_edubba():
 		state = State.TEACH
@@ -2034,12 +2036,10 @@ func _move_toward(target: Vector3, speed: float, delta: float, arrive := ARRIVE_
 	var dir := to_target.normalized()
 	# Steer around trees and rocks (but not the one we're walking to).
 	dir = NavField.steer(global_position, dir, 0.4, target)
-	# Villagers cannot swim: route ALONG the shore around open water rather
-	# than stepping in. Only a body hemmed in by water on every side stalls
-	# (and the stuck watchdog re-decides them).
-	# ...probing as far as THIS step will carry it: velocity is scaled by
-	# `_sim_scale`, so a body on a coarse clock can stride clean over a fixed
-	# 1.7m probe. Three frames of its real travel.
+	# Villagers cannot swim: route ALONG the shore around open water rather than
+	# stepping in — probing as far as THIS step will carry them, since velocity
+	# is scaled by `_sim_scale` and a body on a coarse clock can stride clean
+	# over a fixed 1.7m probe.
 	dir = NavField.water_route(self, global_position, dir, _world(),
 		maxf(1.7, speed * _sim_scale * 0.05))
 	if dir == Vector3.ZERO:

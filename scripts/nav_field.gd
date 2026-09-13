@@ -173,15 +173,27 @@ func water_route(mover: Node, pos: Vector3, desired: Vector3, world: WorldGen,
 		probe := 1.7, drop := SHEER) -> Vector3:
 	if world == null or desired == Vector3.ZERO:
 		return desired
+	# THE CLEAR CASE FIRST, AND IT COSTS NOTHING ELSE.
+	#
+	# The drowning check used to sit above this line, which meant every mover in
+	# the world paid a `water_level_at` and a `height_at` every frame to be told
+	# it was standing on dry grass. `height_at` is five noise samples plus a walk
+	# of every scar in range, and there are a few hundred movers — it pegged a
+	# desktop on its own.
+	#
+	# It does not need asking there. If the ground a stride ahead is good then
+	# this body is not in trouble, and if it IS somehow standing in water while
+	# the way ahead is dry, then walking ahead is already walking out. So the
+	# question only gets asked once something is actually wrong.
+	if not _bad_step(world, pos, desired, probe, drop):
+		if mover != null:
+			mover.set_meta("shore_side", 0)  # open water ahead cleared — drop the commit
+		return desired
 	# WET FEET FIRST. See `_least_bad` — if it is already standing in water deep
 	# enough to kill it, there is no safe heading and the question is not which
 	# way is safe but which way is OUT.
 	if _depth_at(world, pos.x, pos.z) > OUT_OF_DEPTH:
 		return _least_bad(world, pos, desired)
-	if not _bad_step(world, pos, desired, probe, drop):
-		if mover != null:
-			mover.set_meta("shore_side", 0)  # open water ahead cleared — drop the commit
-		return desired
 	var side := int(mover.get_meta("shore_side", 0)) if mover != null else 0
 	# Try ever-wider turns; the side committed to last frame is tried first
 	# (small to large), so the shoreline is followed in one consistent sense.
