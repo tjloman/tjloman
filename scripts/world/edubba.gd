@@ -32,6 +32,9 @@ const LINE_GAP := 1.4
 const DANCE_SPIN := 0.5
 
 var village: Village
+## How much of it is left, and whether it is alight. See Kindling.
+var health := 100.0
+var kindling := Kindling.new()
 
 var _lesson := "circle"
 var _left := 0.0
@@ -39,9 +42,9 @@ var _left := 0.0
 ## so a class is never a diagram.
 var _drift := 0.0
 
-
 func _ready() -> void:
 	add_to_group("edubba")
+	add_to_group("burnable")
 	_left = randf_range(LESSON_LEAST, LESSON_MOST)
 	_lesson = LESSONS[randi() % LESSONS.size()]
 	set_meta("hover_name", "Edubba (school)")
@@ -147,6 +150,7 @@ func _ring_radius(count: int) -> float:
 ## THE LESSON CHANGES. Long enough that a passer-by sees a class doing one
 ## thing rather than a crowd flickering between five.
 func _process(delta: float) -> void:
+	_tick_fire(delta)
 	_drift += delta
 	_left -= delta
 	if _left > 0.0:
@@ -165,3 +169,35 @@ func hover_text() -> String:
 			if not v.is_adult():
 				n += 1
 	return "Edubba (school) — %d children learning" % n
+
+## Fire ------------------------------------------------------------------------
+
+## SET IT ALIGHT. Everything a village raises can burn now — see Kindling for
+## why that had to change and what it costs a town.
+func ignite() -> void:
+	kindling.light(self, 2.8)
+
+
+## Rain, a healing shower, or somebody with a bucket.
+func extinguish() -> void:
+	kindling.douse(self)
+
+
+## Sudden harm — a fireball's core, a quake, a creature's boot.
+func damage(amount: float) -> void:
+	health -= amount
+	if health <= 0.0:
+		burn_down()
+
+
+func _tick_fire(delta: float) -> void:
+	var harm := kindling.tick(self, delta)
+	if harm > 0.0:
+		damage(harm)
+
+
+func burn_down() -> void:
+	if village != null and is_instance_valid(village):
+		village.edubba = null
+	GameState.announce("The school burns down. The children scatter.")
+	queue_free()

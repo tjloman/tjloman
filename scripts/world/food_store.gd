@@ -23,14 +23,17 @@ var plant_food := 14
 var meat_food := 0
 var lumber := 6
 var stone := 3
+## How much of it is left, and whether it is alight. See Kindling.
+var health := 100.0
+var kindling := Kindling.new()
 
 var _stack: Array[MeshInstance3D] = []
 var _intake: Area3D
 var _intake_time := 0.5
 
-
 func _ready() -> void:
 	add_to_group("stores")
+	add_to_group("burnable")
 	set_meta("hover_name", "Storehouse")
 	collision_layer = 4  # hoverable/grabbable by the hand; villagers pass through
 	collision_mask = 0
@@ -96,6 +99,7 @@ func _build_structure() -> void:
 ## Absorb items resting on the platform (polled: released items don't
 ## re-trigger area signals, so we sweep instead).
 func _process(delta: float) -> void:
+	_tick_fire(delta)
 	_intake_time -= delta
 	if _intake_time > 0.0:
 		return
@@ -326,3 +330,41 @@ func hover_text() -> String:
 	return ("Storehouse — %d plants · %d meat · %d lumber · %d stone\n" +
 		"(grab a quarter to take from that pile)") \
 		% [plant_food, meat_food, lumber, stone]
+
+## Fire ------------------------------------------------------------------------
+
+## SET IT ALIGHT. Everything a village raises can burn now — see Kindling for
+## why that had to change and what it costs a town.
+func ignite() -> void:
+	kindling.light(self, 3.2)
+
+
+## Rain, a healing shower, or somebody with a bucket.
+func extinguish() -> void:
+	kindling.douse(self)
+
+
+## Sudden harm — a fireball's core, a quake, a creature's boot.
+func damage(amount: float) -> void:
+	health -= amount
+	if health <= 0.0:
+		burn_down()
+
+
+func _tick_fire(delta: float) -> void:
+	var harm := kindling.tick(self, delta)
+	if harm > 0.0:
+		damage(harm)
+
+
+## A GRANARY ON FIRE IS THE HARVEST ON FIRE. What is in it goes with it, which
+## is the whole reason burning one is a thing worth doing and a thing worth
+## preventing.
+func burn_down() -> void:
+	plant_food = 0
+	meat_food = 0
+	lumber = 0
+	stone = 0
+	GameState.announce("The storehouse burns. A season's harvest with it.")
+	health = 100.0          # the frame stands; the stores are what was lost
+	kindling.douse(self)

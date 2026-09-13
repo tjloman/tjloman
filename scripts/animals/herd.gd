@@ -385,6 +385,13 @@ const LEAN_OFF := 0.09
 ## fixing the instance of it.
 static var _agents_afoot := 0
 
+## HOW MANY HEAD ARE VISIBLE AT ONCE, or -1 for all of them. Set by whoever
+## keeps the herd — a wild one is never told, and shows everybody. A barn tells
+## its stock how many it has let out into the yard, and tells them none while
+## they are in. The rest go on eating, breeding and being butchered from the
+## book; they are simply not standing in the road. See Workshop.
+var shown := -1
+
 var species := ""
 var world: WorldGen = null
 var head := 0
@@ -942,7 +949,13 @@ func _write_transforms(how_many := 0) -> void:
 		# instead, or this one was eaten. Scaling the instance away beats
 		# rebuilding the MultiMesh, which would mean reallocating it every time
 		# anybody walked past a herd or a wolf took one.
-		if m["agent"] != null or m["dead"]:
+		# ...and a village's stock is mostly INSIDE. A barn's book is four
+		# hundred head and four hundred head standing in the street is a town
+		# you cannot see, which is what five barns' worth looked like. The
+		# number is right and wants keeping; what wants cutting is how many of
+		# them are out at once. The barn says how many that is, and says none
+		# when it has drawn them in for the night. See `shown`.
+		if m["agent"] != null or m["dead"] or (shown >= 0 and i >= shown):
 			_mm.set_instance_transform(i, Transform3D().scaled(Vector3.ZERO))
 			continue
 		var p: Vector4 = HerdMotion.pose(m["motion"], m["slot"])

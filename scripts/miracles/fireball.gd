@@ -294,10 +294,20 @@ func _go_off() -> void:
 	if caught > 0:
 		GameState.shift_alignment(KARMA_PER_KILL * KARMA_PER_HEAD * float(caught))
 
-	for h in get_tree().get_nodes_in_group("houses"):
-		var house := h as House
-		if house.global_position.distance_to(pos) < reach:
-			house.damage(float(spec["house"]))
+	# EVERYTHING A VILLAGE RAISED, not only its houses. A fire that spared the
+	# mill, the well, the barn, the school and the granary was a fire the town
+	# could shrug off, and every building added since the houses was in effect
+	# fireproof. See Kindling.
+	for b in get_tree().get_nodes_in_group("burnable"):
+		var built := b as Node3D
+		if not is_instance_valid(built) \
+				or built.global_position.distance_to(pos) > reach:
+			continue
+		if built.has_method("damage"):
+			built.call("damage", float(spec["house"]))
+		# ...and it CATCHES, which is the difference between a blast and a fire.
+		if built.has_method("ignite"):
+			built.call("ignite")
 
 	# Fire catches on the trees it touches — and spreads from there. This is
 	# the whole of what a gout is FOR.

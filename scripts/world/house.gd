@@ -34,6 +34,8 @@ const KNOCK_DAMP := 7.0
 
 var size := Size.HUT
 var health := 100.0
+## Whether it is alight, and for how much longer. See Kindling.
+var kindling := Kindling.new()
 var age := 0.0                  # years
 var occupied := false           # kept current by Village._assign_housing
 var under_construction := false
@@ -52,6 +54,7 @@ var _shove_vel := Vector3.ZERO
 
 func _ready() -> void:
 	add_to_group("houses")
+	add_to_group("burnable")
 	# A real body, so the hand's ray can hover it (census, health, age).
 	# Layer 4 = props: villagers walk through, the hand sees it.
 	collision_layer = 4
@@ -76,6 +79,7 @@ func capacity() -> int:
 
 
 func _process(delta: float) -> void:
+	_tick_fire(delta)
 	if under_construction:
 		return
 	_settle_knock(delta)
@@ -162,6 +166,27 @@ func _settle_knock(delta: float) -> void:
 	else:
 		rotation = _base_rot + _knock
 		position = _base_pos + _shove
+
+
+## SET IT ALIGHT. A house could always be knocked down and never set on fire.
+func ignite() -> void:
+	if under_construction:
+		return
+	kindling.light(self, 2.6)
+
+
+func extinguish() -> void:
+	kindling.douse(self)
+
+
+func burn_down() -> void:
+	_collapse()
+
+
+func _tick_fire(delta: float) -> void:
+	var harm := kindling.tick(self, delta)
+	if harm > 0.0:
+		damage(harm)
 
 
 func _collapse() -> void:

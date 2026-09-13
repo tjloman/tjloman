@@ -102,6 +102,9 @@ const STRAGGLE := 3.2
 ## real animals because they are the ones villagers feed, ride and butcher by
 ## hand, and because a yard with nothing standing in it is not a yard.
 const LOOSE_STOCK := 8
+## ...and how many of the BOOK stand about in the yard, drawn. A dozen reads as
+## a working farmyard; the other few hundred are inside. See Herd.shown.
+const IN_THE_YARD := 12
 
 ## How long one turn of work takes, and how far a well's or a shrine's good
 ## reaches. A shift is long enough that a villager is visibly AT work rather
@@ -114,9 +117,11 @@ var trade := "well"
 ## ONE HERD PER SPECIES THIS BARN KEEPS. Village livestock beyond the loose few
 ## live here as numbers — see Herd, and `_take_in`.
 var stock: Array[Herd] = []
+## How much of it is left, and whether it is alight. See Kindling.
+var health := 100.0
+var kindling := Kindling.new()
 var _leg := 0
 var _leg_left := 0.0
-
 
 static func create(which: String, home: Village) -> Workshop:
 	var w := Workshop.new()
@@ -255,6 +260,7 @@ static func wanted(which: String, population: int) -> int:
 
 func _ready() -> void:
 	add_to_group("workshops")
+	add_to_group("burnable")
 	var spec: Dictionary = TRADES[trade]
 	set_meta("hover_name", String(spec["label"]))
 	collision_layer = 4     # hoverable; villagers walk through it
@@ -422,6 +428,7 @@ func stock_is_in() -> bool:
 
 
 func _process(delta: float) -> void:
+	_tick_fire(delta)
 	if trade != "barn" or village == null or not is_instance_valid(village):
 		return
 	if Util.sim_stride(global_position) > 4:
@@ -438,8 +445,15 @@ func _process(delta: float) -> void:
 	# droving four hundred head costs exactly what droving four costs — which is
 	# the entire reason the surplus is a herd and not four hundred animals.
 	var spot := drove_spot(0)
+	var out := 0 if stock_is_in() else IN_THE_YARD
 	for h in stock:
 		if is_instance_valid(h):
+			# ONLY A FEW OF THEM ARE ACTUALLY OUT. The book goes on being the
+			# book — they eat, breed, and are butchered out of it all the same —
+			# but a barn keeping four hundred head does not put four hundred
+			# animals in the street, and five barns doing it made a town you
+			# could not see. None at all once they are in for the night.
+			h.shown = out
 			h.drive_toward(spot, 999.0)
 	var n := 0
 	for a in village.tamed_animals:
@@ -512,3 +526,38 @@ func hover_text() -> String:
 		return "Barn — %d head (%d in the yard), stock %s" % [
 			loose + stock_held(), loose, "in" if stock_is_in() else "out"]
 	return "%s — work for %d" % [String(spec["label"]), int(spec["employs"])]
+
+## Fire ------------------------------------------------------------------------
+
+## SET IT ALIGHT. Everything a village raises can burn now — see Kindling for
+## why that had to change and what it costs a town.
+func ignite() -> void:
+	kindling.light(self, 3.0)
+
+
+## Rain, a healing shower, or somebody with a bucket.
+func extinguish() -> void:
+	kindling.douse(self)
+
+
+## Sudden harm — a fireball's core, a quake, a creature's boot.
+func damage(amount: float) -> void:
+	health -= amount
+	if health <= 0.0:
+		burn_down()
+
+
+func _tick_fire(delta: float) -> void:
+	var harm := kindling.tick(self, delta)
+	if harm > 0.0:
+		damage(harm)
+
+
+## GONE. The stock is loosed rather than deleted — a barn burning down is a
+## barn's worth of animals in the street, which is the right consequence and a
+## far better sight than a building quietly vanishing.
+func burn_down() -> void:
+	if village != null and is_instance_valid(village):
+		village.workshops.erase(self)
+	GameState.announce("The %s burns down." % String(TRADES[trade]["label"]).to_lower())
+	queue_free()

@@ -391,6 +391,17 @@ func is_unlocked(miracle: String) -> bool:
 	return unlocked_miracles().has(miracle)
 
 
+## PUT OUT WHATEVER THE TOWN BUILT. Everything in "burnable" can be lit now, so
+## everything in it has to be quenchable by the same water; a building that was
+## never alight simply ignores this.
+func _douse_the_built(pos: Vector3, reach: float) -> void:
+	for b in get_tree().get_nodes_in_group("burnable"):
+		var built := b as Node3D
+		if is_instance_valid(built) and built.has_method("extinguish") \
+				and built.global_position.distance_to(pos) < reach:
+			built.call("extinguish")
+
+
 ## The runes just taught by the newest convert — announced on conversion.
 func newly_taught() -> Array:
 	var tier := faithful_villages() - 1
@@ -621,6 +632,10 @@ func rain_upon(pos: Vector3, reach: float, bless: float) -> void:
 			if is_instance_valid(body) and body.get("burning") \
 					and body.global_position.distance_to(pos) < reach:
 				body.call("extinguish")
+	# AND THE BUILDINGS, which can catch now. Rain that put out a burning
+	# villager and left the mill they were standing in alight would be a strange
+	# kind of mercy. Dousing something that was never lit is free (see Kindling).
+	_douse_the_built(pos, reach)
 	# AND THE HERDS. Every group above is a group of NODES, and a herd's burning
 	# members are numbers — so rain fell straight through the mass exactly as
 	# fire used to, which of the two is the worse way round: it is the mercy
@@ -984,10 +999,12 @@ func _quake_everything(pos: Vector3, reach: float, potency: float) -> void:
 		var animal := a as Animal
 		if is_instance_valid(animal) and animal.global_position.distance_to(pos) < reach:
 			animal.scare(pos)
-	for h in get_tree().get_nodes_in_group("houses"):
-		var house := h as House
-		if is_instance_valid(house) and house.global_position.distance_to(pos) < reach:
-			house.damage(18.0 * potency)
+	# A quake shakes down everything the town built, not only where it sleeps.
+	for b in get_tree().get_nodes_in_group("burnable"):
+		var built := b as Node3D
+		if is_instance_valid(built) and built.has_method("damage") \
+				and built.global_position.distance_to(pos) < reach:
+			built.call("damage", 18.0 * potency)
 	# Anything loose is thrown into the air — the readable signature of a quake.
 	for p in get_tree().get_nodes_in_group("pickable"):
 		var loose := p as RigidBody3D
@@ -1509,6 +1526,7 @@ func mercy_upon(pos: Vector3, reach: float) -> void:
 		var farm := f as Farm
 		if is_instance_valid(farm) and farm.global_position.distance_to(pos) < reach:
 			farm.extinguish()
+	_douse_the_built(pos, reach)
 	# AND THE HERDS. Every group above is a group of NODES, and a herd's
 	# burning members are numbers — so the kindest miracle in the game fell
 	# straight through a burning herd. The mercy has to reach the mass for
