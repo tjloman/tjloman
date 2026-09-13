@@ -104,6 +104,9 @@ const HERD_TAG_REACH := 180.0
 ## may make real regardless of the world's allowance. See `_reach_of_the_hand`.
 const HAND_REACH := 6.0
 const HAND_TAKES := 3
+## How far past its own nominal spread a herd's members may actually be standing
+## before the hand stops looking. See `_reach_of_the_hand`.
+const SPREAD_SLACK := 2.5
 const PROMOTE_WITHIN := 40.0
 const DEMOTE_BEYOND := 54.0
 
@@ -1119,22 +1122,50 @@ func _reach_of_the_hand() -> void:
 	var hand := GameState.hand_at
 	if is_inf(hand.x):
 		return
-	# The whole mass, at arm's length — one check before any thought of walking
-	# two hundred rows.
-	if global_position.distance_to(hand) > _spread + HAND_REACH:
+	# THE WHOLE MASS, AT ARM'S LENGTH — one check before any thought of walking
+	# two hundred rows, and deliberately a generous one.
+	#
+	# It used to be `_spread + HAND_REACH`, and `_spread` is recomputed from the
+	# head count every time the herd changes size — while the members keep the
+	# offsets they were dealt. A herd that has LOST head therefore has members
+	# standing well outside its own `_spread`, and the guard turned the hand
+	# away before it ever looked at them. That is why it was bison and horses:
+	# the kinds that get hunted and taken.
+	var span := maxf(_spread, SPREAD_LEAST) * SPREAD_SLACK + HAND_REACH
+	if _flat_gap(global_position, hand) > span:
 		return
-	var took := 0
+	# THE NEAREST ONE FIRST, and one a tick. Taking the first three in row order
+	# promoted whichever heads happened to be early in the book rather than the
+	# one actually under the cursor — so the beast you were pointing at stayed a
+	# box while three of its neighbours became real.
+	var near := 0
+	var best := -1
+	var closest := INF
 	for i in _members.size():
-		if took >= HAND_TAKES:
-			return
 		var m := _members[i]
-		if m["agent"] != null or m["dead"]:
+		if m["dead"]:
 			continue
-		var p := _stands_at(m)
-		if p.distance_to(hand) > HAND_REACH:
+		var gap := _flat_gap(_stands_at(m), hand)
+		if gap > HAND_REACH:
 			continue
-		_promote(m, p)
-		took += 1
+		if m["agent"] != null:
+			near += 1
+			if near >= HAND_TAKES:
+				return          # the hand already has its few here
+			continue
+		if gap < closest:
+			closest = gap
+			best = i
+	if best >= 0:
+		_promote(_members[best], _stands_at(_members[best]))
+
+
+## FLAT DISTANCE, and it has to be flat. The hand floats HOVER_HEIGHT above the
+## ground and a row's stored height is whatever the last ground sweep wrote, so
+## a straight 3D distance spent a third of the hand's reach on a vertical gap
+## that means nothing about whether you are pointing at the thing.
+static func _flat_gap(a: Vector3, b: Vector3) -> float:
+	return Vector2(a.x - b.x, a.z - b.z).length()
 
 
 ## Where a row is standing, in world space.

@@ -19,6 +19,10 @@ const BED_SLOP := 1.2
 ## as an animal lying down and shuffling about; fast enough to be square before
 ## it is properly under.
 const BED_SETTLE := 1.1
+## How far a sleeping creature tips onto its side, and roughly how thick it is
+## lying down as a share of its standing half-height. See `_lie_down`.
+const LIE_ROLL := 80.0
+const LIE_THICK := 0.30
 
 static func lounge(who: Creature, delta: float) -> void:
 	# IF HE HAS A BED, HE USES IT. Lounging used to happen wherever he was
@@ -213,13 +217,37 @@ static func sleep(who: Creature, delta: float) -> bool:
 	# mistreatment compounds: it can never catch up.
 	var depth := who.welfare.sleep_depth()
 	who.energy = minf(who.energy + (2.0 + 5.0 * depth) * delta, 100.0)
-	if who._animator == null:
-		who._body.rotation_degrees.z = 80
+	_lie_down(who, true)
 	if who.energy > lerpf(55.0, 92.0, depth):
-		if who._animator == null:
-			who._body.rotation_degrees.z = 0
+		_lie_down(who, false)
 		who._decide()
 	return false
+
+
+## ON ITS SIDE, AND STILL WHERE IT WAS STANDING.
+##
+## Tipping the visual over is a roll about its Z — and the visual's origin is at
+## the creature's FEET, so the roll swings the whole body out sideways by nearly
+## its own height. On a full-grown creature that is eighteen metres: it lay down
+## in its bed and its body ended up on the grass beside it, which is what
+## "doesn't line up" looked like and is nothing to do with the yaw.
+##
+## So the roll is paid for. The body is pushed back along its own X by what the
+## tip took away, leaving the middle of it over the spot it was standing on, and
+## dropped to about the thickness of a creature lying down. The lying height is
+## an estimate from CreatureBody.STANDING; a rigged model plays its own clip and
+## none of this touches it.
+static func _lie_down(who: Creature, down: bool) -> void:
+	if who._animator != null or who._body == null:
+		return
+	if not down:
+		who._body.rotation_degrees.z = 0.0
+		who._body.position = Vector3.ZERO
+		return
+	var a := deg_to_rad(LIE_ROLL)
+	var mid := CreatureBody.STANDING * 0.5
+	who._body.rotation_degrees.z = LIE_ROLL
+	who._body.position = Vector3(mid * sin(a), mid * (LIE_THICK - cos(a)), 0.0)
 
 
 ## The last metre of it: into the middle of the bed, and square to it.

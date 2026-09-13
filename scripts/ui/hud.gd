@@ -38,6 +38,8 @@ const STONE_HOLD := 14.0
 const STONE_LEAVE := 1.6
 ## How wide the speech-bubble tail is where it leaves the panel, how far the
 ## panel floats off the stone, and the tint they share.
+## How wide the scrollbar is for anyone who aims at it rather than swiping.
+const STONE_BAR := 22.0
 const TAIL_WIDE := 13.0
 const STONE_LIFT := 118.0
 const TAIL_COLOR := Color(0.09, 0.1, 0.09, 0.82)
@@ -95,6 +97,9 @@ var _stone_on: Vector3 = Vector3.INF
 var _stone_mark := Vector2.INF
 var _stone_tail: Control
 var _stone_scroll: ScrollContainer
+## TRUE between pressing on the wall and letting go, so a mouse can drag it the
+## way a thumb does. See `_drag_the_stone`.
+var _stone_dragging := false
 var _stone_rows: VBoxContainer
 
 
@@ -157,6 +162,15 @@ func _build_stone_panel() -> void:
 	_stone_scroll = ScrollContainer.new()
 	_stone_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_stone_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	# DRAG THE TEXT, NOT THE BAR. A scrollbar is a four-pixel target, and this
+	# panel is meant to be read on a phone — a thumb has no business hunting for
+	# the edge of a wall of text to move it. The whole panel takes a swipe, the
+	# same way every page anybody has ever read on a phone does, and the bar is
+	# widened to a thumb as well for anyone who reaches for it anyway.
+	_stone_scroll.gui_input.connect(_drag_the_stone)
+	var bar := _stone_scroll.get_v_scroll_bar()
+	if bar != null:
+		bar.custom_minimum_size = Vector2(STONE_BAR, 0)
 	column.add_child(_stone_scroll)
 	_stone_rows = VBoxContainer.new()
 	_stone_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -169,6 +183,22 @@ func _build_stone_panel() -> void:
 	_stone_tail.draw.connect(_draw_stone_tail)
 	add_child(_stone_tail)
 	add_child(_stone_panel)
+
+
+## A FINGER OR A MOUSE, DRAGGING THE WALL ITSELF. Godot's ScrollContainer takes
+## a touch drag on a touchscreen and nothing at all from a mouse, so this covers
+## both with the same code and keeps the two feeling alike.
+func _drag_the_stone(event: InputEvent) -> void:
+	if event is InputEventScreenDrag:
+		_stone_scroll.scroll_vertical -= int((event as InputEventScreenDrag).relative.y)
+		_stone_scroll.accept_event()
+	elif event is InputEventMouseButton:
+		var press := event as InputEventMouseButton
+		if press.button_index == MOUSE_BUTTON_LEFT:
+			_stone_dragging = press.pressed
+	elif event is InputEventMouseMotion and _stone_dragging:
+		_stone_scroll.scroll_vertical -= int((event as InputEventMouseMotion).relative.y)
+		_stone_scroll.accept_event()
 
 
 ## THE POINTER. A speech-bubble tail from the panel down to the writing it came

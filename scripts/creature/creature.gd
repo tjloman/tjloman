@@ -686,7 +686,13 @@ func _perceive() -> Array:
 	var opts := {}
 	offer_option(opts, "wander", "none", null)
 	if energy < 55.0:
-		offer_option(opts, "rest", "none", null)
+		# WITH ITS BED, IF IT HAS ONE. This offered a null target, always — so
+		# `_enact` never once saw a CreatureNest, `_target` was always INF, and
+		# the creature has never in its life walked to its bed to sleep. It lay
+		# down exactly where it was standing when it got tired, in the nest or
+		# fifty metres outside it, and every bit of the work that lines a
+		# sleeping creature up with its bed sat behind a door that never opened.
+		offer_option(opts, "rest", "none", CreatureNest.holding(self, CreatureNest.BED_CALL))
 	CreatureRelief.offer(self, opts)
 	# A herd it is standing in: drive them, take one, stand watch. It is told
 	# nothing about any of them — see CreatureHerding.

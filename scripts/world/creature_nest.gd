@@ -56,6 +56,10 @@ const DRAPE_CELL := 3.0
 ## DANCE does not, because a dance is villager-sized whatever the creature is —
 ## eight people round a fire stand the same distance apart in any world.
 const GROUNDS := BED_LONG * 0.8
+## HOW FAR OFF A BED IS STILL WORTH WALKING TO. Wider than the grounds by a lot:
+## the grounds answer "is it standing here", and this answers "is it worth going
+## home". Past this it lies down where it is, which is what a spent animal does.
+const BED_CALL := 130.0
 ## What other buildings must keep clear of. Smaller than the grounds on purpose:
 ## the grounds are how far away you still count as BEING here, and that is a
 ## social question, not a question of what the bed is standing on.
@@ -408,13 +412,15 @@ func recarve() -> void:
 ## between him and what he has learned — a beast raised badly may never use the
 ## house his village built him, and that is a thing worth being able to see.
 ## THE NEST THE CREATURE IS STANDING ON THE GROUNDS OF, or null.
-static func holding(beast: Node3D) -> CreatureNest:
+## `within` defaults to the grounds — "is it HERE" — but a tired creature asking
+## where its bed is should be able to ask from across a valley. See BED_CALL.
+static func holding(beast: Node3D, within := GROUNDS) -> CreatureNest:
 	if beast == null or not is_instance_valid(beast):
 		return null
 	for n in beast.get_tree().get_nodes_in_group("creature_nest"):
 		var nest := n as CreatureNest
 		if nest != null and is_instance_valid(nest) \
-				and nest.global_position.distance_to(beast.global_position) <= GROUNDS:
+				and nest.global_position.distance_to(beast.global_position) <= within:
 			return nest
 	return null
 
