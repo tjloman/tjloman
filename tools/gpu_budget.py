@@ -78,6 +78,8 @@ def quality():
         "chunk_cells": [int(x) for x in row("chunk_cells")],
         "load_radius": [int(x) for x in row("load_radius")],
         "unload_radius": [int(x) for x in row("unload_radius")],
+        "sight_radius": [int(x) for x in row("sight_radius")],
+        "camera_far": [float(x) for x in row("camera_far")],
         "render_scale": [float(x) for x in row("render_scale")],
     }
 
@@ -140,15 +142,25 @@ def shadows(on, positional=True):
 ## The only thing here that scales with the size of the world. Unindexed: six
 ## vertices a quad, because `generate_normals` without an index buffer is what
 ## gives the land its faceted look.
-def terrain(cells, radius, chunk_size):
+## A chunk beyond `unload_radius` and inside `sight_radius` is TERRAIN ONLY:
+## the mesh and the height grid it was cut from, no water quad, no collision
+## heightmap, nothing standing on it. It costs the same mesh as a near chunk and
+## none of the rest, which is what makes a view this wide affordable at all.
+def terrain(cells, radius, chunk_size, sight=None):
     chunks = (radius * 2 + 1) ** 2
     verts = cells * cells * 6
     mesh = verts * VERT_TERRAIN
+    grid = (cells + 1) ** 2 * 4                   # PackedFloat32Array, CPU side
     water = 4 * VERT_TERRAIN + 6 * INDEX          # one quad, when drawn at all
-    return {
+    out = {
         "terrain mesh (%d chunks x %dx%d)" % (chunks, cells, cells): mesh * chunks,
+        "height grids (kept for recolouring)": grid * chunks,
         "water planes": water * chunks,
     }
+    if sight is not None and sight > radius:
+        shell = (sight * 2 + 1) ** 2 - chunks
+        out["far ring, terrain only (%d chunks)" % shell] = (mesh + grid) * shell
+    return out
 
 
 ## POOLED PRIMITIVES ----------------------------------------------------------
@@ -212,6 +224,8 @@ def main():
     for tier in (0, 1, 2):
         cells = qual["chunk_cells"][tier]
         radius = qual["load_radius"][tier]
+        sight = qual["sight_radius"][tier]
+        far = qual["camera_far"][tier]
         shadow_on = tier >= 1
         msaa = 1 if tier >= 1 else 0        # Quality.msaa_3d: 2x on medium+
         scale = qual["render_scale"][tier]
@@ -219,10 +233,15 @@ def main():
         print("%s   grid %dx%d (%.2fm cells), %dx%d chunks, 3D at %.0f%%"
               % (tiers[tier], cells, cells, chunk_size / cells,
                  radius * 2 + 1, radius * 2 + 1, scale * 100))
+        print("    sight ring %dx%d = %.0fm of land held against a %.0fm far"
+              " plane  %s" % (
+                  sight * 2 + 1, sight * 2 + 1, sight * chunk_size, far,
+                  "OK" if sight * chunk_size >= far
+                  else "<- SHORT: the horizon will pop"))
         print("=" * 78)
 
         content = {}
-        content.update(terrain(cells, radius, chunk_size))
+        content.update(terrain(cells, radius, chunk_size, sight))
         content.update(pooled_meshes())
         c_total = show("CONTENT — scales with the world:", content)
 
@@ -244,7 +263,7 @@ def main():
     print("=" * 78)
     print("WHAT A METRE OF DETAIL COSTS")
     print("=" * 78)
-    print("  Terrain grid, at a 7x7 of loaded chunks:")
+    print("  Terrain grid, at a 7x7 of loaded chunks (no far ring):")
     for cells in (12, 16, 24, 32, 48, 64):
         m = terrain(cells, 3, chunk_size)
         print("      %2dx%2d  %5.2fm cells  %6d tris a chunk   %7.2f MB"

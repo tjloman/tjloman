@@ -4,9 +4,19 @@ extends Node3D
 ## biome/slope/altitude), heightmap collision, a water quad where the land
 ## dips below the water table, and everything scattered on it — trees, rock
 ## deposits, flowers, and wildlife. All deterministic from the world seed.
+##
+## OR JUST THE FIRST OF THOSE. A chunk beyond the streaming ring but still
+## inside the camera's far plane is built `terrain_only`: the ground mesh and
+## nothing else — no collision, no water, nothing scattered, no shadow cast.
+## It exists to be LOOKED AT. `flesh_out` turns one into a real place when the
+## player walks up to it, and `strip_down` turns a real place back into scenery
+## when they walk away, neither of which re-cuts the mesh. See
+## WorldGen._stream_chunks and Quality.sight_radius.
 
 var world: WorldGen
 var cell := Vector2i.ZERO
+## Set before the chunk enters the tree. See the class note above.
+var terrain_only := false
 
 ## Held so the land can be RE-cut when a miracle moves the earth under it.
 var _ground: MeshInstance3D = null
@@ -32,8 +42,51 @@ var _standing: Array[Node3D] = []
 
 func _ready() -> void:
 	_build_terrain()
+	if terrain_only:
+		return
+	_build_collider()
 	_build_water()
 	_scatter()
+
+
+## SCENERY BECOMES A PLACE. The player has walked into the ring, so the ground
+## that was only ever drawn now gets something to stand on, water to drown in,
+## and everything that lives here.
+##
+## The point of it is what it does NOT do: the mesh was cut when this cell first
+## came into view, possibly minutes ago, and it is left exactly as it is. That
+## is the whole reason the far ring exists — the land must not flicker at the
+## moment you arrive at it.
+func flesh_out() -> void:
+	if not terrain_only:
+		return
+	terrain_only = false
+	if _ground != null and is_instance_valid(_ground):
+		_ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	_build_collider()
+	_build_water()
+	_scatter()
+
+
+## A PLACE BECOMES SCENERY AGAIN. The player has walked out of the ring, so
+## everything that was simulated here goes — which is precisely what unloading
+## the chunk used to do — but the ground stays standing and keeps being drawn.
+##
+## `_heights` is kept too, so a burn here still cools on schedule and the mesh
+## is never re-measured if they turn around and come back.
+func strip_down() -> void:
+	if terrain_only:
+		return
+	terrain_only = true
+	if _ground != null and is_instance_valid(_ground):
+		_ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for node in get_children():
+		if node != _ground:
+			node.queue_free()
+	_body = null
+	_water = null
+	_standing.clear()
+	_blooms = PackedVector3Array()
 
 
 ## THE EARTH MOVED. Re-cut the mesh and the collision from the new heights, put
@@ -53,6 +106,9 @@ func rebuild_terrain() -> void:
 		_water.queue_free()
 		_water = null
 	_build_terrain()
+	if terrain_only:
+		return
+	_build_collider()
 	_build_water()
 	_reground()
 
@@ -119,7 +175,17 @@ func _build_terrain() -> void:
 	_heights = heights
 	_cut_mesh(tint)
 
-	# Heightmap collision (layer 1 = ground).
+
+## Heightmap collision (layer 1 = ground), cut from the grid `_build_terrain`
+## already measured — so what you see and what you walk on cannot disagree.
+##
+## Separate from the mesh because the far ring wants one without the other: a
+## StaticBody3D two hundred metres away is a physics island nothing will ever
+## touch, and there would be a few hundred of them.
+func _build_collider() -> void:
+	var cells := world.chunk_cells
+	var wide := cells + 1
+	var step := WorldGen.CHUNK_SIZE / cells
 	var body := StaticBody3D.new()
 	_body = body
 	body.collision_layer = 1
@@ -129,7 +195,7 @@ func _build_terrain() -> void:
 	var hshape := HeightMapShape3D.new()
 	hshape.map_width = wide
 	hshape.map_depth = wide
-	hshape.map_data = heights
+	hshape.map_data = _heights
 	shape.shape = hshape
 	shape.scale = Vector3(step, 1.0, step)
 	shape.position = Vector3(WorldGen.CHUNK_SIZE / 2.0, 0, WorldGen.CHUNK_SIZE / 2.0)
@@ -189,10 +255,13 @@ func _cut_mesh(tint: PackedColorArray) -> void:
 		_ground.queue_free()
 	_ground = MeshInstance3D.new()
 	_ground.mesh = st.commit()
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.roughness = 1.0
-	_ground.material_override = mat
+	# ONE shared material for every chunk in the world — see Util.ground_material.
+	_ground.material_override = Util.ground_material()
+	# Scenery does not cast. `shadow_distance` is 70-120m and the near ring
+	# reaches 144m, so nothing out here was ever in the atlas anyway; saying so
+	# keeps a few hundred meshes out of the shadow pass's culling entirely.
+	if terrain_only:
+		_ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_ground)
 
 

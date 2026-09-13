@@ -350,6 +350,22 @@ func unload_radius() -> int:
 	return [3, 4, 4][effective_tier()]
 
 
+## HOW FAR THE LAND ITSELF IS HELD, in chunks — much wider than `load_radius`,
+## because these two rings answer different questions. Inside `load_radius` a
+## chunk is a place: collision to walk on, water to drown in, trees, herds,
+## villages. Out here it is only the shape of the ground, built once and left
+## standing, so that the hills you can see are hills instead of a fog bank that
+## grows a ridge the moment you turn towards it.
+##
+## SIZED FROM `camera_far` AND NOTHING ELSE. A chunk is 48m and the camera may
+## be standing on the far edge of its own cell, so covering D metres in the
+## worst case needs ceil(D / 48) rings: 220 -> 5, 300 -> 7, 380 -> 8. Fog does
+## not let us stop short of that — at these densities the land is still a sixth
+## visible at the far plane on every tier (see `fog_density`).
+func sight_radius() -> int:
+	return [5, 7, 8][effective_tier()]
+
+
 func camera_far() -> float:
 	return [220.0, 300.0, 380.0][effective_tier()]
 

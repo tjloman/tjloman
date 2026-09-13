@@ -804,9 +804,11 @@ func _run_smoke_test() -> void:
 	var knobs := PackedStringArray()
 	for level: int in [Quality.Heat.EASY, Quality.Heat.WARM, Quality.Heat.HOT]:
 		Quality.heat = level
-		knobs.append("%s: tier %d, shadows %s, actors %.0fm, sim x%d" % [
+		knobs.append("%s: tier %d, shadows %s, actors %.0fm, sight %.0f/%.0fm, sim x%d" % [
 			Quality.heat_word(), Quality.effective_tier(), Quality.shadows(),
-			Quality.actor_distance(), Quality.sim_relief()])
+			Quality.actor_distance(),
+			Quality.sight_radius() * WorldGen.CHUNK_SIZE, Quality.camera_far(),
+			Quality.sim_relief()])
 	Quality.heat = was
 	print("SMOKE TEST: heat — %s" % "  |  ".join(knobs))
 

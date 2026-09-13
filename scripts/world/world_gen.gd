@@ -22,6 +22,21 @@ extends Node3D
 const CHUNK_SIZE := 48.0
 const WATER_LEVEL := 0.0
 const CHUNKS_PER_FRAME := 1      # one chunk a frame: gentle, no startup stall
+## ...and the far ring only ever gets a frame the near ring did not want. The
+## two budgets do not add: `_fill_near` returning true skips `_fill_sight`
+## outright, so a frame builds either one near chunk or two far ones, never
+## three of anything.
+##
+## Two, because a far chunk is cheaper than a near one — same mesh cut, but no
+## collision heightmap, no water and no scatter, so the pair comes to something
+## like one and a half near chunks — and because the moment they are being
+## built is the moment nothing else is: the near ring finishes in its first
+## twenty-five to fifty frames and everything after that is horizon. It halves
+## the cold fill, which is 121 chunks on a budget phone and 289 on a flagship:
+## about a second and two and a half seconds at 60fps, twice that at 30.
+##
+## In the steady state this costs nothing at all. See `_sight_filled`.
+const SHELLS_PER_FRAME := 2
 ## How many chunks either side of the creature stay loaded wherever it is. One
 ## is a three-by-three of them — about a hundred and fifty metres across, which
 ## is more than its senses reach — and it is deliberately far smaller than the
@@ -49,12 +64,27 @@ const DESERT_DRY := 0.0
 const TUNDRA_COLD := -0.52
 const RAINFOREST_WET := 0.30
 
-## How much world stays live around the focus. Set from the graphics tier
-## at boot: a budget phone keeps a tight 5x5 so it doesn't drown in
-## nodes/memory the instant the world loads (distance fog hides the short
-## horizon); a capable device streams a wider 7x7. Rebuilds on world reload.
+## How much world stays LIVE around the focus — collision, water, trees, herds,
+## villagers. Set from the graphics tier at boot: a budget phone keeps a tight
+## 5x5 so it doesn't drown in nodes the instant the world loads, a capable
+## device a 7x7. Rebuilds on world reload.
+##
+## This is no longer how far you can SEE; it is how far the world is a place.
+## See `sight_radius` just below, which is the one sized against the camera.
 var load_radius := 2
 var unload_radius := 3
+
+## HOW FAR THE LAND ITSELF REACHES, in chunks — see Quality.sight_radius. Past
+## `unload_radius` and out to here, a chunk is built as bare ground and nothing
+## else: no collision, no water, nothing living on it. It is there so that the
+## horizon is the horizon instead of the edge of the loaded world.
+##
+## Chunks are not destroyed and rebuilt as the player crosses this band; they
+## are fleshed out and stripped back down, so a hill's mesh is cut ONCE, when
+## the cell first comes into view, and then left standing until it goes over
+## the horizon for good. That is the whole of the fix: nothing ever pops in
+## within sight, because by the time it is within sight it is already there.
+var sight_radius := 5
 
 ## Quads along one edge of a chunk, so (chunk_cells + 1)^2 height samples. Also
 ## from the tier: 24 on a capable device is a two-metre triangle, 16 on a budget
@@ -86,6 +116,13 @@ var _temp_noise := FastNoiseLite.new()
 var _wet_noise := FastNoiseLite.new()
 var _jungle_noise := FastNoiseLite.new()
 var _chunks := {}                 # Vector2i -> Chunk
+## Where the far ring was last filled from, and whether it is complete. A full
+## sweep of a 17x17 ring is 289 dictionary probes; doing that every frame to
+## learn "still nothing missing" is exactly the kind of idle work the scheduler
+## exists to stop, so the sweep runs only until it finds no gaps and then not
+## again until the focus crosses into another cell.
+var _sight_center := Vector2i(2147483647, 2147483647)
+var _sight_filled := false
 var _village_cells := {}          # Vector2i -> Village (spawned, persistent)
 var _wolf_raid_cooldown := 0.0
 var _burn_tick := 0.0
@@ -96,6 +133,7 @@ func _ready() -> void:
 	add_to_group("world_gen")
 	load_radius = Quality.load_radius()
 	unload_radius = Quality.unload_radius()
+	sight_radius = maxi(Quality.sight_radius(), unload_radius)
 	chunk_cells = Quality.chunk_cells()
 	reseed(world_seed)
 
@@ -123,6 +161,7 @@ func recut() -> void:
 			chunk.queue_free()
 	_chunks.clear()
 	_sea_cache.clear()
+	_sight_filled = false
 
 
 func reseed(to: int) -> void:
@@ -672,29 +711,117 @@ func _stream_chunks() -> void:
 	# A small ring, kept alive wherever it wanders, is what lets it go on being
 	# a creature when nobody is watching.
 	var kept := _creature_cells()
+	if _fill_near(center, kept):
+		return
+	_fill_sight(center)
+	_shed(center, kept)
+
+
+## THE NEAR RING: everywhere that has to be a PLACE. A cell here is either
+## built whole or, if the far ring already drew its ground, fleshed out where it
+## stands. Returns true when the frame's one chunk has been spent, so the far
+## ring knows to wait its turn.
+func _fill_near(center: Vector2i, kept: Dictionary) -> bool:
 	var made := 0
 	for dz in range(-load_radius, load_radius + 1):
 		for dx in range(-load_radius, load_radius + 1):
-			var cell := center + Vector2i(dx, dz)
-			if _chunks.has(cell):
+			if not _make_whole(center + Vector2i(dx, dz)):
 				continue
-			_spawn_chunk(cell)
 			made += 1
 			if made >= CHUNKS_PER_FRAME:
-				return
+				return true
 	for cell: Vector2i in kept:
-		if _chunks.has(cell):
+		if not _make_whole(cell):
 			continue
-		_spawn_chunk(cell)
 		made += 1
 		if made >= CHUNKS_PER_FRAME:
-			return
+			return true
+	return false
 
+
+## Make this cell a real place, whatever it is now. Returns true if that cost
+## anything — false when it was already whole, which is the usual answer.
+func _make_whole(cell: Vector2i) -> bool:
+	var cached = _chunks.get(cell)
+	if cached != null and is_instance_valid(cached):
+		var chunk := cached as Chunk
+		if not chunk.terrain_only:
+			return false
+		# THE GROUND IS ALREADY THERE AND IS NOT TOUCHED. It was cut when this
+		# cell first came into view; all that arrives now is what lives on it.
+		chunk.flesh_out()
+		_maybe_found_village(cell)
+		return true
+	_spawn_chunk(cell)
+	return true
+
+
+## THE FAR RING: the shape of the land, as far as the camera can see it.
+##
+## Filled from the inside out, because the nearest missing hill is the one you
+## will notice. The sweep stops for good once it finds no gaps, and starts again
+## only when the focus crosses into a new cell — see `_sight_filled`.
+func _fill_sight(center: Vector2i) -> void:
+	if center != _sight_center:
+		_sight_center = center
+		_sight_filled = false
+	if _sight_filled:
+		return
+	var made := 0
+	for ring in range(load_radius + 1, sight_radius + 1):
+		for cell: Vector2i in _ring_cells(center, ring):
+			if _chunks.has(cell):
+				continue
+			_spawn_chunk(cell, true)
+			made += 1
+			if made >= SHELLS_PER_FRAME:
+				return
+	_sight_filled = true
+
+
+## The cells exactly `ring` chunks out — the perimeter of the square, walked
+## directly rather than sieved out of its interior.
+func _ring_cells(center: Vector2i, ring: int) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for d in range(-ring, ring + 1):
+		out.append(center + Vector2i(d, -ring))
+		out.append(center + Vector2i(d, ring))
+	for d in range(-ring + 1, ring):
+		out.append(center + Vector2i(-ring, d))
+		out.append(center + Vector2i(ring, d))
+	return out
+
+
+## LEAVING. Two thresholds now, and a chunk crosses them one at a time: past
+## `unload_radius` everything living on it goes and the ground stays drawn; past
+## `sight_radius` the ground goes too.
+##
+## Stripping rather than freeing is what makes walking back the way you came
+## free. It also means the band between the two rings is the ONLY place a chunk
+## is ever destroyed, and that band is well over the horizon.
+##
+## THE CREATURE'S OWN GROUND IS EXEMPT FROM BOTH. It is kept whole wherever the
+## beast has wandered, and the exemption has to cover the free as well as the
+## strip: a creature left to itself for a few minutes drifts past the far ring
+## as readily as past the near one, and freeing that cell only to have
+## `_creature_cells` build it again next frame is a chunk cut per frame,
+## forever. A walked simulation of four minutes found exactly that — 3,035
+## mesh cuts where 795 were due — before this line existed.
+func _shed(center: Vector2i, kept: Dictionary) -> void:
 	for cell: Vector2i in _chunks.keys():
-		var away := (cell - center).abs()
-		if maxi(away.x, away.y) > unload_radius and not kept.has(cell):
-			_chunks[cell].queue_free()
+		var cached = _chunks[cell]
+		if not is_instance_valid(cached):
 			_chunks.erase(cell)
+			continue
+		if kept.has(cell):
+			continue          # the creature is standing here; it stays whole
+		var away := (cell - center).abs()
+		var out := maxi(away.x, away.y)
+		if out > sight_radius:
+			(cached as Chunk).queue_free()
+			_chunks.erase(cell)
+		elif out > unload_radius:
+			(cached as Chunk).strip_down()
 
 
 ## THE CELLS TO KEEP ALIVE FOR THE CREATURE, as a set. Empty when there is no
@@ -715,8 +842,12 @@ func _creature_cells() -> Dictionary:
 	return kept
 
 
-func _spawn_chunk(cell: Vector2i) -> void:
+## `bare` builds the ground and nothing else — see Chunk.terrain_only. A bare
+## chunk founds no village: that waits until the cell is a place people could
+## actually be living in, which is exactly when it used to happen.
+func _spawn_chunk(cell: Vector2i, bare := false) -> void:
 	var chunk := Chunk.new()
+	chunk.terrain_only = bare
 	# PAUSABLE, EXPLICITLY. This node runs even while the tree is paused so the
 	# land can keep arriving, and a child inherits that unless it is told
 	# otherwise — which would have quietly left every animal, herd and villager
@@ -727,7 +858,8 @@ func _spawn_chunk(cell: Vector2i) -> void:
 	chunk.position = Vector3(cell.x * CHUNK_SIZE, 0, cell.y * CHUNK_SIZE)
 	add_child(chunk)
 	_chunks[cell] = chunk
-	_maybe_found_village(cell)
+	if not bare:
+		_maybe_found_village(cell)
 
 
 func chunk_rng(cell: Vector2i, salt := 0) -> RandomNumberGenerator:

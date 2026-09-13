@@ -263,6 +263,26 @@ static func blossom_mesh() -> ArrayMesh:
 	return m
 
 
+## THE ONE MATERIAL EVERY CHUNK OF GROUND IS DRAWN WITH. Vertex colour as
+## albedo, fully rough, nothing else — which is to say it was identical on all
+## of them already, and every chunk was building its own copy of it.
+##
+## That mattered little at a 7x7 ring and matters at a 17x17 one: distinct
+## materials are distinct uniform sets, so two chunks with their own copies
+## cannot be batched into one another's draw, and the renderer re-binds state
+## between every pair. Sharing one instance is the difference between a couple
+## of hundred material bindings a frame and one.
+static func ground_material() -> StandardMaterial3D:
+	var m: StandardMaterial3D = _mat_pool.get("ground")
+	if m != null:
+		return m
+	m = StandardMaterial3D.new()
+	m.vertex_color_use_as_albedo = true
+	m.roughness = 1.0
+	_mat_pool["ground"] = m
+	return m
+
+
 ## Shared material for billboard blossoms: double-sided (quads seen from
 ## both faces), matte, its white albedo modulated by each instance's colour.
 static func blossom_material() -> StandardMaterial3D:
