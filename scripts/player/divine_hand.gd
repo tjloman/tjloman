@@ -641,23 +641,23 @@ func _on_release() -> void:
 			# fall damage, and where you place someone matters.
 			var gentle := not _stroke_is_throw()
 			if is_instance_valid(held_body):
-				# A gentle release right AT the creature is a hand-off: it
-				# takes the object in its claws (and learns to watch you).
+				# A RELEASE INSIDE ITS REACH IS A HAND-OFF, whatever the stroke
+				# did. This used to want `gentle` as well — the pointer had to
+				# come to a full stop for longer than THROW_ACTIVE_WINDOW
+				# before you let go — so dragging something over to the
+				# creature and opening your hand in one motion THREW it, at a
+				# range of two metres, for it to fumble. You cannot throw a
+				# thing you are holding against its chest. Releasing it there
+				# is giving it to the creature, and it reads that way now.
+				var c := get_tree().get_first_node_in_group("creature") as Creature
+				if c != null and held_body != c \
+						and c.global_position.distance_to(global_position) < 3.0 + c.scale.x:
+					# Shares the creature's own door in, so the sling, the busy
+					# flag and what the beast does with the thing are decided in
+					# one place however it got there. See CreatureOffer.
+					give_to(c)
+					return
 				if gentle:
-					var c := get_tree().get_first_node_in_group("creature") as Creature
-					if c != null and held_body != c \
-							and c.global_position.distance_to(global_position) < 3.0 + c.scale.x:
-						c.receive_gift(held_body)
-						held_body = null
-						state = HandState.IDLE
-						# AND THE ROPE GOES WITH IT. This branch returns early,
-						# so it has to stow the sling itself — without this the
-						# rope and the arc stay drawn over a thing that is no
-						# longer in your hand, and `hands_busy` never clears,
-						# which quietly leaves the far half of the world running
-						# a stride slow for the rest of the session.
-						_stow_sling()
-						return
 					_release_body(held_body, Vector3.ZERO, true)
 					_stow_sling()
 				else:
@@ -675,6 +675,26 @@ func _on_release() -> void:
 			held_body = null
 			state = HandState.IDLE
 			_stow_sling()
+
+
+## IT TOOK IT OUT OF YOUR HAND. Called BY the creature (CreatureOffer), not by
+## the player — so unlike every other way a thing leaves this hand, there was
+## no release to hang the tidying off.
+##
+## All of which has to happen anyway: the sling's rope and arc are drawn over
+## whatever is held and would otherwise stay drawn over nothing, and
+## `hands_busy` would never clear, which leaves the far half of the world a
+## simulation stride slow for the rest of the session. `_stow_sling` is the one
+## that does both; it is the same call the set-down hand-off makes below.
+func give_to(who: Creature) -> bool:
+	if not is_instance_valid(held_body) or held_body == who:
+		return false
+	var item := held_body
+	held_body = null
+	state = HandState.IDLE
+	_stow_sling()
+	who.receive_gift(item)
+	return true
 
 
 func _reset_stroke(pos: Vector2) -> void:

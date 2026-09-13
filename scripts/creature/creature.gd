@@ -18,7 +18,7 @@ enum State {
 	WATCH, GO_GATHER, CARRYING, PLAY, GUARD, SULK, CATCH,
 	GO_FISH, FISHING, GO_STORE, SMASH, FLEE, CAST, LEASHED,
 	LOUNGE, DANCE, PRAY, COMMUNE, RUN, MIMIC, SHUN, DEPART, SOOTHE, HEED, JUGGLE,
-	WEIGHING,
+	WEIGHING, TAKE,
 }
 
 const WALK_SPEED := 3.5
@@ -114,6 +114,9 @@ var head := CreatureHead.new()
 ## THE BEAT BEFORE IT DOES SOMETHING IT CANNOT TAKE BACK, in which your praise
 ## and your scold land on what it MEANS to do. See CreatureIntent.
 var intent := CreatureIntent.new()
+## WHAT YOUR HAND IS HOLDING OUT TO IT, and whether it comes and takes it.
+## See CreatureOffer.
+var offer := CreatureOffer.new()
 ## THE ARM — how far it can send a thing, how well it aims, and whatever it
 ## currently has in the air. See CreatureThrowing.
 var throwing := CreatureThrowing.new()
@@ -467,6 +470,8 @@ func _physics_process(delta: float) -> void:
 			_process_soothe(delta)
 		State.HEED:
 			_process_heed(delta)
+		State.TAKE:
+			offer.walk(self, delta)
 		State.RUN:
 			_process_run(delta)
 		State.MIMIC:
@@ -494,6 +499,10 @@ func _physics_process(delta: float) -> void:
 	CreatureStake.hold(self)
 
 	_try_catch_throw()
+	# AND WHAT IS STILL IN YOUR HAND. A thrown thing is a catch; a held thing
+	# is an offer, and the creature has its own reach for those. See
+	# CreatureOffer — it is what makes a staked creature feedable.
+	offer.tick(self, delta)
 
 	# Bulldoze the meadow: nearby trees lean out of the giant's way (they spring
 	# back once it passes). Throttled — the trees' own spring keeps it smooth.
