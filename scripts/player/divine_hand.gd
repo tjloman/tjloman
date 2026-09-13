@@ -330,6 +330,7 @@ func _physics_process(delta: float) -> void:
 	var target := ground_point + Vector3(0, HOVER_HEIGHT, 0)
 	target.y += sin(Time.get_ticks_msec() / 400.0) * 0.08  # idle bob
 	global_position = global_position.lerp(target, minf(delta * 14.0, 1.0))
+	GameState.hand_at = global_position   # what the player is about to reach for
 
 	# Yaw-follow: the hand turns with the camera's heading (palm-down, B&W
 	# style), so it reads right from any angle. Eased so it swings, not snaps.

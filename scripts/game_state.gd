@@ -70,6 +70,11 @@ var camera_focus := Vector3.ZERO
 ## creature, so a reader can tell "nowhere" from "the origin". Written by the
 ## creature itself each frame, exactly as the camera rig writes its own.
 var creature_at := Vector3(INF, INF, INF)
+## AND WHERE THE HAND IS POINTING. The third eye on the world, and the one that
+## says what the player is about to REACH for — the rig's pivot says where they
+## are looking from, which on a wide shot is nowhere near it. Written by
+## DivineHand each frame; infinite before there is one. See Herd._watched_from.
+var hand_at := Vector3(INF, INF, INF)
 
 ## WHAT THE CREATURE IS CALLED, once its god has named it. Every message in the
 ## game was written saying "Your creature", and rather than rewrite thirty

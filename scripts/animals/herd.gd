@@ -91,6 +91,8 @@ const AS_MOTION := {
 ## how far it must wander back out before it is demoted again. The gap between
 ## the two is not fussiness: without it a beast hovering exactly on the line
 ## would be built and freed on alternate frames.
+## How far off a herd's name still draws. See `_build_multimesh`.
+const HERD_TAG_REACH := 180.0
 const PROMOTE_WITHIN := 40.0
 const DEMOTE_BEYOND := 54.0
 
@@ -103,7 +105,7 @@ const SPREAD_LEAST := 3.0
 ## How often the formation is stirred, and how much of it moves per tick. Both
 ## are constants, and that is the point — nothing in this file may scale with
 ## the head count.
-const SHUFFLE_EVERY := 0.2
+const SHUFFLE_EVERY := 0.35
 ## HOW MANY HEADS GET THEIR GROUND RE-READ per shuffle, at rest — and how far
 ## the herd may WALK before every one of them has had it re-read.
 ##
@@ -202,7 +204,7 @@ const LARDER_FADE := 0.30
 ## radar: it catches what is close, it is slower to notice than a predator is to
 ## approach, and the whole scan is over the `herds` group — a few dozen nodes —
 ## on a timer of its own rather than on the formation tick.
-const WATCH_EVERY := 2.5
+const WATCH_EVERY := 4.0
 const NOTICE := 46.0
 const BOLT_WITHIN := 22.0
 ## How much of a fright one pack is, scaled by how many of them there are and
@@ -327,9 +329,24 @@ const BLOWN_SCATTER_MOST := 1.4
 
 ## How far a herd drifts from where it was seeded, and how long it grazes one
 ## patch before moving on.
-const ROAM := 26.0
-const GRAZE_LEAST := 14.0
-const GRAZE_MOST := 34.0
+## HOW A HERD SPENDS ITS DAY. Almost all of it standing still with its head
+## down — which is what cattle do, and what a fourteen-second grazing window
+## emphatically was not: a herd picked a new pasture three times a minute, so
+## every herd in the world was walking almost all of the time, and walking is
+## where the whole cost is (a route probe, a drift step, a formation rewrite and
+## a ground resample, per herd, per tick).
+##
+## Grazing is nearly free by comparison. Nothing here changes what a herd DOES
+## when something happens to it — a startled herd still bolts on the same frame
+## it hears the thing — it only stops them milling about for no reason.
+const ROAM := 18.0
+const GRAZE_LEAST := 90.0
+const GRAZE_MOST := 260.0
+## How far a member turns toward the herd's heading each time its row is
+## rewritten, and how far off true it settles so a moving herd still reads as
+## animals rather than as a formation.
+const TURN_TAKE := 0.22
+const LEAN_OFF := 0.09
 
 ## HOW MANY HEAD ARE REAL ANIMALS ANYWHERE IN THE WORLD. Static on purpose: a
 ## per-herd count would let every herd spend the whole budget, and twenty-five
@@ -337,6 +354,24 @@ const GRAZE_MOST := 34.0
 ## is the exact thing this class exists to prevent. Only herds near the camera
 ## promote at all, so in practice two or three are ever bidding for it, but a
 ## budget that is only respected in practice is not a budget.
+## THE BUDGET, AND WHY IT IS RECONCILED RATHER THAN TRUSTED.
+##
+## This was a one-way counter kept by hand: every promotion added one, every
+## demotion, death, butchering, drowning, chunk unload and herd teardown was
+## supposed to take one back, and each of those is a separate line in a separate
+## place. Miss ONE of them, once, and the world's entire allowance is spent on
+## animals that no longer exist — for the rest of the session, because nothing
+## ever counted it again. The symptom is exact and was reported exactly: a herd
+## you are standing over with none of it grabbable, and one or two heads
+## becoming real only as a miracle kills others and hands their slots back.
+##
+## A counter that can only be wrong in one direction and never checks itself is
+## not a budget, it is a leak with a limit. So each herd knows how many of its
+## OWN rows have a living body in them — recomputed from the rows themselves,
+## in a loop `_tend_agents` was already walking — and the global figure is the
+## sum of those, taken fresh before anybody spends. That is one integer read per
+## herd in the world, and it makes the whole class of bug impossible rather than
+## fixing the instance of it.
 static var _agents_afoot := 0
 
 var species := ""
@@ -364,6 +399,15 @@ var _tag: Label3D = null
 var _mmi: MultiMeshInstance3D = null
 var _home := Vector3.ZERO
 var _target := Vector3.ZERO
+## How many of this herd's rows have a real Animal standing in them. See
+## `_agents_afoot`.
+var _afoot_here := 0
+## Which way the mass is travelling, and whether anybody should be coming round
+## to it. See `_write_transforms`.
+var _heading := 0.0
+var _turning := false
+## The physics frame this herd last ticked on. See Scheduler.
+var _sim_last := 0
 var _graze_left := 0.0
 var _shuffle_left := 0.0
 var _ground_cursor := 0
@@ -507,7 +551,12 @@ func _build_multimesh() -> void:
 	# budget, is a field of unlabelled boxes with no way to ask what it is. This
 	# is a Label3D, so it adds no collider and blocks nothing: the real animals
 	# standing inside the herd can still be pointed at and picked up.
-	_tag = Util.status_label("", 0.012)
+	_tag = Util.status_label("", 0.02)
+	# FURTHER THAN A VILLAGER'S. `status_label` stops drawing at 34 metres,
+	# which is right for a name over somebody's head and wrong for the one
+	# label that says what a mass of animals a hundred metres off actually is —
+	# a herd is a thing you identify from a distance or not at all.
+	_tag.visibility_range_end = HERD_TAG_REACH
 	_tag.position = Vector3(0, leg + body.y + 1.4, 0)
 	add_child(_tag)
 	_retag()
@@ -519,7 +568,21 @@ func _process(delta: float) -> void:
 	# The herd itself thinks on the same distance stride everything else does:
 	# a herd three hundred metres off does not need its formation rewritten
 	# sixty times a second, or indeed five.
+	#
+	# AND IT NOW SKIPS THE FRAMES IT IS NOT DUE, rather than merely doing less
+	# on each one. Every timer in here was counted down every single frame and
+	# only the WORK was strided, so a world of thirty herds paid thirty drifts,
+	# thirty route probes and thirty countdowns sixty times a second whatever
+	# the stride said. Scheduler.turn gives each herd its own phase and charges
+	# it the frames it missed, so the sums come out identical and the peak does
+	# not. See Scheduler.
 	var stride := Util.sim_stride(global_position)
+	if stride > 1:
+		var turn: int = Scheduler.turn(self, stride, _sim_last)
+		if turn == 0:
+			return
+		delta *= float(turn)
+	_sim_last = Scheduler.now()
 	_graze_left -= delta
 	if _graze_left <= 0.0:
 		_pick_pasture()
@@ -775,9 +838,29 @@ func _drift(delta: float) -> void:
 	if to.length() < 0.5:
 		# Arrived. Heads go down, and the mix of motions changes with them.
 		set_mood("graze")
+		_turning = false
 		return
 	set_mood("move")
-	global_position += to.normalized() * minf(step * delta, to.length())
+	var dir := to.normalized()
+	_heading = atan2(dir.x, dir.z)
+	_turning = true
+	# A HERD MUST NOT WALK INTO A LAKE, and nothing stopped it. `_pick_pasture`
+	# checks that the GRAZING SPOT is dry and that is the whole of what was ever
+	# checked: the straight line to it can cross a bay, a barn herd is steered
+	# by its keeper, and a BOLTING herd sets its target by running directly away
+	# from whatever frightened it, with no check at all. So a pig herd fleeing
+	# wolves ran into the water, and the wolves followed it in, and both of them
+	# stood out there in formation at water level.
+	#
+	# PROBED AT THE WIDTH OF THE HERD, not of an animal. The mass is `_spread`
+	# across; asking whether the ground two metres ahead of its CENTRE is dry
+	# tells you nothing about the flanks, which are the parts that end up
+	# swimming. And `water_route` walks a body that is already in the water back
+	# out of it, which is what recovers the ones already out there.
+	if world != null:
+		dir = NavField.water_route(self, global_position, dir, world,
+			maxf(3.0, _spread))
+	global_position += dir * minf(step * delta, to.length())
 
 
 ## Ground heights, a slice at a time. `height_at` is noise plus a walk over
@@ -842,6 +925,16 @@ func _write_transforms(how_many := 0) -> void:
 			continue
 		var p: Vector4 = HerdMotion.pose(m["motion"], m["slot"])
 		var off: Vector2 = m["offset"]
+		# WALKING ONE WAY AND POINTING ANOTHER. Every member was dealt a random
+		# facing at birth and kept it for life, so a herd crossing a meadow was
+		# nine animals travelling due north with three of them side-on and one
+		# going backwards. They come round to the herd's heading here, a slice
+		# at a time on the round-robin this loop already rides — which makes the
+		# turn a ripple through the mass rather than a block snapping about.
+		# Each keeps a small lean off true so it stays a herd and not a parade.
+		if _turning:
+			var lean := (float(int(m["slot"]) % 5) - 2.0) * LEAN_OFF
+			m["facing"] = lerp_angle(float(m["facing"]), _heading + lean, TURN_TAKE)
 		var turn := Basis.from_euler(Vector3(p.y, float(m["facing"]) + p.w, p.z))
 		_mm.set_instance_transform(i, Transform3D(turn, Vector3(
 			off.x, float(m["ground"]) - here.y + p.x, off.y)))
@@ -880,6 +973,16 @@ func _redeal(how_many: int) -> void:
 ## PROMOTION. The handful of head nearest the camera become real beasts, up to
 ## the device's budget; the rest stay numbers. Demotion runs first so a herd
 ## walking past you hands its budget on rather than hoarding it.
+## Every promoted head in the world, counted rather than remembered.
+static func _afoot_everywhere(tree: SceneTree) -> int:
+	var total := 0
+	for h in tree.get_nodes_in_group("herds"):
+		var herd := h as Herd
+		if herd != null and is_instance_valid(herd):
+			total += herd._afoot_here
+	return total
+
+
 func _tend_agents() -> void:
 	# TWO EYES ON THE WORLD, not one. Promotion followed the camera and nothing
 	# else, so a creature left to itself a field away from where the player
@@ -895,6 +998,14 @@ func _tend_agents() -> void:
 	var focus := GameState.camera_focus
 	var beast := GameState.creature_at
 	var budget := Quality.herd_agents()
+	# WHAT THIS HERD ACTUALLY HAS, from the rows rather than from memory — the
+	# demote pass below keeps `_afoot_here` right as it goes, and this is what
+	# repairs it after anything freed a beast without telling the herd.
+	_afoot_here = 0
+	for m in _members:
+		if _living(m) != null:
+			_afoot_here += 1
+	_agents_afoot = _afoot_everywhere(get_tree())
 	for i in _members.size():
 		var m := _members[i]
 		# UNTYPED ON PURPOSE, and this is the whole of why. Writing
@@ -919,6 +1030,7 @@ func _tend_agents() -> void:
 			m["dead"] = true
 			lost_one()
 			_agents_afoot -= 1
+			_afoot_here = maxi(_afoot_here - 1, 0)
 			continue
 		# Keep the row in step with where the animal actually walked to, so
 		# demoting it does not teleport it back into formation.
@@ -940,6 +1052,7 @@ func _tend_agents() -> void:
 			agent.queue_free()
 			m["agent"] = null
 			_agents_afoot -= 1
+			_afoot_here = maxi(_afoot_here - 1, 0)
 	for i in _members.size():
 		if _agents_afoot >= budget:
 			return
@@ -977,6 +1090,7 @@ func _tend_agents() -> void:
 		born.set_meta("herd", self)
 		m["agent"] = born
 		_agents_afoot += 1
+		_afoot_here += 1
 
 
 ## GOING. A herd leaves when its chunk unloads, and it takes its promoted
@@ -997,6 +1111,7 @@ func _exit_tree() -> void:
 		if m["agent"] != null:
 			m["agent"] = null
 			_agents_afoot -= 1
+			_afoot_here = maxi(_afoot_here - 1, 0)
 	# The beasts are going too — freed with the chunk — so this is a release of
 	# SLOTS, not a demotion, and it does not care whether the node is still valid.
 	_agents_afoot = maxi(_agents_afoot, 0)
@@ -1007,9 +1122,22 @@ func _exit_tree() -> void:
 ## in the world, and the camera answers alone.
 static func _watched_from(spot: Vector3, focus: Vector3, beast: Vector3) -> float:
 	var gap := spot.distance_to(focus)
-	if is_inf(beast.x):
-		return gap
-	return minf(gap, spot.distance_to(beast))
+	if not is_inf(beast.x):
+		gap = minf(gap, spot.distance_to(beast))
+	# AND THE HAND, which is the one that decides whether a thing is SELECTABLE.
+	#
+	# `focus` is the camera rig's pivot — where you are looking FROM, on the
+	# ground. On any wide shot that is nowhere near what you are pointing at, so
+	# a mob sixty metres up-screen had exactly one head within PROMOTE_WITHIN of
+	# it and the other fifteen were numbers: no collider for the ray, nothing to
+	# grab, nothing to pick up. You could see a herd perfectly well and take
+	# hold of one animal in it.
+	#
+	# Pointing at a beast is now what makes it real, which is the only rule a
+	# player could have guessed.
+	if not is_inf(GameState.hand_at.x):
+		gap = minf(gap, spot.distance_to(GameState.hand_at))
+	return gap
 
 
 ## THE ANIMAL PROMOTED INTO THIS ROW, or null — including when it was there a
