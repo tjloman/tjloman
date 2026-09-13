@@ -215,7 +215,7 @@ func _physics_process(delta: float) -> void:
 		var stride := Util.sim_stride(global_position)
 		_sim_scale = 1.0
 		if stride > 1:
-			var turn := Scheduler.turn(self, stride, _sim_last)
+			var turn: int = Scheduler.turn(self, stride, _sim_last)
 			if turn == 0:
 				return
 			_sim_last = Scheduler.now()

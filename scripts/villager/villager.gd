@@ -281,7 +281,7 @@ func _physics_process(delta: float) -> void:
 			# WHOSE TURN IS IT. Every villager used to count from zero, so fifty
 			# of them ticked on the same frame and idled for the next three —
 			# see Scheduler for why that made the whole device throttle.
-			var turn := Scheduler.turn(self, stride, _sim_last)
+			var turn: int = Scheduler.turn(self, stride, _sim_last)
 			if turn == 0:
 				return
 			_sim_last = Scheduler.now()

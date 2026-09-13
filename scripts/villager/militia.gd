@@ -106,7 +106,7 @@ static func fight(who: Villager, delta: float) -> void:
 		who._fight_target = null
 		who.scare(flee_from)
 		return
-	var reach := Weapon.reach(who.weapon)
+	var reach: float = Weapon.reach(who.weapon)
 	if who.global_position.distance_to(foe.global_position) > reach:
 		who._move_toward(foe.global_position, Villager.FLEE_SPEED * 0.85, delta, reach * 0.8)
 		return
@@ -226,7 +226,7 @@ static func flee_screaming(who: Villager, from: Vector3) -> void:
 	if town != null:
 		# Toward the houses — UNLESS the houses are past the thing screaming
 		# at them, in which case even a child knows better.
-		var refuge := town.refuge(who.global_position)
+		var refuge: Vector3 = town.refuge(who.global_position)
 		if refuge.distance_to(from) > who.global_position.distance_to(from):
 			who._target = refuge
 	if randf() < 0.35:

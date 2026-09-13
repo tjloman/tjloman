@@ -29,6 +29,7 @@ BUILTIN = {
     "call_deferred", "has_method", "get", "set", "duplicate", "to_local",
     "to_global", "look_at", "rotate_y", "global_rotate", "translate",
     "get_class", "is_class", "set_process", "set_physics_process",
+    "get_child_count", "get_index", "get_groups", "is_ancestor_of", "reparent",
     "move_and_slide", "is_on_floor", "is_on_wall", "get_world_3d",
     "get_viewport", "add_theme_font_size_override", "propagate_call",
     "surface_get_material", "get_surface_override_material", "instantiate",
@@ -86,6 +87,14 @@ typed_decl_re = re.compile(r"^var\s+(\w+)\s*:\s*([A-Z]\w+)", re.M)
 # sailed past the checker and stopped the game compiling.
 local_var_re = re.compile(r"^\s*var\s+(\w+)\s*:?=?\s*([A-Z]\w+)\.new\(\)", re.M)
 local_decl_re = re.compile(r"^\s*var\s+(\w+)\s*:\s*([A-Z]\w+)", re.M)
+# A TYPED FUNCTION PARAMETER. `static func lounge(who: Creature, delta: float)`
+# says what `who` is just as plainly as a `var` does — and this whole project
+# is written that way: CreatureLeisure, CreatureThrowing, CreatureWatching,
+# Militia and Sling all take `who` and reach into it. Without this, NONE of
+# those calls were ever checked against the class they were calling on, which
+# is how `who._audience(20.0)` survived `_audience` being moved out of Creature
+# and took every dependent script down at load.
+param_type_re = re.compile(r"(?<![\w.])(\w+)\s*:\s*([A-Z]\w+)")
 
 # What a literal argument obviously IS. Anything not obvious is left alone.
 LITERAL_FLOAT = re.compile(r"^-?\d+\.\d+$")
@@ -317,13 +326,26 @@ def check(paths, classes):
         # A name declared as two different classes anywhere in the file is
         # AMBIGUOUS -- two functions may each have their own `var v` -- so it is
         # dropped rather than guessed at. Silence beats a false alarm.
-        typed = {}
-        ambiguous = set()
+        # EVERY TYPE A NAME IS EVER GIVEN IN THIS FILE, engine types included.
+        # The engine ones are never USED to resolve a call — this project knows
+        # nothing about Array's members — but they must still count toward
+        # AMBIGUITY, or a file with `tree: SceneTree` in one function and
+        # `tree: WildTree` in another quietly resolves every `tree.` in it to
+        # whichever of the two happened to be a project class.
+        bindings = {}
         for rx in (local_var_re, local_decl_re):
             for word, kind in rx.findall(src):
-                if word in typed and typed[word] != kind:
-                    ambiguous.add(word)
-                typed[word] = kind
+                bindings.setdefault(word, set()).add(kind)
+        for _fname, raw in signature_re.findall(src):
+            for word, kind in param_type_re.findall(raw):
+                bindings.setdefault(word, set()).add(kind)
+        typed = {}
+        ambiguous = set()
+        for word, kinds in bindings.items():
+            if len(kinds) != 1:
+                ambiguous.add(word)
+                continue
+            typed[word] = list(kinds)[0]
         for word in ambiguous:
             typed.pop(word, None)
         for lineno, line in enumerate(src.split("\n"), 1):
@@ -363,6 +385,19 @@ def check(paths, classes):
             for m in member_call_re.finditer(line):
                 chain = [p.strip() for p in m.group(1).split(".")]
                 cls = _walk_chain(chain, typed, classes)
+                # DOES THE METHOD EVEN EXIST? This asked only about ARGUMENTS.
+                # So `who._audience(20.0)`, on a `who: Creature` parameter,
+                # went on being checked for argument count long after
+                # `_audience` had been moved out of Creature entirely — and the
+                # one kind of call this project makes most (a helper class
+                # reaching into the `who` it was handed) was the one kind
+                # nobody ever asked the first question about.
+                # `cls in classes` matters: _walk_chain happily hands back
+                # engine types too (`var _runes: Array`), and this project has
+                # no idea what Array's members are.
+                if cls in classes and chain[-1] not in BUILTIN \
+                        and chain[-1] not in members_of(cls, classes):
+                    problems.append((path, lineno, cls, chain[-1], line.strip()))
                 if cls:
                     _flag_args(problems, path, lineno, line, classes,
                                cls, chain[-1], line[m.end():])

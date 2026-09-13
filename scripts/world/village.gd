@@ -706,7 +706,7 @@ func _process(delta: float) -> void:
 	# priciest thing here, and distant towns needn't pay it every frame.
 	var stride := Util.sim_stride(global_position)
 	if stride > 1:
-		var turn := Scheduler.turn(self, stride, _sim_last)
+		var turn: int = Scheduler.turn(self, stride, _sim_last)
 		if turn == 0:
 			return
 		_sim_last = Scheduler.now()

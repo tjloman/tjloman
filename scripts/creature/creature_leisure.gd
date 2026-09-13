@@ -47,14 +47,14 @@ static func dance(who: Creature, delta: float) -> void:
 	who._cheer_time -= delta
 	if who._cheer_time <= 0.0:
 		who._cheer_time = 1.0
-		who._cheer_nearby(18.0, 1.2)
+		CreatureEyes.cheer_near(who, 18.0, 1.2)
 		var village := CreatureEyes.home_village(who.get_tree())
 		if village != null:
 			# AN INVITATION, not a summons. The crowd mind decides whether the
 			# town takes it up, and a village that is frightened of the beast
 			# will not — see VillageHive.invite.
 			village.hive.invite("dance", who, who.global_position, 1.0)
-			if who._audience(18.0) > 0:
+			if CreatureEyes.audience(who, 18.0) > 0:
 				village.change_belief(0.35)
 	if who._action_time <= 0.0:
 		who._body.scale.y = 1.0
@@ -64,14 +64,14 @@ static func dance(who: Creature, delta: float) -> void:
 		# village that watched the god's beast dance the whole thing through
 		# has SEEN something, and the ledger makes sure the fourth one in five
 		# minutes is merely a creature capering. See VillageWonder.
-		if who._audience(18.0) > 0:
+		if CreatureEyes.audience(who, 18.0) > 0:
 			VillageWonder.spectacle(who.get_tree(), "dance", "wonder",
 				who.global_position, 2.8,
 				"Your creature dances for them, and they will not look away.", who)
 		who._last_deed = "dance"
 		# The bigger the crowd, the better it felt. Nobody watching is a
 		# lesson too — it may well decide dancing is not worth the effort.
-		who._finish_choice(0.4 + who._audience(18.0) * 0.35)
+		who._finish_choice(0.4 + CreatureEyes.audience(who, 18.0) * 0.35)
 
 
 ## LEADING PRAYER. Sat still, eyes shut, arms out. The villagers at their totem
@@ -145,7 +145,7 @@ static func commune(who: Creature, delta: float) -> void:
 	who._apply_gravity_only(delta)
 	who._action_time -= delta
 	village.hive.invite("commune", who, who.global_position, 0.8)
-	var audience := who._audience(20.0)
+	var audience: int = CreatureEyes.audience(who, 20.0)
 	if audience > 0:
 		village.change_belief(0.3 * delta * minf(audience, 6))
 		village.notice(0.4 * delta)

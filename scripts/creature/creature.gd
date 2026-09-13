@@ -557,7 +557,7 @@ func _tick_feelings(delta: float) -> void:
 		# does not put on size even when it is fed; a cherished one outgrows
 		# what its meals alone would explain. Past bearing it wastes instead.
 		_grow_by(d["growth"] * welfare.growth_factor())
-	var wasting := welfare.wasting()
+	var wasting: float = welfare.wasting()
 	if wasting > 0.0:
 		stature = maxf(stature - wasting * delta, 1.0)
 	body.idle(delta)
@@ -1592,7 +1592,7 @@ func _process_cast(delta: float) -> void:
 	# wrench.
 	var practised: float = mind.familiarity.get(miracle, 0.0)
 	var effort := MiracleManager.effort_of(miracle) * (1.0 - practised * 0.55)
-	var toll := body.toll(effort, growth)
+	var toll: float = body.toll(effort, growth)
 
 	# IT DOES NOT KNOW ITS OWN LIMIT. Nothing checks the number before offering
 	# the deed, and nothing warns it — that would be handing it a readout it has

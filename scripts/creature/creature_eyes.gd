@@ -8,10 +8,11 @@ extends RefCounted
 ## a saint and a monster: they both see the shepherd, and only their learned
 ## values differ on what to do about it.
 
-## The nearest field with work in it.
 ## How far the creature reads the mood and health of a village.
 const VILLAGER_REACH := 30.0
 
+
+## The nearest field with work in it.
 static func nearest_farm(tree: SceneTree, from: Vector3, radius := 60.0) -> Farm:
 	var best: Farm = null
 	var best_d := radius

@@ -1164,7 +1164,7 @@ func _run_smoke_test() -> void:
 		Mauling.seize(eaten, jaws)
 		var pinned := eaten.pin != null
 		var gripped := jaws.state == Animal.State.MAUL
-		var outraged := village.feud.outraged(eaten.global_position)
+		var outraged: bool = village.feud.outraged(eaten.global_position)
 		village.feud.tick(12.0)          # twelve seconds under the jaws
 		var part_way := eaten.pin.gone() if eaten.pin != null else -1.0
 		var would_rise := eaten.pin.rise_health() if eaten.pin != null else -1.0
