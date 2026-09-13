@@ -193,12 +193,18 @@ static func with_room(town: Village, from: Vector3) -> Workshop:
 ## HOW MANY BEASTS THIS TOWN CAN HOLD — a pen and a prayer, or a pen and barns.
 ## Kept with the barn rather than on the village, which has been sitting on its
 ## public-method limit for some time now, and is a question about barns anyway.
+## HOW MUCH STOCK THIS TOWN CAN KEEP AT ALL. See Village.HEAD_PER_KEEPER: the
+## barn gives the room and the people give the hands, and it keeps whichever is
+## the smaller. Building barns alone no longer grows a herd, which is what made
+## the barn the strongest building in the game by a distance.
 static func stalls(town: Village) -> int:
 	var barns := 0
 	for w in town.workshops:
 		if is_instance_valid(w) and w.trade == "barn":
 			barns += 1
-	return Village.MAX_TAMED + barns * Village.BARN_STALLS
+	var built := Village.MAX_TAMED + barns * Village.BARN_STALLS
+	var hands := Village.MAX_TAMED + town.population() * Village.HEAD_PER_KEEPER
+	return mini(built, hands)
 
 
 ## IS THERE ANY MEAT ON THE HOOF AT ALL — loose in the yard or in a barn's book.

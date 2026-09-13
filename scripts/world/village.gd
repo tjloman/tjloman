@@ -43,7 +43,13 @@ const MAX_TAMED := 8
 ## still not free is the formation: rewriting it is one cheap pass per member, a
 ## few times a second, so this is generous rather than infinite. Four hundred a
 ## barn is more than any village will catch.
-const BARN_STALLS := 400
+## STALLS A BARN ADDS, and heads a villager can keep. A town keeps whichever of
+## the two is the SMALLER number: the building gives the room, the people give
+## the hands, and neither on its own is a farm. Stalls came down from 400 —
+## three barns were twelve hundred head for a village of eighty, and it is
+## fifteen hundred pigs that makes a barn the strongest thing in the game.
+const BARN_STALLS := 150
+const HEAD_PER_KEEPER := 4
 const PRAYER_PER_VILLAGE := 120.0   # each convert widens your prayer reservoir
 const FARM_HALF := 3.9              # a field's clearance radius (no overlaps)
 

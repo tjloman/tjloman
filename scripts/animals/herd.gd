@@ -1370,11 +1370,24 @@ func founded_by(land_worth: int, settle: float) -> void:
 ## and the creature actually have: plant them and the ceiling rises, and the
 ## herd fills the room over the following seasons.
 func capacity() -> float:
-	# PENNED STOCK IS LIMITED BY THE BARN AND NOTHING ELSE. Counting bushes for
+	# PENNED STOCK IS LIMITED BY THE TOWN AND NOTHING ELSE. Counting bushes for
 	# a village's livestock would be the same error as counting them for a wolf:
 	# these animals are fed from the store by people whose job that is.
+	#
+	# AND THE LIMIT IS ONE POOL FOR THE WHOLE VILLAGE. This returned the full
+	# stall count to EVERY herd a barn kept — and a barn opens a separate herd
+	# per species — so pigs got the town's entire allowance, and so did the
+	# sheep, and so did the chickens. The cap was silently multiplied by the
+	# number of kinds kept, which is why a village of eighty had a thousand head
+	# and then five thousand: growth is proportional to the number already
+	# standing, so the run at a ceiling that far off is a sprint.
+	#
+	# What is left is the town's room minus everything else it is already
+	# keeping, so the kinds compete for one allowance the way they would over
+	# one yard.
 	if keeper != null and is_instance_valid(keeper):
-		return float(Workshop.stalls(keeper))
+		var others := keeper.tamed_count() - alive()
+		return maxf(float(Workshop.stalls(keeper)) - float(maxi(others, 0)), 1.0)
 	# A hunting herd is fed by what it catches, and counting bushes for a wolf
 	# pack was simply the wrong question — it capped a pack at what the berries
 	# nearby would support.
