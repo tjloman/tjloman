@@ -20,6 +20,9 @@ extends CanvasLayer
 ##   "do"     Callable, run once when the beat OPENS. Move things, plant
 ##            things, give things.
 ##   "then"   Callable, run once when the beat CLOSES.
+##   "mark"   put a quest marker here for the length of the beat — a Node3D, a
+##            Vector3, or a Callable returning either. This is the pin that says
+##            GO THERE when the line alone is not enough.
 ##   "free"   false to take the hand away for the length of the beat. Default
 ##            true: the player keeps their hand, which is what makes this a
 ##            game rather than a film.
@@ -34,11 +37,24 @@ extends CanvasLayer
 ## Most real beats are a mix, which is the point. Nothing here knows the
 ## difference between a cutscene and a lesson, because there is not one.
 ##
+## ONE BOARD PER QUEST, AND BOARDS FOLLOW BOARDS. `play()` takes as many as you
+## hand it and runs them end to end, so a twenty-minute introduction is a dozen
+## short files rather than one long one, and Act I can be rewritten without
+## touching Act III.
+##
 ## WHAT IT DELIBERATELY DOES NOT DO. No branching, no variables, no state
 ## machine. A storyboard is a straight line through a sequence; anything that
 ## needs to fork is two storyboards and a Callable that picks. That limit is
 ## what keeps the format writable by hand — and it is easy to lift later, once
 ## something actually needs it.
+##
+## AND NO GATE MAY EVER TEST WHETHER THE PLAYER WAS GOOD. A beat asks whether
+## they can WORK a mechanic, never whether they used it kindly: "praise it or
+## scold it" passes on either, "feed it" passes on grain or on a villager. A
+## player who decides to raise something that eats babies, burns what it can
+## and sleeps underwater must be able to do it from the first lesson to the
+## last without the game ever declining to continue. tools/mastery_gate.py
+## fails the build on a gate that reads morality, alignment or temperament.
 
 ## How long the camera takes to ease onto a new shot, and how often a "hold"
 ## re-aims. Both slow: a camera that snaps reads as a bug.
@@ -47,6 +63,12 @@ const FRAME_EASE := 1.1
 const HINT_AFTER := 9.0
 ## And how long a finished beat sits there ticked before the next one opens.
 const BEAT_REST := 1.2
+
+## THE QUEST MARKER: a column of light you can see over a hill.
+const MARK_HIGH := 14.0
+const MARK_BORE := 0.25
+const MARK_RING := 2.2
+const MARK_COLOR := Color(1.0, 0.88, 0.45, 0.5)
 
 
 var camera_rig: CameraRig
@@ -64,6 +86,7 @@ var _hint: Label
 var _tick: Label
 var _ease := 0.0
 var _aim := Vector3.INF
+var _marker: Node3D = null
 
 
 func _ready() -> void:
@@ -72,9 +95,14 @@ func _ready() -> void:
 	visible = false
 
 
-## RUN ONE. Hand it an array of beats; it plays them in order and stops.
+## RUN ONE OR MANY. Hand it a board, or an array of boards — one per quest —
+## and it plays them end to end.
 func play(board: Array) -> void:
 	beats = board
+	if not board.is_empty() and board[0] is Array:
+		beats = []
+		for one: Array in board:
+			beats.append_array(one)
 	_at = -1
 	running = true
 	visible = true
@@ -86,7 +114,37 @@ func stop() -> void:
 	running = false
 	visible = false
 	set_process(false)
+	_drop_marker()
 	_release_hand()
+
+
+## THE PIN THAT SAYS GO THERE. A tall soft beam with a ring at its foot, so it
+## reads from across a valley and from directly above it.
+func _plant_marker(at: Vector3) -> void:
+	if at == Vector3.INF:
+		return
+	_marker = Node3D.new()
+	var beam := CylinderMesh.new()
+	beam.top_radius = MARK_BORE
+	beam.bottom_radius = MARK_BORE * 2.2
+	beam.height = MARK_HIGH
+	_marker.add_child(Util.mesh_node(beam, MARK_COLOR,
+		Vector3(0, MARK_HIGH * 0.5, 0), true))
+	var ring := TorusMesh.new()
+	ring.inner_radius = MARK_RING * 0.86
+	ring.outer_radius = MARK_RING
+	_marker.add_child(Util.mesh_node(ring, MARK_COLOR, Vector3(0, 0.15, 0), true))
+	var scene := get_tree().current_scene
+	if scene == null:
+		return
+	scene.add_child(_marker)
+	_marker.global_position = at
+
+
+func _drop_marker() -> void:
+	if is_instance_valid(_marker):
+		_marker.queue_free()
+	_marker = null
 
 
 ## WHICH BEAT IS ON, for anything that wants to know (a save, a debug readout).
@@ -140,6 +198,7 @@ func _open_next() -> void:
 	_ease = 0.0
 	_tick.text = ""
 	_hint.visible = false
+	_drop_marker()
 	if _at >= beats.size():
 		stop()
 		return
@@ -151,6 +210,7 @@ func _open_next() -> void:
 		(beat["do"] as Callable).call()
 	if not bool(beat.get("free", true)):
 		_take_hand()
+	_plant_marker(_spot_of(beat.get("mark", null)))
 	_aim = _spot_of(beat.get("look", null))
 	if _aim != Vector3.INF and is_instance_valid(camera_rig):
 		camera_rig.follow_target = null

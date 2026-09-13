@@ -97,6 +97,22 @@ func _ready() -> void:
 	load_radius = Quality.load_radius()
 	unload_radius = Quality.unload_radius()
 	chunk_cells = Quality.chunk_cells()
+	reseed(world_seed)
+
+
+## SET THE SEED AND REBUILD THE LAND FROM IT.
+##
+## Every noise here is derived from the one number, and they were tuned in
+## `_ready` where nothing could reach them — so loading a saved MAP, which is a
+## seed plus a list of reshapings, had no way to say which land the reshapings
+## were reshapings OF. See MapFile.
+##
+## Only touches the generator. Chunks already built are not rebuilt: call this
+## before the world is streamed, which for a map load is the only sane moment
+## anyway.
+func reseed(to: int) -> void:
+	world_seed = to
+	_sea_cache.clear()
 	_height_noise.seed = world_seed
 	_height_noise.fractal_octaves = 4
 	_height_noise.frequency = 0.007

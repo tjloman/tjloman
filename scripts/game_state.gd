@@ -86,6 +86,8 @@ var creature_name := ""
 ## so it is a flag on the profile that the workshop drawer can flip for testing;
 ## when a real receipt check exists it sets this and nothing else changes.
 var supporter := false
+## Bottomless prayer, for making maps. Debug menu only.
+var sculpting := false
 
 
 ## The setting the player sees. Reads false for anyone without the entitlement
@@ -134,6 +136,12 @@ func add_prayer_power(amount: float) -> void:
 
 
 func try_spend(amount: float) -> bool:
+	# SCULPTING. While a map is being made the earth-movers are a chisel, and a
+	# chisel you have to wait ninety seconds to use again is not one. Set only
+	# by the debug menu; off in every ordinary game. See MapFile for why the
+	# map editor is the game rather than a separate tool.
+	if sculpting:
+		return true
 	if prayer_power < amount:
 		return false
 	prayer_power -= amount

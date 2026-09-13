@@ -21,6 +21,8 @@ var profiles: ProfileMenu
 var _panel: PanelContainer
 var _friends_button: Button = null
 var _supporter_button: Button = null
+var _sculpt_button: Button = null
+var _map_name: LineEdit = null
 var _armed: Button = null
 var _arm_time := 0.0
 var _armed_label := ""
@@ -94,6 +96,28 @@ func _build() -> void:
 	box.add_child(_supporter_button)
 	box.add_child(_gap())
 
+	# THE MAP EDITOR, and it is not a tool — it is the game with the prayer
+	# turned off. Sculpt the coast with lava and lightning, then write the
+	# result out. See MapFile for why that is the whole of it.
+	box.add_child(_heading("MAPS"))
+	_sculpt_button = _button("", _on_sculpt,
+		"Bottomless prayer, so the earth-movers are a sculpting tool.\n"
+		+ "Nothing else changes: the world goes on living while you work.")
+	box.add_child(_sculpt_button)
+	_map_name = LineEdit.new()
+	_map_name.placeholder_text = "map name"
+	_map_name.custom_minimum_size = Vector2(250, 30)
+	box.add_child(_map_name)
+	box.add_child(_button("Save this map", _on_save_map,
+		"Writes the seed and every reshaping to user://maps.\n"
+		+ "That pair IS the map — there is no second copy of the terrain."))
+	box.add_child(_button("Load that map", _on_load_map,
+		"Reads it back over the living world. Reload the scene afterwards\n"
+		+ "for chunks already built to be cut again.", true))
+	box.add_child(_button("What maps are there?", _on_list_maps,
+		"Print every saved map to the announcement line."))
+	box.add_child(_gap())
+
 	box.add_child(_heading("CHEATS"))
 	box.add_child(_button("+500 prayer", _on_prayer, "Fill the reservoir."))
 	box.add_child(_button("Grow creature", _on_grow,
@@ -120,6 +144,7 @@ func _show_settings() -> void:
 		"off (supporters)" if not GameState.supporter else "off")
 	_friends_button.disabled = not GameState.supporter
 	_supporter_button.text = "Supporter: %s" % ("yes" if GameState.supporter else "no")
+	_refresh_sculpt()
 
 
 func _on_friends() -> void:
@@ -222,6 +247,60 @@ func _on_profiles() -> void:
 	if profiles != null and is_instance_valid(profiles):
 		_panel.visible = false
 		profiles.open(SaveGame.profiles.is_empty())
+
+
+## SCULPT MODE. Prayer stops being a resource, so the earth-movers can be used
+## the way a sculptor uses a chisel — dozens of times a minute without waiting.
+## It is a toggle rather than a one-off top-up because sculpting a coastline
+## takes an afternoon, and topping up by hand every ninety seconds is the thing
+## that would make it unbearable.
+func _on_sculpt() -> void:
+	GameState.sculpting = not GameState.sculpting
+	if GameState.sculpting:
+		# So the reservoir READS full as well as being bottomless — a bar that
+		# says empty while nothing costs anything is a confusing thing to work
+		# under for an afternoon.
+		GameState.set_max_prayer_power(maxf(GameState.max_prayer_power, 500.0))
+		GameState.add_prayer_power(500.0)
+	_refresh_sculpt()
+	GameState.announce("Sculpting: prayer is bottomless." if GameState.sculpting
+		else "Sculpting off. Prayer costs again.")
+
+
+func _refresh_sculpt() -> void:
+	if _sculpt_button == null or not is_instance_valid(_sculpt_button):
+		return
+	_sculpt_button.text = "Sculpt mode: ON" if GameState.sculpting else "Sculpt mode: off"
+
+
+func _on_save_map() -> void:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world == null:
+		return
+	var written := MapFile.save_as(world, _map_name.text)
+	if written == "":
+		GameState.announce("That map needs a name.")
+		return
+	GameState.announce("Map written: %s" % written)
+
+
+func _on_load_map() -> void:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world == null:
+		return
+	if MapFile.load_into(world, _map_name.text):
+		GameState.announce("Map loaded: %s" % MapFile.describe(_map_name.text))
+	else:
+		GameState.announce("No map by that name.")
+
+
+func _on_list_maps() -> void:
+	var maps := MapFile.all_maps()
+	if maps.is_empty():
+		GameState.announce("No maps saved yet.")
+		return
+	for one: String in maps:
+		GameState.announce(MapFile.describe(one))
 
 
 func _on_prayer() -> void:
