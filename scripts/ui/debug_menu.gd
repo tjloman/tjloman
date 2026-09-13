@@ -110,10 +110,14 @@ func _build() -> void:
 	box.add_child(_map_name)
 	box.add_child(_button("Save this map", _on_save_map,
 		"Writes the seed and every reshaping to user://maps.\n"
-		+ "That pair IS the map — there is no second copy of the terrain."))
+		+ "That pair IS the map — there is no second copy of the terrain.\n"
+		+ "The soot is left out: you keep the shape, not the burning."))
+	box.add_child(_button("Save it burnt", _on_save_burnt,
+		"The same, keeping every scorch mark — for a map that is\n"
+		+ "MEANT to look like somewhere a god has been."))
 	box.add_child(_button("Load that map", _on_load_map,
-		"Reads it back over the living world. Reload the scene afterwards\n"
-		+ "for chunks already built to be cut again.", true))
+		"Reads it back and re-cuts every chunk, so the new ground is\n"
+		+ "the ground you see as well as the one you walk on.", true))
 	box.add_child(_button("What maps are there?", _on_list_maps,
 		"Print every saved map to the announcement line."))
 	box.add_child(_gap())
@@ -273,11 +277,19 @@ func _refresh_sculpt() -> void:
 	_sculpt_button.text = "Sculpt mode: ON" if GameState.sculpting else "Sculpt mode: off"
 
 
+func _on_save_burnt() -> void:
+	_write_map(true)
+
+
 func _on_save_map() -> void:
+	_write_map(false)
+
+
+func _write_map(keep_scorch: bool) -> void:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	if world == null:
 		return
-	var written := MapFile.save_as(world, _map_name.text)
+	var written := MapFile.save_as(world, _map_name.text, keep_scorch)
 	if written == "":
 		GameState.announce("That map needs a name.")
 		return

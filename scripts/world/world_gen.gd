@@ -110,6 +110,21 @@ func _ready() -> void:
 ## Only touches the generator. Chunks already built are not rebuilt: call this
 ## before the world is streamed, which for a map load is the only sane moment
 ## anyway.
+## THROW AWAY EVERY CHUNK SO THE LAND IS CUT AGAIN.
+##
+## Chunk meshes are built from the heights that were true when they streamed in,
+## so loading a map over a living world left the OLD ground standing while the
+## new ground was what everything walked on and routed over. Dropping them makes
+## the streamer rebuild each one as it comes back into range.
+func recut() -> void:
+	for cell in _chunks.keys():
+		var chunk = _chunks[cell]
+		if is_instance_valid(chunk):
+			chunk.queue_free()
+	_chunks.clear()
+	_sea_cache.clear()
+
+
 func reseed(to: int) -> void:
 	world_seed = to
 	_sea_cache.clear()

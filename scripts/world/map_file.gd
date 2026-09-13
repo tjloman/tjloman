@@ -36,7 +36,12 @@ const FORMAT := 1
 
 
 ## WRITE THE WORLD OUT. Returns the path, or "" if it could not be written.
-static func save_as(world: WorldGen, map_name: String) -> String:
+## `keep_scorch` writes the blackening out with the shape. Off by default, and
+## that default matters: you sculpt a coastline with volcanoes and molten rock,
+## and every one of those chars the ground it moves. Saved as they came, a
+## hand-made island is a BURNT island — the record of how it was made rather
+## than the thing that was made. A map is terrain; the soot is not part of it.
+static func save_as(world: WorldGen, map_name: String, keep_scorch := false) -> String:
 	if world == null or not is_instance_valid(world):
 		return ""
 	var clean := _tidy(map_name)
@@ -53,7 +58,7 @@ static func save_as(world: WorldGen, map_name: String) -> String:
 		"seed": world.world_seed,
 		# The whole of what has been done to the land, exactly as the save game
 		# already stores it — one representation, not two.
-		"scars": world.scars.to_save(),
+		"scars": _shape_only(world.scars.to_save(), keep_scorch),
 	}, "\t"))
 	file.close()
 	return path
@@ -68,7 +73,20 @@ static func load_into(world: WorldGen, map_name: String) -> bool:
 		return false
 	world.reseed(int(data.get("seed", world.world_seed)))
 	world.scars.from_save(data.get("scars", []))
+	# And drop every chunk, or the old ground goes on being drawn over the new.
+	world.recut()
 	return true
+
+
+## STRIP THE SOOT, keeping every metre of the shape. See `save_as`.
+static func _shape_only(saved: Dictionary, keep_scorch: bool) -> Dictionary:
+	if keep_scorch:
+		return saved
+	var out := saved.duplicate(true)
+	for scar: Dictionary in out.get("scars", []):
+		scar["char"] = 0.0
+		scar["burned"] = 0.0
+	return out
 
 
 ## The raw dictionary of a map, or {} if there is no such map.
