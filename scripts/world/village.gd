@@ -27,6 +27,8 @@ const STARTING_SOULS := 50
 const FARMS_MOST := 10
 ## A school is a civic building: it has posts, like the rest of them.
 const TEACHERS_MOST := 3
+## Children to a teacher. See `teaching_posts`.
+const CLASS_SIZE := 10
 
 ## HOW MUCH STOCK A TOWN CAN KEEP WITH NOWHERE TO PUT IT. Eight is what will
 ## stand about a pen and be watched; past that they wander off and the village
@@ -694,14 +696,43 @@ func spawn_edubba_at(world_spot: Vector3) -> void:
 ## anything that removes a teacher without saying so — a death, a chunk unload,
 ## a school burning down.
 func claim_teaching_post() -> bool:
-	if not has_edubba() or _teachers >= TEACHERS_MOST:
+	if _teachers >= _teaching_posts():
 		return false
 	_teachers += 1
 	return true
 
 
-func leave_teaching_post() -> void:
+## HOW MANY POSTS THE SCHOOL HAS OPEN — set by the CHILDREN, because that is
+## what a school is for. No children, no post: a town with an empty Edubba and
+## two adults standing in the yard teaching nobody is two farmers it does not
+## have, and it was what the fixed ceiling of three produced the moment the last
+## pupil grew up. One teacher answers up to ten, two up to twenty, three for any
+## number past that — and never a fourth, because past three the limit is the
+## building rather than the staff.
+func _teaching_posts() -> int:
+	if not has_edubba() or _children <= 0:
+		return 0
+	if _children <= CLASS_SIZE:
+		return 1
+	if _children <= CLASS_SIZE * 2:
+		return 2
+	return TEACHERS_MOST
+
+
+## A POST HELD IS NOT A POST KEPT — asked by a teacher every time it decides, so
+## a school that has run out of children lets its staff go back to work. The
+## first to ask is the one who stands down, which levels a surplus off one at a
+## time rather than emptying the yard in a frame.
+##
+## Standing down is done HERE rather than by the caller, so that giving the post
+## up and the count dropping are one act, exactly as taking it is. A teacher
+## that had to be told to leave and then told to decrement was the same shape of
+## bug as the one that let forty people take three posts.
+func holds_teaching_post() -> bool:
+	if has_edubba() and _teachers <= _teaching_posts():
+		return true
 	_teachers = maxi(_teachers - 1, 0)
+	return false
 
 
 func _process(delta: float) -> void:

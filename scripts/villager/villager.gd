@@ -1050,32 +1050,7 @@ func _try_conceive(delta: float) -> void:
 ## Needs ---------------------------------------------------------------------
 
 func _tick_needs(delta: float) -> void:
-	# Bellies empty at HALF the old rate: with hauling, militia duty and spread
-	# job priorities all competing for hands, the village could not out-farm the
-	# old appetite and starved. A slower burn lets the granary keep ahead.
-	var hunger_rate := 0.25 * (1.4 if pregnant else 1.0)
-	if state == State.SLEEPING:
-		hunger_rate *= 0.4  # a sleeping body burns slow
-	hunger = minf(hunger + hunger_rate * delta, 100.0)
-	if state != State.SLEEPING:
-		var working := state in [State.FARMING, State.HUNTING, State.CHOPPING,
-			State.QUARRYING, State.BUILDING]
-		energy = maxf(energy - (0.5 if working else 0.25) * delta, 0.0)
-	social = maxf(social - 0.3 * delta, 0.0)
-	_breed_cooldown = maxf(_breed_cooldown - delta, 0.0)
-	# A fed body knits itself back together — small wounds heal.
-	if hunger < 70.0 and health < 100.0:
-		health = minf(health + 1.5 * delta, 100.0)
-	if hunger > 85.0:
-		happiness = maxf(happiness - 1.5 * delta, 0.0)
-	if hunger >= 100.0:
-		health -= 2.0 * delta
-		if health <= 0.0:
-			# You are judged for your own flock, not for strangers far away.
-			if village.is_player_home:
-				GameState.shift_alignment(-3.0)
-				GameState.announce("%s starved to death. The heavens stayed silent." % villager_name)
-			die(false)
+	VillagerNeeds.tick(self, delta)
 
 
 func cheer(amount: float) -> void:
@@ -1122,9 +1097,10 @@ func _decide() -> void:
 	# Lost the post? Only the school going does that now. The post used to be a
 	# single slot on the village, so a second teacher taking it silently unseated
 	# the first — which is why a town of any size still had exactly one.
-	if is_teacher and not village.has_edubba():
+	# The school closed, or its last pupil grew up, or the town has more staff
+	# than children to teach. See Village.teaching_posts.
+	if is_teacher and not village.holds_teaching_post():
 		is_teacher = false
-		village.leave_teaching_post()
 	# Asked and taken in ONE act. See Village.claim_teaching_post.
 	if not is_teacher and not _has_dependent_child() \
 			and village.claim_teaching_post():
