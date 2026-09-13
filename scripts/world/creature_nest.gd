@@ -62,6 +62,8 @@ const GROUNDS := BED_LONG * 0.8
 const FOOTPRINT := BED_LONG * 0.55
 const RING := 4.2
 const DANCERS := 8
+## The most miracles named on the wall before it says "and N more".
+const MIRACLES_SHOWN := 12
 
 ## THE VIEW FROM THE FRONT — see `viewing`. A shade above level so sky and
 ## ground both show; far enough back that the whole stone wall is in frame and
@@ -543,6 +545,14 @@ func chronicle() -> String:
 			held = held.substr(0, 32) + "…"
 		lines.append("%-34s %s" % [held, pair[1]])
 	lines.append("")
+	lines.append("WHAT HE IS MADE OF")
+	for pair: Array in _body_lines():
+		lines.append("  %-13s %s" % [pair[0], pair[1]])
+	lines.append("")
+	lines.append("WHAT HE HAS COME TO")
+	for pair: Array in _mind_lines():
+		lines.append("  %-13s %s" % [pair[0], pair[1]])
+	lines.append("")
 	lines.append("CUT INTO THE SIX STONES")
 	for which: String in FACES:
 		var how: float = creature.mind.ethos.standing(which)
@@ -580,6 +590,72 @@ func _columns() -> Array:
 		"nothing settled" if habits.is_empty() else String(habits[0])),
 		"his hands know %s" % _best_skill()])
 	return out
+
+
+## THE PLAIN MEASUREMENTS — the ones you read to find out whether you have been
+## feeding him too well or not well enough.
+##
+## These used to be in the panel that follows him about, where they were four
+## lines of arithmetic in the middle of a readout you want to be able to glance
+## at. Fat and strength and size are not glanceable and were never meant to be:
+## they are what you come HERE to check, against a creature you can see standing
+## in front of the wall. The panel out there keeps what you need mid-stride.
+##
+## Digesting is deliberately not among them. It is a clock the body runs, it
+## explains itself through the creature's own behaviour, and a number for it
+## tells a player nothing they can act on.
+func _body_lines() -> Array:
+	var body := creature.body
+	var out := []
+	out.append(["build", "%s — fat %d, strength %d%s" % [
+		body.condition_word(), int(body.fat), int(body.strength),
+		", lent might" if body.is_boosted() else ""]])
+	out.append(["size", creature.stature_text()])
+	out.append(["vigour", "%d rested, %d fearful" % [
+		int(creature.energy), int(creature.fear)]])
+	out.append(["kept", "%s%s" % [creature.welfare.account(),
+		" — and in pain" if creature.welfare.pain > 12.0 else ""]])
+	return out
+
+
+## AND WHAT IS IN HIM — the slow readings, the ones worth sitting down with.
+func _mind_lines() -> Array:
+	var mind := creature.mind
+	var out := []
+	out.append(["nature", creature.morality_word()])
+	out.append(["mood", "%s, bonded %d" % [creature.mood_word(), int(creature.bond)]])
+	out.append(["feeling", " and ".join(creature.heart.account())])
+	var habits: Array = mind.character_account()
+	out.append(["habits", "nothing settled yet" if habits.is_empty()
+		else "\n                ".join(habits)])
+	out.append(["learned", mind.strongest_urge()])
+	var creed: Array = mind.beliefs.creed(2)
+	out.append(["believes", "nothing firmly yet" if creed.is_empty()
+		else "\n                ".join(creed)])
+	var picture: Array = mind.world_picture()
+	out.append(["the world", "no idea yet" if picture.is_empty()
+		else "\n                ".join(picture)])
+	out.append(["miracles", _miracle_list(mind.known_miracles())])
+	return out
+
+
+## Every miracle it has picked up by watching you, capped — a creature that has
+## seen a long reign has seen a great many and the wall is not a scroll.
+func _miracle_list(spells: Array) -> String:
+	if spells.is_empty():
+		return "none watched yet"
+	var shown := spells.slice(0, MIRACLES_SHOWN)
+	var text: String = ", ".join(PackedStringArray(shown))
+	if spells.size() > shown.size():
+		text += " and %d more" % (spells.size() - shown.size())
+	return text
+
+
+## WHERE THE WRITING IS — the middle of the wall of faces, in world space, so
+## the panel that reads it can be pinned to the stone it came off. See
+## HUD._tick_stone.
+func tablet_point() -> Vector3:
+	return to_global(Vector3(0.0, _ground_local(0.0, WALL_AT) + WALL_HIGH * 0.7, WALL_AT))
 
 
 ## WHAT IS ACTUALLY PROWLING, right now, within sight of this place. The plainest

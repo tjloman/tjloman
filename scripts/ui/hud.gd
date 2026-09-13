@@ -32,11 +32,15 @@ const LABEL_PAD := "          "   # the hanging indent, matching "Miracles: "
 ## WHAT IT HAS LEARNED TO CAST, which is the line that used to run off the
 ## screen. Wrapped like everything else, and capped: past a dozen the list
 ## stops being a thing you read and becomes a count.
-const MIRACLES_SHOWN := 12
 ## How long the chronicle stays up while you are still at the nest, and how
 ## quickly it clears once you have left it.
 const STONE_HOLD := 14.0
 const STONE_LEAVE := 1.6
+## How wide the speech-bubble tail is where it leaves the panel, how far the
+## panel floats off the stone, and the tint they share.
+const TAIL_WIDE := 13.0
+const STONE_LIFT := 118.0
+const TAIL_COLOR := Color(0.09, 0.1, 0.09, 0.82)
 
 var village: Village
 var divine_hand: DivineHand
@@ -71,8 +75,14 @@ var _cast_overlay: CastOverlay
 var _stone_panel: PanelContainer
 var _stone_label: Label
 var _stone_time := 0.0
-## Where the wall that was read is standing. See `_tick_stone`.
+## Where the wall that was read is standing, and where its WRITING is — the
+## first decides when the panel goes away, the second where it points. See
+## `_tick_stone`.
 var _stone_at := Vector3.INF
+var _stone_on: Vector3 = Vector3.INF
+## That writing, in screen space, or INF when it is off screen or behind you.
+var _stone_mark := Vector2.INF
+var _stone_tail: Control
 
 
 func _ready() -> void:
@@ -121,15 +131,59 @@ func _build_stone_panel() -> void:
 	_stone_label.add_theme_font_size_override("font_size", 15)
 	_stone_label.add_theme_color_override("font_color", Color(0.92, 0.88, 0.78))
 	_stone_panel.add_child(_stone_label)
+	# THE TAIL IS DRAWN FIRST so the panel sits on top of where it joins.
+	_stone_tail = Control.new()
+	_stone_tail.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_stone_tail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_stone_tail.draw.connect(_draw_stone_tail)
+	add_child(_stone_tail)
 	add_child(_stone_panel)
 	_make_click_through(_stone_panel)
+
+
+## THE POINTER. A speech-bubble tail from the panel down to the writing it came
+## off, so there is never a question of what is being talked about — and so that
+## a panel which follows the stone around the screen still reads as belonging to
+## it rather than as having come loose.
+func _draw_stone_tail() -> void:
+	if not _stone_panel.visible or _stone_mark == Vector2.INF:
+		return
+	var box := _stone_panel.get_global_rect()
+	var from := box.get_center()
+	var out := (_stone_mark - from)
+	if out.length() < 1.0:
+		return
+	# The base of the tail sits across the panel edge, square to the line out.
+	var side := Vector2(-out.y, out.x).normalized() * TAIL_WIDE
+	var edge := from + out.normalized() * _edge_span(box, out)
+	_stone_tail.draw_colored_polygon(
+		PackedVector2Array([edge + side, edge - side, _stone_mark]), TAIL_COLOR)
+
+
+## How far the panel's own edge is along a heading — so the tail starts AT the
+## rim rather than at the middle, whichever side it leaves from.
+func _edge_span(box: Rect2, out: Vector2) -> float:
+	var d := out.normalized()
+	var half := box.size * 0.5
+	var span := INF
+	if absf(d.x) > 0.0001:
+		span = minf(span, half.x / absf(d.x))
+	if absf(d.y) > 0.0001:
+		span = minf(span, half.y / absf(d.y))
+	return span if span < INF else 0.0
 
 
 func _on_stone_read(text: String) -> void:
 	_stone_label.text = text
 	_stone_panel.visible = true
 	_stone_time = STONE_HOLD
-	_stone_at = _nest_read_from()
+	var read := _nest_read()
+	_stone_at = read.global_position if read != null else Vector3.INF
+	_stone_on = read.tablet_point() if read != null else Vector3.INF
+	# Off the screen's middle and free to move: from here on it follows the
+	# stone rather than sitting where the last one sat.
+	_stone_panel.set_anchors_and_offsets_preset(
+		Control.PRESET_TOP_LEFT, Control.PRESET_MODE_MINSIZE)
 
 
 ## Which nest was read. The chronicle is a thing SCRATCHED ON A WALL, and you
@@ -137,8 +191,8 @@ func _on_stone_read(text: String) -> void:
 ## screen. Held as a position rather than a reference so a nest that is razed,
 ## or whose village is wiped out, takes its panel with it and does not keep a
 ## dead node alive to do it.
-func _nest_read_from() -> Vector3:
-	var near := Vector3.INF
+func _nest_read() -> CreatureNest:
+	var near: CreatureNest = null
 	var best := INF
 	for n in get_tree().get_nodes_in_group("creature_nest"):
 		var nest := n as CreatureNest
@@ -147,7 +201,7 @@ func _nest_read_from() -> Vector3:
 		var gap := nest.global_position.distance_to(GameState.camera_focus)
 		if gap < best:
 			best = gap
-			near = nest.global_position
+			near = nest
 	return near
 
 
@@ -171,6 +225,40 @@ func _tick_stone(delta: float) -> void:
 	_stone_time -= delta
 	if _stone_time <= 0.0:
 		_stone_panel.visible = false
+		return
+	_follow_stone()
+
+
+## WHERE THE PANEL SITS — over the writing, wherever the writing is on screen.
+##
+## It was pinned to the centre of the VIEWPORT, which is the one place it is
+## certainly not: a wall of text about a wall, floating in the sky, while the
+## wall itself is off to the left behind a tree. Anchoring it to the stone is
+## what makes the tail below mean anything.
+##
+## The panel is nudged to stay wholly on screen, because a bubble half off the
+## edge is worse than one slightly out of line — and the TAIL keeps pointing at
+## the true spot either way, which is exactly what a tail is for.
+func _follow_stone() -> void:
+	var cam := camera_rig.camera if camera_rig != null else null
+	if cam == null or not is_instance_valid(cam) or _stone_on == Vector3.INF:
+		_stone_mark = Vector2.INF
+		_stone_tail.queue_redraw()
+		return
+	if cam.is_position_behind(_stone_on):
+		# Turned away from it entirely: nothing to point at, so nothing to say.
+		_stone_panel.visible = false
+		_stone_mark = Vector2.INF
+		_stone_tail.queue_redraw()
+		return
+	_stone_mark = cam.unproject_position(_stone_on)
+	var screen := _stone_tail.size
+	var box := _stone_panel.size
+	var at := _stone_mark - Vector2(box.x * 0.5, box.y + STONE_LIFT)
+	at.x = clampf(at.x, 12.0, maxf(screen.x - box.x - 12.0, 12.0))
+	at.y = clampf(at.y, 12.0, maxf(screen.y - box.y - 12.0, 12.0))
+	_stone_panel.position = at
+	_stone_tail.queue_redraw()
 
 
 func _build_bars() -> void:
@@ -329,16 +417,6 @@ func _wrap_width() -> int:
 	# the third it is supposed to keep to.
 	var room := int(cap / maxf(em, 1.0)) - LABEL_PAD.length()
 	return clampi(room, WRAP_LEAST, WRAP_AT)
-
-
-func _miracle_list(spells: Array) -> String:
-	if spells.is_empty():
-		return "none yet"
-	var shown := spells.slice(0, MIRACLES_SHOWN)
-	var text: String = ", ".join(PackedStringArray(shown))
-	if spells.size() > shown.size():
-		text += " … and %d more" % (spells.size() - shown.size())
-	return text
 
 
 ## Praise / Scold — big touch buttons, top-right, only while locked on. They
@@ -736,51 +814,25 @@ func _update_creature_panel() -> void:
 	_praise_scold.visible = locked
 	if not locked:
 		return
-	# Its inner life, in plain words — including what it has LEARNED to love and
-	# any miracles it has picked up by watching you.
-	var learned: String = creature.mind.strongest_urge()
-	# WHAT IT BELIEVES — the convictions it has drawn from its own life.
-	var creed: Array = creature.mind.beliefs.creed(2)
-	var believes := "nothing firmly yet" if creed.is_empty() else "\n          ".join(creed)
-	# WHAT IT MAKES OF THE WORLD ITSELF — what tends to happen, and which
-	# stretches of country it has come to feel something about.
-	var picture: Array = creature.mind.world_picture()
-	var world := "no idea yet" if picture.is_empty() else "\n          ".join(picture)
-	var spells: Array = creature.mind.known_miracles()
-	# ITS CHARACTER, spelled out. The one-word nature above is the compass
-	# named; these are the leanings that name actually stands for, so a player
-	# can see WHY their beast is called what it is called.
-	var habits: Array = creature.mind.character_account()
-	var character := "nothing settled yet" if habits.is_empty() \
-		else "\n          ".join(habits)
+	# THREE LINES, AND THEY ARE THE THREE YOU ACT ON.
+	#
+	# This was eighteen rows deep — nature, habits, feeling, mood, bond, fear,
+	# belly, build, stature, welfare, what it had learned, what it believed,
+	# what it made of the world, and every miracle it had ever watched. All of
+	# that is worth knowing and none of it is worth reading while you are
+	# steering a creature around a field. A panel you have to STUDY is a panel
+	# you stop looking at, and it was covering a third of the screen to do it.
+	#
+	# So the readout split by what it is FOR. Is he hungry, is he tired, what is
+	# he doing — that is a glance, and it stays out here where he is. Everything
+	# slow went onto the nest wall (CreatureNest.chronicle), which is somewhere
+	# you walk to and stand still in front of on purpose.
 	var room := _wrap_width()
 	var rows: Array[String] = [
 		"YOUR CREATURE",
 		_field("Doing", creature.activity_word(), room),
-		_field("Nature", creature.morality_word(), room),
-		_field("Habits", character, room),
-		_field("Feeling", " and ".join(creature.heart.account()), room),
-		_field("Mood", creature.mood_word(), room),
-		_field("Bond", "%d / 100" % int(creature.bond), room),
 		_field("Hunger", "%d / 100" % int(creature.hunger), room),
 		_field("Energy", "%d / 100" % int(creature.energy), room),
-		_field("Fear", "%d / 100" % int(creature.fear), room),
-		_field("Belly", "%d%% full%s" % [
-			int(creature.body.fullness(creature.growth) * 100.0),
-			"  (digesting)" if creature.body.stomach > 0.05 else ""], room),
-		_field("Body", "%s  (fat %d · strength %d%s)" % [
-			creature.body.condition_word(), int(creature.body.fat),
-			int(creature.body.strength),
-			"  BOOSTED" if creature.body.is_boosted() else ""], room),
-		_field("Stature", creature.stature_text(), room),
-		# What you have made of it, in words rather than numbers — the one line
-		# that tells a player what their treatment of the beast has come to.
-		_field("Kept", "%s%s" % [creature.welfare.account(),
-			"  (in pain)" if creature.welfare.pain > 12.0 else ""], room),
-		_field("Learned", learned, room),
-		_field("Believes", believes, room),
-		_field("World", world, room),
-		_field("Miracles", _miracle_list(spells), room),
 	]
 	_creature_label.text = "\n".join(rows)
 
