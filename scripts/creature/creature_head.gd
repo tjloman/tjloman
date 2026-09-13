@@ -82,6 +82,14 @@ var _voice_in := 0.0
 ## EVERY FRAME, WHATEVER THE HANDS ARE DOING. Called from the creature's own
 ## tick rather than from any state, which is the entire point.
 func aim(who: Creature, delta: float) -> void:
+	# A SLEEPING CREATURE DOES NOT LOOK AT THINGS. The head runs on every tick
+	# of every state on purpose — being watchful is not a thing it stops to do
+	# — but "every state" quietly included the one state where it has its eyes
+	# shut, so a beast lying on its side in its bed went on tracking villagers
+	# across the meadow all night. It keeps whatever it was looking at, so it
+	# wakes facing what it dozed off at rather than snapping to centre.
+	if who.state == Creature.State.SLEEPING:
+		return
 	_choose_in -= delta
 	if _choose_in <= 0.0 or not _still_worth_it(who):
 		_choose_in = HOLD_LOOK

@@ -482,12 +482,28 @@ func covers(world_spot: Vector3, room := 0.0) -> bool:
 	return absf(here.x) <= half_long and here.z <= near_z and here.z >= far_z
 
 
+## IN THE NEST'S OWN FRAME, which is what BED_MID was always measured in.
+##
+## These added a LOCAL offset to a WORLD position, so they only ever landed on
+## the bed when the nest happened to be built facing world −Z. A nest turned any
+## other way sent the creature to a point out on the grass at the same distance
+## and the wrong bearing — which is why it slept beside its bed rather than in
+## it, sometimes outside the walls altogether. `_ground_local` a few lines up
+## says outright that the nest may be turned to any heading; these two did not
+## get the message.
 func bed() -> Vector3:
-	return global_position + Vector3(0, 0, BED_MID)
+	return to_global(Vector3(0, 0, BED_MID))
 
 
 func water() -> Vector3:
-	return global_position + Vector3(BED_LONG * 0.32, 0, POOL_R * 0.9)
+	return to_global(Vector3(BED_LONG * 0.32, 0, POOL_R * 0.9))
+
+
+## WHICH WAY IT LIES. Along the bed's length rather than across it, so a sleeping
+## creature is nose to one wall and tail to the other — which is the difference
+## between a beast in a bed and a beast that fell over near one.
+func bed_facing() -> float:
+	return global_rotation.y
 
 
 ## AN EVENING OF IT. Called once a second by the village while a circle is
@@ -512,7 +528,7 @@ func dance_tick(dancers: int, delta: float) -> void:
 			clampf(float(dancers) / float(DANCERS), 0.2, 1.5))
 
 
-## THE WHOLE WALL, IN WORDS — what a long press on the stone brings up.
+## THE WHOLE WALL — as STRUCTURE, for the reader to lay out.
 ##
 ## TWO COLUMNS: WHAT HE HOLDS, AND WHAT IS SO. That is the whole idea and it is
 ## worth stating plainly, because a single list of statistics is what the
@@ -527,41 +543,27 @@ func dance_tick(dancers: int, delta: float) -> void:
 ## trusts you completely, beside a count of how many times you have struck him,
 ## is the hardest line in the game to look at.
 ##
-## It is also why the wall is somewhere you walk to and hold still in front of,
-## rather than a key you press. You are getting closer to him to read it.
-func chronicle() -> String:
+## IT USED TO HAND BACK ONE PADDED STRING, and that is why the columns melded.
+## `%-34s %s` aligns nothing unless the font is monospace, and the readout's is
+## not — so the right-hand column started wherever the left-hand one happened to
+## end, and every left entry had to be TRUNCATED to 33 characters to stop it
+## shoving the other side off the panel. The interesting half of each pair was
+## the half being cut. Columns are a job for a layout, so the wall now says what
+## it has and HUD builds it out of real controls that can wrap and scroll.
+func reading() -> Dictionary:
 	if creature == null or not is_instance_valid(creature):
-		return "The stone is blank. Nobody has been read here yet."
-	var lines := PackedStringArray()
-	lines.append("SCRATCHED INTO THE STONE")
-	lines.append("")
-	lines.append("%-34s %s" % ["WHAT HE HOLDS", "WHAT IS SO"])
-	lines.append("%-34s %s" % ["-------------", "----------"])
-	for pair: Array in _columns():
-		# Trimmed to the column rather than allowed to shove the right-hand side
-		# along — two columns that do not line up are one column.
-		var held: String = String(pair[0])
-		if held.length() > 33:
-			held = held.substr(0, 32) + "…"
-		lines.append("%-34s %s" % [held, pair[1]])
-	lines.append("")
-	lines.append("WHAT HE IS MADE OF")
-	for pair: Array in _body_lines():
-		lines.append("  %-13s %s" % [pair[0], pair[1]])
-	lines.append("")
-	lines.append("WHAT HE HAS COME TO")
-	for pair: Array in _mind_lines():
-		lines.append("  %-13s %s" % [pair[0], pair[1]])
-	lines.append("")
-	lines.append("CUT INTO THE SIX STONES")
+		return {}
+	var stones := []
 	for which: String in FACES:
-		var how: float = creature.mind.ethos.standing(which)
-		var bar := ""
-		for i in 9:
-			bar += "|" if float(i) < absf(how) * 9.0 else "."
-		lines.append("  %-11s %s  %s" % [which, bar,
-			"" if absf(how) < 0.12 else ("much" if how > 0.0 else "against")])
-	return "\n".join(lines)
+		stones.append([which, creature.mind.ethos.standing(which)])
+	return {
+		"pairs": _columns(),
+		"blocks": [
+			{"head": "WHAT HE IS MADE OF", "rows": _body_lines()},
+			{"head": "WHAT HE HAS COME TO", "rows": _mind_lines()},
+		],
+		"stones": stones,
+	}
 
 
 ## THE PAIRS. Each is one thing he carries and the same thing as it really is.
@@ -627,14 +629,14 @@ func _mind_lines() -> Array:
 	out.append(["feeling", " and ".join(creature.heart.account())])
 	var habits: Array = mind.character_account()
 	out.append(["habits", "nothing settled yet" if habits.is_empty()
-		else "\n                ".join(habits)])
+		else "\n".join(habits)])
 	out.append(["learned", mind.strongest_urge()])
 	var creed: Array = mind.beliefs.creed(2)
 	out.append(["believes", "nothing firmly yet" if creed.is_empty()
-		else "\n                ".join(creed)])
+		else "\n".join(creed)])
 	var picture: Array = mind.world_picture()
 	out.append(["the world", "no idea yet" if picture.is_empty()
-		else "\n                ".join(picture)])
+		else "\n".join(picture)])
 	out.append(["miracles", _miracle_list(mind.known_miracles())])
 	return out
 

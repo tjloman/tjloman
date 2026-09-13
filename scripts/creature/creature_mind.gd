@@ -563,6 +563,12 @@ func witness_god_deed(verb: String, type: String, trust: float) -> void:
 func known_miracles() -> Array:
 	var ready := []
 	for m: String in familiarity:
+		# `familiarity` also carries the mind's own bookkeeping — "_watching"
+		# is how often it thinks to look at you at all — and an underscore was
+		# the only thing marking those apart. Nothing enforced it, so the nest
+		# wall listed "_watching" among the miracles it had learned.
+		if m.begins_with("_"):
+			continue
 		if float(familiarity[m]) >= MIRACLE_READY:
 			ready.append(m)
 	return ready

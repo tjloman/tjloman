@@ -17,7 +17,10 @@ signal settings_changed
 ## read by the HUD. Godot only looks for an emit inside THIS class, so it
 ## calls a signal the rest of the game plainly uses unused.
 @warning_ignore("unused_signal")
-signal stone_read(text: String)
+## Somebody held a press on a nest's wall. Carries the nest, so the reader
+## can lay its own reading out rather than being handed a pre-formatted wall
+## of text it cannot wrap, align or scroll. See CreatureNest.reading.
+signal stone_read(nest: Node)
 
 ## One full day/night cycle, in real seconds. (The pace of the sun is the
 ## heartbeat of the game — tuned once, everything else derives from it.)

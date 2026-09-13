@@ -947,7 +947,7 @@ func _tick_press_charge(delta: float) -> void:
 		if _press_time >= READ_HOLD:
 			_reading = false
 			hover_info_changed.emit(_describe(hover_target))
-			GameState.stone_read.emit((hover_target as CreatureNest).chronicle())
+			GameState.stone_read.emit(hover_target)
 			return
 		# THE HOLD, FILLING. There was no feedback of any kind: you pressed the
 		# wall, nothing happened for seven tenths of a second, and you let go —

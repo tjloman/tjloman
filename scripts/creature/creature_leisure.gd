@@ -11,6 +11,15 @@ extends RefCounted
 ## Lifted out of Creature because that file lives permanently on its line limit
 ## and these four sat together already, doing one thing.
 
+## HOW FAR OFF THE BED STILL COUNTS AS WALKING TO IT — scaled, because a flat
+## two metres is a stride for a whelp and a whisker for a fifteen-times giant,
+## and the giant is the one that ends up asleep with its head through a wall.
+const BED_SLOP := 1.2
+## And how quickly it settles into place once it is there. Slow enough to read
+## as an animal lying down and shuffling about; fast enough to be square before
+## it is properly under.
+const BED_SETTLE := 1.1
+
 static func lounge(who: Creature, delta: float) -> void:
 	# IF HE HAS A BED, HE USES IT. Lounging used to happen wherever he was
 	# standing, which meant a village could build him a lodge and watch him flop
@@ -174,3 +183,50 @@ static func commune(who: Creature, delta: float) -> void:
 ## The point of doing it THIS way rather than silently is that a creature that
 ## stops and looks at you is not a glitch. It is the most legible thing in the
 ## game. The player reads "it noticed something" — and it did.
+
+
+## ASLEEP. Returns true when it is still walking to bed and the caller should do
+## nothing else this frame.
+##
+## LYING IN THE BED, NOT NEAR IT. It used to stop the moment it was within two
+## metres of the bed's centre and tip onto its side wherever it happened to be
+## standing, at whatever heading it had walked in on. Two metres is nothing to a
+## creature forty metres long, and a heading nobody set is a creature lying
+## diagonally across its own bed with its legs out over the wall. So once it is
+## home it eases the last of the way in and turns to lie ALONG the bed.
+##
+## Eased rather than snapped: a beast that teleports square the instant it
+## arrives is a prop being placed, and everything else this creature does is
+## something it is seen to do.
+static func sleep(who: Creature, delta: float) -> bool:
+	var home := who._target
+	if home != Vector3.INF:
+		var reach := 2.0 + who.scale.x * BED_SLOP
+		if who.global_position.distance_to(home) > reach:
+			who._move_toward(home, Creature.WALK_SPEED * 0.7, delta)
+			return true
+		_bed_down(who, home, delta)
+	who._apply_gravity_only(delta)
+	# HEAVY OR LIGHT. A content, well-fed creature sleeps like a stone and gets
+	# the good of it. One that is hungry, spent, or braced for the next blow
+	# sleeps thin — it rests more slowly AND wakes sooner, which is why
+	# mistreatment compounds: it can never catch up.
+	var depth := who.welfare.sleep_depth()
+	who.energy = minf(who.energy + (2.0 + 5.0 * depth) * delta, 100.0)
+	if who._animator == null:
+		who._body.rotation_degrees.z = 80
+	if who.energy > lerpf(55.0, 92.0, depth):
+		if who._animator == null:
+			who._body.rotation_degrees.z = 0
+		who._decide()
+	return false
+
+
+## The last metre of it: into the middle of the bed, and square to it.
+static func _bed_down(who: Creature, home: Vector3, delta: float) -> void:
+	var take := clampf(BED_SETTLE * delta, 0.0, 1.0)
+	who.global_position.x = lerpf(who.global_position.x, home.x, take)
+	who.global_position.z = lerpf(who.global_position.z, home.z, take)
+	var nest := CreatureNest.holding(who)
+	if nest != null and is_instance_valid(nest):
+		who.rotation.y = lerp_angle(who.rotation.y, nest.bed_facing(), take)

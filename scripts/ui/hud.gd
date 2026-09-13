@@ -41,6 +41,17 @@ const STONE_LEAVE := 1.6
 const TAIL_WIDE := 13.0
 const STONE_LIFT := 118.0
 const TAIL_COLOR := Color(0.09, 0.1, 0.09, 0.82)
+## ROOM LEFT EITHER SIDE FOR THE LAND. A panel that can reach the screen edge
+## on a phone leaves nowhere to put a thumb down on the world, and the world is
+## the game. This much of the width stays clear on both sides, always.
+const STONE_SIDE := 0.13
+## And the most of the screen's height it may take before it starts scrolling
+## instead of growing, with a ceiling in pixels so a desk monitor does not get
+## a single column half a metre long.
+const STONE_TALL := 0.62
+const STONE_WIDE_MOST := 640.0
+## The heading column of a key/value block, as a share of the panel's width.
+const KEY_SHARE := 0.32
 
 var village: Village
 var divine_hand: DivineHand
@@ -83,6 +94,8 @@ var _stone_on: Vector3 = Vector3.INF
 ## That writing, in screen space, or INF when it is off screen or behind you.
 var _stone_mark := Vector2.INF
 var _stone_tail: Control
+var _stone_scroll: ScrollContainer
+var _stone_rows: VBoxContainer
 
 
 func _ready() -> void:
@@ -124,13 +137,31 @@ func _build_stone_panel() -> void:
 	_stone_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_stone_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 	_stone_panel.add_theme_stylebox_override("panel", _dim_panel_style())
-	_stone_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# NOT CLICK-THROUGH ANY MORE, because it has to be SCROLLABLE. A wall that
+	# is taller than a phone is a wall with a bottom nobody has ever seen — the
+	# six stones were off the end of the screen with no way to reach them.
+	_stone_panel.mouse_filter = Control.MOUSE_FILTER_PASS
 	_stone_panel.visible = false
+	var pad := MarginContainer.new()
+	for side: String in ["left", "right", "top", "bottom"]:
+		pad.add_theme_constant_override("margin_" + side, 12)
+	_stone_panel.add_child(pad)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 8)
+	pad.add_child(column)
 	_stone_label = Label.new()
-	_stone_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_stone_label.text = "SCRATCHED INTO THE STONE"
 	_stone_label.add_theme_font_size_override("font_size", 15)
 	_stone_label.add_theme_color_override("font_color", Color(0.92, 0.88, 0.78))
-	_stone_panel.add_child(_stone_label)
+	column.add_child(_stone_label)
+	_stone_scroll = ScrollContainer.new()
+	_stone_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_stone_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(_stone_scroll)
+	_stone_rows = VBoxContainer.new()
+	_stone_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stone_rows.add_theme_constant_override("separation", 10)
+	_stone_scroll.add_child(_stone_rows)
 	# THE TAIL IS DRAWN FIRST so the panel sits on top of where it joins.
 	_stone_tail = Control.new()
 	_stone_tail.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -138,7 +169,6 @@ func _build_stone_panel() -> void:
 	_stone_tail.draw.connect(_draw_stone_tail)
 	add_child(_stone_tail)
 	add_child(_stone_panel)
-	_make_click_through(_stone_panel)
 
 
 ## THE POINTER. A speech-bubble tail from the panel down to the writing it came
@@ -173,36 +203,108 @@ func _edge_span(box: Rect2, out: Vector2) -> float:
 	return span if span < INF else 0.0
 
 
-func _on_stone_read(text: String) -> void:
-	_stone_label.text = text
+func _on_stone_read(nest: Node) -> void:
+	var wall := nest as CreatureNest
+	if wall == null or not is_instance_valid(wall):
+		return
+	_fill_stone(wall.reading())
 	_stone_panel.visible = true
 	_stone_time = STONE_HOLD
-	var read := _nest_read()
-	_stone_at = read.global_position if read != null else Vector3.INF
-	_stone_on = read.tablet_point() if read != null else Vector3.INF
+	_stone_at = wall.global_position
+	_stone_on = wall.tablet_point()
 	# Off the screen's middle and free to move: from here on it follows the
 	# stone rather than sitting where the last one sat.
 	_stone_panel.set_anchors_and_offsets_preset(
 		Control.PRESET_TOP_LEFT, Control.PRESET_MODE_MINSIZE)
 
 
-## Which nest was read. The chronicle is a thing SCRATCHED ON A WALL, and you
-## read it by standing at the wall — so it belongs to that wall and not to the
-## screen. Held as a position rather than a reference so a nest that is razed,
-## or whose village is wiped out, takes its panel with it and does not keep a
-## dead node alive to do it.
-func _nest_read() -> CreatureNest:
-	var near: CreatureNest = null
-	var best := INF
-	for n in get_tree().get_nodes_in_group("creature_nest"):
-		var nest := n as CreatureNest
-		if nest == null or not is_instance_valid(nest):
-			continue
-		var gap := nest.global_position.distance_to(GameState.camera_focus)
-		if gap < best:
-			best = gap
-			near = nest
-	return near
+## LAY THE WALL OUT — in real controls, sized to the screen it is on.
+##
+## Rebuilt per reading rather than kept: a wall is read for a few seconds at a
+## time and the alternative is a dozen labels held live against a creature that
+## is changing under them.
+func _fill_stone(part: Dictionary) -> void:
+	for old_row in _stone_rows.get_children():
+		old_row.queue_free()
+	if part.is_empty():
+		return
+	var screen := get_viewport().get_visible_rect().size
+	var wide := minf(screen.x * (1.0 - STONE_SIDE * 2.0), STONE_WIDE_MOST)
+	_stone_scroll.custom_minimum_size = Vector2(wide, screen.y * STONE_TALL)
+	# HALF EACH, AND THEY STAY HALF EACH. The two columns are the whole point
+	# of the header — what he holds against what is so — and a column whose
+	# width depends on what happens to be in it is not a column.
+	var half := (wide - 26.0) * 0.5
+	var head := _stone_grid(2)
+	head.add_child(_stone_cell("WHAT HE HOLDS", half, true))
+	head.add_child(_stone_cell("WHAT IS SO", half, true))
+	for pair: Array in part.get("pairs", []):
+		head.add_child(_stone_cell(String(pair[0]), half))
+		head.add_child(_stone_cell(String(pair[1]), half))
+	_stone_rows.add_child(head)
+	for block: Dictionary in part.get("blocks", []):
+		_stone_rows.add_child(_stone_cell(String(block["head"]), wide, true))
+		var keyw := wide * KEY_SHARE
+		var grid := _stone_grid(2)
+		for row: Array in block["rows"]:
+			grid.add_child(_stone_cell(String(row[0]), keyw))
+			grid.add_child(_stone_cell(String(row[1]), wide - keyw - 22.0))
+		_stone_rows.add_child(grid)
+	_fill_stones(part.get("stones", []), wide)
+
+
+## THE SIX STONES, which nobody could read because they were off the bottom of
+## the screen and there was no bar to hold onto. They are the creature's ETHOS —
+## the standing it has earned on each of six counts by what it has actually
+## done — and since a player has no way of knowing that from six words and a row
+## of pipes, the section now says so.
+func _fill_stones(stones: Array, wide: float) -> void:
+	if stones.is_empty():
+		return
+	_stone_rows.add_child(_stone_cell("CUT INTO THE SIX STONES", wide, true))
+	_stone_rows.add_child(_stone_cell(
+		"what he has made of himself, by what he has done", wide))
+	var keyw := wide * KEY_SHARE
+	var grid := _stone_grid(2)
+	for stone: Array in stones:
+		var how := clampf(float(stone[1]), -1.0, 1.0)
+		var filled := int(absf(how) * 9.0)
+		var bar := ""
+		for i in 9:
+			bar += "|" if i < filled else "·"
+		var word := ""
+		if absf(how) >= 0.12:
+			word = "  much" if how > 0.0 else "  against"
+		grid.add_child(_stone_cell(String(stone[0]), keyw))
+		grid.add_child(_stone_cell(bar + word, wide - keyw - 22.0))
+	_stone_rows.add_child(grid)
+
+
+## A grid to hang cells in. The widths themselves live on the CELLS, as minimum
+## sizes — a GridContainer sizes a column to its widest child, so fixing the
+## children is what fixes the column.
+func _stone_grid(columns: int) -> GridContainer:
+	var grid := GridContainer.new()
+	grid.columns = columns
+	grid.add_theme_constant_override("h_separation", 22)
+	grid.add_theme_constant_override("v_separation", 6)
+	return grid
+
+
+## One cell. Wrapping, not truncating: the left column used to be cut at 33
+## characters to keep it out of the right column's way, and the interesting
+## half of every pair was the half being cut off.
+func _stone_cell(text: String, wide: float, heading := false) -> Label:
+	var cell := Label.new()
+	cell.text = text
+	cell.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	cell.custom_minimum_size = Vector2(wide, 0)
+	cell.size_flags_horizontal = Control.SIZE_FILL
+	cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cell.add_theme_font_size_override("font_size", 15 if heading else 14)
+	cell.add_theme_color_override("font_color",
+		Color(0.96, 0.93, 0.82) if heading else Color(0.86, 0.84, 0.76))
+	return cell
 
 
 ## THE STONE GOES OFF THE SCREEN WHEN YOU WALK AWAY FROM THE STONE.

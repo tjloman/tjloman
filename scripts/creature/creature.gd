@@ -391,23 +391,8 @@ func _physics_process(delta: float) -> void:
 			if _action_time <= 0.0:
 				_finish_deed("tend", 4.0)
 		State.SLEEPING:
-			if _target != Vector3.INF \
-					and global_position.distance_to(_target) > 2.0:
-				_move_toward(_target, WALK_SPEED * 0.7, delta)
+			if CreatureLeisure.sleep(self, delta):
 				return
-			_apply_gravity_only(delta)
-			# HEAVY OR LIGHT. A content, well-fed creature sleeps like a stone
-			# and gets the good of it. One that is hungry, spent, or braced for
-			# the next blow sleeps thin — it rests more slowly AND wakes sooner,
-			# which is why mistreatment compounds: it can never catch up.
-			var depth := welfare.sleep_depth()
-			energy = minf(energy + (2.0 + 5.0 * depth) * delta, 100.0)
-			if _animator == null:
-				_body.rotation_degrees.z = 80
-			if energy > lerpf(55.0, 92.0, depth):
-				if _animator == null:
-					_body.rotation_degrees.z = 0
-				_decide()
 		State.WATCH:
 			_process_watch(delta)
 		State.GO_GATHER:
