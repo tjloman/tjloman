@@ -688,6 +688,38 @@ elliptical falloff multiplied by noise sampled with a squashed vertical, so the
 detail runs in horizontal **streaks** rather than reading as a stack of fuzzy
 balls. 64×64, built once at world load, shared by every cloud ever cast.
 
+## What a tree is worth
+
+A tree's `lumber` is how **big** it is, 1 to 10. What felling it *yields* is the
+running Fibonacci sum of every size it has been — **a tree is worth everything
+it has been** — so a sapling is 1 and a giant is 143. Cutting the little ones
+stops being worth the walk, a wood becomes something a village lets stand and
+comes back to, and a well-tended forest is worth enormously more than a scrubby
+one. That is the lever a god actually has over a logging town.
+
+Three of the four ways to harvest one were banking the **size** instead:
+
+| size | chopped by a woodcutter | carried to the store | hurled hard |
+|---|---|---|---|
+| 5 | 12 | ~~5~~ → 12 | ~~2~~ → 3 |
+| 9 | 88 | ~~9~~ → 88 | ~~3~~ → 22 |
+| 10 | 143 | ~~10~~ → 143 | ~~3~~ → 35 |
+
+A woodcutter called `fell()`, which returns `timber()`, and got the real
+number. The same giant carried to the storehouse in your own hand paid 9, and
+burst on impact paid 3. Each line looked perfectly reasonable on its own.
+
+Hurling still wastes most of it — `SPLINTER_SHARE` is a quarter, and that is
+the point — but it is now a quarter of what the tree was *worth* rather than of
+how tall it stood. `check_calls.py` fails the build on anything that passes
+`lumber` to `add_lumber` again.
+
+The same bug in miniature: a `ResourceItem` bundle carries a `count`, which the
+storehouse platform has always read and the creature's own hands never did — so
+everything the beast fetched by hand arrived worth exactly one. Both now go
+through `FoodStore.take_bundle`, which is the only thing that decides what a
+bundle is worth.
+
 ## Land you can wreck
 
 Every hill in this world is derived from the world seed. That is what makes it

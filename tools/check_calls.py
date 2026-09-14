@@ -1503,6 +1503,51 @@ def check_int_division(files):
     return out
 
 
+def check_tree_worth(files):
+    """A TREE'S SIZE BANKED AS A TREE'S WORTH.
+
+    `WildTree.lumber` is how BIG it is, one to ten. `WildTree.timber()` is what
+    felling it yields -- the running Fibonacci sum of every size it has been, so
+    a nine is worth eighty-eight and a ten is worth a hundred and forty-three.
+    The whole point of that curve is that a wood becomes something a village
+    lets stand and comes back to, and cutting saplings stops being worth the
+    walk.
+
+    Three of the four ways a tree can be harvested were banking the SIZE. A
+    woodcutter called `fell()`, which returns `timber()`, and got 88; the same
+    giant carried to the storehouse in the god's own hand paid 9, and hurled
+    hard enough to burst it paid 3. Nobody noticed for as long as the game has
+    had Fibonacci timber, because each path looked perfectly reasonable on its
+    own line.
+
+    So: nothing may pass `lumber` to `add_lumber`. Quoted text is stripped
+    first, because `spec["lumber"]` is a build cost and has nothing to do with
+    a tree.
+    """
+    out = []
+    quoted = re.compile(r'"[^"]*"|\'[^\']*\'')
+    bare = re.compile(r"\blumber\b")
+    for path in files:
+        for i, line in enumerate(open(path, encoding="utf-8").read().split("\n")):
+            code = line.split("#", 1)[0]
+            at = code.find("add_lumber(")
+            if at < 0:
+                continue
+            # The argument text, to the matching close paren.
+            depth, arg = 0, []
+            for ch in code[at + len("add_lumber("):]:
+                if ch == "(":
+                    depth += 1
+                elif ch == ")":
+                    if depth == 0:
+                        break
+                    depth -= 1
+                arg.append(ch)
+            if bare.search(quoted.sub("", "".join(arg))):
+                out.append((path, i + 1, code.strip()))
+    return out
+
+
 def check_sentinel_passed(files):
     """A "NOWHERE YET" SENTINEL HANDED TO SOMETHING THAT WILL BUILD THERE.
 
@@ -1791,6 +1836,13 @@ def main():
               "is what was wanted, say it: `@warning_ignore(\"integer_division\")` "
               "on the line above, and a comment saying why the floor is right."
               "\n    %s" % (path, lineno, expr, line))
+    worth = check_tree_worth(files)
+    for path, lineno, line in worth:
+        print("%s:%d: this banks a tree's SIZE as its WORTH. `lumber` is how big "
+              "it is (1..10); `timber()` is what felling it yields — the running "
+              "Fibonacci sum of every size it has been, so a nine is 88 and a "
+              "ten is 143. Call `timber()`."
+              "\n    %s" % (path, lineno, line))
     sentinels = check_sentinel_passed(files)
     for path, lineno, name, line in sentinels:
         print("%s:%d: `%s` is assigned Vector3.INF somewhere in this file — the "
@@ -1843,7 +1895,7 @@ def main():
         + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice) + len(loose_consts) + len(through) \
         + len(class_shadows) + len(confusable) + len(sim_clocks) + len(alive) \
         + len(stand) + len(typed_has) + len(shadowed_own) + len(sentinels) \
-        + len(int_div)
+        + len(int_div) + len(worth)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

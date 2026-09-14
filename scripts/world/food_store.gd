@@ -127,11 +127,7 @@ func _process(delta: float) -> void:
 			_marvel(word, many, flew, by_beast, by_god)
 		elif rb is ResourceItem:
 			var r := rb as ResourceItem
-			var many := maxi(r.count, 1)
-			if r.kind == "lumber":
-				add_lumber(many)
-			else:
-				add_stone(many)
+			var many := take_bundle(r)
 			rb.queue_free()
 			_thank_the_giver()
 			_marvel(r.kind, many, flew, by_beast, by_god)
@@ -273,6 +269,20 @@ func has(type: FoodItem.FoodType) -> bool:
 
 func total_food() -> int:
 	return plant_food + meat_food
+
+
+## BANK A BUNDLE, worth what it HOLDS rather than one. ResourceItem.count has
+## said so since bundles existed and the platform drop has always read it — but
+## the creature carrying one in by hand had its own copy of this that banked a
+## flat one, so everything the beast fetched arrived worth a single unit.
+## One door now, and nowhere left for a second opinion. Returns what was banked.
+func take_bundle(item: ResourceItem) -> int:
+	var many := maxi(item.count, 1)
+	if item.kind == "lumber":
+		add_lumber(many)
+	else:
+		add_stone(many)
+	return many
 
 
 func add_lumber(amount: int) -> void:

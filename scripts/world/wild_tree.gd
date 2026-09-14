@@ -9,6 +9,12 @@ extends StaticBody3D
 ## sequence up to it — see TIMBER. A tree is worth everything it has been.
 
 const MAX_LUMBER := 10.0
+
+## WHAT SURVIVES A TREE BEING HURLED INTO THE GROUND, as a share of what it was
+## worth, and over how many bundles. A wasteful way to harvest, deliberately —
+## but a share of its real worth rather than of its size. See `_land`.
+const SPLINTER_SHARE := 0.25
+const SPLINTER_MOST := 5
 ## The running sum of Fibonacci, one entry per whole size: 1, 1+1, +2, +3, +5...
 ## Written out rather than computed because it is ten numbers that will never
 ## change, and a table can be read at a glance by anyone balancing the economy.
@@ -464,10 +470,16 @@ func _land(impact_speed: float) -> void:
 		var store := s as FoodStore
 		if is_instance_valid(store) \
 				and store.global_position.distance_to(global_position) < FoodStore.PLATFORM_RADIUS + 1.5:
-			store.add_lumber(maxi(int(lumber), 1))
+			# WHAT IT IS WORTH, not how big it is. `lumber` is the tree's SIZE,
+			# one to ten; `timber()` is what felling it yields, which is the
+			# running Fibonacci sum of everything it has been — 88 for a size
+			# nine, not 9. This path banked the size for as long as it has
+			# existed, so a giant carried carefully to the storehouse paid a
+			# tenth of the same giant chopped by a woodcutter.
+			store.add_lumber(timber())
 			var town := store.get_parent() as Village
 			if town != null and is_instance_valid(town):
-				town.wonder.given(town, "lumber", maxi(int(lumber), 1),
+				town.wonder.given(town, "lumber", timber(),
 					impact_speed, has_meta("hurled_by_creature"))
 			queue_free()
 			return
@@ -478,9 +490,24 @@ func _land(impact_speed: float) -> void:
 			return
 		global_position.y = world.height_at(global_position.x, global_position.z) - 0.1
 	if impact_speed > 14.0:
-		for i in mini(int(lumber / 4.0) + 1, 5):
+		# SPLINTERED. A share of what the tree was worth, and the rest is lost
+		# — which is the point, and was always the point. But the share has to
+		# be of `timber()`: off the raw size a hurled giant burst into three
+		# bundles worth three, against the eighty-eight a woodcutter would have
+		# had, so the wasteful god was not being taxed, he was being robbed.
+		#
+		# Carried in `count`, so five physical bundles can be worth twenty-two
+		# without putting twenty-two rigid bodies on the grass. FoodStore reads
+		# it; so does the creature, now.
+		var worth := maxi(int(float(timber()) * SPLINTER_SHARE), 1)
+		var bundles := clampi(worth, 1, SPLINTER_MOST)
+		var each := float(worth) / float(bundles)
+		for i in bundles:
 			var bundle := ResourceItem.new()
 			bundle.kind = "lumber"
+			# Exact split, remainder and all: this bundle's boundary less the
+			# one before it, so the pieces always sum back to `worth`.
+			bundle.count = int(round(each * float(i + 1))) - int(round(each * float(i)))
 			get_parent().add_child(bundle)
 			bundle.global_position = global_position \
 				+ Vector3(randf_range(-1, 1), 1.0, randf_range(-1, 1))

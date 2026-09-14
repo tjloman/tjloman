@@ -1273,13 +1273,10 @@ func _process_carrying(delta: float) -> void:
 					store.add((_carried as FoodItem).food_type, 1)
 					_carried.queue_free()
 				elif _carried is ResourceItem:
-					if (_carried as ResourceItem).kind == "lumber":
-						store.add_lumber(1)
-					else:
-						store.add_stone(1)
+					store.take_bundle(_carried as ResourceItem)
 					_carried.queue_free()
 				elif _carried is WildTree:
-					store.add_lumber(maxi(int((_carried as WildTree).lumber), 1))
+					store.add_lumber((_carried as WildTree).timber())
 					_carried.queue_free()
 				_carried = null
 				for v in get_tree().get_nodes_in_group("villagers"):
