@@ -161,6 +161,8 @@ var pin: Mauling = null
 var state := State.WANDER
 var _target := Vector3.ZERO
 var _action_time := 0.0
+## A decision has been asked for and not yet granted. See `_rethink`.
+var _decision_due := false
 var _target_food: FoodItem = null
 var _target_animal: Animal = null
 ## The wild herd they are going to cut a head out of, when there is no loose
@@ -277,7 +279,17 @@ func _ready() -> void:
 	add_child(_label)
 
 	_apply_life_stage()
-	_decide()
+	# TAKEN, NOT ASKED FOR. A villager starts in WANDER with `_target` at
+	# Vector3.ZERO, so one waiting on its FIRST decision walks toward the world
+	# origin a step a frame. Everything after this spools. The only time this
+	# arrives in bulk is a save load, which is a loading screen.
+	_choose()
+
+
+## A DECISION IS WANTED — not taken. Every caller that used to decide now asks;
+## the spool says when, and until then they carry on exactly as they were.
+func _rethink() -> void:
+	_decision_due = true
 
 
 func _physics_process(delta: float) -> void:
@@ -336,6 +348,11 @@ func _physics_process(delta: float) -> void:
 		_process_dying(delta)
 		_stick_to_ground()
 		return
+	# THE TURN TO THINK, if one is owed and the frame has room. Refused, they
+	# carry on into the state machine below doing what they were already doing.
+	if _decision_due and Spool.turn_to_think(self):
+		_decision_due = false
+		_choose()
 	_tick_lifecycle(delta)
 	_tick_needs(delta)
 	_tick_watchdogs(delta)
@@ -369,19 +386,19 @@ func _physics_process(delta: float) -> void:
 			away.y = 0
 			_move_toward(global_position + away.normalized() * 5.0, FLEE_SPEED, delta)
 			if _action_time <= 0.0:
-				_decide()
+				_rethink()
 		State.WANDER, State.PLAY:
 			_action_time -= delta
 			var speed := WALK_SPEED * (1.4 if state == State.PLAY else 0.6)
 			if _move_toward(_target, speed * _speed_factor(), delta) or _action_time <= 0.0:
-				_decide()
+				_rethink()
 		State.GO_EAT:
 			_process_go_eat(delta)
 		State.EATING:
 			if _wait(delta):
 				_eat_meal()
 				happiness = minf(happiness + 8.0, 100.0)
-				_decide()
+				_rethink()
 		State.GO_SLEEP:
 			if _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
 				state = State.SLEEPING
@@ -397,15 +414,15 @@ func _physics_process(delta: float) -> void:
 			# and _decide puts eating before everything else.
 			if hunger > 80.0:
 				_pitch_body(0.0)
-				_decide()
+				_rethink()
 			elif energy >= 100.0 or (energy > 60.0 and not GameState.is_night()):
 				_pitch_body(0.0)
-				_decide()
+				_rethink()
 		State.GO_FARM:
 			if _target_farm == null or not is_instance_valid(_target_farm):
-				_decide()
+				_rethink()
 			elif _state_time > 10.0:
-				_decide()  # can't reach the field — give it up (frees the claim)
+				_rethink()  # can't reach the field — give it up (frees the claim)
 			elif _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
 				state = State.FARMING
 				_action_time = 3.0
@@ -414,7 +431,7 @@ func _physics_process(delta: float) -> void:
 			_action_time -= delta
 			if _target_farm == null or not is_instance_valid(_target_farm) \
 					or not _target_farm.is_workable():
-				_decide()
+				_rethink()
 				return
 			_target_farm.tend()
 			_work_noise("chatter", 6.0, delta)
@@ -426,21 +443,21 @@ func _physics_process(delta: float) -> void:
 					_carry_announce = "%s brought in the harvest." % villager_name
 					_begin_haul("plant", grain, "farm")
 				else:
-					_decide()
+					_rethink()
 		State.GO_FEED:
 			if not _carrying_feed:
 				if _move_toward(village.store.global_position, WALK_SPEED * _speed_factor(), delta):
 					if village.store.take(FoodItem.FoodType.PLANT, 1) > 0:
 						_carrying_feed = true
 					else:
-						_decide()
+						_rethink()
 			elif _move_toward(village.pen_position(), WALK_SPEED * _speed_factor(), delta):
 				village.feed_penned()
 				_carrying_feed = false
-				_decide()
+				_rethink()
 		State.GO_FISH:
 			if _fish_spot == Vector3.INF:
-				_decide()
+				_rethink()
 			elif _move_toward(_fish_spot, WALK_SPEED * _speed_factor(), delta, 1.6):
 				_dismount()
 				state = State.FISHING
@@ -465,7 +482,7 @@ func _physics_process(delta: float) -> void:
 			if _action_time <= 0.0:
 				village.spawn_farm_at(_farm_spot)
 				_farm_spot = Vector3.INF
-				_decide()
+				_rethink()
 		State.GO_BUILD_EDUBBA:
 			if _move_toward(_edubba_spot, WALK_SPEED * _speed_factor(), delta):
 				_dismount()
@@ -478,7 +495,7 @@ func _physics_process(delta: float) -> void:
 			if _action_time <= 0.0:
 				village.spawn_edubba_at(_edubba_spot)
 				_edubba_spot = Vector3.INF
-				_decide()
+				_rethink()
 		State.GO_BUILD_NEST:
 			if _move_toward(_shop_spot, WALK_SPEED * _speed_factor(), delta):
 				_dismount()
@@ -492,10 +509,10 @@ func _physics_process(delta: float) -> void:
 				CreatureNest.raise_at(village, _shop_spot,
 					get_tree().get_first_node_in_group("creature") as Creature)
 				_shop_spot = Vector3.INF
-				_decide()
+				_rethink()
 		State.GO_CIRCLE:
 			if village.nest == null or not is_instance_valid(village.nest):
-				_decide()
+				_rethink()
 			elif _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
 				state = State.CIRCLING
 				_action_time = randf_range(25.0, 50.0)
@@ -516,7 +533,7 @@ func _physics_process(delta: float) -> void:
 				_work_noise("chant", 0.5, delta)
 			_action_time -= delta
 			if _action_time <= 0.0 or not GameState.is_night():
-				_decide()
+				_rethink()
 		State.GO_BUILD_SHOP:
 			if _move_toward(_shop_spot, WALK_SPEED * _speed_factor(), delta):
 				_dismount()
@@ -530,11 +547,11 @@ func _physics_process(delta: float) -> void:
 				village.spawn_workshop_at(_shop_kind, _shop_spot)
 				_shop_spot = Vector3.INF
 				_shop_kind = ""
-				_decide()
+				_rethink()
 		State.GO_WORK:
 			if workshop == null or not is_instance_valid(workshop):
 				workshop = null
-				_decide()
+				_rethink()
 			elif _move_toward(workshop.post(), WALK_SPEED * _speed_factor(), delta):
 				_dismount()
 				state = State.WORKING
@@ -547,7 +564,7 @@ func _physics_process(delta: float) -> void:
 			_apply_gravity_only(delta)
 			if workshop == null or not is_instance_valid(workshop):
 				workshop = null
-				_decide()
+				_rethink()
 			else:
 				_work_noise("hammer", 0.35, delta)
 				_shift_left -= delta
@@ -557,16 +574,16 @@ func _physics_process(delta: float) -> void:
 				_action_time -= delta
 				if _action_time <= 0.0:
 					workshop = null
-					_decide()
+					_rethink()
 		State.GO_ARM:
 			# To the storehouse for arms. If the stores can't pay for a weapon
 			# they go bare-handed rather than stand about.
 			if village == null or not is_instance_valid(village.store):
-				_decide()
+				_rethink()
 			elif _move_toward(village.store.global_position,
 					WALK_SPEED * _speed_factor(), delta, 2.2):
 				Militia.take_up_arms(self)
-				_decide()
+				_rethink()
 		State.FIGHT:
 			Militia.fight(self, delta)
 		State.HIDE:
@@ -577,18 +594,18 @@ func _physics_process(delta: float) -> void:
 				_apply_gravity_only(delta)
 				happiness = maxf(happiness - 2.0 * delta, 0.0)
 			if _action_time <= 0.0:
-				_decide()
+				_rethink()
 		State.HAULING:
 			# Carry the gathered load home on foot — nothing teleports to the
 			# store; if the store is gone, the load is simply dropped.
 			if village == null or village.store == null \
 					or not is_instance_valid(village.store):
 				_clear_carry()
-				_decide()
+				_rethink()
 			elif _move_toward(village.store.global_position,
 					WALK_SPEED * _speed_factor(), delta, 2.2):
 				_deliver_carry()
-				_decide()
+				_rethink()
 		State.COURT:
 			# Court at the totem; conception happens while worshipping there.
 			if _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
@@ -604,7 +621,7 @@ func _physics_process(delta: float) -> void:
 				_apply_gravity_only(delta)
 			_action_time -= delta
 			if _action_time <= 0.0 or not village.has_edubba():
-				_decide()
+				_rethink()
 		State.MUSTERING:
 			# Standing about at the totem until enough have come. What the party
 			# decides it IS depends on who turns up — see VillageParty.
@@ -613,7 +630,7 @@ func _physics_process(delta: float) -> void:
 			if village.party.settled():
 				_set_out()
 			elif _action_time <= 0.0:
-				_decide()          # nobody came; do not wait at a totem forever
+				_rethink()          # nobody came; do not wait at a totem forever
 		State.GO_HUNT:
 			_process_go_target(_target_animal, delta, State.HUNTING, 2.0)
 		State.HUNTING:
@@ -626,7 +643,7 @@ func _physics_process(delta: float) -> void:
 				if meat > 0:
 					_begin_haul("meat", meat, "hunt")
 				else:
-					_decide()
+					_rethink()
 		State.GO_BUTCHER:
 			_process_go_target(_target_corpse, delta, State.BUTCHERING, 2.5)
 		State.BUTCHERING:
@@ -644,7 +661,7 @@ func _physics_process(delta: float) -> void:
 				if butchered:
 					_begin_haul("meat", 2, "butcher")
 				else:
-					_decide()
+					_rethink()
 		State.GO_CHOP:
 			_process_go_target(_target_tree, delta, State.CHOPPING, 4.0)
 		State.CHOPPING:
@@ -660,7 +677,7 @@ func _physics_process(delta: float) -> void:
 				if lumber > 0:
 					_begin_haul("lumber", lumber, "chop")
 				else:
-					_decide()
+					_rethink()
 		State.GO_QUARRY:
 			_process_go_target(_target_deposit, delta, State.QUARRYING, 4.0)
 		State.QUARRYING:
@@ -675,11 +692,11 @@ func _physics_process(delta: float) -> void:
 				if stone > 0:
 					_begin_haul("stone", stone, "quarry")
 				else:
-					_decide()
+					_rethink()
 		State.GO_BUILD:
 			if _build_site == null or not is_instance_valid(_build_site):
 				_build_site = null
-				_decide()
+				_rethink()
 			elif _move_toward(_build_site.global_position, WALK_SPEED * _speed_factor(), delta):
 				state = State.BUILDING
 		State.BUILDING:
@@ -687,17 +704,17 @@ func _physics_process(delta: float) -> void:
 			_work_noise("hammer", 0.7, delta)
 			if _build_site == null or not is_instance_valid(_build_site):
 				_build_site = null
-				_decide()
+				_rethink()
 			elif _build_site.under_construction:
 				_build_site.advance_construction(House.BUILD_RATE * delta)
 			elif _build_site.needs_repair():
 				_build_site.repair(20.0 * delta)
 				if not _build_site.needs_repair():
 					_build_site = null
-					_decide()
+					_rethink()
 			else:
 				_build_site = null
-				_decide()
+				_rethink()
 		State.GO_TAME:
 			if _target_animal == null and _target_herd != null:
 				_process_go_target(_target_herd, delta, State.TAMING, 3.0)
@@ -713,12 +730,12 @@ func _physics_process(delta: float) -> void:
 			if _target_animal == null and _target_herd != null:
 				if not is_instance_valid(_target_herd) or _target_herd.alive() <= 0:
 					_target_herd = null
-					_decide()
+					_rethink()
 				elif _action_time <= 0.0:
 					_take_from_herd()
 			elif not is_instance_valid(_target_animal) or not _target_animal.is_tamable():
 				_target_animal = null
-				_decide()
+				_rethink()
 			elif _action_time <= 0.0:
 				_target_animal.tame(village)
 				morality = minf(morality + 2.0, 100.0)
@@ -726,11 +743,11 @@ func _physics_process(delta: float) -> void:
 					GameState.announce("%s gently tamed a %s. It follows them home."
 						% [villager_name, _target_animal.species])
 				_target_animal = null
-				_decide()
+				_rethink()
 		State.GO_PREACH:
 			if _mission_village == null or not is_instance_valid(_mission_village):
 				_mission_village = null
-				_decide()
+				_rethink()
 			elif _move_toward(_mission_village.totem.global_position
 					+ Vector3(randf_range(-2, 2), 0, randf_range(-2, 2)),
 					WALK_SPEED * _speed_factor(), delta):
@@ -742,18 +759,18 @@ func _physics_process(delta: float) -> void:
 			_work_noise("murmur", 3.0, delta)
 			if _mission_village == null or not is_instance_valid(_mission_village):
 				_mission_village = null
-				_decide()
+				_rethink()
 			elif _mission_village.converted:
 				GameState.announce("%s has brought %s into the light!"
 					% [villager_name, _mission_village.village_name])
 				morality = minf(morality + 5.0, 100.0)
 				_mission_village = null
-				_decide()
+				_rethink()
 			else:
 				_mission_village.change_belief(0.45 * delta)
 				if _action_time <= 0.0:
 					_mission_village = null
-					_decide()
+					_rethink()
 		State.GO_WORSHIP:
 			if _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
 				state = State.WORSHIPPING
@@ -767,7 +784,7 @@ func _physics_process(delta: float) -> void:
 			morality = minf(morality + 0.05, 100.0)
 			_try_conceive(delta)
 			if _action_time <= 0.0:
-				_decide()
+				_rethink()
 	_stick_to_ground()
 
 
@@ -811,7 +828,7 @@ func _tick_watchdogs(delta: float) -> void:
 	_state_time += delta
 	if _state_time > 40.0 and state not in [State.SLEEPING, State.HELD]:
 		_state_time = 0.0
-		_decide()
+		_rethink()
 	# No-progress breaker: a villager on a TRIP (heading somewhere) that hasn't
 	# covered ground for a few seconds is blocked — a lakeshore it can't round,
 	# a knot of bodies. Re-decide now so it picks a reachable errand instead of
@@ -825,7 +842,7 @@ func _tick_watchdogs(delta: float) -> void:
 			if _wd_still > 4.0:
 				_wd_still = 0.0
 				_wd_pos = global_position
-				_decide()
+				_rethink()
 	else:
 		_wd_still = 0.0
 		_wd_pos = global_position
@@ -836,7 +853,7 @@ func _tick_watchdogs(delta: float) -> void:
 			velocity = Vector3.ZERO
 			if state == State.FALLING:
 				state = State.WANDER
-				_decide()
+				_rethink()
 	# Waist-deep in a hillside (bad spawn, collision hiccup): pop back up.
 	_ground_check_time -= delta
 	if _ground_check_time <= 0.0:
@@ -863,7 +880,7 @@ func _wait(delta: float) -> bool:
 # them or the villager shoves at the rock forever and quarries nothing.
 func _process_go_target(target: Variant, delta: float, next: State, work_time: float) -> void:
 	if target == null or not is_instance_valid(target) or target.is_queued_for_deletion():
-		_decide()
+		_rethink()
 		return
 	if _move_toward(target.global_position, WALK_SPEED * _speed_factor(), delta, 2.4):
 		_dismount()
@@ -880,14 +897,14 @@ func _take_from_herd() -> void:
 	_target_herd = null
 	var won := from.give_one(global_position)
 	if won == null:
-		_decide()
+		_rethink()
 		return
 	won.tame(village)
 	morality = minf(morality + 2.0, 100.0)
 	if village.is_player_home:
 		GameState.announce("%s cut a %s out of the herd and brought it home."
 			% [villager_name, won.species])
-	_decide()
+	_rethink()
 
 
 func _work_noise(sound: String, period: float, delta: float) -> void:
@@ -1055,7 +1072,7 @@ func cheer(amount: float) -> void:
 
 ## Decision-making -----------------------------------------------------------
 
-func _decide() -> void:
+func _choose() -> void:
 	_dismount()
 	_release_farm()  # re-deciding drops any field claim, so others may take it
 	# ...and the post itself, freed on this frame rather than at the village's
@@ -1610,7 +1627,7 @@ func _process_go_eat(delta: float) -> void:
 	if _target_bush != null:
 		if not is_instance_valid(_target_bush) or not _target_bush.has_berries():
 			_target_bush = null
-			_decide()
+			_rethink()
 			return
 		if _move_toward(_target_bush.global_position, WALK_SPEED * _speed_factor(), delta):
 			if _target_bush.take_berry():
@@ -1622,7 +1639,7 @@ func _process_go_eat(delta: float) -> void:
 	if _target_food != null:
 		if not is_instance_valid(_target_food) or _target_food.is_queued_for_deletion():
 			_target_food = null
-			_decide()
+			_rethink()
 			return
 		_target = _target_food.global_position
 		if _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
@@ -1644,7 +1661,7 @@ func _process_go_eat(delta: float) -> void:
 					state = State.EATING
 					_action_time = 2.0
 					return
-			_decide()
+			_rethink()
 
 
 ## Consume the meal at hand. A ground bundle (_target_food) is eaten a mouthful
@@ -1672,7 +1689,7 @@ func _eat_meal() -> void:
 ## banked until they actually arrive (see State.HAULING / _deliver_carry).
 func _begin_haul(kind: String, amount: int, origin_job: String) -> void:
 	if amount <= 0 or village == null:
-		_decide()
+		_rethink()
 		return
 	_carry_kind = kind
 	_carry_amount = amount
@@ -1957,7 +1974,7 @@ func _dismount() -> void:
 func _process_follow_mom(delta: float) -> void:
 	if mother == null or not is_instance_valid(mother) or mother.village != village \
 			or village.has_edubba():
-		_decide()
+		_rethink()
 		return
 	var to_mom := mother.global_position - global_position
 	to_mom.y = 0
@@ -1967,7 +1984,7 @@ func _process_follow_mom(delta: float) -> void:
 		_apply_gravity_only(delta)
 		_action_time -= delta
 		if _action_time <= 0.0:
-			_decide()  # re-check needs (hunger, sleep) now and then
+			_rethink()  # re-check needs (hunger, sleep) now and then
 	social = minf(social + 2.0 * delta, 100.0)
 
 
@@ -1997,12 +2014,12 @@ func _set_out() -> void:
 
 func _process_at_school(delta: float) -> void:
 	if not village.has_edubba() or is_adult():
-		_decide()
+		_rethink()
 		return
 	village.edubba.attend(self, delta)
 	_action_time -= delta
 	if _action_time <= 0.0:
-		_decide()  # re-check needs now and then
+		_rethink()  # re-check needs now and then
 
 
 ## Movement ------------------------------------------------------------------
@@ -2123,7 +2140,7 @@ func rescue() -> void:
 		happiness = maxf(happiness, 30.0)
 		if village != null and village.is_player_home:
 			GameState.announce("%s was pulled back from death's door." % villager_name)
-		_decide()
+		_rethink()
 
 
 func is_dying() -> bool:
@@ -2254,7 +2271,7 @@ func _land() -> void:
 func _on_placed_gently() -> void:
 	var host := _village_here()
 	if host == null or host == village:
-		_decide()
+		_rethink()
 		return
 	if host.converted:
 		_defect_to(host)
@@ -2264,7 +2281,7 @@ func _on_placed_gently() -> void:
 		GameState.announce("%s carries the word of the heavens into %s."
 			% [villager_name, host.village_name])
 	else:
-		_decide()  # two heathen villages; they will simply walk home
+		_rethink()  # two heathen villages; they will simply walk home
 
 
 func _village_here() -> Village:
@@ -2292,7 +2309,7 @@ func _defect_to(host: Village) -> void:
 	if host.is_player_home or host.converted:
 		GameState.announce("%s of %s now calls %s home."
 			% [villager_name, old_name, host.village_name])
-	_decide()
+	_rethink()
 
 
 func scare(from_pos: Vector3) -> void:

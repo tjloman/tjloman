@@ -352,6 +352,23 @@ func far_cells() -> int:
 	return [6, 8, 8][effective_tier()]
 
 
+## HOW MANY DECISIONS A FRAME the whole world is allowed to make.
+##
+## The hard ceiling on the spool. A villager's `_choose` walks the job board,
+## scores seventeen kinds of work and asks the village several questions, and it
+## is the most expensive thing a crowd does — but it is bursty rather than
+## constant, so the average was never the problem and capping the average was
+## never the fix. This caps the PEAK, which is what a player feels.
+##
+## A town of two hundred re-deciding at once clears in 200/this frames: about a
+## third of a second at the top tier, two thirds on a budget phone. Everybody
+## goes on walking or standing where they were until their turn comes.
+##
+## The creature is not counted here and never waits — see Spool.
+func decisions() -> int:
+	return [4, 8, 14][effective_tier()]
+
+
 ## HOW MANY TREE FRIENDS may be alive at once. Each is one billboarded quad
 ## with a shared texture, so the plates are nearly free; what this really
 ## bounds is the per-frame work of moving and startling them. Voices are

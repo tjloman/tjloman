@@ -132,6 +132,8 @@ var _fall_speed := 0.0
 var _gentle_drop := false
 var _spin_ang := Vector3.ZERO   # aftertouch spin axis*rate while thrown (rad/s)
 var _animator: ModelAnimator = null   # non-null only for a rigged custom model
+## A thought is due and not yet granted — see the spool gate in _physics_process.
+var _think_due := false
 var _burn_visual: Node3D = null
 var _full_health := 30.0
 var _burn_rate := 0.0
@@ -361,6 +363,12 @@ func _physics_process(delta: float) -> void:
 	_think_time -= delta
 	if _think_time <= 0.0:
 		_think_time = randf_range(0.7, 1.3)
+		_think_due = true
+	# ...AND THE SPOOL SAYS WHEN. The clock says a beast is due a thought; the
+	# queue says whether the frame can afford one. Refused, it goes on grazing
+	# or walking exactly as it was and asks again next frame. See Spool.
+	if _think_due and Spool.turn_to_think(self):
+		_think_due = false
 		_think()
 
 	# Ridden animals glue themselves under their rider.

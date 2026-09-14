@@ -98,7 +98,7 @@ static func fight(who: Villager, delta: float) -> void:
 	var foe := who._fight_target
 	if foe == null or not is_instance_valid(foe) or foe.is_queued_for_deletion():
 		who._fight_target = null
-		who._decide()
+		who._rethink()
 		return
 	if who.health < Villager.RETREAT_HEALTH or not dares_fight(who, foe):
 		# Nerve broken: run, and let the fear spread the alarm further.
@@ -145,7 +145,7 @@ static func strike(who: Villager, foe: Node3D) -> void:
 					% who.villager_name)
 		who._fight_target = null
 		who.happiness = minf(who.happiness + 12.0, 100.0)
-		who._decide()
+		who._rethink()
 	elif foe is Creature:
 		# A mob is a lesson. The creature is left to work out for ITSELF which
 		# of its recent deeds brought this on — perhaps eating one of them.

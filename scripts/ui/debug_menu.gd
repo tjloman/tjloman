@@ -372,6 +372,13 @@ func _on_creed() -> void:
 		% [creature.heart.wisdom(), int(creature.heart.empathy * 100.0)])
 	creed.append("the device is %s (%.1fms a frame)" % [
 		Quality.heat_word(), Quality.frame_ms()])
+	# WHAT THE TOWN IS WAITING ON. The one number worth watching while tuning
+	# Quality.decisions: if the line is never more than a handful deep the
+	# budget is generous, and if it is hundreds deep the town is thinking as
+	# fast as the frame will let it — which is the spool doing its job, not a
+	# fault, until the wait starts showing as people standing about.
+	creed.append("%d thinking a frame, %d standing in the line" % [
+		Spool.served(), Spool.waiting()])
 	var said := "  ·  ".join(creed) if not creed.is_empty() \
 		else "It has learned nothing it can put into words yet."
 	GameState.announce("%s (%s, %s) — %s" % [
