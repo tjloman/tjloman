@@ -26,6 +26,7 @@ gdlint scripts/                  # style
 python3 tools/check_calls.py     # calls to methods that DON'T EXIST
 python3 tools/chronicle.py       # the record still spans the whole reign
 python3 tools/pause_walk.py      # nothing measures time on the WALL clock
+python3 tools/herd_stray.py      # the hand can reach any beast you can see
 ```
 
 That last one matters: `gdparse` only checks syntax and `gdlint` only checks
@@ -687,6 +688,53 @@ The vapour texture is drawn in code like everything else here: a soft
 elliptical falloff multiplied by noise sampled with a squashed vertical, so the
 detail runs in horizontal **streaks** rather than reading as a stack of fuzzy
 balls. 64×64, built once at world load, shared by every cloud ever cast.
+
+## A beast a hundred metres from the herd is not in the herd
+
+A herd is one node and a MultiMesh; only a couple of dozen head anywhere in the
+world are ever real bodies. Point at one and the hand promotes that row into an
+animal — but first it asks one cheap question about the **whole** herd, *is the
+hand within the mass's span*, and walks away if not.
+
+That span was a **guess**: the head count, times a spacing, times a slack
+factor, hoping nobody stood further out. They do. A row's offset is dealt once
+and then only ever pushed **outward** — a gust blows rows downwind, and a
+promoted animal that wandered off keeps wherever it actually got to when it is
+demoted. `_redeal` re-rolls what a row is *doing* and never where it stands.
+**Nothing pulled one home.** And the span shrinks as the herd is hunted, while
+the outliers stay exactly where they were — which is why it was always bison and
+horses, the kinds that get hunted and taken.
+
+Three changes, and `tools/herd_stray.py` walks a herd through four hours of
+being harried and hunted to show what each one is worth:
+
+```
+                       OVERHANG       SPAN    IF TIDY   HERDS
+as it shipped               50m        83m        83m       1  <-- UNREACHABLE
+shedding only                3m        83m        83m      85  <-- UNREACHABLE
+as the source stands         0m        83m        83m      85
+```
+
+- **Strays leave and found their own herd.** A beast that far out is not in the
+  herd; it *is* a herd. A lone stray founds a herd of one, which is correct — a
+  proper node with its own heart, its own span and its own place in the "herds"
+  group, so the hand reaches it, miracles reach it, it grazes, it breeds back up
+  toward what the land will feed, and the existing kin-joining walks it into the
+  next herd it meets. A row standing alone inside somebody else's herd has none
+  of that. Barn stock never sheds — penned beasts belong to a keeper who is
+  counting them.
+- **The heart moves to the middle of what is left.** Shedding cannot help the
+  case it most needs to: a herd of *one* whose single head drifts has nothing to
+  leave behind. It is already its own herd; its heart is simply in the wrong
+  place. Nothing on the grass moves — every offset shifts by exactly what the
+  heart moved.
+- **And the early-out stops being a guess.** The herd remembers how far out its
+  widest head actually is, bumped on the spot by the only two things that push a
+  row outward, so `hand_span()` is true by construction. The other two changes
+  are what keep that span *tight* — without them a herd stretches its reach to
+  cover a stray a hundred metres off, and pointing at one sheep walks the rows
+  of every herd for streets around, which is the whole thing the early-out
+  exists to avoid.
 
 ## What a tree is worth
 

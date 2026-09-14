@@ -107,6 +107,43 @@ const HAND_TAKES := 3
 ## How far past its own nominal spread a herd's members may actually be standing
 ## before the hand stops looking. See `_reach_of_the_hand`.
 const SPREAD_SLACK := 2.5
+
+## HOW FAR A HEAD MAY STAND FROM ITS OWN HERD'S HEART before it stops being part
+## of that herd and founds its own.
+##
+## NOTHING EVER PULLED A STRAYED ROW HOME. A row's offset is dealt once and then
+## only ever pushed OUTWARD: a gust blows rows downwind (`blown`), and a
+## promoted animal that walked off and was demoted keeps wherever it actually
+## got to (`_tend_agents`). `_redeal` re-rolls what a row is DOING and never
+## where it stands. So over an evening a hunted, harried herd grows a scatter of
+## outliers standing a hundred metres from the mass, and they are the ones the
+## player finds and cannot pick up: the hand's reach gives up on the whole herd
+## at one generous span check before it ever looks at the rows, and no span
+## measured off the heart can cover a head that far out.
+##
+## Widening that check is the wrong fix twice over — it would make every herd in
+## the world answer the hand from far away, and it would leave the thing still
+## drawn as part of a herd it is plainly not with. A beast a hundred metres from
+## the herd IS NOT IN THE HERD. It is a herd.
+##
+## THE LIMIT IS NOT A NUMBER OF ITS OWN. It is `hand_span()` less the hand's own
+## reach — the shedding is defined as "further out than this herd will answer
+## for", so the two can never disagree. Written as an independent constant first
+## (twenty-six metres, which sounded reasonable), and tools/herd_stray.py showed
+## that making things WORSE: a small herd answers the hand within about fourteen
+## metres, so a tolerance of twenty-six left every remnant carrying strays it
+## would not reach, and the daughters it shed inherited the same hole.
+##
+## How close two strays must be to found a herd TOGETHER rather than one apiece,
+## as a share of the SMALLEST span any herd has. A newborn band of one or two
+## head answers the hand within about fourteen metres, so gathering strays from
+## further than that founds a herd that cannot reach its own members on the day
+## it is born. Same trap, one level down.
+const STRAY_GATHER_SHARE := 0.75
+## How far off the middle the heart has to be before it is worth moving. Below
+## this it is noise, and rewriting every instance transform for noise is the
+## sort of thing that costs a frame on a phone. See `_recentre`.
+const RECENTRE_LEAST := 1.0
 const PROMOTE_WITHIN := 40.0
 const DEMOTE_BEYOND := 54.0
 
@@ -458,6 +495,9 @@ var _kin_gap := INF
 var _kin_near := 0
 var _joining: Herd = null
 var _settle_left := 0.0
+## How far out this herd's widest living head actually stands. See `hand_span`:
+## the hand's early-out is measured against this rather than against a guess.
+var _widest := 0.0
 
 
 ## Roll the head count for a species. Public so the seeding code and the smoke
@@ -617,6 +657,7 @@ func _process(delta: float) -> void:
 	if _watch_left <= 0.0:
 		_watch_left = WATCH_EVERY * float(stride)
 		_look_about()
+		_shed_strays()
 	_season_left -= delta
 	if _season_left <= 0.0:
 		_season_left = SEASON
@@ -1074,6 +1115,10 @@ func _tend_agents() -> void:
 		# demoting it does not teleport it back into formation.
 		var local := agent.global_position - global_position
 		m["offset"] = Vector2(local.x, local.z)
+		# ON THE SPOT, not at the next look-round: this is a beast the player
+		# was close enough to for it to have been real, so it is exactly the one
+		# they are about to point at. See `hand_span`.
+		_widest = maxf(_widest, (m["offset"] as Vector2).length())
 		m["ground"] = agent.global_position.y
 		# NEVER OUT OF SOMEBODY'S HAND. A beast that is held or in flight is the
 		# one beast the player is certainly paying attention to, and demotion
@@ -1131,8 +1176,7 @@ func _reach_of_the_hand() -> void:
 	# standing well outside its own `_spread`, and the guard turned the hand
 	# away before it ever looked at them. That is why it was bison and horses:
 	# the kinds that get hunted and taken.
-	var span := maxf(_spread, SPREAD_LEAST) * SPREAD_SLACK + HAND_REACH
-	if _flat_gap(global_position, hand) > span:
+	if _flat_gap(global_position, hand) > hand_span():
 		return
 	# THE NEAREST ONE FIRST, and one a tick. Taking the first three in row order
 	# promoted whichever heads happened to be early in the book rather than the
@@ -1158,6 +1202,29 @@ func _reach_of_the_hand() -> void:
 			best = i
 	if best >= 0:
 		_promote(_members[best], _stands_at(_members[best]))
+
+
+## THE SPAN A TIDY HERD OF THIS SIZE OCCUPIES — what the shedding measures
+## against, and what the reach would be if nobody had ever strayed.
+func tidy_span() -> float:
+	return maxf(_spread, SPREAD_LEAST) * SPREAD_SLACK
+
+
+## WHAT THE HAND MUST ACTUALLY TEST, and the point is that it is not a guess.
+##
+## The early-out exists so that pointing at one sheep does not walk two hundred
+## rows of every herd in the world, and that is worth keeping. But it was a
+## GUESS — a span reckoned off the head count, times a slack factor, hoping no
+## member stood further out than that. Members do stand further out, shedding
+## takes up to a look-round to notice, and in that window the game refuses to
+## pick up a beast the player is pointing straight at.
+##
+## So the herd remembers how far out its widest head actually is, and the
+## early-out is true by construction. `_widest` is refreshed every look-round
+## and bumped on the spot by the only two things that push a row outward, so it
+## is never stale in the direction that matters.
+func hand_span() -> float:
+	return maxf(tidy_span(), _widest) + HAND_REACH
 
 
 ## FLAT DISTANCE, and it has to be flat. The hand floats HOVER_HEIGHT above the
@@ -1408,6 +1475,156 @@ func _spot_for_band() -> Vector3:
 func founded_by(land_worth: int, settle: float) -> void:
 	_born_head = maxi(land_worth, head)
 	_settle_left = settle
+
+
+## THE STRAYS LEAVE AND FOUND THEIR OWN. See STRAY_FAR for why they exist at
+## all and why widening the hand's reach is not the answer.
+##
+## One band a look-round, built on the FARTHEST head out and everything that has
+## drifted near it — so a scatter on two sides of the mass becomes two herds
+## over two look-rounds rather than one absurd herd straddling the old one.
+##
+## A lone stray founds a herd of one, and that is correct: it is a proper Herd
+## node with its own heart, its own span and its own place in the "herds" group,
+## so the hand reaches it, the miracles reach it, it grazes, it breeds back up
+## toward what the land will feed, and the kin-joining in `_look_about` walks it
+## into the next herd it meets. A row standing alone inside somebody else's herd
+## has none of that.
+##
+## A BARN'S STOCK NEVER SHEDS. Penned beasts belong to a keeper who is counting
+## them, and a herd that split itself in the yard would take half the village's
+## livestock out of the village's books.
+func _shed_strays() -> void:
+	if keeper != null and is_instance_valid(keeper):
+		return
+	# Measured against the TIDY span, not hand_span() — which now stretches to
+	# cover the strays, and measuring against it would shed nobody, ever.
+	var limit := tidy_span()
+	var gather := SPREAD_LEAST * SPREAD_SLACK * STRAY_GATHER_SHARE
+	var anchor := Vector3.INF
+	var worst := limit
+	for m in _members:
+		if m["dead"]:
+			continue
+		var at := _stands_at(m)
+		var gap := _flat_gap(at, global_position)
+		if gap > worst:
+			worst = gap
+			anchor = at
+	if is_inf(anchor.x):
+		return
+	var taken: Array[Dictionary] = []
+	var kept: Array[Dictionary] = []
+	var left_alive := 0
+	for m in _members:
+		if not m["dead"] and _flat_gap(_stands_at(m), global_position) > limit \
+				and _flat_gap(_stands_at(m), anchor) < gather:
+			taken.append(m)
+		else:
+			kept.append(m)
+			if not m["dead"]:
+				left_alive += 1
+	# A herd cannot shed itself. If everything living is out at the anchor then
+	# the mass has simply walked and its heart has not caught up, which `_drift`
+	# fixes on its own and a split would only make two of.
+	if taken.is_empty() or left_alive == 0:
+		return
+	var band := Herd.create(species, taken.size(), world)
+	band.position = position + (anchor - global_position)
+	get_parent().add_child(band)
+	# After it is in the tree: `_ready` reads its own head count as the land's
+	# worth and deals itself a formation, and both are about to be replaced.
+	band.founded_by(_born_head, SETTLE)
+	band.settled_with(taken, global_position)
+	_members = kept
+	head = _members.size()
+	_spread = maxf(SPACING * sqrt(float(alive())), SPREAD_LEAST)
+	_afoot_here = 0
+	for m in _members:
+		if _living(m) != null:
+			_afoot_here += 1
+	if _mm != null:
+		_mm.instance_count = _members.size()
+	_recentre()
+
+
+## THE HEART GOES WHERE THE HEAD ACTUALLY IS.
+##
+## Shedding alone is not enough and tools/herd_stray.py is what said so. It
+## cannot help the case it most needs to: a herd of ONE whose single head drifts
+## away has nothing to leave behind, so the split refuses — and a lone bison
+## wandering off from a hunted-out remnant is precisely the animal the player
+## walks up to and cannot pick up. Splitting a herd of one is not the answer
+## either; it is already its own herd. Its HEART is simply in the wrong place.
+##
+## So the mass is re-reckoned about the middle of what is left of it. Nothing
+## moves: every offset is shifted by exactly what the heart moved, so each head
+## stands on the same grass it stood on before — this is bookkeeping, and the
+## point of it is that `_spread`, the hand's reach, the miracle reaches and the
+## pasture steering are all measured off a heart that means something again.
+##
+## It also quietly repairs the older half of the same complaint, where a herd
+## that has walked while its heart lagged behind answers the hand from where it
+## used to be.
+func _recentre() -> void:
+	var middle := Vector2.ZERO
+	var living := 0
+	for m in _members:
+		if m["dead"]:
+			continue
+		middle += m["offset"] as Vector2
+		living += 1
+	if living == 0:
+		return
+	middle /= float(living)
+	if middle.length() >= RECENTRE_LEAST:
+		for m in _members:
+			m["offset"] -= middle
+		global_position += Vector3(middle.x, 0.0, middle.y)
+	# `_home` and `_target` are where the herd means to GO and are untouched on
+	# purpose: the mass has not moved and has not changed its mind about the
+	# pasture. Only our idea of where it is standing has been corrected.
+	_remeasure()
+	if _mm != null:
+		_write_transforms()
+
+
+## How far out the widest living head stands. Walked once a look-round, which is
+## a walk this herd was making anyway.
+func _remeasure() -> void:
+	_widest = 0.0
+	for m in _members:
+		if not m["dead"]:
+			_widest = maxf(_widest, (m["offset"] as Vector2).length())
+
+
+## FOUNDED ON PARTICULAR HEAD rather than on a count of them. `_ready` has
+## already dealt this herd a formation out of its head count; these rows replace
+## it wholesale, keeping what each one was doing and — the point of the whole
+## exercise — exactly where it was standing. `from` is the heart of the herd the
+## rows came out of, since their offsets are still reckoned against it.
+func settled_with(rows: Array[Dictionary], from: Vector3) -> void:
+	var shift := from - global_position
+	_members = []
+	_afoot_here = 0
+	for m in rows:
+		m["offset"] += Vector2(shift.x, shift.z)
+		var agent := _living(m)
+		if agent != null:
+			# THE WAY HOME, REPOINTED. A promoted beast carries a handle on its
+			# herd so a kill can be credited and charged; left pointing at the
+			# herd it just left, every one of these would have paid its debts to
+			# the wrong mass.
+			agent.set_meta("herd", self)
+			_afoot_here += 1
+		_members.append(m)
+	head = _members.size()
+	_spread = maxf(SPACING * sqrt(float(alive())), SPREAD_LEAST)
+	_home = global_position
+	_target = _home
+	if _mm != null:
+		_mm.instance_count = _members.size()
+		_write_transforms()
 
 
 ## WHAT THE GROUND WILL FEED, in head. Bushes in reach are the lever the player
@@ -1702,6 +1919,7 @@ func blown(from: Vector3, push: Vector3, reach: float) -> void:
 		var went := downwind * carry \
 			* randf_range(BLOWN_SCATTER_LEAST, BLOWN_SCATTER_MOST)
 		m["offset"] += Vector2(went.x, went.z)
+		_widest = maxf(_widest, (m["offset"] as Vector2).length())
 	# FRIGHT FIRST, THEN THE DIRECTION. `scattered` picks a random bearing to
 	# run on, which is right for a botched drive and wrong here — a herd that
 	# has just been blown across a field goes the way the wind sent it. Setting
