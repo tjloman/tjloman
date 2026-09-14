@@ -1460,8 +1460,17 @@ def check_int_division(files):
     Only divisions where BOTH sides are known integers are flagged — an int
     const over a literal, or over another int const. Anything involving a
     float, a variable or a call is left alone, because this cannot know.
+
+    ...WITH ONE EXCEPTION, ADDED AFTER IT MISSED ONE. `.size()` and
+    `.get_child_count()` return an int and nothing else, always, so
+    `sorted.size() / 2` is an integer division as surely as any const is — and
+    it is the commonest shape of all, because halving a collection is what
+    people do to find a middle. The original rule only knew about named int
+    constants and let Chronicle._middle straight through into the log.
     """
     out = []
+    # Calls whose return type is int, whatever the receiver.
+    WHOLE = r"(?:\.size\(\)|\.get_child_count\(\))"
     for path in files:
         lines = open(path, encoding="utf-8").read().split("\n")
         ints = set()
@@ -1469,16 +1478,23 @@ def check_int_division(files):
             m = re.match(r"^const (\w+)(?:\s*:\s*int)?\s*:?=\s*-?\d+\s*(?:#.*)?$", line)
             if m:
                 ints.add(m.group(1))
-        if not ints:
-            continue
         named = "|".join(re.escape(n) for n in ints)
-        div = re.compile(r"\b(%s)\s*/\s*(\d+|%s)\b" % (named, named))
+        # `(?![\d.])` and not `\b`: a word boundary sits happily between the 2
+        # and the dot of `2.0`, so the first pass flagged `size() / 2.0` —
+        # which is a FLOAT divide and perfectly correct. A checker that cries
+        # about correct code gets switched off.
+        tests = [re.compile(r"\w+%s\s*/\s*\d+(?![\d.])" % WHOLE)]
+        if ints:
+            tests.append(re.compile(
+                r"\b(?:%s)\s*/\s*(?:\d+(?![\d.])|(?:%s)\b)" % (named, named)))
         for i, line in enumerate(lines):
             code = line.split("#", 1)[0]
-            hit = div.search(code)
+            hit = None
+            for test in tests:
+                hit = test.search(code)
+                if hit is not None:
+                    break
             if hit is None:
-                continue
-            if hit.group(2).isdigit() is False and hit.group(2) not in ints:
                 continue
             above = lines[i - 1] if i > 0 else ""
             if "integer_division" in above:

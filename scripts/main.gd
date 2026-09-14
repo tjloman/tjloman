@@ -572,13 +572,13 @@ func _run_smoke_test() -> void:
 	var held := divine_hand.casting
 	divine_hand._begin_stroke(Vector2(400, 300))
 	var drawing_holds := divine_hand.casting_fraction() >= 1.0
-	divine_hand._tick_casting(DivineHand.IDLE_TO_CAST * 2.0)
+	divine_hand._tick_casting(DivineHand.FIRST_RUNE_WAIT * 2.0)
 	var survived := divine_hand.casting     # mid-stroke, so it cannot have fired
 	divine_hand.gesture_points = _wobbly_stroke(
 		func(t: float) -> Vector2: return Vector2(400, 150 + t * 300), 0)
 	divine_hand._end_stroke()
 	var got_rune := divine_hand.working_text()
-	divine_hand._tick_casting(DivineHand.IDLE_TO_CAST + 0.1)
+	divine_hand._tick_casting(DivineHand.FIRST_RUNE_WAIT + 0.1)
 	print("SMOKE TEST: casting — opened=%s, holds while drawing=%s, survives a slow rune=%s" % [
 		held, drawing_holds, survived])
 	print("SMOKE TEST: casting — rune read as '%s', session closed=%s, world free=%s" % [

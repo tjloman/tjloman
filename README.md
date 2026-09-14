@@ -129,6 +129,18 @@ you're done. No system install required.
 
 ### Miracles — open the casting, then draw runes
 
+**The two silences are not the same silence.** Before your first stroke you are
+deciding what to cast and being hurried is the whole problem, so you get three
+seconds. After a stroke you are already mid-working and your finger is coming
+back down; the only thing more waiting buys is the chance to add another rune,
+and every tenth of a second past that is a fire burning while the game waits to
+be told you have finished. So that one is **0.75s**.
+
+Both are measured in **real** seconds. Casting slows the world to 0.75× time,
+and the old single wait of 2.6 was being fed the *scaled* delta — so it was
+really 3.5 seconds of wall clock, which is most of why it felt so much longer
+than the number said.
+
 Casting is a thing you deliberately **enter**. Trying to tell a drawing from a
 drag moment by moment does not work on a touchscreen: every scheme for it either
 steals your pans or misses your strokes, and one of them cast a half-finished
@@ -138,7 +150,7 @@ working out of the player's hand mid-stroke. So:
 |---|---|
 | **Open it** | Hold the **right mouse button** · or on touch, press bare ground and **hold** — a ring fills under your finger |
 | **While open** | **The world is held.** Nothing pans, nothing is picked up, and *every stroke is a rune* — there is nothing left to disambiguate |
-| **Close it** | Just **stop**. After a couple of quiet seconds what you drew is cast; if you drew nothing, you are simply let go. Escape leaves at once |
+| **Close it** | Just **stop**. **Three seconds** of quiet before your first stroke — that is thinking time — but only **three quarters of a second** after each one, which is about as long as lifting a finger and putting it down. Escape leaves at once |
 
 The bar along the bottom is the time remaining, and it **only runs down while
 you are not drawing** — so you may take as long as you like over a single rune.

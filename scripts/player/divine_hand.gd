@@ -100,7 +100,25 @@ const STROKE_CAP := 220
 const PEEK_EVERY := 0.08
 
 const OPEN_SLOP := 16.0      # move further than this first and you meant to pan
-const IDLE_TO_CAST := 2.6    # quiet seconds that end the session
+## HOW LONG A QUIET HAND HAS BEFORE THE SESSION RESOLVES ITSELF — and there are
+## two answers, because the two silences mean opposite things.
+##
+## BEFORE THE FIRST STROKE you are deciding what to cast, and being hurried is
+## the whole problem: three seconds is thinking time. AFTER a stroke you are
+## already mid-working and your finger is coming back down; the only thing the
+## wait buys you there is the chance to add another rune, and every tenth of a
+## second past that is a fire burning while the game waits to be told you have
+## finished. Three quarters of a second is about as long as it takes to lift a
+## finger and put it down again, which is exactly the gesture being waited for.
+##
+## IN REAL SECONDS, NOT THE WORLD'S. Casting slows time to FOCUS_TIME_SCALE, so
+## the old single constant of 2.6 was really 2.6 / 0.75 = 3.5 seconds of
+## wall time — the clock was slowing itself down along with everything else,
+## which is most of why the wait felt so much longer than the number said. See
+## `_tick_casting`, which now divides it back out the way `_tick_focus` always
+## has.
+const FIRST_RUNE_WAIT := 3.0
+const NEXT_RUNE_WAIT := 0.75
 ## HOW FAR THE WORLD LEANS IN while a rune is being drawn. See `_tick_focus`.
 const FOCUS_TIME_SCALE := 0.75
 const FOCUS_IN := 0.30            # seconds to lean in
@@ -188,6 +206,12 @@ var _on_disk := ""
 ## what cast a half-made miracle out of the player's hand.
 var _runes: Array = []
 var _idle_time := 0.0
+## Has a stroke been drawn in this session at all? Keyed on the STROKE and not
+## on the runes, so a scribble the recogniser could not read still puts you in
+## the fast rhythm — you are plainly mid-working either way, and being given
+## three seconds back because a rune failed would be a punishment dressed as
+## generosity.
+var _drew := false
 var _peek_time := 0.0
 var _whisper_time := 0.0
 
@@ -1058,6 +1082,7 @@ func _open_casting() -> void:
 	live_confidence = 0.0
 	_runes.clear()
 	_idle_time = 0.0
+	_drew = false
 	state = HandState.IDLE
 	gesture_points = PackedVector2Array()
 	_clear_trail()
@@ -1170,6 +1195,8 @@ func _end_stroke() -> void:
 	_clear_trail()
 	state = HandState.IDLE
 	_idle_time = 0.0
+	# FROM HERE ON THE HAND IS IN A HURRY. See FIRST_RUNE_WAIT.
+	_drew = true
 	# NEVER MIND. A LINE STRUCK STRAIGHT ACROSS ends the session and casts
 	# nothing — the gesture for striking something out, which is what it does.
 	# The old sweep still works, because players who learned it should not have
@@ -1217,9 +1244,17 @@ func _tick_casting(delta: float) -> void:
 	_tick_focus(delta)
 	if not casting or state == HandState.GESTURING:
 		return
-	_idle_time += delta
-	if _idle_time >= IDLE_TO_CAST:
+	# UNSCALED. The world is running at FOCUS_TIME_SCALE while you draw, and a
+	# clock fed the scaled delta slows down with it — so a wait written as
+	# three quarters of a second would take a full one. See FIRST_RUNE_WAIT.
+	_idle_time += delta / maxf(Engine.time_scale, 0.01)
+	if _idle_time >= _wait_now():
 		_close_casting(true)
+
+
+## Which of the two waits applies right now. See FIRST_RUNE_WAIT.
+func _wait_now() -> float:
+	return NEXT_RUNE_WAIT if _drew else FIRST_RUNE_WAIT
 
 
 ## THE WORLD LEANS IN WHILE YOU DRAW.
@@ -1255,7 +1290,7 @@ func casting_fraction() -> float:
 		return 0.0
 	if state == HandState.GESTURING:
 		return 1.0
-	return clampf(1.0 - _idle_time / IDLE_TO_CAST, 0.0, 1.0)
+	return clampf(1.0 - _idle_time / _wait_now(), 0.0, 1.0)
 
 
 ## What is on the slate right now, for the HUD to show as you draw.

@@ -174,6 +174,10 @@ static func _middle(values: PackedFloat32Array) -> float:
 		return 0.0
 	var sorted := values.duplicate()
 	sorted.sort()
+	# The floor IS the wanted answer: for an odd count it is the middle index,
+	# and for an even one it is the upper of the two middles, which is why the
+	# line below reaches back one for its partner.
+	@warning_ignore("integer_division")
 	var half := sorted.size() / 2
 	if sorted.size() % 2 == 1:
 		return sorted[half]
