@@ -331,6 +331,27 @@ func chunk_cells() -> int:
 	return [16, 24, 24][effective_tier()]
 
 
+## HOW FINELY A CHUNK IS CUT WHEN IT IS ONLY EVER LOOKED AT.
+##
+## The land is the budget — 83% of every triangle in a full town — and nearly
+## all of it is ground the player can never reach this session. Past
+## `load_radius` a chunk is scenery: no collision, no water, nothing scattered,
+## nothing to walk on. It does not need three-metre cells, and at a hundred and
+## fifty metres through fog it cannot be seen to have them.
+##
+## Eight cells is six metres a sample and 128 triangles; with its skirt, 192.
+## That is a sixth of the 1,152 a near chunk costs, and — because a grid is
+## sampled as (cells+1)^2 and every sample is five noise evaluations plus a walk
+## of the scars — it is an eighth of the work to BUILD, which matters more. The
+## far ring is built while the player is walking, and that is where hitches come
+## from.
+##
+## A budget device goes coarser still: 6 cells is 72 triangles and 120 with the
+## skirt, and its far ring is only five chunks deep anyway.
+func far_cells() -> int:
+	return [6, 8, 8][effective_tier()]
+
+
 ## HOW MANY TREE FRIENDS may be alive at once. Each is one billboarded quad
 ## with a shared texture, so the plates are nearly free; what this really
 ## bounds is the per-frame work of moving and startling them. Voices are

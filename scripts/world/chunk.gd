@@ -13,6 +13,20 @@ extends Node3D
 ## when they walk away, neither of which re-cuts the mesh. See
 ## WorldGen._stream_chunks and Quality.sight_radius.
 
+## HOW FAR A COARSE CHUNK'S SKIRT HANGS BELOW ITS EDGE.
+##
+## A coarse edge is a CHORD where its fine neighbour is a curve, so between the
+## two you can see sky through the floor. The textbook answer is to stitch the
+## edges, which means every chunk knowing its neighbours' resolution and being
+## re-cut when one of them changes. The cheap answer is a wall dropped straight
+## down from the border, deeper than the gap can ever be, so there is something
+## behind the crack: four sides by `cells` quads, 64 triangles at eight cells,
+## and no bookkeeping at all.
+##
+## Only the COARSE side needs one. Where the fine terrain rises above the chord
+## the fine chunk simply pokes through, which is an overlap and not a hole.
+const SKIRT_DROP := 6.0
+
 var world: WorldGen
 var cell := Vector2i.ZERO
 ## Set before the chunk enters the tree. See the class note above.
@@ -33,6 +47,13 @@ var _deepest := Vector2.ZERO
 ## ground without re-measuring it. About 2.5 KB at a 24x24 grid, 122 KB across
 ## a loaded 7x7 — which buys burns that visibly cool.
 var _heights := PackedFloat32Array()
+## THE GRID THIS CHUNK WAS ACTUALLY CUT AT, which is no longer one number for
+## the whole world. A chunk that is only ever looked at is cut coarse (see
+## Quality.far_cells); one you can walk on is cut fine, because `_heights` is
+## also the collision heightmap and a six-metre cell would have you floating a
+## metre over the hills. Everything that reads the grid reads THIS, not
+## `world.chunk_cells` — they disagree for most of the chunks in the world.
+var _cells := 0
 ## Every bloom scattered here, in world space — read by TreeFriends so bees and
 ## moths can be over the flowers instead of near them.
 var _blooms: PackedVector3Array = PackedVector3Array()
@@ -53,14 +74,30 @@ func _ready() -> void:
 ## that was only ever drawn now gets something to stand on, water to drown in,
 ## and everything that lives here.
 ##
-## The point of it is what it does NOT do: the mesh was cut when this cell first
-## came into view, possibly minutes ago, and it is left exactly as it is. That
-## is the whole reason the far ring exists — the land must not flicker at the
-## moment you arrive at it.
+## The point of it used to be what it did NOT do: the mesh was cut when this
+## cell first came into view, possibly minutes ago, and was left exactly as it
+## was, because the land must not flicker at the moment you arrive at it.
+##
+## That still holds for a chunk that was already cut fine. A COARSE one has to
+## be re-cut, and the reason is below.
 func flesh_out() -> void:
 	if not terrain_only:
 		return
 	terrain_only = false
+	# THE GROUND IS RE-CUT IF IT WAS COARSE, and this is the one place the old
+	# promise — "the mesh is left exactly as it is" — has to give way. The grid
+	# IS the collision heightmap, and a six-metre cell would have people walking
+	# a metre above the hills and falling through the dips. What you see and
+	# what you walk on cannot disagree; so if the land here is to be stood on,
+	# it is measured again properly first.
+	#
+	# It costs (cells+1)^2 height samples on one frame — the same build every
+	# near chunk pays, and rate-limited the same way, because WorldGen._make_whole
+	# counts a flesh-out against CHUNKS_PER_FRAME.
+	if _cells != world.chunk_cells:
+		rebuild_terrain()   # re-cuts fine, and lays the collider and water with it
+		_scatter()
+		return
 	if _ground != null and is_instance_valid(_ground):
 		_ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	_build_collider()
@@ -72,8 +109,9 @@ func flesh_out() -> void:
 ## everything that was simulated here goes — which is precisely what unloading
 ## the chunk used to do — but the ground stays standing and keeps being drawn.
 ##
-## `_heights` is kept too, so a burn here still cools on schedule and the mesh
-## is never re-measured if they turn around and come back.
+## `_heights` is kept too, so a burn here still cools on schedule. The grid it
+## was cut at is kept as well, which is the point of `coarse_due` below: the
+## ground here is still cut for walking on, and nobody can walk here any more.
 func strip_down() -> void:
 	if terrain_only:
 		return
@@ -87,6 +125,27 @@ func strip_down() -> void:
 	_water = null
 	_standing.clear()
 	_blooms = PackedVector3Array()
+
+
+## THE LAND HERE IS STILL CUT FOR WALKING ON, and nobody can walk here.
+##
+## Without the coarsening a player crossing the world leaves a widening wake of
+## full-resolution chunks behind them, still drawn, all the way out to the far
+## plane — which gives back most of what the far ring was for.
+##
+## BUT IT IS NOT DONE IN `strip_down`. Crossing one chunk boundary strips a
+## whole row at once — nine of them at `unload_radius` 4 — and nine re-cuts on
+## the frame you step over a line is a hitch of exactly the kind this change
+## exists to remove. So stripping stays free, this says the work is owed, and
+## WorldGen._shed pays it off one chunk a frame like everything else.
+func coarse_due() -> bool:
+	return terrain_only and _cells != Quality.far_cells()
+
+
+## Pay it. 81 height samples against the 625 that cut it fine, so the cheap
+## direction is the one that is allowed to wait.
+func coarsen() -> void:
+	rebuild_terrain()
 
 
 ## THE EARTH MOVED. Re-cut the mesh and the collision from the new heights, put
@@ -145,7 +204,8 @@ func _reground() -> void:
 ## being re-derived from the noise. About 1,000 evaluations for the same
 ## 12x12 chunk — which is what pays for the grid being 24x24 instead.
 func _build_terrain() -> void:
-	var cells := world.chunk_cells
+	_cells = Quality.far_cells() if terrain_only else world.chunk_cells
+	var cells := _cells
 	var step := WorldGen.CHUNK_SIZE / cells
 	var wide := cells + 1
 	var heights := PackedFloat32Array()
@@ -183,7 +243,7 @@ func _build_terrain() -> void:
 ## StaticBody3D two hundred metres away is a physics island nothing will ever
 ## touch, and there would be a few hundred of them.
 func _build_collider() -> void:
-	var cells := world.chunk_cells
+	var cells := _cells
 	var wide := cells + 1
 	var step := WorldGen.CHUNK_SIZE / cells
 	var body := StaticBody3D.new()
@@ -208,7 +268,7 @@ func _build_collider() -> void:
 ## the step difference is scaled to that — otherwise a four-metre grid reports
 ## half the true steepness and every cliff comes out green.
 func _tint_grid(heights: PackedFloat32Array) -> PackedColorArray:
-	var cells := world.chunk_cells
+	var cells := _cells
 	var wide := cells + 1
 	var step := WorldGen.CHUNK_SIZE / cells
 	var per_two := 2.0 / step
@@ -229,7 +289,7 @@ func _tint_grid(heights: PackedFloat32Array) -> PackedColorArray:
 ## Two triangles a cell, unindexed — six vertices a quad, because
 ## `generate_normals` without an index buffer is what gives the land its facets.
 func _cut_mesh(tint: PackedColorArray) -> void:
-	var cells := world.chunk_cells
+	var cells := _cells
 	var wide := cells + 1
 	var step := WorldGen.CHUNK_SIZE / cells
 	var st := SurfaceTool.new()
@@ -249,6 +309,8 @@ func _cut_mesh(tint: PackedColorArray) -> void:
 			for idx in [0, 1, 2, 0, 2, 3]:
 				st.set_color(tint[at[idx]])
 				st.add_vertex(corners[idx])
+	if cells != world.chunk_cells:
+		_cut_skirt(st, tint, wide, step)
 	st.generate_normals()
 
 	if _ground != null and is_instance_valid(_ground):
@@ -263,6 +325,42 @@ func _cut_mesh(tint: PackedColorArray) -> void:
 	if terrain_only:
 		_ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_ground)
+
+
+## THE WALL ROUND A COARSE CHUNK. See SKIRT_DROP for why there is one.
+##
+## Four edges, walked in the direction that makes each wall face OUTWARD.
+## Godot takes a face's normal from (v0-v2) x (v0-v1), and the pattern below
+## yields Y x d for an edge walked in direction d — so the south edge is walked
+## +X, the north -X, the east +Z and the west -Z. Get one backwards and it is
+## invisible from the only side anyone sees it from, which is the sort of bug
+## that is much easier to write down than to find.
+func _cut_skirt(st: SurfaceTool, tint: PackedColorArray, wide: int, step: float) -> void:
+	var cells := wide - 1
+	var top := cells * wide
+	for i in cells:
+		_skirt_quad(st, tint, i, i + 1, wide, step)                          # S
+		_skirt_quad(st, tint, top + i + 1, top + i, wide, step)              # N
+		_skirt_quad(st, tint, i * wide + cells, (i + 1) * wide + cells, wide, step)   # E
+		_skirt_quad(st, tint, (i + 1) * wide, i * wide, wide, step)          # W
+
+
+## One panel of it: the two border corners, and the same two dropped straight
+## down. The colour is the ground's own at that corner, so the wall reads as
+## the underside of the land rather than as a band of something else.
+func _skirt_quad(st: SurfaceTool, tint: PackedColorArray,
+		a: int, b: int, wide: int, step: float) -> void:
+	# Whole grid columns. `a` and `b` are indices into a wide x wide lattice,
+	# so the row is the quotient and the column the remainder, exactly.
+	@warning_ignore("integer_division")
+	var pa := Vector3(float(a % wide) * step, _heights[a], float(a / wide) * step)
+	@warning_ignore("integer_division")
+	var pb := Vector3(float(b % wide) * step, _heights[b], float(b / wide) * step)
+	var da := pa - Vector3(0, SKIRT_DROP, 0)
+	var db := pb - Vector3(0, SKIRT_DROP, 0)
+	for v: Array in [[pa, a], [da, a], [db, b], [pa, a], [db, b], [pb, b]]:
+		st.set_color(tint[v[1]])
+		st.add_vertex(v[0])
 
 
 ## THE COLOURS CHANGED, THE LAND DID NOT — a burn cooling from ember to char to

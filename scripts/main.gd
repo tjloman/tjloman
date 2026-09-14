@@ -447,10 +447,21 @@ func _run_smoke_test() -> void:
 	# smallest thing the world can hold a shape for — a 2.4m fireball divot is
 	# invisible on a 4m grid and reads as a dish on a 2m one.
 	var span := WorldGen.CHUNK_SIZE / world_gen.chunk_cells
+	var far := Quality.far_cells()
+	var near_lot: int = (world_gen.load_radius * 2 + 1) ** 2
+	var seen: int = (world_gen.sight_radius * 2 + 1) ** 2
 	print("SMOKE TEST: terrain grid %dx%d — %.2fm cells, %d tris a chunk, %d loaded" % [
 		world_gen.chunk_cells, world_gen.chunk_cells, span,
-		world_gen.chunk_cells * world_gen.chunk_cells * 2,
-		(world_gen.load_radius * 2 + 1) ** 2])
+		world_gen.chunk_cells * world_gen.chunk_cells * 2, near_lot])
+	# AND THE FAR RING, which is most of the land and nearly all of the budget.
+	# Cut coarse and skirted; see Quality.far_cells and Chunk.SKIRT_DROP. The
+	# total is the one number worth watching go down.
+	var near_tris: int = near_lot * world_gen.chunk_cells * world_gen.chunk_cells * 2
+	var far_tris: int = (seen - near_lot) * (far * far * 2 + far * 8)
+	print("SMOKE TEST: far ring %dx%d — %.2fm cells, %d tris a chunk with skirt, %d drawn" % [
+		far, far, WorldGen.CHUNK_SIZE / far, far * far * 2 + far * 8, seen - near_lot])
+	print("SMOKE TEST: the land is %d tris — %d near + %d far, across %d chunks" % [
+		near_tris + far_tris, near_tris, far_tris, seen])
 	# WHAT THE RENDERER IS ACTUALLY HOLDING, from the device rather than from
 	# an estimate — the one line to check against `adb shell dumpsys meminfo`,
 	# and against tools/gpu_budget.py, which counts the same things on paper.

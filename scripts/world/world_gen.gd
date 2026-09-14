@@ -37,6 +37,10 @@ const CHUNKS_PER_FRAME := 1      # one chunk a frame: gentle, no startup stall
 ##
 ## In the steady state this costs nothing at all. See `_sight_filled`.
 const SHELLS_PER_FRAME := 2
+## And one chunk a frame put back down to the far ring's resolution. See
+## Chunk.coarse_due: the work is owed the moment a row is stripped, and paid off
+## at the same rate everything else in this file is.
+const COARSEN_PER_FRAME := 1
 ## How many chunks either side of the creature stay loaded wherever it is. One
 ## is a three-by-three of them — about a hundred and fifty metres across, which
 ## is more than its senses reach — and it is deliberately far smaller than the
@@ -808,6 +812,7 @@ func _ring_cells(center: Vector2i, ring: int) -> Array[Vector2i]:
 ## forever. A walked simulation of four minutes found exactly that — 3,035
 ## mesh cuts where 795 were due — before this line existed.
 func _shed(center: Vector2i, kept: Dictionary) -> void:
+	var coarsened := 0
 	for cell: Vector2i in _chunks.keys():
 		var cached = _chunks[cell]
 		if not is_instance_valid(cached):
@@ -820,8 +825,16 @@ func _shed(center: Vector2i, kept: Dictionary) -> void:
 		if out > sight_radius:
 			(cached as Chunk).queue_free()
 			_chunks.erase(cell)
-		elif out > unload_radius:
-			(cached as Chunk).strip_down()
+			continue
+		var chunk := cached as Chunk
+		if out > unload_radius:
+			chunk.strip_down()
+		# A chunk left cut for walking on that nobody can walk to. This sweep
+		# runs every frame it is reached, so anything that misses its turn is
+		# simply picked up on the next one — no queue, no state.
+		if coarsened < COARSEN_PER_FRAME and chunk.coarse_due():
+			chunk.coarsen()
+			coarsened += 1
 
 
 ## THE CELLS TO KEEP ALIVE FOR THE CREATURE, as a set. Empty when there is no

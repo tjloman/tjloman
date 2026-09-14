@@ -387,6 +387,13 @@ HAND_BUILT = {
         tris=lambda: 2 * 24 * 24, parts=1,
         note="2 per cell, chunk_cells^2 cells; 24 on a capable device, 16 on a "
              "budget one (Quality.chunk_cells) — so 512 triangles a chunk there"),
+    # The same function, cutting the same land at the resolution a chunk nobody
+    # can reach is worth. Declared separately because one builder makes two
+    # models here and the scanner has no way to know it.
+    ("scripts/world/chunk.gd", "_cut_mesh:far"): dict(
+        tris=lambda: 2 * 8 * 8 + 8 * 8, parts=1,
+        note="Quality.far_cells = 8 (6 on a budget device, which is 120 with "
+             "its skirt); plus 8 per cell of skirt — see Chunk.SKIRT_DROP"),
     ("scripts/util.gd", "blossom_mesh"): dict(
         tris=lambda: 4, parts=2,
         note="two crossed quads, welded in SurfaceTool"),
@@ -426,7 +433,8 @@ MULTI = {
 # loudly at the bottom rather than quietly left out.
 
 NAMES = {
-    ("world/chunk.gd", "_cut_mesh"): ("LAND", "Ground, one chunk (48m)"),
+    ("world/chunk.gd", "_cut_mesh"): ("LAND", "Ground, one near chunk (48m)"),
+    ("world/chunk.gd", "_cut_mesh:far"): ("LAND", "Ground, one far chunk, skirted"),
     ("world/chunk.gd", "_build_water"): ("LAND", "Water sheet, one chunk"),
     ("world/chunk.gd", "_scatter_flowers"): ("LAND", "Meadow of flowers, one chunk"),
     ("util.gd", "blossom_mesh"): ("LAND", "Flower"),
@@ -627,18 +635,31 @@ def knobs():
 def land(rows):
     """WHAT THE LAND COSTS, which is the answer to the whole question.
 
-    Every model in the chart above is a rounding error beside this. A chunk of
-    ground is 1,152 triangles and the sight ring is seventeen chunks across, so
-    the land is the budget and everything standing on it is the change."""
+    Every model in the chart above is a rounding error beside this. The sight
+    ring is seventeen chunks across, and until the far ring was cut coarse every
+    one of them was 1,152 triangles whether you could reach it or not.
+
+    TWO BANDS NOW. Inside `load_radius` a chunk is a place and is cut fine,
+    because the grid is also the collision heightmap. Outside it a chunk is
+    scenery: `far_cells` a side, plus a skirt of 8 per cell to cover the cracks
+    where a coarse edge meets a fine one."""
     k = knobs()
     per_tier = []
     for tier, label in enumerate(["LOW", "MEDIUM", "HIGH"]):
         cells = int(k["chunk_cells"][tier])
+        far = int(k["far_cells"][tier])
         ring = int(k["sight_radius"][tier])
+        near_ring = int(k["load_radius"][tier])
         chunks = (2 * ring + 1) ** 2
-        per_tier.append(dict(tier=label, cells=cells, ring=ring, chunks=chunks,
-                             per_chunk=2 * cells * cells,
-                             tris=chunks * 2 * cells * cells,
+        near_lot = (2 * near_ring + 1) ** 2
+        far_lot = chunks - near_lot
+        per_near = 2 * cells * cells
+        per_far = 2 * far * far + 8 * far
+        per_tier.append(dict(tier=label, cells=cells, far=far, ring=ring,
+                             chunks=chunks, near_lot=near_lot, far_lot=far_lot,
+                             per_chunk=per_near, per_far=per_far,
+                             tris=near_lot * per_near + far_lot * per_far,
+                             was=chunks * per_near,
                              herd_agents=int(k["herd_agents"][tier]),
                              actor_dist=k["actor_distance"][tier]))
     return per_tier
@@ -698,12 +719,15 @@ def main():
           % (len(rows), "{:,}".format(total)))
 
     print("\n== THE LAND, which is the budget")
-    print("%-8s %6s %7s %8s %10s %12s"
-          % ("TIER", "CELLS", "RING", "CHUNKS", "PER CHUNK", "TRIANGLES"))
+    print("%-8s %7s %7s %8s %8s %10s %12s %12s %6s"
+          % ("TIER", "NEAR", "FAR", "CHUNKS", "FAR LOT", "EACH FAR",
+             "ONE BAND", "TWO BANDS", "CUT"))
     for t in land(rows):
-        print("%-8s %6d %7d %8d %10s %12s"
-              % (t["tier"], t["cells"], t["ring"], t["chunks"],
-                 "{:,}".format(t["per_chunk"]), "{:,}".format(t["tris"])))
+        print("%-8s %7s %7s %8d %8d %10s %12s %12s %5.1fx"
+              % (t["tier"], "{:,}".format(t["per_chunk"]),
+                 "%dx%d" % (t["far"], t["far"]), t["chunks"], t["far_lot"],
+                 "{:,}".format(t["per_far"]), "{:,}".format(t["was"]),
+                 "{:,}".format(t["tris"]), float(t["was"]) / t["tris"]))
 
     print("\n== A TOWN OF 108 SOULS AND 430 HEAD, standing on it")
     rolled = town(rows)
