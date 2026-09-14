@@ -265,6 +265,10 @@ var divine_hand: DivineHand = null  # wired by main; orbs land in the grip
 ## the tutorial watches them to know a lesson actually landed.
 var casts_made := 0
 var last_rune_count := 0
+## And what the CREATURE has worked, kept apart from the above on purpose: a
+## reign where the beast casts more miracles than its god is a different story
+## from one where it casts none, and the temple charts them as two lines.
+var creature_casts := 0
 ## The showers currently in the sky, oldest first.
 var _clouds: Array[StormCloud] = []
 
@@ -1743,6 +1747,7 @@ static func effort_of(miracle: String) -> float:
 func creature_cast(miracle: String, pos: Vector3, skill: float) -> void:
 	if not MIRACLES.has(miracle):
 		return
+	creature_casts += 1
 	pos.y = 0
 	var potency := maxf(power() * clampf(skill, 0.1, 1.0) * 0.6, 0.25)
 	match miracle:

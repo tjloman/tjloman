@@ -147,6 +147,12 @@ func _ready() -> void:
 	tutorial.story = story
 	add_child(tutorial)
 
+	# THE RECORD OF THE REIGN, added before anything that can die: a chart of a
+	# number's history cannot be reconstructed from the number later, so this
+	# has to be sampling from the first second whether or not anybody ever
+	# opens the temple to look at it. See Chronicle.
+	add_child(Chronicle.new())
+
 	# THE CREATURES YOU HAVE RAISED. Above everything, because on the very first
 	# run it is the only thing on screen: a god names its creature before it does
 	# anything else with it.
@@ -160,6 +166,14 @@ func _ready() -> void:
 	var friends := TreeFriends.new()
 	friends.world = world_gen
 	add_child(friends)
+
+	# THE TEMPLE. Every option, save and statistic behind one gesture aimed at
+	# the sun — see Temple for why the disk and not the sky.
+	var temple := Temple.new()
+	temple.world_gen = world_gen
+	temple.profiles = profiles
+	add_child(temple)
+	divine_hand.temple_asked.connect(temple.open)
 
 	var debug_menu := DebugMenu.new()
 	debug_menu.world_gen = world_gen
@@ -340,6 +354,7 @@ func _setup_input() -> void:
 		"toggle_debug": [KEY_F3],
 		"skip_tutorial": [KEY_F4],
 		"toggle_profiles": [KEY_F5],
+		"toggle_temple": [KEY_F6],
 	}
 	for action: String in actions:
 		if InputMap.has_action(action):
@@ -366,12 +381,17 @@ func _build_environment() -> void:
 	_sun.shadow_enabled = Quality.shadows()
 	_sun.directional_shadow_max_distance = Quality.shadow_distance()
 	_sun.light_specular = 0.25  # matte, plain — no plastic glints
+	# THE DOORWAY TO THE TEMPLE IS THE DISK ITSELF. Neither light is a body and
+	# neither can be raycast, so Temple.disk_at walks this group and compares
+	# directions. See Temple.
+	_sun.add_to_group("sky_disks")
 	add_child(_sun)
 
 	_moon = DirectionalLight3D.new()
 	_moon.light_color = Color(0.7, 0.78, 1.0)
 	_moon.shadow_enabled = false  # a second shadowed sun is a phone-killer
 	_moon.light_specular = 0.1
+	_moon.add_to_group("sky_disks")
 	add_child(_moon)
 
 	_sky_material = ProceduralSkyMaterial.new()

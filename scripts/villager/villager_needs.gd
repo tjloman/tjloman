@@ -76,6 +76,12 @@ static func tick(who: Villager, delta: float) -> void:
 ## reading its god's hand in the world, and there is no hand in an old man
 ## dying full of years.
 static func mourn(who: Villager, of_old_age: bool) -> void:
+	# THE REGISTER FIRST, and before the old-age door below, because a chart of
+	# what kills people here is worthless if it omits the one thing that kills
+	# everybody eventually. See Chronicle.
+	var ledger := Chronicle.of(who.get_tree())
+	if ledger != null:
+		ledger.inter(_cause_of(who, of_old_age), who.age)
 	if of_old_age:
 		return
 	var creature := who.get_tree().get_first_node_in_group("creature") as Creature
@@ -94,3 +100,21 @@ static func mourn(who: Villager, of_old_age: bool) -> void:
 		and who.village.is_player_home
 	if mine or karma == DEATH_BY_FIRE:
 		GameState.shift_alignment(karma)
+
+
+## WHAT THE EVIDENCE ON THE BODY SAYS. Tested in the order a god is answerable
+## for: a man on fire who was also starving is recorded as burnt.
+static func _cause_of(who: Villager, of_old_age: bool) -> String:
+	if of_old_age:
+		return "age"
+	if who.burning:
+		return "fire"
+	if who.hunger >= 100.0:
+		return "hunger"
+	if is_instance_valid(who._last_attacker):
+		return "war" if who._last_attacker is Villager else "beast"
+	# Nothing struck him, nothing burnt him, he was not starving. In practice
+	# this is a miracle, but nothing in the world says so — an instant kill
+	# leaves no attacker — so it is named after the evidence. See
+	# Chronicle.CAUSES.
+	return "sudden"

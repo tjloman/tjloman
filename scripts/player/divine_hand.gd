@@ -5,6 +5,9 @@ extends Node3D
 ## villagers, and draws miracle gestures while the right button is held.
 
 signal hover_info_changed(text: String)
+## A HELD PRESS ON THE SUN OR THE MOON. The hand does not know what a temple
+## is; it only knows the finger stayed on the disk. `why` is "sun" or "moon".
+signal temple_asked(why: String)
 
 enum HandState { IDLE, DRAG_LAND, HOLDING, GESTURING }
 
@@ -166,6 +169,10 @@ var _press_at := Vector2.ZERO
 var _press_time := 0.0
 var _reading := false
 var _charging := false
+## Which disk the finger came down on, or "" — see Temple.disk_at. Kept apart
+## from `_charging` because it OUTRANKS it: bare sky opens the rune session
+## under a thumb, and the sun is a hole cut in that.
+var _on_disk := ""
 
 ## The runes drawn so far this session, and the quiet since the last stroke —
 ## which counts ONLY while nothing is being drawn. Letting it run mid-stroke is
@@ -562,6 +569,16 @@ func _on_pointer_button(event: InputEventMouseButton) -> void:
 		# HOLDING THE STONE READS IT. The nest wall is the one thing in the world
 		# that answers a long press with words rather than with a grab, which is
 		# what makes walking to it worth doing.
+		# THE DISK FIRST. A press on the sun is a press on the temple door and
+		# is never a grab, a pan, or the casting summons — which is the whole
+		# reason the doorway is the disk and not the sky it sits in.
+		_on_disk = ""
+		if state == HandState.IDLE and not is_instance_valid(held_body):
+			_on_disk = Temple.disk_at(camera_rig.camera, event.position)
+		if _on_disk != "":
+			_reading = false
+			_charging = false
+			return
 		_reading = hover_target is CreatureNest and state == HandState.IDLE
 		_charging = _touch_only() and state == HandState.IDLE \
 			and not _on_something_grabbable() and not _reading
@@ -576,6 +593,11 @@ func _on_pointer_button(event: InputEventMouseButton) -> void:
 		return
 	# Released.
 	_charging = false
+	# Let go of the sun before it opened: that was a look, not a summons.
+	if _on_disk != "":
+		_on_disk = ""
+		hover_info_changed.emit("")
+		return
 	if state == HandState.GESTURING:
 		_end_stroke()
 	elif not casting:
@@ -586,6 +608,12 @@ func _on_pointer_motion(event: InputEventMouseMotion) -> void:
 	_stirred = 0.0          # the hand is reaching, not resting. See `_tick_pose`.
 	if state == HandState.GESTURING:
 		_add_stroke_point(event.position)
+	elif _on_disk != "":
+		# Slid off the disk: the sky is not the sun, and a drag up there is a
+		# throw being wound up or a camera being turned.
+		if Temple.disk_at(camera_rig.camera, event.position) == "":
+			_on_disk = ""
+			hover_info_changed.emit("")
 	elif _charging:
 		# Moved before the press matured: that was a pan, not a summons.
 		if event.position.distance_to(_press_at) > OPEN_SLOP:
@@ -951,6 +979,9 @@ func _touch_only() -> bool:
 
 ## Charging the opening press. Touch only; a mouse has a button for this.
 func _tick_press_charge(delta: float) -> void:
+	if _on_disk != "":
+		_tick_disk(delta)
+		return
 	if _reading:
 		if not _pointer_down or not is_instance_valid(hover_target):
 			_reading = false
@@ -977,6 +1008,27 @@ func _tick_press_charge(delta: float) -> void:
 	if _press_time >= OPEN_HOLD:
 		_charging = false
 		_open_casting()
+
+
+## HOLDING THE SUN. Unlike the casting summons this is NOT touch-only: a mouse
+## has buttons to spare everywhere else in the game, but there is no second
+## button on the sky and no menu bar to put this on, so the gesture is the same
+## on both. See Temple.
+func _tick_disk(delta: float) -> void:
+	if not _pointer_down:
+		_on_disk = ""
+		return
+	_press_time += delta
+	if _press_time >= Temple.DISK_HOLD:
+		var why := _on_disk
+		_on_disk = ""
+		hover_info_changed.emit("")
+		temple_asked.emit(why)
+		return
+	# The same feedback the stone gets, for the same reason: without it you
+	# press the sun, nothing happens for most of a second, and you let go.
+	hover_info_changed.emit("The %s opens... %d%%"
+		% [_on_disk, int(clampf(_press_time / Temple.DISK_HOLD, 0.0, 1.0) * 100.0)])
 
 
 ## How far through the opening press we are, 0..1 — for the ring the HUD draws

@@ -136,6 +136,10 @@ func _build() -> void:
 	_quality_button = _row("", _on_quality)
 	rows.add_child(_quality_button)
 	rows.add_child(_row("Your creatures  [F5]", _fire.bind("toggle_profiles")))
+	# The temple's real door is holding the sun, which nobody discovers by
+	# accident. One line here is what makes the gesture findable at all.
+	rows.add_child(_row("The temple — or hold the sun  [F6]",
+		_fire.bind("toggle_temple")))
 	rows.add_child(_row("How to play  [F1]", _fire.bind("toggle_help")))
 	rows.add_child(_row("Skip the tutorial  [F4]", _fire.bind("skip_tutorial")))
 	rows.add_child(_row("Debug menu  [F3]", _fire.bind("toggle_debug")))

@@ -24,6 +24,7 @@ generated from code.
 gdparse scripts/**/*.gd          # syntax
 gdlint scripts/                  # style
 python3 tools/check_calls.py     # calls to methods that DON'T EXIST
+python3 tools/chronicle.py       # the record still spans the whole reign
 ```
 
 That last one matters: `gdparse` only checks syntax and `gdlint` only checks
@@ -119,9 +120,11 @@ you're done. No system install required.
 | G | **Lead your creature** to where your hand points — it goes there and waits (G again releases) |
 | C | **Lock** the camera onto your creature — centered, orbitable; C again (or pan) releases |
 | V | **Villages roster** — list your faithful villages (population, distance) and **snap the camera** to any of them |
+| **Hold the sun (or the moon)** | **The temple** — the map, the charts, the ledger, the saves. See below |
 | F1 | Help panel |
 | F3 | **Workshop** — save, load, regenerate the world, new game, replay the lessons, and a few test cheats |
 | F4 | Skip the opening lessons |
+| F6 | The temple, for anyone who would rather not hold the sun |
 
 ### Miracles — open the casting, then draw runes
 
@@ -984,6 +987,65 @@ it drops whatever it was reaching for. Doing it *visibly* rather than silently i
 the point: a creature that halts and turns to face you is not a glitch, it is the
 most legible thing on screen, and the player reads "it noticed something". It
 did. It goes back to what it was doing the moment the frames recover.
+
+## The temple, behind the sun
+
+Every option, every save, every number this game knows sits behind **one
+gesture aimed at the one part of the screen that has never meant anything**:
+the disk of the sun by day, of the moon by night. Hold it for most of a second.
+No button, no corner tab, no burger — the HUD does not grow.
+
+**Why the disk and not the sky.** A long press on bare sky is already taken: on
+a touchscreen it is what opens the rune-casting session, and on a mouse it is
+how you wind a throw up into the air. The sky is the busiest empty space in the
+game. The disks are genuinely unused. The grab cone is about **seven degrees**
+against the sun's real half-degree, because a thumb is about that wide at arm's
+length and there is nothing else up there to hit by mistake.
+
+**It does not pause the world.** A reflecting pool showing a still frame is a
+screenshot; one showing your villages moving while you read is the thing
+itself. Wolves do not wait while you read a chart. `Temple.HOLDS_THE_WORLD` is
+one line if you disagree.
+
+Inside:
+
+- **The Pool** — the land from above, in still water. The world is endless, so
+  this is a scrolling window rather than a map that fits on screen: drag to
+  scroll, wheel or pinch to change the span from 240m to 3.2km. Terrain is a
+  function of the seed, so it draws country **you have never walked on**.
+  Villages and creatures are **marks, never models** — a map that renders
+  anybody is a second world simulated for the sake of a dot — and each set
+  toggles off. Towns you have met and left behind are drawn hollow, because
+  that is honestly what they are. The water raises a few rows a frame and fades
+  in as it settles, which is both the cheap way and the right picture.
+- **The Chronicle** — souls alive, median age, alignment, faithful villages,
+  miracles by you *and* by the beast, and how grown it is, all against an axis
+  in **game days** (a day is 320 real seconds and a villager lives about forty
+  of them, so an evening's play is roughly one human lifetime).
+- **The Reign** — the ledger. What is standing, what is dead, and what killed
+  it, broken down by cause.
+- **Rites** and **Creatures** — options and saves. Doors, not yet rooms.
+
+### The record had to be built first
+
+Every number the temple shows as a *current* value already existed. **Nothing
+recorded history**, and a chart of a number's past cannot be reconstructed from
+the number. So `Chronicle` samples the world from the first second of every run
+whether or not anybody ever opens the temple.
+
+It **never runs out of room and never drops the start of the reign**: when its
+600 slots fill it throws away every other sample and doubles the interval, so
+the chart always spans the *whole* run and loses resolution at the old end
+instead of losing the old end. Four hours lands at a sample every 40 seconds;
+twenty hours at every 160. `tools/chronicle.py` proves it, and
+`tools/chronicle.py --broken` shows the ring-buffer version losing the first
+thirteen hours of a twenty-hour reign.
+
+**Life expectancy is the one number worth the room.** The world rolls every
+villager a lifespan of 60–85 years at birth, so the mean of *that* is 72.5 in
+every game ever played, however you rule — printing it would be printing a
+constant. The age people **actually reach**, wolves and famine and lightning
+included, is a direct measure of your reign.
 
 ## Saving looks after itself, and you can raise more than one
 
