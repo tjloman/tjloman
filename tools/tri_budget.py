@@ -308,11 +308,119 @@ NUM = re.compile(r"^-?\d+(?:\.\d+)?$")
 ## round, which is a decision this game makes nowhere else, so leaving them
 ## alone is always an oversight rather than a choice.
 ROUND = ("SphereMesh", "CapsuleMesh", "CylinderMesh", "TorusMesh")
+## THE SHAPES WHOSE DEFAULTS ARE EXPENSIVE. A BoxMesh, PrismMesh or PlaneMesh
+## left alone is 12, 8 and 2 triangles — the defaults ARE the right answer and
+## setting them would be noise. These four are not: stock they are 64 segments
+## round, which is a decision this game makes nowhere else, so leaving them
+## alone is always an oversight rather than a choice.
+ROUND = ("SphereMesh", "CapsuleMesh", "CylinderMesh", "TorusMesh")
 TESS = ("radial_segments", "rings", "ring_segments")
+
+ARM = re.compile(r"^(if|elif|else|while|match|for)\b")
+
+
+def branches(items, i, indent):
+    """The source as a tree of (line, text, children), split on indentation.
+
+    Needed because a builder is not a straight list of parts. WildTree._ready
+    builds a cone OR a flat acacia canopy; FoodItem builds a fish OR a joint of
+    meat OR a sheaf. Summing those, which is what this tool did until it was
+    caught doing it, reports a tree as 88 triangles when it is 56 or 64 — an
+    over-report of a third, on a figure somebody is budgeting a real model
+    against.
+    """
+    out = []
+    while i < len(items):
+        _, ind, _ = items[i]
+        if ind < indent:
+            break
+        kids, j = [], i + 1
+        if i + 1 < len(items) and items[i + 1][1] > ind:
+            kids, j = branches(items, i + 1, items[i + 1][1])
+        out.append((items[i], kids))
+        i = j
+    return out, i
+
+
+def reduce_block(nodes, consts, state):
+    """Triangles and parts for one block: alternatives take the LARGER arm,
+    loops multiply, everything else adds."""
+    tris, parts = 0, 0
+    k = 0
+    while k < len(nodes):
+        (num, _, text), kids = nodes[k]
+        head = ARM.match(text)
+        word = head.group(1) if head else ""
+        if word == "for":
+            m = LOOP.match(text)
+            many = loop_count(m.group(1), consts) if m else None
+            got = reduce_block(kids, consts, state)
+            if many is None:
+                # Only a loop that actually BUILDS something makes the figure
+                # uncertain. A loop over villagers with no mesh in it was
+                # marking whole models as unsure for nothing.
+                if got[1] > 0:
+                    state["unsure"] = True
+                many = 1
+            tris += got[0] * many
+            parts += got[1] * many
+            k += 1
+            continue
+        if word in ("if", "while"):
+            # An if/elif/else chain, or a `match` — one arm happens, so the
+            # model is as big as its biggest arm, not as big as all of them.
+            arms = [reduce_block(kids, consts, state)]
+            k += 1
+            while k < len(nodes) and ARM.match(nodes[k][0][2]) \
+                    and ARM.match(nodes[k][0][2]).group(1) in ("elif", "else"):
+                arms.append(reduce_block(nodes[k][1], consts, state))
+                k += 1
+            best = max(arms, key=lambda a: a[0])
+            tris += best[0]
+            parts += best[1]
+            continue
+        if word == "match":
+            arms = [reduce_block(kid[1], consts, state) for kid in kids]
+            best = max(arms, key=lambda a: a[0]) if arms else (0, 0)
+            tris += best[0]
+            parts += best[1]
+            k += 1
+            continue
+        got = _calls_in(num, text, state)
+        sub = reduce_block(kids, consts, state)
+        tris += got[0] + sub[0]
+        parts += got[1] + sub[1]
+        k += 1
+    return tris, parts
+
+
+def _calls_in(num, text, state):
+    """The meshes one statement builds, recorded into `state` as it goes."""
+    tris, parts = 0, 0
+    for hit in UTIL_CALL.finditer(text):
+        helper = hit.group(1)
+        got = int(util_tris(helper, call_args(text, hit.start())))
+        tris += got
+        parts += 1
+        state["bits"].append(("Util." + helper, got, num))
+    for hit in MESH_NEW.finditer(text):
+        kind = hit.group(1)
+        if kind not in DEFAULTS:
+            state["blind"].append((num, state["func"], kind))
+            continue
+        var = re.match(r"^(?:var )?(\w+)\s*:?=", text)
+        tuned = state["props"].get(var.group(1), {}) if var else {}
+        got = int(raw_tris(kind, tuned))
+        tris += got
+        parts += 1
+        state["bits"].append((kind, got, num))
+        if kind in ROUND and not any(t in tuned for t in TESS):
+            state["stock"].append((num, kind))
+    return tris, parts
 
 
 def scan(path):
-    """Every mesh built in this file."""
+    """Every model this file builds, as {func: {...}}."""
     lines = logical_lines(path)
     consts = {}
     for _, _, text in lines:
@@ -323,54 +431,31 @@ def scan(path):
         m = CONST_ARR.match(text)
         if m and m.group(2).strip():
             consts[m.group(1)] = len(split_args(m.group(2)))
-    # Property writes, so `var t := TorusMesh.new()` picks up `t.rings = 48`.
     props = {}
     for _, _, text in lines:
         m = re.match(r"^(\w+)\.(\w+)\s*=\s*(.+)$", text)
         if m and NUM.match(m.group(3).strip()):
             props.setdefault(m.group(1), {})[m.group(2)] = float(m.group(3))
 
-    stack = []          # (indent, multiplier or None)
-    func = "<file>"
-    found, blind = [], []
-    for num, indent, text in lines:
-        while stack and indent <= stack[-1][0]:
-            stack.pop()
+    nodes, _ = branches(lines, 0, 0)
+    found, blind = {}, []
+    for (num, _, text), kids in nodes:
         m = re.match(r"^(?:static )?func (\w+)", text)
-        if m:
-            func, stack = m.group(1), []
+        if m is None:
             continue
-        times, unknown = 1, False
-        for _, mult in stack:
-            if mult is None:
-                unknown = True
-            else:
-                times *= mult
-        m = LOOP.match(text)
-        if m:
-            stack.append((indent, loop_count(m.group(1), consts)))
+        state = dict(func=m.group(1), props=props, bits=[], stock=[],
+                     blind=[], unsure=False)
+        tris, parts = reduce_block(kids, consts, state)
+        blind += state["blind"]
+        if not state["bits"]:
             continue
-        if re.match(r"^(if|elif|else|while|match|for)\b", text):
-            stack.append((indent, 1))
-
-        for hit in UTIL_CALL.finditer(text):
-            helper = hit.group(1)
-            args = call_args(text, hit.start())
-            found.append(dict(line=num, func=func, what="Util." + helper,
-                              tris=util_tris(helper, args), times=times,
-                              unsure=unknown, stock=False))
-        for hit in MESH_NEW.finditer(text):
-            kind = hit.group(1)
-            if kind not in DEFAULTS:
-                blind.append((num, func, kind))
-                continue
-            var = re.match(r"^(?:var )?(\w+)\s*:?=", text)
-            tuned = props.get(var.group(1), {}) if var else {}
-            found.append(dict(line=num, func=func, what=kind,
-                              tris=raw_tris(kind, tuned), times=times,
-                              unsure=unknown,
-                              stock=(kind in ROUND
-                                     and not any(k in tuned for k in TESS))))
+        found[m.group(1)] = dict(
+            line=num, tris=tris, parts=parts, unsure=state["unsure"],
+            stock=len(state["stock"]),
+            stock_at=["%s:%d %s" % (path[len(SRC) + 1:], at, kind)
+                      for at, kind in state["stock"]],
+            notes=["%s = %d (line %d)" % (what, got, at)
+                   for what, got, at in state["bits"]])
     return found, blind
 
 
@@ -559,36 +644,22 @@ def path_of(row):
 
 def models():
     """The chart's rows: every model, named, with its parts and triangles."""
-    rows, blind = [], []
+    by, blind = {}, []
     for root, _, files in os.walk(SRC):
         for name in sorted(files):
             if not name.endswith(".gd"):
                 continue
             path = os.path.join(root, name)
             got, miss = scan(path)
-            for r in got:
-                r["file"] = path
-                rows.append(r)
             # A MultiMesh the MULTI table already accounts for is priced, not
             # blind; anything else by that name is a new one nobody has counted.
             blind += [(path,) + b for b in miss
                       if (path, b[1]) not in MULTI]
-
-    by = {}
-    for r in rows:
-        if r["file"].endswith("util.gd"):
-            continue                # the helpers themselves, priced at callers
-        key = (r["file"], r["func"])
-        slot = by.setdefault(key, dict(parts=0, tris=0, line=r["line"],
-                                       unsure=False, stock=0, stock_at=[], notes=[]))
-        slot["parts"] += r["times"]
-        slot["tris"] += int(r["tris"]) * r["times"]
-        slot["unsure"] = slot["unsure"] or r["unsure"]
-        if r["stock"]:
-            slot["stock"] += r["times"]
-            slot["stock_at"].append("%s:%d %s" % (path_of(r), r["line"], r["what"]))
-        slot["notes"].append("%s x%d = %d" % (r["what"], r["times"],
-                                              int(r["tris"]) * r["times"]))
+            if path.endswith("util.gd") and "tree_art" not in path:
+                # The helpers themselves, priced where they are called from.
+                continue
+            for func, v in got.items():
+                by[(path, func)] = v
     for key, hand in HAND_BUILT.items():
         slot = by.setdefault(key, dict(parts=0, tris=0, line=0, unsure=False,
                                        stock=0, stock_at=[], notes=[]))
@@ -678,23 +749,34 @@ def town(rows):
     spreadsheet. Answers the only question the chart cannot: which of these
     models is the one there are enough of to matter."""
     look = {r["model"]: r["tris"] for r in rows}
+    # PARTS IS DRAW CALLS. Every Util.* call is one MeshInstance3D (or one
+    # Label3D), and Godot submits each separately — there is no automatic
+    # instancing for distinct 3D nodes. So this column is what a one-mesh,
+    # one-material Blender export would collapse to ONE per instance, which is
+    # the real question anybody modelling these is asking.
+    drawn = {r["model"]: r["parts"] for r in rows}
     herd_each = MULTI[("scripts/animals/herd.gd", "_build_multimesh")]["each"]
     afoot = 24                    # Quality.herd_agents at the top tier
     return [
-        ("108 villagers", 108, look["Villager"]),
-        ("406 head as numbers", 406, herd_each),
-        ("24 head afoot as beasts", afoot, 140),
-        ("40 houses", 40, look["House"]),
-        ("5 granaries, full", 5, look["Granary"] + look["Granary's stores, full"]),
-        ("5 barns' worth of pens", 5, look["Stock pen"]),
-        ("3 workshops", 3, look["Workshop"]),
-        ("1 edubba", 1, look["Edubba (school)"]),
+        ("108 villagers", 108, look["Villager"], drawn["Villager"]),
+        ("406 head as numbers", 406, herd_each, 0),
+        ("24 head afoot as beasts", afoot, 140,
+         drawn["Beast afoot (see the species table)"]),
+        ("40 houses", 40, look["House"], drawn["House"]),
+        ("5 granaries, full", 5, look["Granary"] + look["Granary's stores, full"],
+         drawn["Granary"] + drawn["Granary's stores, full"]),
+        ("5 barns' worth of pens", 5, look["Stock pen"], drawn["Stock pen"]),
+        ("3 workshops", 3, look["Workshop"], drawn["Workshop"]),
+        ("1 edubba", 1, look["Edubba (school)"], drawn["Edubba (school)"]),
         ("1 totem + ring + torches", 1,
-         look["Totem"] + look["Influence ring"] + look["Torchlight, one town"]),
+         look["Totem"] + look["Influence ring"] + look["Torchlight, one town"],
+         drawn["Totem"] + drawn["Influence ring"] + 1),
         ("1 nest, whole", 1,
          look["Nest lodge"] + look["Nest effigy"] + look["Nest fire"]
-         + look["Nest pool"] + 6 * look["Nest wall, one stone"]),
-        ("1 Creature", 1, look["The Creature"]),
+         + look["Nest pool"] + 6 * look["Nest wall, one stone"],
+         drawn["Nest lodge"] + drawn["Nest effigy"] + drawn["Nest fire"]
+         + drawn["Nest pool"] + 6),
+        ("1 Creature", 1, look["The Creature"], drawn["The Creature"]),
     ]
 
 
@@ -738,11 +820,16 @@ def main():
 
     print("\n== A TOWN OF 108 SOULS AND 430 HEAD, standing on it")
     rolled = town(rows)
-    print("%-30s %6s %9s %12s" % ("", "HOW MANY", "EACH", "TRIANGLES"))
-    for what, many, each in rolled:
-        print("%-30s %6d %9s %12s"
-              % (what, many, "{:,}".format(each), "{:,}".format(many * each)))
-    built = sum(m * e for _, m, e in rolled)
+    print("%-30s %6s %9s %12s %8s %8s"
+          % ("", "HOW MANY", "EACH", "TRIANGLES", "DRAWS", "MODELLED"))
+    for what, many, each, parts in rolled:
+        print("%-30s %6d %9s %12s %8s %8s"
+              % (what, many, "{:,}".format(each), "{:,}".format(many * each),
+                 "{:,}".format(many * parts) if parts else "1",
+                 "{:,}".format(many) if parts else "1"))
+    built = sum(m * e for _, m, e, _p in rolled)
+    draws_now = sum(m * p for _, m, _e, p in rolled)
+    draws_then = sum(m for _, m, _e, p in rolled if p)
     ground = land(rows)[2]["tris"]
     print("%-30s %6s %9s %12s" % ("everything the town built", "", "",
                                   "{:,}".format(built)))
@@ -750,6 +837,10 @@ def main():
                                   "{:,}".format(ground)))
     print("\nThe land is %.0f%% of it. Every model in the chart above is the "
           "change." % (100.0 * ground / (ground + built)))
+    print("\nAND %s DRAW CALLS, which on a phone is the number that decides the"
+          "\n  framerate. One mesh with one material per model makes it %s — "
+          "that,\n  not the triangle count, is what modelling these actually"
+          " buys." % ("{:,}".format(draws_now), "{:,}".format(draws_then)))
     stock = [r for r in rows if r["stock"]]
     if stock:
         print("\n! STOCK TESSELLATION — a primitive built with nobody setting its "
