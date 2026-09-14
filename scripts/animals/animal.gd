@@ -135,6 +135,12 @@ var _animator: ModelAnimator = null   # non-null only for a rigged custom model
 ## A thought is due and not yet granted — see the spool gate in _physics_process.
 var _think_due := false
 var _burn_visual: Node3D = null
+## ALIGHT, OR IN THE AIR. See Agitation — and note that a beast gets the CRY
+## and the guttering flame but not the thrash: an animal's parts hang straight
+## off its body with no visuals node between, so there is nothing to shake that
+## is not also the thing physics is steering. Give it a wrapper and the last
+## argument below stops being null.
+var _agitation := Agitation.new()
 var _full_health := 30.0
 var _burn_rate := 0.0
 var _panic_left := 0.0
@@ -200,6 +206,11 @@ func _build_body(body: Vector3, leg_h: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# ALIGHT, OR IN THE AIR — the band above fear, where there is nothing
+	# sensible left to do. `false` is "not a person": the same waveform pitched
+	# down and roughened. See Agitation.
+	_agitation.tick(null, global_position, burning,
+		state == State.FALLING, _burn_visual, false)
 	# Life goes on even beyond the camera: aging, appetite, and quiet
 	# deaths of old age happen way out in the woods.
 	if state != State.HELD:
@@ -673,8 +684,6 @@ func _tick_hazards(delta: float) -> void:
 				return
 	if burning:
 		health -= _burn_rate * delta
-		if is_instance_valid(_burn_visual):
-			_burn_visual.scale.y = 1.0 + sin(Time.get_ticks_msec() / 60.0) * 0.2
 		# TORTURED SCURRYING. A beast on fire does not flee a THING — there is
 		# nothing to get away from — so it bolts, and then bolts somewhere else,
 		# and keeps doing it until it goes down. It overrides a hunt: a wolf

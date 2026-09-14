@@ -36,6 +36,7 @@ against the twenty-four other things a village is doing.
 | **`[bark]`** | a dog | a working dog telling you something, not a pet wanting attention |
 | **`[howl]`** | a wolf, far off | the one that makes a player look up from what they were doing |
 | **`[roar]`** | the creature | pitched by its size at the call site — record it big and let the game shrink it |
+| **`[scream]`** | a person past bearing it | alight, struck, or thrown — see the section; the hardest cue in the game and the one to record last |
 | **`[croak]`** | a frog | comic, wet, unhurried; the only voice in a wetland at night |
 | **`[saw]`** | felling timber | the pull stroke, not the push; wood giving way, not metal |
 | **`[pick]`** | quarrying stone | one strike and its ring; a small chip, not a demolition |
@@ -103,6 +104,39 @@ than as sounds in their own right.
 
 `[hammer]` doubles as a melee weapon connecting (`Weapon.strike`), so it wants
 enough weight to read as a blow without being a demolition.
+
+### The one that is nobody's favourite day at work
+
+**`[scream]`**
+
+This plays when a person is **on fire**, has been **struck**, or is **turning
+over in the air** because a god threw them. There is nothing sensible left for
+them to do in any of the three, which is the whole reason the cue exists: fear
+has a behaviour and this does not.
+
+**Direction.** It is a cry for *help*, not a horror-film scream. The difference
+is that a cry for help is addressed to somebody — there is a hope in it, and
+the hope is what makes it land. Start it already at full voice; there is no
+wind-up when you are alight. Let the throat tighten across it rather than the
+pitch rise: the rasp coming in is what says this has been going on longer than
+the half-second you can hear.
+
+**Keep it short.** Under a second. A scream that outlasts the fall is a comedy,
+and the game will cut you off at the landing either way.
+
+**Do not perform the death.** The game decides whether they live — a healing
+shower, a hand, a pond to land in — and a take that has already given up
+contradicts the rescue the player is at that moment attempting. Three takes,
+and let one of them be somebody who thinks they are going to be caught.
+
+**The same waveform serves animals**, pitched down between 0.55 and 0.78 and
+roughened, so there is no separate beast cue to record. If that reads badly
+once it is in, a `[scream_beast]` is a two-line change at the call site.
+
+**Level.** Quiet. This is already the loudest thing in the mix by context, and
+the game rations it hard: one cry anywhere in the world every 0.22s, and no
+single body more than once every 2.6s. A take mastered hot turns a burning
+street into distortion.
 
 ### The voices of a crowd
 

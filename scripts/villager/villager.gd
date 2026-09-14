@@ -181,6 +181,8 @@ var _mount: Animal = null
 var _flee_from := Vector3.ZERO
 var _fall_speed := 0.0
 var _burn_visual: Node3D = null
+## ALIGHT, OR IN THE AIR — neither is a thing fear can help with. See Agitation.
+var _agitation := Agitation.new()
 var _dying_time := 0.0
 var _spin_ang := Vector3.ZERO   # aftertouch spin axis*rate while thrown (rad/s)
 var _animator: ModelAnimator = null   # non-null only for a rigged custom model
@@ -293,6 +295,10 @@ func _rethink() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# ALIGHT, OR IN THE AIR — before the LOD below, because a scream arriving
+	# every fourth frame would not be a scream. See Agitation.
+	_agitation.tick(_visuals, global_position, burning,
+		state == State.FALLING and not _gentle_drop, _burn_visual)
 	# Simulation LOD: a villager the player isn't looking at runs on a slower
 	# clock — it still lives and works, just updated every few frames with the
 	# skipped time folded into delta. Held/falling always run full-rate so the
@@ -2099,7 +2105,6 @@ func _tick_hazards(delta: float) -> void:
 				return
 	if burning:
 		health -= HAZARD_RATE * delta
-		_flicker_flame()
 		if health <= 0.0:
 			enter_dying()
 
@@ -2112,8 +2117,6 @@ func _process_dying(delta: float) -> void:
 		_animator.play("dying")
 	elif _visuals != null:
 		_visuals.rotation_degrees.x = 88.0  # fallen prone
-	if burning:
-		_flicker_flame()
 	_dying_time -= delta
 	if _dying_time <= 0.0:
 		die(false)
@@ -2168,11 +2171,6 @@ func extinguish() -> void:
 	if is_instance_valid(_burn_visual):
 		_burn_visual.queue_free()
 	_burn_visual = null
-
-
-func _flicker_flame() -> void:
-	if is_instance_valid(_burn_visual):
-		_burn_visual.scale.y = 1.0 + sin(Time.get_ticks_msec() / 60.0) * 0.2
 
 
 ## Struck by a beast (or your creature). Remembers WHO, rouses the village, and

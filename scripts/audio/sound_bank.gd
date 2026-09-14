@@ -29,7 +29,7 @@ const MOST_TAKES := 8
 const ONE_SHOTS: Array[String] = [
 	"baa", "cluck", "oink", "neigh", "bark", "howl", "croak", "saw", "pick",
 	"hammer", "murmur", "chatter", "boom", "coo", "caw", "screech", "drum",
-	"whisper", "roar",
+	"whisper", "roar", "scream",
 ]
 ## THE SMALL VOICES. Everything above is a one-shot; these are LOOPS, because
 ## a cricket is not an event. See `_make_loop` and `voice`.
@@ -396,6 +396,36 @@ func _make_screech() -> AudioStreamWAV:
 		var tone := sin(t * freq * TAU)
 		var noise := randf_range(-1, 1) * 0.2
 		samples[i] = (tone * 0.7 + noise) * _env(t, dur, 0.01, 0.1) * 0.4
+	return _make_wav(samples)
+
+
+## A PERSON IN EXTREMITY. Alight, struck by lightning, or turning over and over
+## in the air on their way down — the three things this game does to people that
+## there was previously no sound for at all.
+##
+## Built from a voice rather than from a siren: two formants a fifth apart with
+## the pitch breaking upward at the start and cracking downward at the end,
+## which is the shape a shout has and a tone does not. The noise layer is the
+## breath. Deliberately short — a scream that outlasts the fall is a comedy —
+## and deliberately rough, because `say` will happily replace the whole thing
+## with a recorded take the day one is dropped into res://voices/ (see
+## voices/aDIRECTIONcoaching.md, cue `scream`).
+func _make_scream() -> AudioStreamWAV:
+	var dur := 0.62
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var k := t / dur
+		# Up hard, hold, then break. The hold is what makes it a cry for help
+		# rather than a yelp.
+		var bend := 1.0 + 0.55 * clampf(k / 0.12, 0.0, 1.0) 			- 0.45 * clampf((k - 0.62) / 0.38, 0.0, 1.0)
+		var base := 340.0 * bend
+		var tone := sin(t * base * TAU) * 0.55 			+ sin(t * base * 1.5 * TAU) * 0.3 			+ sin(t * base * 2.0 * TAU) * 0.15
+		# The throat tightening: the rasp comes IN as the cry goes on.
+		var rasp := randf_range(-1.0, 1.0) * (0.08 + 0.22 * k)
+		samples[i] = (tone + rasp) * _env(t, dur, 0.02, 0.22) * 0.5
 	return _make_wav(samples)
 
 

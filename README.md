@@ -689,6 +689,42 @@ elliptical falloff multiplied by noise sampled with a squashed vertical, so the
 detail runs in horizontal **streaks** rather than reading as a stack of fuzzy
 balls. 64×64, built once at world load, shared by every cloud ever cast.
 
+## Extremely agitated — the state above fear
+
+Fear already existed and it is a sensible, social thing: a villager who is
+afraid runs from what frightened them. That is exactly wrong for the three
+situations this game can put a body in where there is **nothing sensible left
+to do**:
+
+- **Alight.** You cannot run away from being on fire.
+- **Struck.** A bolt is over before fleeing is a plan.
+- **In the air.** A god has thrown you and the ground is coming.
+
+In all three, the old behaviour was a body walking calmly or tumbling in
+*silence* while something unsurvivable happened to it — and that silence is most
+of why burning a village felt like editing a spreadsheet.
+
+So there is a band above fear with **no flee behaviour in it at all**, because
+thrashing is not a plan and is not meant to be. It is a look and a sound and
+nothing else, on the same principle as the creature's head: a body that is
+agitated is still doing whatever it was doing, it is just coming apart while it
+does it.
+
+- **A flail** — the body shaking on three axes at a rate nothing else in the
+  game moves at, laid over whatever pose it already had, so a burning man still
+  runs and a thrown one still tumbles. Applied to the *visuals*, never the body,
+  so it can't push anyone through a wall.
+- **A cry** — `[scream]`, synthesized from two formants with the pitch breaking
+  up at the start and cracking down at the end, which is the shape a shout has
+  and a tone does not. Rationed **across the whole world**: one cry anywhere
+  every 0.22s and no single body more than once every 2.6s, so a street on fire
+  is a street on fire and not a wall of clipped voices.
+
+Animals get the cry (pitched down and roughened — one waveform, no second cue
+to record) and the guttering flame, but not the flail: an animal's parts hang
+straight off its body with no visuals node between, so there is nothing to shake
+that is not also the thing physics is steering.
+
 ## There is no throwing of children in this game
 
 Not "it costs a lot of karma". Not "the villagers will hate you for it". It
