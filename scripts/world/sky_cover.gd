@@ -27,6 +27,16 @@ extends RefCounted
 ## looked at across the whole screen.
 const WIDE := 1024
 const TALL := 512
+## THE HORIZON, as a row. Half the image is the upper hemisphere and the other
+## half is under the ground — so this is the one number that means "the horizon"
+## and it is worked out once rather than written `TALL / 2` in three places, all
+## three of which Godot then warns about separately.
+##
+## The division is whole on purpose and it is exact: TALL is even, so there is
+## no decimal part to discard. Said out loud because a compiler cannot tell a
+## deliberate floor from a rounding mistake.
+@warning_ignore("integer_division")
+const HALF := TALL / 2
 ## How many stars, at the top tier. Thinned on a budget device with the rest.
 const STARS := 1400
 ## The seed the sky is made from. Change it and every constellation changes.
@@ -89,7 +99,7 @@ static func _scatter(img: Image) -> void:
 		_dot(img, px, py, tint * bright, mag)
 	# Nothing below the horizon: the cover wraps the whole sphere and the lower
 	# half of it is under the ground.
-	for y2 in range(TALL / 2, TALL):
+	for y2 in range(HALF, TALL):
 		for x2 in WIDE:
 			img.set_pixel(x2, y2, Color(0, 0, 0, 0))
 
@@ -154,9 +164,9 @@ static func _band(img: Image) -> void:
 	var src := _find_band()
 	if src == null:
 		return
-	src.resize(WIDE, TALL / 2, Image.INTERPOLATE_LANCZOS)
+	src.resize(WIDE, HALF, Image.INTERPOLATE_LANCZOS)
 	src.convert(Image.FORMAT_RGBA8)
-	for y in TALL / 2:
+	for y in HALF:
 		for x in WIDE:
 			var paint := src.get_pixel(x, y)
 			if paint.a <= 0.004:

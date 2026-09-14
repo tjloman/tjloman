@@ -1437,6 +1437,52 @@ def split_top(text):
     return out
 
 
+def check_int_division(files):
+    """WHOLE-NUMBER DIVISION THAT NOBODY SAID WAS DELIBERATE.
+
+    `TALL / 2` where TALL is an int const is an INTEGER division, and Godot
+    warns about every one of them at every load, forever. The warning is right
+    to exist — it cannot tell a deliberate floor from somebody who forgot that
+    two ints do not make a float — but a warning nobody can silence is a
+    warning nobody reads, and this project has now shipped three separate
+    batches of them: Edubba's class seating, VillageJobs' hands per job, and
+    SkyCover's horizon row.
+
+    The fix is never to change the arithmetic. It is to SAY SO: an
+    `@warning_ignore("integer_division")` on the line above, and a comment
+    saying why the floor is what was wanted. Then the log is empty and the next
+    person knows the remainder was thrown away on purpose.
+
+    Only divisions where BOTH sides are known integers are flagged — an int
+    const over a literal, or over another int const. Anything involving a
+    float, a variable or a call is left alone, because this cannot know.
+    """
+    out = []
+    for path in files:
+        lines = open(path, encoding="utf-8").read().split("\n")
+        ints = set()
+        for line in lines:
+            m = re.match(r"^const (\w+)(?:\s*:\s*int)?\s*:?=\s*-?\d+\s*(?:#.*)?$", line)
+            if m:
+                ints.add(m.group(1))
+        if not ints:
+            continue
+        named = "|".join(re.escape(n) for n in ints)
+        div = re.compile(r"\b(%s)\s*/\s*(\d+|%s)\b" % (named, named))
+        for i, line in enumerate(lines):
+            code = line.split("#", 1)[0]
+            hit = div.search(code)
+            if hit is None:
+                continue
+            if hit.group(2).isdigit() is False and hit.group(2) not in ints:
+                continue
+            above = lines[i - 1] if i > 0 else ""
+            if "integer_division" in above:
+                continue
+            out.append((path, i + 1, hit.group(0), code.strip()))
+    return out
+
+
 def check_sentinel_passed(files):
     """A "NOWHERE YET" SENTINEL HANDED TO SOMETHING THAT WILL BUILD THERE.
 
@@ -1718,6 +1764,13 @@ def main():
               "and whatever follows works on a corpse (a cast of it is a crash). "
               "Ask `typeof(%s) == TYPE_OBJECT` instead."
               "\n    %s" % (path, lineno, name, name, name, line))
+    int_div = check_int_division(files)
+    for path, lineno, expr, line in int_div:
+        print("%s:%d: `%s` divides two whole numbers, so the remainder is "
+              "thrown away — and Godot says so at every load, forever. If that "
+              "is what was wanted, say it: `@warning_ignore(\"integer_division\")` "
+              "on the line above, and a comment saying why the floor is right."
+              "\n    %s" % (path, lineno, expr, line))
     sentinels = check_sentinel_passed(files)
     for path, lineno, name, line in sentinels:
         print("%s:%d: `%s` is assigned Vector3.INF somewhere in this file — the "
@@ -1769,7 +1822,8 @@ def main():
         + len(loose_arrays) + len(variants) + len(shadowed_members) \
         + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice) + len(loose_consts) + len(through) \
         + len(class_shadows) + len(confusable) + len(sim_clocks) + len(alive) \
-        + len(stand) + len(typed_has) + len(shadowed_own) + len(sentinels)
+        + len(stand) + len(typed_has) + len(shadowed_own) + len(sentinels) \
+        + len(int_div)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0
