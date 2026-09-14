@@ -164,6 +164,14 @@ static func _band(img: Image) -> void:
 	var src := _find_band()
 	if src == null:
 		return
+	# DECOMPRESS BEFORE READING A PIXEL. On desktop an imported PNG comes back
+	# as plain RGBA and none of this matters. On iOS and Android it does not:
+	# the importer hands textures to the GPU in a block-compressed format
+	# (ASTC or ETC2), and `get_pixel` on one of those fails — so the painted
+	# sky would work in the editor, work on a PC, and be missing on the only
+	# device anybody was going to see it on.
+	if src.is_compressed():
+		src.decompress()
 	src.resize(WIDE, HALF, Image.INTERPOLATE_LANCZOS)
 	src.convert(Image.FORMAT_RGBA8)
 	for y in HALF:

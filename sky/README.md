@@ -24,6 +24,14 @@ you hand it something else you are choosing the stretch rather than deciding it.
   alignment tint all show through untouched. Paint the band and leave the rest
   black — that is why this is a band and not a whole sky.
 
+## Import settings
+
+Set the texture's **Compress > Mode** to **Lossless** in the Import dock, not
+VRAM Compressed. The game reads this image pixel by pixel to build the sky, and
+a mobile export block-compresses textures (ASTC/ETC2) by default — which reads
+back fine on a PC and not at all on a phone or an iPad. The code copes with it
+now, but decompressing at boot costs time for nothing.
+
 ## What must NOT be in it
 
 These are not style notes. Each one breaks something specific.
