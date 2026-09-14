@@ -169,7 +169,7 @@ def util_tris(helper, args):
     if helper == "small_flame":
         # Three emissive cones, hard-coded: lite_cylinder(..., 0.0, 6, true).
         return 3 * cylinder_tris(6, 0, 0.0, 1.0)
-    if helper in ("speck_mesh", "flame_mesh"):
+    if helper in ("speck_mesh", "flame_mesh", "dot_mesh", "dot_node"):
         return plane_tris()
     if helper == "blossom_mesh":
         return 4            # two crossed quads, built by hand in SurfaceTool
@@ -194,6 +194,7 @@ def util_tris(helper, args):
 UTIL_HELPERS = (
     "box sphere capsule cylinder prism lite_box lite_sphere lite_capsule "
     "lite_cylinder small_flame speck_mesh flame_mesh blossom_mesh status_label "
+    "dot_mesh dot_node "
     "_pooled_box_mesh _pooled_sphere_mesh _pooled_capsule_mesh _pooled_cylinder_mesh"
 ).split()
 
@@ -391,19 +392,28 @@ HAND_BUILT = {
         note="two crossed quads, welded in SurfaceTool"),
 }
 
+## `already` is how many copies of the per-instance mesh the SCANNER already
+## counted in this same function — usually one, because the function builds the
+## mesh before handing it to the MultiMesh. Without it the instance total either
+## double-counts that one or swallows everything else the function builds (the
+## sling's rope, the herd's name tag).
 MULTI = {
     ("scripts/animals/herd.gd", "_build_multimesh"): dict(
-        each=12, most=200,
+        each=12, most=200, already=1,
         note="one pooled box a head; Herd.SOCIAL rolls caribou 2d100, and "
              "nothing else in the table reaches half that"),
     ("scripts/world/chunk.gd", "_scatter_flowers"): dict(
-        each=4, most=12,
+        each=4, most=12, already=1,
         note="Chunk._plant_meadow scatters 6-12 on a meadow, 4-8 on wetland"),
     ("scripts/world/village.gd", "_build_torches"): dict(
-        each=2, most=24,
+        each=2, most=24, already=1,
         note="Village.TORCH_MOST — the most flames one town ever draws"),
+    ("scripts/player/sling.gd", "_ready"): dict(
+        each=2, most=26, already=1,
+        note="Sling.ARC_STEPS billboarded dots, one draw; the rope's box is "
+             "counted with them"),
     ("scripts/miracles/storm_cloud.gd", "brew"): dict(
-        each=2, most=22,
+        each=2, most=22, already=0,
         note="StormCloud.LAYERS_FIERCE, thinned by Quality.particle_scale"),
 }
 
@@ -573,8 +583,9 @@ def models():
     for key, many in MULTI.items():
         slot = by.setdefault(key, dict(parts=0, tris=0, line=0, unsure=False,
                                        stock=0, stock_at=[], notes=[]))
-        slot["parts"] = many["most"]
-        slot["tris"] = many["each"] * many["most"]
+        fresh = many["most"] - many["already"]
+        slot["parts"] += fresh
+        slot["tris"] += many["each"] * fresh
         slot["notes"].append("%d x %d — %s" % (many["most"], many["each"],
                                                many["note"]))
 

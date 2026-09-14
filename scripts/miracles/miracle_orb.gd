@@ -41,8 +41,13 @@ func _ready() -> void:
 	col.shape = shape
 	add_child(col)
 
-	add_child(Util.sphere(0.35, color, Vector3.ZERO, true))
-	add_child(Util.sphere(0.22, color.lightened(0.4), Vector3.ZERO, true))
+	# THE ORB RESISTS THE KNIFE MORE THAN ANYTHING ELSE CARRIED, because it is
+	# the only one routinely held a metre from the camera, and a glowing ball
+	# with too few segments reads as a cut gem. Eight round the shell is where
+	# the outline stops announcing itself; the core inside it can be coarser,
+	# since it is seen through a bright translucent shell. 576 -> 128.
+	add_child(Util.lite_sphere(0.35, color, Vector3.ZERO, 8, true))
+	add_child(Util.lite_sphere(0.20, color.lightened(0.4), Vector3.ZERO, 6, true))
 
 	var light := OmniLight3D.new()
 	light.light_color = color

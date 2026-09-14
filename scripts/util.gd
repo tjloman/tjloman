@@ -17,6 +17,7 @@ class_name Util
 static var _mesh_pool := {}
 static var _mat_pool := {}
 static var _glow: ImageTexture = null   # the soft dot every torch is drawn with
+static var _dot: ImageTexture = null    # and the round one every mark is
 
 
 static func mat(color: Color, emission := false) -> StandardMaterial3D:
@@ -193,11 +194,15 @@ static func lite_box(size: Vector3, color: Color, pos := Vector3.ZERO) -> MeshIn
 	return mi
 
 
-## Low-poly sphere sharing mesh+material with every twin. For static clutter.
-static func lite_sphere(radius: float, color: Color, pos := Vector3.ZERO, segs := 8) -> MeshInstance3D:
+## Low-poly sphere sharing mesh+material with every twin. For static clutter,
+## and for anything handheld whose radius is a round multiple of the 5cm bucket
+## `_pooled_sphere_mesh` snaps to — off a bucket, use node scale to get the
+## silhouette rather than a radius that mints a mesh nothing else will share.
+static func lite_sphere(radius: float, color: Color, pos := Vector3.ZERO,
+		segs := 8, emission := false) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = _pooled_sphere_mesh(radius, segs)
-	mi.material_override = shared_mat(color)
+	mi.material_override = shared_mat(color, emission)
 	mi.position = pos
 	return mi
 
@@ -375,6 +380,70 @@ static func flame_mesh(width: float, height: float) -> QuadMesh:
 	m.material = skin
 	_mesh_pool[key] = m
 	return m
+
+
+## A DOT, for anything that is only ever a dot: one billboarded quad with a
+## soft round edge, alpha-blended, taking its colour and its fade per instance.
+##
+## A bead of the sling's aiming arc used to be a SphereMesh, twenty-six of them,
+## 48 triangles each and a draw call each, for a mark that is eight pixels
+## across and never seen from any angle but square on. A quad that always faces
+## the camera is two triangles and reads better, because its edge is soft
+## instead of faceted — and through a MultiMesh the whole arc is one draw.
+##
+## Alpha rather than the additive blend `flame_mesh` uses: a torch pours light
+## into a dark screen, an aiming mark sits on top of daylight and wants to stay
+## the colour it was given.
+static func dot_mesh(size: float, color := Color.WHITE) -> QuadMesh:
+	var key := "dot|%.3f|%s" % [size, color]
+	var m: QuadMesh = _mesh_pool.get(key)
+	if m != null:
+		return m
+	m = QuadMesh.new()
+	m.size = Vector2(size, size)
+	var skin := StandardMaterial3D.new()
+	skin.albedo_color = color
+	skin.albedo_texture = _dot_texture()
+	skin.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	skin.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	skin.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	skin.billboard_keep_scale = true
+	skin.cull_mode = BaseMaterial3D.CULL_DISABLED
+	skin.disable_receive_shadows = true
+	skin.vertex_color_use_as_albedo = true   # per-instance colour AND fade
+	m.material = skin
+	_mesh_pool[key] = m
+	return m
+
+
+## One dot as a node, for the single marks that are not worth a MultiMesh —
+## a fish's eye, a berry, anything that is a coloured full stop. Mesh and
+## material are pooled by size and colour, so a granary full of fish shares
+## one of each. No `material_override`: the billboarding lives in the mesh's
+## own material, and overriding it is how you get a flat square.
+static func dot_node(size: float, color: Color, pos := Vector3.ZERO) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = dot_mesh(size, color)
+	mi.position = pos
+	return mi
+
+
+## The dot's own texture: round, unlike the flame's teardrop, and squared at
+## the edge so it has a defined rim rather than fading into nothing.
+static func _dot_texture() -> ImageTexture:
+	if _dot != null:
+		return _dot
+	var size := 32
+	var img := Image.create_empty(size, size, false, Image.FORMAT_RGBA8)
+	var mid := (size - 1) * 0.5
+	for y in size:
+		for x in size:
+			var u := (x - mid) / mid
+			var v := (y - mid) / mid
+			var a := smoothstep(1.0, 0.72, sqrt(u * u + v * v))
+			img.set_pixel(x, y, Color(1.0, 1.0, 1.0, a))
+	_dot = ImageTexture.create_from_image(img)
+	return _dot
 
 
 ## A soft round glow, brightest in the middle, generated once. 32 pixels is

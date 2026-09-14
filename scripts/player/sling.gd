@@ -81,6 +81,7 @@ const ARC_STEPS := 26
 const ARC_STEP_TIME := 0.14
 const ARC_BORE := 0.16
 const ARC_FADE := 0.55            # how much dimmer the far end of the arc is
+const ARC_COLOR := Color(1.0, 0.88, 0.55)
 const TAUT_AT := 2.5              # metres of lag that reads as a fully taut rope
 
 ## HOW OFTEN THE ARC IS RECOMPUTED, and how many of its beads actually ask the
@@ -105,7 +106,8 @@ const ARC_PROBE := 3
 var hand: Node3D = null
 
 var _rope: MeshInstance3D = null
-var _arc: Array[MeshInstance3D] = []
+var _arc: MultiMesh = null
+var _arc_view: MultiMeshInstance3D = null
 var _shown := false
 var _arc_due := 0.0
 
@@ -186,16 +188,29 @@ func _ready() -> void:
 	_rope = Util.mesh_node(cord, Color(1.0, 0.9, 0.65, 0.7), Vector3.ZERO, true) as MeshInstance3D
 	_rope.visible = false
 	add_child(_rope)
-	for i in ARC_STEPS:
-		var bead := SphereMesh.new()
-		bead.radius = ARC_BORE
-		bead.height = ARC_BORE * 2.0
-		bead.radial_segments = 6
-		bead.rings = 3
-		var dot := Util.mesh_node(bead, Color(1.0, 0.88, 0.55), Vector3.ZERO, true) as MeshInstance3D
-		dot.visible = false
-		add_child(dot)
-		_arc.append(dot)
+	# TWENTY-SIX BEADS, ONE DRAW, TWO TRIANGLES EACH.
+	#
+	# They were SphereMeshes: a node and a draw call apiece, 48 triangles apiece,
+	# for a mark eight pixels across that is never seen from any angle but square
+	# on. A billboarded quad is two triangles and a softer edge, and one MultiMesh
+	# draws the whole arc at once — 1,248 triangles and 26 draws became 52 and 1.
+	#
+	# `visible_instance_count` is what makes the truncation free: an arc that
+	# lands early is always a PREFIX of the beads, so the tail is dropped by
+	# lowering a count rather than by reallocating the buffer twenty times a
+	# second, which is what setting `instance_count` would do.
+	_arc = MultiMesh.new()
+	_arc.transform_format = MultiMesh.TRANSFORM_3D
+	_arc.use_colors = true
+	_arc.mesh = Util.dot_mesh(ARC_BORE * 2.0)
+	_arc.instance_count = ARC_STEPS
+	_arc.visible_instance_count = 0
+	_arc_view = MultiMeshInstance3D.new()
+	_arc_view.multimesh = _arc
+	_arc_view.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_arc_view.top_level = true      # beads are placed in world space, as before
+	_arc_view.visible = false
+	add_child(_arc_view)
 
 
 ## SHOW THE PLAYER WHAT THEY ARE HOLDING AND WHERE IT WOULD GO.
@@ -215,8 +230,7 @@ func hide_it() -> void:
 	_shown = false
 	_arc_due = 0.0
 	_rope.visible = false
-	for dot in _arc:
-		dot.visible = false
+	_arc_view.visible = false
 
 
 ## THE ROPE. Slack and dim when the thing is riding with the hand, taut and
@@ -241,31 +255,34 @@ func _draw_rope(at: Vector3, held: Vector3, weight: float) -> void:
 ## far end is dimmer, because the far end is the part you are least sure of.
 func _draw_arc(from: Vector3, shot: Vector3) -> void:
 	if shot.length() < 1.0:
-		for dot in _arc:
-			dot.visible = false
+		_arc_view.visible = false
 		return
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	var at := from
 	var vel := shot
 	var g := Villager.GRAVITY * FLOAT_SCALE
-	var landed := false
 	var ground := 0.0
-	for i in _arc.size():
-		var dot := _arc[i]
-		if landed:
-			dot.visible = false
-			continue
+	var shown := 0
+	for i in ARC_STEPS:
 		vel.y -= g * ARC_STEP_TIME
 		at += vel * ARC_STEP_TIME
 		# Every third bead asks; the two between carry the last answer, which
 		# over a third of a second of flight is inside the width of a bead.
 		if world != null and i % ARC_PROBE == 0:
 			ground = world.surface_at(at.x, at.z)
-		if at.y <= ground:
+		var landed := at.y <= ground
+		if landed:
 			at.y = ground
-			landed = true
-		dot.visible = true
-		dot.global_position = at
-		var far := float(i) / float(maxi(_arc.size() - 1, 1))
-		dot.transparency = far * ARC_FADE
-		dot.scale = Vector3.ONE * lerpf(1.0, 0.55, far)
+		var far := float(i) / float(ARC_STEPS - 1)
+		# The fade WAS a per-instance `transparency`, which a MultiMesh has no
+		# room for. It is the colour's alpha now, which is the same picture and
+		# rides along in the buffer that was already being written.
+		_arc.set_instance_transform(i, Transform3D(
+			Basis.IDENTITY.scaled(Vector3.ONE * lerpf(1.0, 0.55, far)), at))
+		_arc.set_instance_color(i, Color(
+			ARC_COLOR.r, ARC_COLOR.g, ARC_COLOR.b, 1.0 - far * ARC_FADE))
+		shown = i + 1
+		if landed:
+			break
+	_arc.visible_instance_count = shown
+	_arc_view.visible = shown > 0
