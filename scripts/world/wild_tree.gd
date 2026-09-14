@@ -320,13 +320,25 @@ static func crown(kind: String) -> Vector2:
 ## — width by height, pivoted at the foot. The growth curve is `_scale_for_lumber`
 ## written out, because a board is not a node and has no scale to read.
 static func board_size(kind: String, from_seed: int, carried: float) -> Vector2:
+	var t := clampf(carried / MAX_LUMBER, 0.0, 1.0)
+	var grown := SAPLING_SCALE + (MATURE_SCALE - SAPLING_SCALE) * t * t
+	# THE MODEL'S OWN SIZE, WHEN THERE IS A MODEL. `crown` describes the
+	# PRIMITIVE — a 1.6m cone on a bole — and the moment a tree_forest.glb is
+	# dropped in res://models/ that is no longer what is standing there. The
+	# board went on being cut to the primitive's dimensions, so the wood on the
+	# horizon was the wrong size for the wood you walk into. Measured once per
+	# style and cached; see ModelBank.bounds.
+	#
+	# A modelled tree has no per-seed height, because there is one model — which
+	# is why the seed only matters on the fallback path below.
+	var box := ModelBank.bounds_any(["tree_" + kind, "tree"])
+	if box.size.y > 0.0:
+		return Vector2(maxf(box.size.x, box.size.z), box.size.y) * grown
 	var rng := RandomNumberGenerator.new()
 	rng.seed = from_seed
 	var h := trunk_height(kind, rng)
 	var top := crown(kind)
-	var t := clampf(carried / MAX_LUMBER, 0.0, 1.0)
-	return Vector2(top.x, h + top.y) * (
-		SAPLING_SCALE + (MATURE_SCALE - SAPLING_SCALE) * t * t)
+	return Vector2(top.x, h + top.y) * grown
 
 
 ## What this tree's board would be, as it actually stands right now.

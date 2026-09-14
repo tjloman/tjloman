@@ -37,6 +37,8 @@ const EXTS: Array[String] = [".glb", ".gltf", ".obj", ".scn", ".tscn", ".tres", 
 var _cache := {}
 # name -> extracted Mesh (for MultiMesh clutter), cached the same way.
 var _mesh_cache := {}
+# name -> how big it actually is, in metres at scale one. See `bounds`.
+var _size_cache := {}
 
 
 ## True if a custom model exists for this name.
@@ -102,3 +104,70 @@ func _resolve(model_name: String) -> Resource:
 				break
 	_cache[model_name] = found
 	return found
+
+
+## HOW BIG A MODEL ACTUALLY IS, in metres at scale one.
+##
+## THE FAR RING'S BILLBOARD TREES WERE SIZED OFF THE PRIMITIVE. WildTree.crown
+## knows the fallback is a 1.6m cone on a 3.5m bole, because that is what the
+## fallback IS — and the moment a tree_forest.glb landed beside it that figure
+## became fiction, so the wood on the horizon stood at whatever size the
+## primitive would have been rather than the size of the trees it stands in for.
+##
+## Measured, not declared, because a model's dimensions are the modeller's
+## business and nobody should have to come back here and retype them. Measured
+## ONCE per name and kept: this instantiates the scene to read it, which is far
+## too expensive to do per tree, and exactly cheap enough to do per style.
+##
+## Returns a zero-size AABB when there is no model — which is the caller's cue
+## to use whatever the primitive would have been.
+func bounds(model_name: String) -> AABB:
+	if _size_cache.has(model_name):
+		return _size_cache[model_name]
+	var box := AABB()
+	var node := instantiate(model_name)
+	if node != null:
+		box = _measure(node)
+		node.queue_free()
+	_size_cache[model_name] = box
+	return box
+
+
+## The first of these names that has a model, measured. Mirrors
+## `instantiate_any`, so a caller asks the same question the same way.
+func bounds_any(names: Array) -> AABB:
+	for n: String in names:
+		var box := bounds(n)
+		if box.size.y > 0.0:
+			return box
+	return AABB()
+
+
+## Every renderable in the model, merged, in the model's own space.
+##
+## Walked by hand rather than read off `mesh_for().get_aabb()`, because that
+## would miss a mesh the artist parented under a scaled or offset node — which
+## is most of what comes out of Blender. The root's own transform is skipped:
+## the root IS the model's origin.
+func _measure(root: Node3D) -> AABB:
+	var boxes: Array[AABB] = []
+	if root is VisualInstance3D:
+		boxes.append((root as VisualInstance3D).get_aabb())
+	for kid in root.get_children():
+		_gather(kid, Transform3D.IDENTITY, boxes)
+	if boxes.is_empty():
+		return AABB()
+	var box: AABB = boxes[0]
+	for i in range(1, boxes.size()):
+		box = box.merge(boxes[i])
+	return box
+
+
+func _gather(node: Node, at: Transform3D, out: Array[AABB]) -> void:
+	var here := at
+	if node is Node3D:
+		here = at * (node as Node3D).transform
+	if node is VisualInstance3D:
+		out.append(here * (node as VisualInstance3D).get_aabb())
+	for kid in node.get_children():
+		_gather(kid, here, out)
