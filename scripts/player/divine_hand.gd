@@ -687,7 +687,12 @@ func _on_grab() -> void:
 			force_hold(item)
 		return
 	if is_instance_valid(hover_target) and hover_target.is_in_group("pickable"):
-		held_body = hover_target
+		# WHO ACTUALLY ENDS UP IN YOUR HAND. A child reached for by a cruel god
+		# is not the thing that comes up — their mother is. See ChildSafety,
+		# which is the whole of that rule.
+		held_body = ChildSafety.in_your_hand(hover_target) as PhysicsBody3D
+		if held_body == null:
+			return
 		# Lifting a dying villager with a clean conscience (neutral or better)
 		# cradles them back to a sliver of life.
 		if held_body is Villager and (held_body as Villager).is_dying() \
@@ -754,6 +759,18 @@ func _on_release() -> void:
 					_release_body(held_body, Vector3.ZERO, true)
 					_stow_sling()
 				else:
+					# NOT THAT. A child goes on their feet wherever the hand is,
+					# and somebody standing in a child's place wrestles and does
+					# not come out of it at all. See ChildSafety.
+					var refused := ChildSafety.throw_answer(held_body)
+					if refused == ChildSafety.HELD_FAST:
+						return        # still in your hand, and still in the way
+					if refused == ChildSafety.SET_DOWN:
+						_release_body(held_body, Vector3.ZERO, true)
+						_stow_sling()
+						held_body = null
+						state = HandState.IDLE
+						return
 					# Aftertouch shapes the shot from the final flick: a lofted
 					# and/or curving launch, plus a lingering in-flight steer.
 					var shot := _compute_throw()
@@ -902,6 +919,8 @@ func _release_body(body: Node3D, vel: Vector3, gentle: bool) -> void:
 		rb.linear_velocity = vel
 	elif body.has_method("drop"):
 		body.call("drop", vel, gentle)
+	# Back on their feet and back to being an ordinary villager. See ChildSafety.
+	ChildSafety.let_go(body)
 	# YOUR CREATURE IS WATCHING. Setting a thing down carefully and hurling it
 	# are different lessons, and it takes whichever one you just gave.
 	_show_creature("gather" if gentle else "throw", body, 0.4 if gentle else -0.6)

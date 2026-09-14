@@ -180,6 +180,13 @@ static func heave(who: Creature) -> Vector3:
 static func send(thing: Node3D, v: Vector3, gently := false) -> void:
 	if thing == null or not is_instance_valid(thing):
 		return
+	# NOT A CHILD, NOT EVER, and the creature's hand is no different from the
+	# god's. Every way this beast lets go of anything comes through here, so
+	# one line covers the heave, the aimed shot, the juggle and the fumble
+	# alike. They go down on their feet. See ChildSafety.
+	if ChildSafety.throw_answer(thing) != "":
+		v = Vector3.ZERO
+		gently = true
 	if thing is RigidBody3D:
 		(thing as RigidBody3D).freeze = false
 		(thing as RigidBody3D).linear_velocity = v

@@ -689,6 +689,46 @@ elliptical falloff multiplied by noise sampled with a squashed vertical, so the
 detail runs in horizontal **streaks** rather than reading as a stack of fuzzy
 balls. 64×64, built once at world load, shared by every cloud ever cast.
 
+## There is no throwing of children in this game
+
+Not "it costs a lot of karma". Not "the villagers will hate you for it". It
+does not happen, the way a rule of the world does not happen, and it lives in
+one file — `scripts/villager/child_safety.gd` — so that there is exactly one
+place to read it and exactly one place it could ever be weakened from.
+
+A game about a god with a hand over a village is going to be picked up and
+shaken by people looking for the worst thing in it, and the worst thing in it
+should not be available. That is not squeamishness. The cruelty this game is
+actually *about* is the interesting kind — neglect, favouritism, a famine you
+caused by not looking, a creature you taught to eat people. None of it needs
+this, and this would drown all of it.
+
+So the world pushes back, rather than a message box telling you not to:
+
+- **Reach for a child with an evil hand and you get the parent.** They put
+  themselves in your grip in the child's place — their mother if she is alive
+  and near, otherwise the nearest grown villager, because an orphan is not less
+  defended than anybody else. If nobody is close enough to step in, the hand
+  closes on nothing: a child alone in an empty field under a monstrous god is a
+  moment the game refuses rather than resolves.
+- **And they will not be shaken off.** Try to hurl the parent aside and go back
+  for the child, and they wrestle to stay in your hand. Your hand stays occupied
+  for exactly as long as you keep trying, which costs you the only thing you
+  actually wanted.
+- **A child in hand is set down, never thrown.** Every path that lets go with
+  any speed sets them on their feet instead — the player's hand and the
+  creature's alike, since `CreatureThrowing.send` is the one door everything
+  the beast hurls goes through.
+
+**A good hand may lift a child, and must be able to.** Carrying one out of a
+burning street is a rescue, and lifting one out of the water is the *only* way
+to save them from drowning. A rule that made children untouchable would take
+that away and make good play poorer, which is the opposite of the point. The
+gate is on cruelty, not on children.
+
+`check_calls.py` fails the build if either throwing path stops asking, or if
+the rule itself loses a method.
+
 ## A beast a hundred metres from the herd is not in the herd
 
 A herd is one node and a MultiMesh; only a couple of dozen head anywhere in the

@@ -1523,6 +1523,51 @@ VILLAGE_RAISES = {
 BURNABLE_OWES = ("ignite", "extinguish", "damage", "full_health", "burn_down")
 
 
+# EVERY PLACE IN THE GAME THAT LETS GO OF SOMETHING WITH SPEED. Each one has
+# to ask ChildSafety first, and a new one added without asking is how the rule
+# quietly stops being a rule.
+LETS_GO = {
+    "divine_hand.gd": "the player's own hand",
+    "creature_throwing.gd": "everything the creature hurls",
+}
+
+
+def check_children(files):
+    """NO PATH LETS GO OF A CHILD WITH ANY SPEED.
+
+    There is no throwing of children in this game -- not "it costs a lot of
+    karma", not "the villagers will hate you", it does not happen. The rule
+    lives in one file, ChildSafety, precisely so there is one place to read it
+    and one place it could ever be weakened from.
+
+    But a rule enforced at the call sites is only as good as the call sites, and
+    the two of them are a thousand lines apart in files that are edited for
+    entirely unrelated reasons. So: anything that throws asks first, and this
+    fails the build if one of them stops asking. That includes deleting the
+    check to fix something else and meaning to put it back.
+    """
+    out = []
+    for path in files:
+        name = os.path.basename(path)
+        if name not in LETS_GO:
+            continue
+        src = open(path, encoding="utf-8").read()
+        if "ChildSafety.throw_answer(" not in src:
+            out.append((path, "%s is %s and never asks ChildSafety.throw_answer"
+                        % (name, LETS_GO[name])))
+    # And the rule itself has to still be a rule.
+    guard = [p for p in files if os.path.basename(p) == "child_safety.gd"]
+    if not guard:
+        out.append(("scripts/villager/child_safety.gd",
+                    "ChildSafety is gone entirely"))
+    else:
+        src = open(guard[0], encoding="utf-8").read()
+        for owed in ("is_child", "in_your_hand", "throw_answer", "let_go"):
+            if re.search(r"^static func %s\(" % owed, src, re.M) is None:
+                out.append((guard[0], "ChildSafety has lost `%s`" % owed))
+    return out
+
+
 def check_burnable(files):
     """EVERYTHING A VILLAGE RAISES CAN BE BURNED DOWN, AND KNOWS WHAT IT IS WORTH.
 
@@ -1890,6 +1935,11 @@ def main():
               "is what was wanted, say it: `@warning_ignore(\"integer_division\")` "
               "on the line above, and a comment saying why the floor is right."
               "\n    %s" % (path, lineno, expr, line))
+    kids = check_children(files)
+    for path, why in kids:
+        print("%s: %s. There is no throwing of children in this game and the "
+              "rule is enforced at every place that lets go — see "
+              "scripts/villager/child_safety.gd." % (path, why))
     burnable = check_burnable(files)
     for path, _lineno, why in burnable:
         print("%s: %s. Everything a village raises must be destructible and must "
@@ -1954,7 +2004,7 @@ def main():
         + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice) + len(loose_consts) + len(through) \
         + len(class_shadows) + len(confusable) + len(sim_clocks) + len(alive) \
         + len(stand) + len(typed_has) + len(shadowed_own) + len(sentinels) \
-        + len(int_div) + len(worth) + len(burnable)
+        + len(int_div) + len(worth) + len(burnable) + len(kids)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0
