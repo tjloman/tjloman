@@ -53,7 +53,7 @@ const TIDY_AT := 256
 ## live places of the front, which is what stops the order the askers happen to
 ## arrive in — Godot's tree order, which never changes — from deciding anything.
 static var _line := PackedInt64Array()
-static var _waiting := {}          # instance id -> true, while it is in `_line`
+static var _waiting := {}          # instance id -> the frame it joined the line
 static var _head := 0              # everything before this is served or dead
 static var _frame := -1
 static var _spent := 0
@@ -79,7 +79,7 @@ static func turn_to_think(who: Node) -> bool:
 	var id := who.get_instance_id()
 	if not _waiting.has(id):
 		_line.append(id)
-		_waiting[id] = true
+		_waiting[id] = now
 	if _spent >= budget:
 		return false
 	# Walk the front of the line, dropping what is served or dead as we pass
@@ -128,3 +128,19 @@ static func clear() -> void:
 	_head = 0
 	_spent = 0
 	_served = 0
+
+
+## HOW LONG THIS ONE HAS BEEN STANDING IN THE LINE, in seconds. Zero when it is
+## not waiting at all.
+##
+## Here so that a body can be given something to do with the wait. Most waits
+## are a fifth of a second and want no covering; it is the STORMS — a wolf, a
+## filled job, a whole town re-deciding at once — that produce a pause long
+## enough to see, and that is exactly when a villager should be visibly
+## thinking rather than visibly stopped. See VillagerLook.may_choose.
+static func stalled_for(who: Node) -> float:
+	var since = _waiting.get(who.get_instance_id())
+	if since == null:
+		return 0.0
+	return float(Engine.get_physics_frames() - int(since)) \
+		/ float(maxi(Engine.physics_ticks_per_second, 1))

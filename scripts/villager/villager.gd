@@ -350,7 +350,7 @@ func _physics_process(delta: float) -> void:
 		return
 	# THE TURN TO THINK, if one is owed and the frame has room. Refused, they
 	# carry on into the state machine below doing what they were already doing.
-	if _decision_due and Spool.turn_to_think(self):
+	if _decision_due and VillagerLook.may_choose(self):
 		_decision_due = false
 		_choose()
 	_tick_lifecycle(delta)

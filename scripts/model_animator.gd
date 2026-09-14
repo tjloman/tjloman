@@ -40,6 +40,13 @@ const ALIASES := {
 	# rig ships with the clip it simply starts working, with nothing to wire.
 	# Falls back to a crouch or a kneel if the model has one of those first.
 	"sit": ["sit", "sitting", "seated", "crouch", "kneel"],
+	# WAITING ITS TURN TO THINK. A villager whose plan has run out and whose
+	# decision is still in the spool's queue stands about for a fraction of a
+	# second — and rather than hide that, it stretches and yawns through it, so
+	# the pause reads as a person deciding instead of a body that stopped. Same
+	# arrangement as `sit`: nothing has the clip yet, asking costs nothing, and
+	# the day a rig ships with one it simply starts working.
+	"stretch": ["stretch", "yawn", "think", "ponder", "idle"],
 	"pray": ["pray", "worship", "kneel"],
 	"swim": ["swim", "wade"],
 	"graze": ["graze", "eat", "feed"],

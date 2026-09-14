@@ -17,6 +17,60 @@ extends RefCounted
 const SIT_DROP := 0.42
 
 
+## HOW LONG A WAIT IS WORTH COVERING. Most are a fifth of a second and want
+## nothing done about them — covering those would have a town twitching into a
+## stretch and out of it constantly. It is the storms that make a pause you can
+## see: a wolf, a filled job, a miracle, everybody re-deciding at once.
+const DITHER := 0.35
+## And how often ANYBODY says anything out loud while they wait. A whole town
+## greeting each other at once is not atmosphere, it is a riot.
+##
+## The rest is the WHOLE TOWN'S, not each villager's, because what wants
+## controlling is how often you hear a voice — and because a cooldown a piece
+## is state the Villager has no room for. The odds on top of it decide WHO:
+## without them the first villager in tree order would take every turn, tree
+## order never changes, and one man would do all the talking in the village
+## forever.
+const SPEAK_ODDS := 0.06
+const SPEAK_REST := 5.0
+
+static var _spoke_at := -99.0
+
+
+## MAY THIS ONE CHOOSE NOW? Asks the spool, and if the answer is no, gives the
+## body something to do with the wait.
+##
+## THE POINT IS THAT A PAUSE SHOULD LOOK LIKE THINKING. The spool bounds the
+## frame by making decisions late, and a villager whose plan has run out has
+## nothing to do until its turn comes. Standing perfectly still reads as a
+## broken body. Stretching, yawning and passing the time of day with whoever is
+## nearby reads as a person deciding what to do next — which is exactly what
+## they are doing.
+static func may_choose(who: Villager) -> bool:
+	if Spool.turn_to_think(who):
+		return true
+	_pass_the_time(who)
+	return false
+
+
+## A word while they wait. Rate-limited twice over — by the odds and by a rest
+## — because this fires on every frame of every wait in the town.
+static func _pass_the_time(who: Villager) -> void:
+	if Spool.stalled_for(who) < DITHER or not who.is_adult():
+		return
+	var now := float(Time.get_ticks_msec()) / 1000.0
+	if now - _spoke_at < SPEAK_REST or randf() > SPEAK_ODDS:
+		return
+	_spoke_at = now
+	# The recorded line if somebody has recorded one, and the synthesized
+	# murmur if not — so this does something from today and something better
+	# the day a voice is dropped in res://voices/. See SoundBank.say.
+	var hour := GameState.time_of_day()
+	if not SoundBank.say("greet_" + hour, who.global_position):
+		if not SoundBank.say("yawn", who.global_position):
+			SoundBank.play_at("murmur", who.global_position, -12.0)
+
+
 static func pose(who: Villager) -> String:
 	# SITTING OUTRANKS THE STATE IT IS IN, because AT_SCHOOL covers a class on
 	# its feet and a class on the ground alike, and only the school knows which.
@@ -41,8 +95,16 @@ static func pose(who: Villager) -> String:
 		Villager.State.BUILDING_FARM, Villager.State.BUILDING_EDUBBA, Villager.State.BUTCHERING, \
 		Villager.State.TAMING, Villager.State.HUNTING, Villager.State.FISHING, Villager.State.TEACH:
 			return "work"
-	# Everything else: walking if moving, otherwise idle.
-	return "walk" if Vector2(who.velocity.x, who.velocity.z).length() > 0.3 else "idle"
+	if Vector2(who.velocity.x, who.velocity.z).length() > 0.3:
+		return "walk"
+	# STANDING STILL — AND WAITING ON A THOUGHT, if the wait has gone on long
+	# enough to see. Deliberately the LAST thing asked, below every state above:
+	# a villager whose decision is late while they are still mid-haul goes on
+	# hauling, because the plan they are waiting to replace is the one they are
+	# still carrying out. Only somebody with nothing left to do stretches.
+	if Spool.stalled_for(who) >= DITHER:
+		return "stretch"
+	return "idle"
 
 
 ## ARE BOTH THIS BODY AND WHERE IT IS GOING INSIDE THE TOWN?

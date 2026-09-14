@@ -134,6 +134,24 @@ func sun_elevation() -> float:
 	return -cos(day_fraction() * TAU)
 
 
+## WHAT PART OF THE DAY IT IS, as a word. The world already knows the hour —
+## `day_fraction` has always been exact — but nothing had ever needed to SAY it,
+## so there was no word for it. A villager greeting a neighbour does.
+##
+## The boundaries sit where the light does rather than on the clock face: dawn
+## is 0.25 and dusk 0.75, so morning runs from a little before first light and
+## evening from a little before the sun is down.
+func time_of_day() -> String:
+	var t := day_fraction()
+	if t < 0.20 or t >= 0.86:
+		return "night"
+	if t < 0.46:
+		return "morning"
+	if t < 0.70:
+		return "afternoon"
+	return "evening"
+
+
 func is_night() -> bool:
 	return sun_elevation() < -0.08
 

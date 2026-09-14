@@ -9,6 +9,14 @@ const MAX_CONCURRENT := 24
 ## join, in seconds. A loop that clicks is worse than no loop. See `_make_loop`.
 const SPLICE := 0.25
 
+## SPOKEN LINES live in files, unlike everything else here. See `say`.
+const VOICE_DIR := "res://voices/"
+const VOICE_EXTS: Array[String] = [".ogg", ".wav", ".mp3"]
+## How many numbered takes of a line are looked for. Probed rather than listed:
+## a directory walk at runtime is a filesystem hit per call, and this is
+## bounded, predictable and cached after the first ask.
+const MOST_TAKES := 8
+
 ## EVERY SOUND, AND HOW TO MAKE IT. Twenty-four waveforms synthesized from
 ## nothing, which is why there are no audio files in this project — and which
 ## used to happen in one lump before the first frame was ever drawn.
@@ -29,6 +37,10 @@ const VOICES: Array[String] = [
 	"crickets", "bees", "flies", "peepers", "chitter", "rustle",
 ]
 
+## Recorded lines, by name: an Array of streams when there are any, an empty
+## Array when the folder has been looked in and there was nothing. Both answers
+## are kept so a chattering town never walks the filesystem twice. See `say`.
+var _said := {}
 var _bank := {}
 var _active := 0
 ## The looping voices, kept apart from the one-shots because they are used
@@ -642,3 +654,64 @@ func _make_rustle() -> AudioStreamWAV:
 		var gust := 0.25 + 0.75 * pow(maxf(sin(t * 0.71 * TAU), 0.0), 1.5)
 		samples[i] = hiss * gust * 0.5
 	return _make_loop(samples)
+
+
+## SPOKEN LINES ------------------------------------------------------------
+##
+## EVERYTHING ABOVE IS SYNTHESIZED AND THERE IS NOT AN AUDIO FILE IN THIS
+## PROJECT. That is the right arrangement for a sheep and the wrong one for a
+## voice: nobody is going to synthesize "good morning to ye" out of oscillators,
+## and the day somebody records one it should just start playing.
+##
+## So this is the ModelBank arrangement for sound. Drop `res://voices/yawn.ogg`
+## in and villagers yawn; delete it and they go back to a murmur. Nothing here
+## is required and the game runs with the folder empty.
+##
+## TAKES, NOT A TAKE. `line.ogg` is played if it is the only one, but `line_1`,
+## `line_2`, `line_3` and so on are looked for too and one is chosen at random.
+## A single recording heard twice in a minute is worse than no recording at all,
+## and a town says these things constantly.
+## SAY IT, if there is anything to say it with. False when there is no recording
+## of this line, which is the caller's cue to fall back on something synthesized
+## — see VillagerLook.may_choose, which murmurs instead.
+func say(line: String, pos: Vector3, volume_db := -3.0) -> bool:
+	var takes: Array = _takes(line)
+	if takes.is_empty():
+		return false
+	var stream: AudioStream = takes[randi() % takes.size()]
+	var player := AudioStreamPlayer3D.new()
+	player.stream = stream
+	player.volume_db = volume_db
+	player.unit_size = 12.0
+	player.max_distance = 40.0
+	# A voice is a person, not a machine: a little pitch either way so a town
+	# does not sound like one man recorded once.
+	player.pitch_scale = randf_range(0.94, 1.07)
+	get_tree().current_scene.add_child(player)
+	player.global_position = pos
+	player.play()
+	player.finished.connect(player.queue_free)
+	return true
+
+
+func _takes(line: String) -> Array:
+	if _said.has(line):
+		return _said[line]
+	var found: Array = []
+	for stem: String in [line] + _numbered(line):
+		for ext: String in VOICE_EXTS:
+			var path := VOICE_DIR + stem + ext
+			if ResourceLoader.exists(path):
+				var res := load(path)
+				if res is AudioStream:
+					found.append(res)
+				break
+	_said[line] = found
+	return found
+
+
+func _numbered(line: String) -> Array:
+	var out: Array = []
+	for i in range(1, MOST_TAKES + 1):
+		out.append("%s_%d" % [line, i])
+	return out

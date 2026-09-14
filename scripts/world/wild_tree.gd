@@ -341,11 +341,6 @@ static func board_size(kind: String, from_seed: int, carried: float) -> Vector2:
 	return Vector2(top.x, h + top.y) * grown
 
 
-## What this tree's board would be, as it actually stands right now.
-func board_now() -> Vector2:
-	return board_size(style, rng_seed, lumber)
-
-
 ## Has the axe been to it? A felled tree is still a child of its chunk for a
 ## few seconds while it topples, and must not be boarded in that time.
 func felled() -> bool:

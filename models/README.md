@@ -70,6 +70,7 @@ Name your clips (or a listed alias) to match these semantic states:
 | `attack` | creature rampaging / kicking a house | kick, hit, smash |
 | `play` | villager/creature playing | cheer, dance, jump |
 | `pray` | worshipping / preaching | worship, kneel |
+| `stretch` | a villager standing idle while it waits its turn to decide — see `voices/README.md` | yawn, think, ponder |
 | `graze` | animal grazing | eat, feed |
 | `drink` | animal drinking | graze, eat |
 | `guard` | creature guarding | alert, watch |
