@@ -40,6 +40,10 @@ BUILTIN = {
     "add_theme_constant_override", "set_anchors_preset", "reparent",
     "set_anchors_and_offsets_preset", "find_blend_shape_by_name",
     "set_blend_shape_value", "set_instance_shader_parameter",
+    # Viewport's own. get_texture is how anything looks at what a SubViewport
+    # drew — see Temple, which hangs the temple room on a TextureRect.
+    "get_texture", "get_visible_rect", "set_input_as_handled",
+    "get_node_count_in_group", "get_first_node_in_group", "get_nodes_in_group",
 }
 
 decl_re = re.compile(r"^class_name\s+(\w+)", re.M)

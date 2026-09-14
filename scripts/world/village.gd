@@ -653,7 +653,14 @@ func _make_villager(start_age: float) -> Villager:
 	return v
 
 
+## THE WORLD CAN BE FULL. Births stop at GameState.folk_cap and resume under
+## it; nobody is ever culled to meet it, because a world that kills a villager
+## to satisfy a graphics setting is not a world. A town at the ceiling simply
+## stops growing, which is indistinguishable from a town short of land.
 func spawn_child(pos: Vector3, mother: Villager = null) -> void:
+	if GameState.folk_cap > 0 \
+			and get_tree().get_node_count_in_group("villagers") >= GameState.folk_cap:
+		return
 	var v := _make_villager(0.0)
 	v.mother = mother
 	v.position = to_local(pos) + Vector3(randf_range(-0.5, 0.5), 0.5, randf_range(-0.5, 0.5))

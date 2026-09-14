@@ -1024,6 +1024,33 @@ world, and on a frozen clock a stroke spanning a pause would hold two samples a
 hand's width apart with zero seconds between them and hurl a rock the player
 merely set down.
 
+**What you are actually in** is the inside of a cube. Six sides, each about the
+geometry of one ordinary chunk of ground — a floor with the well cut into it, a
+ceiling with a turning chandelier, and four walls a god turns to face. It has
+its **own `World3D`**, so the game's sun does not set in here, the fog does not
+reach, and nothing the room lights can touch anything outside it. The whole
+thing:
+
+| | tris |
+|---|---|
+| Six sides, 1,152 each | 6,912 |
+| Chandelier | 576 |
+| The well — rim, shaft, water | 480 |
+| **The temple entire** | **7,968** |
+| *the creature alone, for scale* | *2,880* |
+
+And it is drawn while the world is **paused and culled to nothing** — the main
+camera's `cull_mask` goes to 0 at the door — so the temple does not add to a
+scene, it replaces one. The room's render target is `UPDATE_DISABLED` until you
+walk in; a `SubViewport` does not stop for a hidden `CanvasLayer`, and left
+awake it would draw a second full 3D scene every frame of the entire game.
+
+**Nothing is written on the walls.** Text on a surface at an angle goes soft,
+and a wall carrying a viewport texture is a fixed resolution being magnified —
+on a tablet at arm's length it is unreadable. So the room gives the *place*: you
+turn, and the north wall is where the dead are counted. The words resolve
+crisply in 2D over it.
+
 Inside:
 
 - **The Pool** — the land from above, in still water. The world is endless, so
@@ -1049,7 +1076,15 @@ Inside:
   of them, so an evening's play is roughly one human lifetime).
 - **The Reign** — the ledger. What is standing, how much land you have raised
   the fog from, what is dead, and what killed it, by cause.
-- **Rites** and **Creatures** — options and saves. Doors, not yet rooms.
+- **Rites** — graphics tier, master volume, the living wood, and **how many
+  people the world may hold**. That last one is the only setting here that
+  bounds something *growing*: shadows and draw distance are fixed costs paid
+  once a frame, but villagers compound — a thriving world breeds more, each one
+  thinks, walks, eats and is drawn, and a long session can pass a thousand
+  souls before the frame rate says so. Births stop at the ceiling and resume
+  under it; **nobody is ever culled to meet it**, so a town that reaches it
+  simply stops growing, which is what a town short of land does anyway.
+- **Creatures** — the profiles, and the saves they live in.
 
 ### The record had to be built first
 

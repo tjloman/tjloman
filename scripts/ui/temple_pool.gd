@@ -107,6 +107,13 @@ func _ready() -> void:
 	set_process(true)
 
 
+## THE IMAGE IN THE WATER, for the room to lay on its own well. The same
+## ImageTexture this Control draws, so the disc across the room and the crisp
+## map you lean over can never be showing two different worlds.
+func water() -> Texture2D:
+	return _tex
+
+
 ## Centre the pool on whatever the god is looking at, and raise the water
 ## again. Called every time the door is opened.
 func look_again() -> void:

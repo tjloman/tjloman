@@ -308,13 +308,18 @@ NUM = re.compile(r"^-?\d+(?:\.\d+)?$")
 ## round, which is a decision this game makes nowhere else, so leaving them
 ## alone is always an oversight rather than a choice.
 ROUND = ("SphereMesh", "CapsuleMesh", "CylinderMesh", "TorusMesh")
-## THE SHAPES WHOSE DEFAULTS ARE EXPENSIVE. A BoxMesh, PrismMesh or PlaneMesh
-## left alone is 12, 8 and 2 triangles — the defaults ARE the right answer and
-## setting them would be noise. These four are not: stock they are 64 segments
-## round, which is a decision this game makes nowhere else, so leaving them
-## alone is always an oversight rather than a choice.
-ROUND = ("SphereMesh", "CapsuleMesh", "CylinderMesh", "TorusMesh")
 TESS = ("radial_segments", "rings", "ring_segments")
+
+## GODOT'S PROPERTY NAMES AGAINST THE ONES THE FORMULAS USE. These differed,
+## silently, for as long as this tool has existed: every `subdivide_width` in
+## the codebase was recorded under a key nothing ever read, so a subdivided
+## plane came out as two triangles. A budget tool that UNDER-reports is worse
+## than no budget tool, because it is believed.
+PROP_KEY = {
+    "subdivide_width": "subdivide_w",
+    "subdivide_height": "subdivide_h",
+    "subdivide_depth": "subdivide_d",
+}
 
 ARM = re.compile(r"^(if|elif|else|while|match|for)\b")
 
@@ -434,8 +439,19 @@ def scan(path):
     props = {}
     for _, _, text in lines:
         m = re.match(r"^(\w+)\.(\w+)\s*=\s*(.+)$", text)
-        if m and NUM.match(m.group(3).strip()):
-            props.setdefault(m.group(1), {})[m.group(2)] = float(m.group(3))
+        if m is None:
+            continue
+        raw = m.group(3).strip()
+        # A KNOB SET FROM A CONSTANT IS STILL SET. `plane.subdivide_width = CUT`
+        # was read as nothing at all, so a wall cut to a chunk's fineness
+        # reported as the two triangles of a bare plane.
+        if NUM.match(raw):
+            value = float(raw)
+        elif raw in consts:
+            value = float(consts[raw])
+        else:
+            continue
+        props.setdefault(m.group(1), {})[PROP_KEY.get(m.group(2), m.group(2))] = value
 
     nodes, _ = branches(lines, 0, 0)
     found, blind = {}, []
@@ -523,6 +539,12 @@ MULTI = {
 # loudly at the bottom rather than quietly left out.
 
 NAMES = {
+    # THE TEMPLE, which is the only room in the game and is drawn while the
+    # world is paused and culled to nothing — so it does not add to a scene,
+    # it replaces one. Each side is deliberately one near chunk's worth.
+    ("ui/temple_room.gd", "_side"): ("TEMPLE", "Temple, one of six sides"),
+    ("ui/temple_room.gd", "_build_well"): ("TEMPLE", "The well: rim, shaft, water"),
+    ("ui/temple_room.gd", "_build_chandelier"): ("TEMPLE", "Chandelier"),
     ("world/chunk.gd", "_cut_mesh"): ("LAND", "Ground, one near chunk (48m)"),
     ("world/chunk.gd", "_cut_mesh:far"): ("LAND", "Ground, one far chunk, skirted"),
     ("world/chunk.gd", "_build_water"): ("LAND", "Water sheet, one chunk"),

@@ -474,6 +474,19 @@ func cycle() -> void:
 	quality_changed.emit()
 
 
+## PICK ONE OUTRIGHT, which is what a settings wall with three buttons on it
+## needs — `cycle` is for the F2 key, where stepping round is the only gesture
+## a single key has. Same persistence, same live re-apply.
+func choose(want: Tier) -> void:
+	if want == tier:
+		return
+	tier = want
+	_save_override(tier)
+	GameState.announce("Graphics quality: %s (some parts apply on restart)"
+		% Tier.keys()[tier].capitalize())
+	quality_changed.emit()
+
+
 func _save_override(t: Tier) -> void:
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f != null:

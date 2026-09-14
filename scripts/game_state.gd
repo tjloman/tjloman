@@ -54,6 +54,21 @@ const MOON_LIGHT := Color(0.72, 0.80, 1.0)
 var prayer_power: float = 60.0
 var max_prayer_power: float = 100.0
 
+## HOW MANY SOULS THE WORLD MAY HOLD AT ONCE, across every village.
+##
+## Not a difficulty knob — a HEAT knob, and the only one that bites on the part
+## of the frame that actually grows without bound. Everything else the temple
+## can turn down (shadows, draw distance, the render scale) is a fixed cost
+## paid once a frame; villagers are a cost that compounds, because a thriving
+## world breeds more of them and each one thinks, walks, eats and is drawn.
+## A four-hour session on a phone can pass a thousand without noticing.
+##
+## Births stop at the cap and resume under it — nobody is culled. A village
+## that hits the ceiling simply stops growing, which is what a village short of
+## land does anyway, so it reads as the world being full rather than as a
+## setting. 0 means no ceiling at all. See Village.spawn_child.
+var folk_cap := 0
+
 ## Total elapsed game time, in years.
 var game_years := 0.0
 
