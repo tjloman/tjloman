@@ -379,6 +379,14 @@ func _on_creed() -> void:
 	# fault, until the wait starts showing as people standing about.
 	creed.append("%d thinking a frame, %d standing in the line" % [
 		Spool.served(), Spool.waiting()])
+	# WHAT THE EYE HAS MADE OF THE LIGHT. The gap between the two numbers is the
+	# adaptation still happening — walk away from a fire and watch the second
+	# chase the first down for nine seconds while the stars come up.
+	var nightfall := get_tree().get_first_node_in_group("nightfall") as Nightfall
+	if nightfall != null and is_instance_valid(nightfall):
+		var meter := nightfall.meter
+		creed.append("it is %.3f lux here and the eye has settled on %.3f (%d%% stars)"
+			% [meter.lux(), meter.adapted(), int(meter.starlight() * 100.0)])
 	var said := "  ·  ".join(creed) if not creed.is_empty() \
 		else "It has learned nothing it can put into words yet."
 	GameState.announce("%s (%s, %s) — %s" % [

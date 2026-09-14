@@ -52,6 +52,10 @@ const EASE := 1.6
 const FLICKER := 0.12
 
 var camera_rig: CameraRig
+## THE LIGHT SENSOR. Lives here because this file already knows where the light
+## in the world is — it deals the hearths itself — and because it already has a
+## slow tick to hang it on. main.gd reads it into the Environment. See LightMeter.
+var meter := LightMeter.new()
 
 var _lights: Array[OmniLight3D] = []
 var _claims: Array[Vector3] = []      # where each light is trying to be
@@ -62,6 +66,7 @@ var _redeal := 0.0
 
 
 func _ready() -> void:
+	add_to_group("nightfall")
 	_resize_pool(Quality.night_lights())
 	Quality.quality_changed.connect(_on_quality_changed)
 	Quality.heat_changed.connect(_on_heat_changed)
@@ -108,6 +113,10 @@ func _resize_pool(want: int) -> void:
 
 
 func _process(delta: float) -> void:
+	# THE SENSOR FIRST, AND WHATEVER THE POOL IS DOING. A device with no hearth
+	# lights at all still has a sky, a town's torches and a creature in it, and
+	# it is the tier that needs the exposure most.
+	meter.tick(GameState.camera_focus, _lights, get_tree(), delta)
 	if _lights.is_empty():
 		return
 	_redeal -= delta

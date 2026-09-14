@@ -34,6 +34,9 @@ var hud: HUD
 var _sun: DirectionalLight3D
 var _moon: DirectionalLight3D
 var _sky_material: ProceduralSkyMaterial
+## Held for its light meter, which is what drives the exposure, the stars and
+## how much colour the eye is getting. See LightMeter.
+var _nightfall: Nightfall = null
 var _environment: Environment
 
 
@@ -83,6 +86,7 @@ func _ready() -> void:
 	var nightfall := Nightfall.new()
 	nightfall.camera_rig = camera_rig
 	add_child(nightfall)
+	_nightfall = nightfall
 
 	miracles = MiracleManager.new()
 	add_child(miracles)
@@ -270,6 +274,35 @@ func _update_daylight() -> void:
 	_environment.ambient_light_color = MOON_AMBIENT.lerp(Color.WHITE, t)
 	_environment.ambient_light_sky_contribution = lerpf(0.25, 0.7, t)
 	_environment.fog_light_color = horizon.darkened(0.2)
+	_read_the_light()
+
+
+## WHAT THE EYE HAS MADE OF IT.
+##
+## The sky above decides what there IS to see; this decides what a person
+## standing in it can actually see of it, which is a different question and the
+## one nothing in this game was asking. Three answers come out of the same
+## reading, and the third is the one nobody expects to matter:
+##
+##   THE SHUTTER. A dark scene is lifted and a blazing one is stopped down, on
+##   an eye that opens slowly and closes at once — see LightMeter, where the
+##   lopsidedness is the whole effect.
+##
+##   THE STARS. Two gates, both of which have to open: the eye dark-adapted AND
+##   the sky dark. So they arrive over several seconds as you walk away from a
+##   fire, and a creature burning bright enough beside you costs you the sky.
+##
+##   THE COLOUR. As the rods take over, reds collapse toward black and the
+##   blue-greens hold on, so a moonlit wood goes cold and desaturated — and the
+##   torch you are carrying pulls a pool of true colour along with you.
+func _read_the_light() -> void:
+	if _nightfall == null or not is_instance_valid(_nightfall):
+		return
+	var meter := _nightfall.meter
+	_environment.tonemap_exposure = meter.exposure()
+	_environment.adjustment_saturation = meter.colour()
+	var stars := meter.starlight()
+	_sky_material.sky_cover_modulate = Color(stars, stars, stars, 1.0)
 
 
 func _setup_input() -> void:
@@ -329,6 +362,13 @@ func _build_environment() -> void:
 	add_child(_moon)
 
 	_sky_material = ProceduralSkyMaterial.new()
+	# THE STARS, AND THE PAINTED HORIZON IF THERE IS ONE. An equirectangular
+	# cover whose colours are ADDED to the gradient — which is what a star does
+	# to a sky — with `sky_cover_modulate` as the handle the light meter pulls.
+	# Generated rather than painted so the meter can bring them out slowly; see
+	# SkyCover.
+	_sky_material.sky_cover = SkyCover.texture()
+	_sky_material.sky_cover_modulate = Color(0, 0, 0, 1)
 	var sky := Sky.new()
 	sky.sky_material = _sky_material
 
@@ -338,6 +378,8 @@ func _build_environment() -> void:
 	_environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	_environment.ambient_light_sky_contribution = 0.7
 	_environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	# The eye's colour response rides on this; see LightMeter.colour.
+	_environment.adjustment_enabled = true
 	# Distance fog is cheap and stays on everywhere; glow scales with tier.
 	_environment.fog_enabled = true
 	_environment.fog_density = Quality.fog_density()
