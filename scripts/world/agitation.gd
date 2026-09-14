@@ -45,7 +45,13 @@ const WORLD_REST := 0.22
 const OWN_REST := 2.6
 
 ## How far a cry carries, past which it is not worth an AudioStreamPlayer3D.
-const HEARD_WITHIN := 55.0
+## Measured from the EAR and not from the camera — see Ear.
+##
+## MUST NOT EXCEED the reach SoundBank.play_on gives a cry, or this gate lets
+## through sounds the mixer then cuts off, which is a player and a voice budget
+## spent on silence. tools/earshot.py fails the build if the two drift apart;
+## it caught them drifting the first time they were written.
+const HEARD_WITHIN := 70.0
 
 ## When the world last heard anybody at all. Static because the budget is the
 ## WORLD'S, not each body's — a hundred people each politely waiting their own
@@ -66,7 +72,7 @@ var _gripped := false
 ## because a guttering flame is the same fact about the same body as the
 ## thrashing and the cry, and it was previously a third function on a third
 ## clock doing it from two call sites that had to remember to.
-func tick(visuals: Node3D, at: Vector3, burning: bool, airborne: bool,
+func tick(who: Node3D, visuals: Node3D, burning: bool, airborne: bool,
 		flame: Node3D = null, human := true) -> void:
 	if is_instance_valid(flame):
 		flame.scale.y = 1.0 + sin(GameState.clock * 16.0) * 0.2
@@ -80,7 +86,7 @@ func tick(visuals: Node3D, at: Vector3, burning: bool, airborne: bool,
 		return
 	_gripped = true
 	flail(visuals)
-	_cried_at = cry(at, _cried_at, human)
+	_cried_at = cry(who, _cried_at, human)
 
 
 ## IS THIS BODY PAST BEARING IT? The one definition, so the flail, the cry and
@@ -125,23 +131,33 @@ static func settle(visuals: Node3D) -> void:
 ## CRY OUT, if the world has room for it. `last` is the body's own clock, given
 ## and returned so nothing here has to keep a table of every villager alive.
 ##
-## Tries `say` first so that the day a recorded scream is dropped into
-## res://voices/ every body in the game uses it with no further work — see
-## SoundBank.say and voices/aDIRECTIONcoaching.md.
-static func cry(at: Vector3, last: float, human := true) -> float:
+## IT PLAYS ON THE BODY, NOT ON A SPEAKER IN THE FIELD. `play_on` parents the
+## emitter to the thing crying, so a villager hurled across a valley is followed
+## by their own voice — panning, falloff and Doppler all coming out of the body
+## actually travelling — instead of leaving the scream behind at the spot they
+## were thrown from and flying off in silence. And it cuts the instant they
+## land, because a scream that outlives its owner is a joke.
+##
+## `play_on` reads res://voices/ first, so a recorded take replaces this
+## everywhere with no further work — see voices/aDIRECTIONcoaching.md, [scream].
+static func cry(who: Node3D, last: float, human := true) -> float:
 	var now := GameState.clock
 	if now - last < OWN_REST or now - _world_cried < WORLD_REST:
 		return last
-	var ear := GameState.camera_focus
-	if is_finite(ear.x) and ear.distance_to(at) > HEARD_WITHIN:
-		return last          # nobody was near enough for it to be a sound
+	if who == null or not is_instance_valid(who):
+		return last
+	# ASKED OF THE EAR, not of the camera. The ear stands on the ground the god
+	# is looking at and leans toward their hand; the camera can be seventy
+	# metres behind it, and measuring from there refused cries that would have
+	# been perfectly audible. See Ear.
+	if Ear.where().distance_to(who.global_position) > HEARD_WITHIN:
+		return last
 	_world_cried = now
 	if human:
-		if not SoundBank.say("scream", at):
-			SoundBank.play_at("scream", at, -2.0, 0.16)
+		SoundBank.play_on(who, "scream", -2.0, 0.16)
 	else:
 		# An animal in the same extremity. The same waveform pitched down and
 		# roughened is a beast rather than a person, and one waveform serving
 		# both is one waveform to replace when a real one arrives.
-		SoundBank.play_at("scream", at, -4.0, 0.22, randf_range(0.55, 0.78))
+		SoundBank.play_on(who, "scream", -4.0, 0.22, randf_range(0.55, 0.78))
 	return now

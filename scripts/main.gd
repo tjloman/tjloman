@@ -147,6 +147,13 @@ func _ready() -> void:
 	tutorial.story = story
 	add_child(tutorial)
 
+	# WHERE THE GOD IS LISTENING FROM, which is not where the camera is: the rig
+	# orbits from up to seventy metres out and every sound falls off over about
+	# fifty, so at a survey zoom the world went silent. See Ear.
+	var ear := Ear.new()
+	ear.camera_rig = camera_rig
+	add_child(ear)
+
 	# THE RECORD OF THE REIGN, added before anything that can die: a chart of a
 	# number's history cannot be reconstructed from the number later, so this
 	# has to be sampling from the first second whether or not anybody ever

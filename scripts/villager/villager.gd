@@ -297,7 +297,7 @@ func _rethink() -> void:
 func _physics_process(delta: float) -> void:
 	# ALIGHT, OR IN THE AIR — before the LOD below, because a scream arriving
 	# every fourth frame would not be a scream. See Agitation.
-	_agitation.tick(_visuals, global_position, burning,
+	_agitation.tick(self, _visuals, burning,
 		state == State.FALLING and not _gentle_drop, _burn_visual)
 	# Simulation LOD: a villager the player isn't looking at runs on a slower
 	# clock — it still lives and works, just updated every few frames with the

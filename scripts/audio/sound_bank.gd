@@ -115,6 +115,55 @@ func play_at(sound: String, pos: Vector3, volume_db := 0.0, pitch_jitter := 0.12
 	p.play()
 
 
+## A SOUND THAT TRAVELS WITH THE THING MAKING IT.
+##
+## `play_at` puts a speaker on the ground and walks away, which is right for a
+## hammer blow or a tree coming down — the event happened THERE — and wrong for
+## anything that is still moving while it sounds. A villager hurled across a
+## valley screamed from the spot they left, so the cry stayed behind while the
+## body flew off in silence, and the one moment in the game that most wants to
+## be followed by ear was the one that could not be.
+##
+## Parented to the body, so Godot moves the emitter for us and the panning,
+## the Doppler and the falloff all come out of the thing actually travelling.
+##
+## AND IT CUTS WHEN THE BODY GOES, which is not a bug: a scream that outlives
+## its owner is a joke, and one that stops the instant they hit the ground is
+## the single most effective sound in this whole class of game.
+func play_on(who: Node3D, sound: String, volume_db := 0.0, pitch_jitter := 0.12,
+		pitch := 1.0, reach := 70.0) -> void:
+	if who == null or not is_instance_valid(who) or _active >= MAX_CONCURRENT:
+		return
+	var takes: Array = _takes(sound)
+	_ensure(sound)
+	if takes.is_empty() and not _bank.has(sound):
+		return
+	var p := AudioStreamPlayer3D.new()
+	p.stream = takes[randi() % takes.size()] if not takes.is_empty() else _bank[sound]
+	p.volume_db = volume_db
+	p.pitch_scale = maxf(pitch + randf_range(-pitch_jitter, pitch_jitter), 0.05)
+	# Further than a fixed sound carries. A cry is the one thing a god should
+	# hear from across a valley, and the ear is on the ground now rather than
+	# out in the sky behind the camera — see Ear.
+	p.max_distance = reach
+	p.unit_size = 10.0
+	# THE DOPPLER IS THE WHOLE POINT for a thrown body, and it costs nothing:
+	# the engine reads the emitter's own velocity between frames.
+	p.doppler_tracking = AudioStreamPlayer3D.DOPPLER_TRACKING_PHYSICS_STEP
+	who.add_child(p)
+	_active += 1
+	p.finished.connect(func() -> void:
+		_active -= 1
+		p.queue_free())
+	p.play()
+	# A body freed mid-cry takes its speaker with it, and `finished` never
+	# fires — so the budget has to be given back on the way out as well or the
+	# world goes quiet after enough people have died in mid-air.
+	p.tree_exiting.connect(func() -> void:
+		if p.playing:
+			_active = maxi(_active - 1, 0))
+
+
 ## A LOOPING VOICE, for something that is always making its noise — a cricket,
 ## a hive, flies over meat. The caller owns the player and rides its volume,
 ## which is what lets a chorus go from intermittent to continuous as the player

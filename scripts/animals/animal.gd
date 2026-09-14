@@ -209,7 +209,7 @@ func _physics_process(delta: float) -> void:
 	# ALIGHT, OR IN THE AIR — the band above fear, where there is nothing
 	# sensible left to do. `false` is "not a person": the same waveform pitched
 	# down and roughened. See Agitation.
-	_agitation.tick(null, global_position, burning,
+	_agitation.tick(self, null, burning,
 		state == State.FALLING, _burn_visual, false)
 	# Life goes on even beyond the camera: aging, appetite, and quiet
 	# deaths of old age happen way out in the woods.

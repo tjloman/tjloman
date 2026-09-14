@@ -27,6 +27,7 @@ python3 tools/check_calls.py     # calls to methods that DON'T EXIST
 python3 tools/chronicle.py       # the record still spans the whole reign
 python3 tools/pause_walk.py      # nothing measures time on the WALL clock
 python3 tools/herd_stray.py      # the hand can reach any beast you can see
+python3 tools/earshot.py         # the god hears what they are looking at
 ```
 
 That last one matters: `gdparse` only checks syntax and `gdlint` only checks
@@ -688,6 +689,47 @@ The vapour texture is drawn in code like everything else here: a soft
 elliptical falloff multiplied by noise sampled with a squashed vertical, so the
 detail runs in horizontal **streaks** rather than reading as a stack of fuzzy
 balls. 64×64, built once at world load, shared by every cloud ever cast.
+
+## Where the god is listening from
+
+Godot's default audio listener is the current `Camera3D`, which is right for
+almost every game because the camera is roughly the player's head. **This camera
+is not a head.** It is a rig that orbits a point on the ground from between 1.2
+and **70 metres** out, and a placed sound carries about fifty before its hard
+cutoff — so the game got quieter the further you pulled back, and at a survey
+zoom, which is where a god game is actually *played*, a village burning in front
+of you made **no sound at all**. Not muffled. Past `max_distance` a source is
+silent outright.
+
+`Ear` is an `AudioListener3D` that stands on the ground the god is looking at
+and leans 45% of the way toward **whatever their hand is over**. That second
+half is the interesting one: in a game whose whole verb is a hand reaching into
+the world, the hand is where your attention *is*. Reach into a burning street
+and it gets louder, because you leaned in — no UI, no setting, and true. The
+orientation stays the camera's, always: position decides how loud a thing is,
+the basis decides which side of your head it is on, and that has to agree with
+which side of the *screen* it is on.
+
+| zoom | camera as ear | Ear |
+|---|---|---|
+| 20m | 20m — heard | 6m — heard |
+| 50m | 50m — heard | 6m — heard |
+| **70m** | **70m — SILENT** | 6m — heard |
+
+**And a sound made by something moving now travels with it.** `play_at` puts a
+speaker on the ground and walks away, which is right for a hammer blow — the
+event happened *there* — and wrong for anything still moving while it sounds. A
+villager hurled across a valley screamed from the spot they left, so the cry
+stayed behind while the body flew off in silence: the one moment in the game
+that most wants to be followed by ear was the one that could not be.
+`play_on` parents the emitter to the body, so panning, falloff and **Doppler**
+all fall out of the thing actually travelling. It cuts the instant they land,
+which is not a bug.
+
+`tools/earshot.py` reasons about the hard cutoff only — how loud a thing is
+*inside* it is Godot's curve, and guessing at its exact shape would make the
+tool lie confidently. It caught the cry gate being set wider than the reach a
+cry is given, which would have spent voices on silence.
 
 ## Extremely agitated — the state above fear
 
