@@ -88,14 +88,20 @@ func play_at(sound: String, pos: Vector3, volume_db := 0.0, pitch_jitter := 0.12
 		pitch := 1.0) -> void:
 	if _active >= MAX_CONCURRENT:
 		return
+	# A RECORDING BEATS THE OSCILLATOR, for any cue, not only the spoken ones.
+	# `res://voices/howl.ogg` replaces the synthesized howl everywhere it fires,
+	# with the same volume and the same jitter the call site asked for — so the
+	# whole of voices/aDIRECTIONcoaching.md is actionable a file at a time, and
+	# deleting one puts the waveform back.
+	var takes: Array = _takes(sound)
 	_ensure(sound)
-	if not _bank.has(sound):
+	if takes.is_empty() and not _bank.has(sound):
 		return
 	var scene := get_tree().current_scene
 	if scene == null:
 		return
 	var p := AudioStreamPlayer3D.new()
-	p.stream = _bank[sound]
+	p.stream = takes[randi() % takes.size()] if not takes.is_empty() else _bank[sound]
 	p.volume_db = volume_db
 	p.pitch_scale = maxf(pitch + randf_range(-pitch_jitter, pitch_jitter), 0.05)
 	p.max_distance = 50.0

@@ -227,13 +227,23 @@ func _update_daylight() -> void:
 	# still reads as night rather than as a late dusk.
 	var night_top := Color(0.05, 0.06, 0.14)
 	var night_horizon := Color(0.10, 0.12, 0.21)
-	var dusk_horizon := Color(0.9, 0.5, 0.3)
+	# TWILIGHT IS TWO COLOURS, NOT ONE, and it was only ever one here: a warm
+	# band at the horizon under a sky that went on lerping placidly from day
+	# blue to night blue, which is not what a sunset does. What a sunset does is
+	# put vivid orange along the ground and drag VIOLET across the top of the
+	# sky behind it — the fire and the bruise, and the gap between them is most
+	# of why the hour is worth looking at.
+	var dusk_horizon := Color(1.0, 0.42, 0.12)
+	var dusk_top := Color(0.32, 0.13, 0.42)
 	var t := clampf((elev + 0.3) / 0.9, 0.0, 1.0)
 	var top := night_top.lerp(day_top, t)
 	var horizon := night_horizon.lerp(day_horizon, t)
-	# A band of fire at dawn and dusk.
+	# A band of fire at dawn and dusk, and the violet above it. The zenith takes
+	# less of it than the horizon does, because a sky that goes fully purple
+	# overhead reads as a miracle rather than as an evening.
 	var duskiness := clampf(1.0 - absf(elev) * 3.5, 0.0, 1.0)
-	horizon = horizon.lerp(dusk_horizon, duskiness * 0.7)
+	horizon = horizon.lerp(dusk_horizon, duskiness * 0.78)
+	top = top.lerp(dusk_top, duskiness * 0.55)
 
 	# The heavens are the god's conscience: a saintly hand gilds the sky
 	# warm and golden; a monstrous one bruises it ash and blood.

@@ -1,7 +1,9 @@
 # Voices
 
-Drop a sound file here and villagers start using it. Delete it and they go back
-to the synthesized murmur. Nothing here is required — the game ships and runs
+Drop a sound file here and the game starts using it. Delete it and the
+synthesized version comes back. This works for **any** cue the game plays, not
+only the spoken ones — `howl.ogg` replaces the synthesized wolf everywhere it
+fires. Nothing here is required — the game ships and runs
 with this folder empty, and there is not one audio file anywhere else in the
 project (see `scripts/audio/sound_bank.gd`: every other sound is oscillators).
 
@@ -14,6 +16,14 @@ when there is more than one a take is chosen at random each time. **Record
 several.** A town says these constantly, and one recording heard twice in a
 minute is worse than no recording at all. Pitch is already jittered ±6% on top,
 so three takes go a long way.
+
+## Direction
+
+**[`aDIRECTIONcoaching.md`](aDIRECTIONcoaching.md)** is the coaching document:
+every cue in the game by name, what it is, and how it should be performed —
+searchable by tag, so Ctrl-F for `[howl]` lands on the direction for it. Read
+that before recording anything. It covers the synthesized cues too, because a
+recording dropped in here replaces any of them, not only the spoken lines.
 
 ## Lines the game asks for
 

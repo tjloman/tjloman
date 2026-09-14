@@ -8,6 +8,28 @@ extends RefCounted
 ## cost, and what happens when it is not paid.
 
 
+## WHAT A DEATH COSTS THE GOD WHO LET IT HAPPEN.
+##
+## ONE PLACE, because it used to be several and they did not agree. Starving
+## charged three; burning to death from a fireball charged nothing at all,
+## since the miracle only paid for the people its core killed outright and a
+## man set alight and dead eight seconds later was free. Every early death is
+## answered for here, and nowhere else.
+##
+## THE SCALE IS HOW MUCH OF IT WAS YOURS. A wolf is the world being what it is
+## and costs a god very little. Hunger in your own town is neglect, and neglect
+## is the one thing a god is unambiguously for. Fire is almost never the
+## world's doing — it is a miracle or it is your creature, and either way it is
+## you.
+const DEATH_UNLOOKED_FOR := -0.5    # a beast, a fall, the sea
+const DEATH_BY_NEGLECT := -3.0      # starved, in a town that was yours to feed
+const DEATH_BY_FIRE := -2.5         # yours, or your creature's, nearly always
+
+## And how far a death carries to the creature, which learns cruelty from what
+## it watches its god allow.
+const GRIEF_REACH := 40.0
+
+
 static func tick(who: Villager, delta: float) -> void:
 	# NO CHILD IS EVER HUNGRY. Not fed first, not fed cheaply — not hungry at
 	# all, so the question never reaches the granary, the job board, or the
@@ -45,8 +67,30 @@ static func tick(who: Villager, delta: float) -> void:
 	if who.hunger >= 100.0:
 		who.health -= 2.0 * delta
 		if who.health <= 0.0:
-			# You are judged for your own flock, not for strangers far away.
 			if who.village.is_player_home:
-				GameState.shift_alignment(-3.0)
 				GameState.announce("%s starved to death. The heavens stayed silent." % who.villager_name)
 			who.die(false)
+
+
+## Bury one, and settle what it cost. Old age settles nothing: the creature is
+## reading its god's hand in the world, and there is no hand in an old man
+## dying full of years.
+static func mourn(who: Villager, of_old_age: bool) -> void:
+	if of_old_age:
+		return
+	var creature := who.get_tree().get_first_node_in_group("creature") as Creature
+	if creature != null \
+			and creature.global_position.distance_to(who.global_position) < GRIEF_REACH:
+		creature.witness(-2.0)
+	var karma := DEATH_UNLOOKED_FOR
+	if who.burning:
+		karma = DEATH_BY_FIRE
+	elif who.hunger >= 100.0:
+		karma = DEATH_BY_NEGLECT
+	# YOU ARE JUDGED FOR YOUR OWN FLOCK — unless you did it. A wolf in a village
+	# on the far side of the world is not a god's business; a man you set alight
+	# there is, wherever he lived.
+	var mine := who.village != null and is_instance_valid(who.village) \
+		and who.village.is_player_home
+	if mine or karma == DEATH_BY_FIRE:
+		GameState.shift_alignment(karma)

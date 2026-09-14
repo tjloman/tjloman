@@ -2210,13 +2210,8 @@ func die(of_old_age: bool) -> void:
 	# Dying while the village was up in arms teaches them the cost of standing.
 	if not of_old_age and village != null and village.is_roused():
 		village.remember_battle(false)
-	# The creature learns cruelty from the deaths it witnesses its god allow —
-	# a violent end nearby drags its heart toward the dark. (Old age teaches
-	# nothing; the creature is only reading its god's hand in the world.)
-	if not of_old_age:
-		var creature := get_tree().get_first_node_in_group("creature") as Creature
-		if creature != null and creature.global_position.distance_to(global_position) < 40.0:
-			creature.witness(-2.0)
+	# What it teaches the creature, and what it costs the god. See the one table.
+	VillagerNeeds.mourn(self, of_old_age)
 	# The town grieves together. One death is one event to the crowd mind, not a
 	# hundred separate people each noticing a body.
 	if village != null:
