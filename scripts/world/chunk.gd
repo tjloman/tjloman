@@ -27,6 +27,21 @@ extends Node3D
 ## the fine chunk simply pokes through, which is an overlap and not a hole.
 const SKIRT_DROP := 6.0
 
+## HOW MUCH WOOD EACH BIOME CARRIES: fewest, most, and the style it grows. Was
+## spelled out inside `_scatter`'s match, one line per biome; it is a table now
+## because the far ring has to be able to ask the same question without
+## building anything. See `_tree_stand`.
+const STAND := {
+	"forest": [5, 8, "forest"],
+	"grassland": [1, 3, "grassland"],
+	"savanna": [2, 4, "savanna"],
+	"rocky_hills": [0, 1, "forest"],
+	"desert": [0, 1, "savanna"],
+	"tundra": [0, 2, "forest"],
+	"rainforest": [7, 11, "wetland"],
+	"wetland": [1, 3, "wetland"],
+}
+
 var world: WorldGen
 var cell := Vector2i.ZERO
 ## Set before the chunk enters the tree. See the class note above.
@@ -59,15 +74,31 @@ var _cells := 0
 var _blooms: PackedVector3Array = PackedVector3Array()
 ## Everything scattered here that has to be set back down on the new ground.
 var _standing: Array[Node3D] = []
+## The billboard woods, one MultiMesh a style — usually one, since a biome
+## grows one kind. Kept so `strip_down` knows not to free them with everything
+## else, and so they can be rebuilt when the wood changes.
+var _boards: Array[MultiMeshInstance3D] = []
+## WHAT STANDS HERE, once it has been decided — and it is decided once.
+##
+## A chunk you logged and walked away from is stripped, and later COARSENED,
+## which re-cuts the ground and would have re-asked the seed what grows here.
+## The seed does not know you were ever here, so the wood stood back up on the
+## horizon. Keeping the answer is what makes felling permanent: `_stand_known`
+## says it has been decided, and an empty `_stand_kept` beside it is a real
+## answer — a clearing — rather than a question nobody has asked yet.
+var _stand_kept: Array[Dictionary] = []
+var _stand_known := false
 
 
 func _ready() -> void:
 	_build_terrain()
 	if terrain_only:
+		retally_boards()
 		return
 	_build_collider()
 	_build_water()
 	_scatter()
+	retally_boards()
 
 
 ## SCENERY BECOMES A PLACE. The player has walked into the ring, so the ground
@@ -97,12 +128,14 @@ func flesh_out() -> void:
 	if _cells != world.chunk_cells:
 		rebuild_terrain()   # re-cuts fine, and lays the collider and water with it
 		_scatter()
+		retally_boards()
 		return
 	if _ground != null and is_instance_valid(_ground):
 		_ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	_build_collider()
 	_build_water()
 	_scatter()
+	retally_boards()
 
 
 ## A PLACE BECOMES SCENERY AGAIN. The player has walked out of the ring, so
@@ -115,11 +148,15 @@ func flesh_out() -> void:
 func strip_down() -> void:
 	if terrain_only:
 		return
+	# BOARD THE WOOD AS IT ACTUALLY STANDS, before a line of it is freed —
+	# while `_standing` still holds real trees and `terrain_only` is still
+	# false, which is what makes this read the survivors rather than the seed.
+	retally_boards()
 	terrain_only = true
 	if _ground != null and is_instance_valid(_ground):
 		_ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	for node in get_children():
-		if node != _ground:
+		if node != _ground and not _boards.has(node):
 			node.queue_free()
 	_body = null
 	_water = null
@@ -166,10 +203,12 @@ func rebuild_terrain() -> void:
 		_water = null
 	_build_terrain()
 	if terrain_only:
+		retally_boards()
 		return
 	_build_collider()
 	_build_water()
 	_reground()
+	retally_boards()
 
 
 ## Trees, rocks and bushes do not fall when the ground drops out from under
@@ -363,6 +402,108 @@ func _skirt_quad(st: SurfaceTool, tint: PackedColorArray,
 		st.add_vertex(v[0])
 
 
+## THE WOOD ON THE HORIZON ------------------------------------------------
+##
+## Past Quality.clutter_distance a real tree stops drawing, and out here there
+## are no real trees to stop. What stands instead is one painted quad a tree,
+## turning to face the camera, the whole chunk's worth in a single MultiMesh:
+## two triangles and no node each, against 88 triangles and a StaticBody3D that
+## would lengthen every `get_nodes_in_group("trees")` scan in the game.
+##
+## WHERE THE TREES COME FROM depends on whether anyone has been here. Ground
+## nobody has visited is boarded from the SEED, which is why the billboards and
+## the real trees agree. Ground you have walked on is boarded from what actually
+## survived you — otherwise a wood you logged would stand back up the moment you
+## turned around.
+func retally_boards() -> void:
+	for old in _boards:
+		if is_instance_valid(old):
+			old.queue_free()
+	_boards.clear()
+	if not terrain_only:
+		# Standing here, so the trees themselves are the answer — and they
+		# overwrite whatever the seed once said, which is how logging sticks.
+		_stand_kept = _standing_stand()
+		_stand_known = true
+	elif not _stand_known:
+		_stand_kept = _tree_stand(world.chunk_rng(cell))
+		_stand_known = true
+	if _stand_kept.is_empty():
+		return
+	var stand := _stand_kept
+	# One MultiMesh a style. A biome grows one kind, so this is nearly always a
+	# single pass — but a tree can be carried across a border in the hand, and a
+	# conifer drawn as an acacia would be a strange thing to have built.
+	var by_style := {}
+	for it: Dictionary in stand:
+		by_style.get_or_add(String(it["style"]), []).append(it)
+	for style: String in by_style:
+		_board_style(style, by_style[style])
+
+
+## The trees that are really here, in the shape `_tree_stand` hands back.
+func _standing_stand() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for node in _standing:
+		if not is_instance_valid(node) or not (node is WildTree):
+			continue
+		var tree := node as WildTree
+		if tree.felled() or tree.lumber < TreeArt.LEAST_LUMBER:
+			continue
+		out.append({"spot": tree.position, "seed": tree.rng_seed,
+			"lumber": tree.lumber, "style": tree.style})
+	return out
+
+
+## One style's worth, as a MultiMesh standing on the ground.
+func _board_style(style: String, stand: Array) -> void:
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = TreeArt.board(style)
+	mm.instance_count = stand.size()
+	var leaf := TreeArt.leaf_of(style)
+	var shown := 0
+	for it: Dictionary in stand:
+		var carried := float(it["lumber"])
+		if carried < TreeArt.LEAST_LUMBER:
+			continue
+		var size := WildTree.board_size(style, int(it["seed"]), carried)
+		var spot: Vector3 = it["spot"]
+		spot.y = world.height_at(position.x + spot.x, position.z + spot.z) - 0.1
+		mm.set_instance_transform(shown, Transform3D(
+			Basis.IDENTITY.scaled(Vector3(size.x, size.y, 1.0)), spot))
+		# A little variation in the green, off the seed, so a wood is not one
+		# colour stamped four hundred times.
+		var shift := float(int(it["seed"]) & 63) / 63.0
+		mm.set_instance_color(shown, leaf.lightened(shift * 0.16).darkened(0.08))
+		shown += 1
+	mm.visible_instance_count = shown
+	if shown == 0:
+		return
+	var view := MultiMeshInstance3D.new()
+	view.multimesh = mm
+	view.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# WHERE THE BOARDS TAKE OVER: exactly where the real trees stop — but ONLY
+	# on a chunk that has real trees.
+	#
+	# Out in the far ring there are none, and a far chunk is not necessarily
+	# far: its nearest edge sits at load_radius x 48m, which is 144m, while
+	# clutter_distance on a capable device is 180m. Cull those boards at 180 and
+	# the nearest ring of the wood goes out — a clearing that follows the player
+	# around, with a forest standing behind it.
+	#
+	# A visibility range is measured to the whole MultiMesh, so the handover is
+	# per CHUNK rather than per tree: half a chunk of slop at the seam, which is
+	# what the fade margin is for.
+	if not terrain_only:
+		view.visibility_range_begin = Quality.clutter_distance()
+		view.visibility_range_begin_margin = Quality.clutter_distance() * 0.12
+		view.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+	add_child(view)
+	_boards.append(view)
+
+
 ## THE COLOURS CHANGED, THE LAND DID NOT — a burn cooling from ember to char to
 ## scrub, which happens for eight minutes after every fireball.
 ##
@@ -439,54 +580,53 @@ func _scatter() -> void:
 	var rng := world.chunk_rng(cell)
 	var biome := world.biome_at(
 		position.x + WorldGen.CHUNK_SIZE * 0.5, position.z + WorldGen.CHUNK_SIZE * 0.5)
+	# THE WOOD FIRST, AND ALWAYS FIRST. Every arm below used to open with its
+	# own `_scatter_trees` line; they are one call now, made before the match,
+	# which draws from `rng` in exactly the order they did. That order is load-
+	# bearing: the far ring replays this same stream to decide where the
+	# billboards go, and if the two ever fall out of step the trees move as you
+	# walk up to them.
+	_plant_stand(_tree_stand(rng))
 	match biome:
 		"forest":
-			_scatter_trees(rng, rng.randi_range(5, 8), "forest")
 			_scatter_deposits(rng, rng.randi_range(0, 1))
 			_scatter_bushes(rng, rng.randi_range(1, 3))
 			_scatter_animals(rng, {"deer": 0.22, "elk": 0.18, "bear": 0.05,
 				"wolf": 0.05, "tiger": 0.02})
 		"grassland":
-			_scatter_trees(rng, rng.randi_range(1, 3), "grassland")
 			_scatter_flowers(rng, rng.randi_range(6, 12))
 			_scatter_deposits(rng, rng.randi_range(0, 1))
 			_scatter_bushes(rng, rng.randi_range(2, 3))
 			_scatter_animals(rng, {"sheep": 0.12, "horse": 0.1, "chicken": 0.12,
 				"pig": 0.08, "dog": 0.04, "bison": 0.12})
 		"savanna":
-			_scatter_trees(rng, rng.randi_range(2, 4), "savanna")
 			_scatter_bushes(rng, rng.randi_range(1, 3))
 			_scatter_animals(rng, {"giraffe": 0.12, "lion": 0.06, "llama": 0.12,
 				"ox": 0.05, "anteater": 0.1, "coati": 0.12})
 		"rocky_hills":
-			_scatter_trees(rng, rng.randi_range(0, 1), "forest")
 			_scatter_deposits(rng, rng.randi_range(2, 4))
 			_scatter_bushes(rng, rng.randi_range(0, 2))
 			_scatter_animals(rng, {"caribou": 0.03, "llama": 0.12, "elk": 0.1})
 		# THE HOT DRY COUNTRY. Almost nothing grows and almost nothing lives here,
 		# which is the point of it — a desert should be a place you cross.
 		"desert":
-			_scatter_trees(rng, rng.randi_range(0, 1), "savanna")
 			_scatter_deposits(rng, rng.randi_range(1, 2))
 			_scatter_animals(rng, {"llama": 0.1, "giraffe": 0.06, "lion": 0.05,
 				"dog": 0.03})
 		# THE FAR COLD. Open, flat and full of big grazing beasts with wolves
 		# and bears working them — the meat wall at its plainest.
 		"tundra":
-			_scatter_trees(rng, rng.randi_range(0, 2), "forest")
 			_scatter_deposits(rng, rng.randi_range(1, 2))
 			_scatter_animals(rng, {"caribou": 0.07, "bison": 0.12, "elk": 0.14,
 				"deer": 0.12, "wolf": 0.07, "bear": 0.05, "dog": 0.03})
 		# WHERE WETLAND MEETS FOREST. The densest, loudest, most crowded ground
 		# in the world: everything small, everything at once, and a tiger in it.
 		"rainforest":
-			_scatter_trees(rng, rng.randi_range(7, 11), "wetland")
 			_scatter_bushes(rng, rng.randi_range(3, 5))
 			_scatter_flowers(rng, rng.randi_range(4, 8))
 			_scatter_animals(rng, {"coati": 0.2, "anteater": 0.16, "deer": 0.14,
 				"frog": 0.7, "tiger": 0.05, "chicken": 0.14, "pig": 0.12})
 		"wetland":
-			_scatter_trees(rng, rng.randi_range(1, 3), "wetland")
 			_scatter_bushes(rng, rng.randi_range(2, 4))
 			_scatter_animals(rng, {"frog": 0.9, "pig": 0.12, "anteater": 0.12,
 				"coati": 0.1})
@@ -519,17 +659,42 @@ func _place(node: Node3D, local: Vector3, sink := 0.0) -> void:
 	_standing.append(node)
 
 
-func _scatter_trees(rng: RandomNumberGenerator, count: int, style: String) -> void:
-	for i in count:
+## WHAT WOOD STANDS HERE, decided by the seed and nothing else.
+##
+## Deliberately separate from planting it. A chunk out in the far ring is never
+## built as a place and has no trees at all, but it still has to draw them — so
+## it asks this, off its own deterministic RNG, and gets exactly the answer the
+## chunk would give if you walked up to it. Which is the whole trick: when it is
+## promoted, every real tree stands where its billboard stood.
+##
+## The draws have to match the old inline version exactly, including the fact
+## that a rejected spot consumes no seed and no lumber.
+func _tree_stand(rng: RandomNumberGenerator) -> Array[Dictionary]:
+	var biome := world.biome_at(
+		position.x + WorldGen.CHUNK_SIZE * 0.5, position.z + WorldGen.CHUNK_SIZE * 0.5)
+	var out: Array[Dictionary] = []
+	if not STAND.has(biome):
+		return out
+	var spec: Array = STAND[biome]
+	for i in rng.randi_range(int(spec[0]), int(spec[1])):
 		var spot := _random_spot(rng)
 		if not _spot_ok(spot):
 			continue
-		var tree := WildTree.new()
-		tree.style = style
-		tree.rng_seed = rng.randi()
+		var from_seed := rng.randi()
 		# A natural mixed-age stand: some saplings, some giants.
-		tree.lumber = rng.randf_range(4.0, WildTree.MAX_LUMBER)
-		_place(tree, spot, 0.1)
+		var carried := rng.randf_range(4.0, WildTree.MAX_LUMBER)
+		out.append({"spot": spot, "seed": from_seed, "lumber": carried,
+			"style": String(spec[2])})
+	return out
+
+
+func _plant_stand(stand: Array[Dictionary]) -> void:
+	for it: Dictionary in stand:
+		var tree := WildTree.new()
+		tree.style = it["style"]
+		tree.rng_seed = it["seed"]
+		tree.lumber = it["lumber"]
+		_place(tree, it["spot"], 0.1)
 		Util.apply_lod(tree, Quality.clutter_distance())
 
 

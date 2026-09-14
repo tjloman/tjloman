@@ -111,19 +111,9 @@ func _ready() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = rng_seed
 
-	var h := rng.randf_range(2.5, 4.5)
-	var trunk_color := Color(0.42, 0.3, 0.18)
-	var leaf_color := Color(0.2, 0.45, 0.2)
-	match style:
-		"savanna":
-			h = rng.randf_range(3.5, 5.0)
-			leaf_color = Color(0.4, 0.5, 0.22)
-		"wetland":
-			h = rng.randf_range(2.0, 3.2)
-			trunk_color = Color(0.35, 0.28, 0.2)
-			leaf_color = Color(0.25, 0.4, 0.24)
-		"grassland":
-			leaf_color = Color(0.28, 0.52, 0.24)
+	var h := trunk_height(style, rng)
+	var trunk_color := TreeArt.bark_of(style)
+	var leaf_color := TreeArt.leaf_of(style)
 
 	_base_height = h
 	var col := CollisionShape3D.new()
@@ -294,6 +284,57 @@ func _update_lean(delta: float) -> void:
 ## a towering ~30m giant. The ramp is eased-in (t²) so young trees stay small
 ## and only the mature ones loom — the alternative (a straight lerp to a big
 ## mature scale) would make every sapling a monster the moment it sprouts.
+## THE SHAPE A SEED GIVES, in one place, because two things want it now: the
+## tree, and the board that stands in for it past Quality.clutter_distance. If
+## those two ever disagree the wood changes size as you walk towards it, which
+## is the one thing an impostor must never do.
+##
+## It takes the RNG rather than the seed so `_ready` can go on using the same
+## stream afterwards for the plant's facing — the draws here are exactly the
+## draws that were inline before, in the same order.
+static func trunk_height(style: String, rng: RandomNumberGenerator) -> float:
+	var h := rng.randf_range(2.5, 4.5)
+	match style:
+		"savanna":
+			h = rng.randf_range(3.5, 5.0)
+		"wetland":
+			h = rng.randf_range(2.0, 3.2)
+	return h
+
+
+## How wide the crown is and how far it stands above the bole, in metres at
+## scale one. Read straight off what _ready actually builds: a conifer is a
+## 1.6m-radius cone sitting 1.2m up and 2.8m tall; an acacia is a 2.2m plate.
+static func crown(style: String) -> Vector2:
+	if style == "savanna":
+		return Vector2(4.4, 0.55)
+	return Vector2(3.2, 2.6)
+
+
+## THE BOARD'S SIZE IN METRES for a tree of this seed carrying this much lumber
+## — width by height, pivoted at the foot. The growth curve is `_scale_for_lumber`
+## written out, because a board is not a node and has no scale to read.
+static func board_size(style: String, from_seed: int, carried: float) -> Vector2:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = from_seed
+	var h := trunk_height(style, rng)
+	var top := crown(style)
+	var t := clampf(carried / MAX_LUMBER, 0.0, 1.0)
+	return Vector2(top.x, h + top.y) * (
+		SAPLING_SCALE + (MATURE_SCALE - SAPLING_SCALE) * t * t)
+
+
+## What this tree's board would be, as it actually stands right now.
+func board_now() -> Vector2:
+	return board_size(style, rng_seed, lumber)
+
+
+## Has the axe been to it? A felled tree is still a child of its chunk for a
+## few seconds while it topples, and must not be boarded in that time.
+func felled() -> bool:
+	return _felled
+
+
 func _scale_for_lumber() -> Vector3:
 	var t := lumber / MAX_LUMBER
 	return Vector3.ONE * (SAPLING_SCALE + (MATURE_SCALE - SAPLING_SCALE) * t * t)
@@ -551,6 +592,12 @@ func fell() -> int:
 		return 0
 	_felled = true
 	collision_layer = 0
+	# AND THE BOARD GOES WITH IT. A chunk you logged and walked away from would
+	# otherwise still show its wood standing on the horizon — the impostors are
+	# drawn from the trees, so the trees have to say when they are gone.
+	var ground := get_parent()
+	if ground is Chunk:
+		(ground as Chunk).retally_boards()
 	var tween := create_tween()
 	tween.tween_property(self, "rotation_degrees:x",
 		88.0, 1.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)

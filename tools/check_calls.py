@@ -1317,6 +1317,49 @@ def check_sim_clock(files):
     return out
 
 
+def check_stand_first(files):
+    """THE WOOD MUST BE DRAWN FROM THE CHUNK'S RNG BEFORE ANYTHING ELSE IS.
+
+    Chunk._tree_stand decides where a chunk's trees go, off `world.chunk_rng`.
+    Two callers ask it: `_scatter`, which plants real trees, and
+    `retally_boards` on a chunk out in the far ring, which has no trees at all
+    and paints billboards where they WOULD be. The two agree only because both
+    ask at the same point in the same deterministic stream — the very start of
+    it.
+
+    Put one more `rng` draw above `_tree_stand(rng)` in `_scatter` and they
+    silently disagree: the far ring paints a wood in one place, and walking up
+    to it plants the wood somewhere else. Nothing errors. You watch the trees
+    move as you approach them, which is the exact thing an impostor exists not
+    to do.
+
+    So: in `_scatter`, the first line after the RNG is made that touches it has
+    to be the `_tree_stand` call.
+    """
+    out = []
+    for path in files:
+        if not path.endswith("chunk.gd"):
+            continue
+        inside, armed = False, False
+        for i, line in enumerate(open(path, encoding="utf-8"), 1):
+            code = line.split("#", 1)[0]
+            if re.match(r"^func _scatter\(", code):
+                inside = True
+                continue
+            if inside and re.match(r"^func ", code):
+                break
+            if not inside:
+                continue
+            if "world.chunk_rng(" in code:
+                armed = True
+                continue
+            if armed and re.search(r"\brng\b", code):
+                if "_tree_stand(rng)" not in code:
+                    out.append((path, i, line.strip()))
+                armed = False
+    return out
+
+
 def check_null_as_alive(files):
     """`x != null` USED AS A TEST FOR "THERE IS A LIVE OBJECT HERE".
 
@@ -1473,6 +1516,15 @@ def main():
               "and whatever follows works on a corpse (a cast of it is a crash). "
               "Ask `typeof(%s) == TYPE_OBJECT` instead."
               "\n    %s" % (path, lineno, name, name, name, line))
+    stand = check_stand_first(files)
+    for path, lineno, line in stand:
+        print("%s:%d: this draws from the chunk's RNG before `_tree_stand(rng)` "
+              "does. The far ring replays that same stream to decide where a "
+              "chunk's billboard trees stand, so one extra draw ahead of it "
+              "puts the painted wood and the real wood in different places — "
+              "and you watch the trees move as you walk up to them. Ask for "
+              "the stand first."
+              "\n    %s" % (path, lineno, line))
     sim_clocks = check_sim_clock(files)
     for path, lineno, line in sim_clocks:
         print("%s:%d: nothing writes `_sim_last = Scheduler.now()` outside this "
@@ -1491,7 +1543,8 @@ def main():
     total = len(problems) + len(escapes) + len(formats) + len(shadowed) \
         + len(loose_arrays) + len(variants) + len(shadowed_members) \
         + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice) + len(loose_consts) + len(through) \
-        + len(class_shadows) + len(confusable) + len(sim_clocks) + len(alive)
+        + len(class_shadows) + len(confusable) + len(sim_clocks) + len(alive) \
+        + len(stand)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

@@ -415,6 +415,11 @@ MULTI = {
     ("scripts/world/village.gd", "_build_torches"): dict(
         each=2, most=24, already=1,
         note="Village.TORCH_MOST — the most flames one town ever draws"),
+    ("scripts/world/chunk.gd", "_board_style"): dict(
+        each=2, most=11, already=0,
+        note="one painted quad a tree; Chunk.STAND tops out at 11 in "
+             "rainforest, and the far ring averages about 3 a chunk — call the "
+             "whole 240-chunk ring 1,400 triangles"),
     ("scripts/player/sling.gd", "_ready"): dict(
         each=2, most=26, already=1,
         note="Sling.ARC_STEPS billboarded dots, one draw; the rope's box is "
@@ -475,6 +480,8 @@ NAMES = {
     ("story/storyboard.gd", "_plant_marker"): ("VILLAGE", "Story marker"),
 
     ("world/wild_tree.gd", "_ready"): ("WILDERNESS", "Tree"),
+    ("world/tree_art.gd", "board"): ("WILDERNESS", "Tree, seen from far off"),
+    ("world/chunk.gd", "_board_style"): ("WILDERNESS", "Boarded wood, one chunk"),
     ("world/forage_bush.gd", "_ready"): ("WILDERNESS", "Berry bush"),
     ("world/rock_deposit.gd", "_ready"): ("WILDERNESS", "Rock"),
 
