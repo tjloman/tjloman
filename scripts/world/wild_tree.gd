@@ -292,9 +292,14 @@ func _update_lean(delta: float) -> void:
 ## It takes the RNG rather than the seed so `_ready` can go on using the same
 ## stream afterwards for the plant's facing — the draws here are exactly the
 ## draws that were inline before, in the same order.
-static func trunk_height(style: String, rng: RandomNumberGenerator) -> float:
+##
+## The parameter is `kind` and not `style` because `style` is a member of this
+## class, and a parameter of that name shadows it — harmless in a static
+## function, which cannot reach the member anyway, and a warning at every load
+## for as long as it stands.
+static func trunk_height(kind: String, rng: RandomNumberGenerator) -> float:
 	var h := rng.randf_range(2.5, 4.5)
-	match style:
+	match kind:
 		"savanna":
 			h = rng.randf_range(3.5, 5.0)
 		"wetland":
@@ -305,8 +310,8 @@ static func trunk_height(style: String, rng: RandomNumberGenerator) -> float:
 ## How wide the crown is and how far it stands above the bole, in metres at
 ## scale one. Read straight off what _ready actually builds: a conifer is a
 ## 1.6m-radius cone sitting 1.2m up and 2.8m tall; an acacia is a 2.2m plate.
-static func crown(style: String) -> Vector2:
-	if style == "savanna":
+static func crown(kind: String) -> Vector2:
+	if kind == "savanna":
 		return Vector2(4.4, 0.55)
 	return Vector2(3.2, 2.6)
 
@@ -314,11 +319,11 @@ static func crown(style: String) -> Vector2:
 ## THE BOARD'S SIZE IN METRES for a tree of this seed carrying this much lumber
 ## — width by height, pivoted at the foot. The growth curve is `_scale_for_lumber`
 ## written out, because a board is not a node and has no scale to read.
-static func board_size(style: String, from_seed: int, carried: float) -> Vector2:
+static func board_size(kind: String, from_seed: int, carried: float) -> Vector2:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = from_seed
-	var h := trunk_height(style, rng)
-	var top := crown(style)
+	var h := trunk_height(kind, rng)
+	var top := crown(kind)
 	var t := clampf(carried / MAX_LUMBER, 0.0, 1.0)
 	return Vector2(top.x, h + top.y) * (
 		SAPLING_SCALE + (MATURE_SCALE - SAPLING_SCALE) * t * t)

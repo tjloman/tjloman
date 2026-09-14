@@ -156,7 +156,14 @@ func strip_down() -> void:
 	if _ground != null and is_instance_valid(_ground):
 		_ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	for node in get_children():
-		if node != _ground and not _boards.has(node):
+		# `_boards` IS A TYPED ARRAY, AND `has` ON ONE VALIDATES ITS ARGUMENT.
+		# Ask an Array[MultiMeshInstance3D] whether it holds a StaticBody3D and
+		# Godot does not answer false — it raises, every frame a chunk is
+		# stripped with a tree standing on it. The `is` in front short-circuits
+		# before `has` ever sees the wrong type. (Same family as the `filter()`
+		# trap in Util.prune: a typed array is not a list, it is a list that
+		# checks.)
+		if node != _ground and not (node is MultiMeshInstance3D and _boards.has(node)):
 			node.queue_free()
 	_body = null
 	_water = null

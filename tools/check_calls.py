@@ -1317,6 +1317,119 @@ def check_sim_clock(files):
     return out
 
 
+def check_typed_has(files):
+    """A TYPED ARRAY'S `has` VALIDATES ITS ARGUMENT, AND RAISES.
+
+    `Array[MultiMeshInstance3D].has(some_staticbody)` does not answer false. It
+    throws — "Attempted to use 'has' an object of type 'StaticBody3D' into a
+    TypedArray, which does not inherit from 'MultiMeshInstance3D'" — and keeps
+    throwing, once per offending element, every time the line runs.
+
+    Which makes "is this thing of mine in my list?" an unsafe question to ask of
+    a mixed bag. The bag that shipped this was `get_children()`: a chunk walking
+    its children to free them, asking a typed array of billboards whether each
+    one was a billboard. Every tree standing on that chunk raised.
+
+    Guard with `is` first — `node is T and list.has(node)` short-circuits before
+    `has` ever sees the wrong type. Same family as the `filter()` trap in
+    Util.prune: a typed array is not a list, it is a list that CHECKS.
+    """
+    node_source = re.compile(
+        r"^for\s+(\w+)\s+in\s+.*\b(get_children|find_children|"
+        r"get_nodes_in_group)\(")
+    typed = re.compile(r"^\s*var\s+(\w+)\s*:\s*Array\[")
+    asked = re.compile(r"\b([\w.]+)\.(has|erase|find|rfind|count)\(\s*(\w+)\s*\)")
+    out = []
+    for path in files:
+        lines = open(path, encoding="utf-8").read().split("\n")
+        names = set()
+        for line in lines:
+            m = typed.match(line)
+            if m:
+                names.add(m.group(1))
+        if not names:
+            continue
+        loop_var, loop_indent = None, 0
+        for i, line in enumerate(lines, 1):
+            code = line.split("#", 1)[0]
+            bare = code.strip()
+            indent = len(code) - len(code.lstrip("\t"))
+            if loop_var is not None and bare != "" and indent <= loop_indent:
+                loop_var = None
+            m = node_source.match(bare)
+            if m:
+                loop_var, loop_indent = m.group(1), indent
+                continue
+            if loop_var is None:
+                continue
+            for hit in asked.finditer(code):
+                if hit.group(3) != loop_var or hit.group(1) not in names:
+                    continue
+                # `x is T and list.has(x)` is the fix, and is left alone.
+                if re.search(r"\b%s\s+is\s+\w+" % re.escape(loop_var), code):
+                    continue
+                out.append((path, i, hit.group(1), hit.group(2), loop_var,
+                            bare))
+    return out
+
+
+def check_shadowed_own(files):
+    """A parameter or local named after one of the class's OWN variables.
+
+    check_shadowed_members catches names inherited from the base node. This
+    catches the other half: a script that declares `var style` and then writes
+    `static func crown(style: String)`. Godot raises SHADOWED_VARIABLE at every
+    load, for the life of the line, and in a NON-static function the parameter
+    quietly wins over the member — which is how a function comes to read an
+    argument it was never passed.
+
+    Zero of these existed when the rule was written, so anything it finds is new.
+    """
+    own_decl = re.compile(r"^(?:var|const)\s+(\w+)")
+    sig = re.compile(r"^(?:static\s+)?func\s+\w+\((.*)$")
+    local = re.compile(r"^\t+var\s+(\w+)")
+    out = []
+    for path in files:
+        lines = open(path, encoding="utf-8").read().split("\n")
+        own = set()
+        for line in lines:
+            m = own_decl.match(line)
+            if m:
+                own.add(m.group(1))
+        if not own:
+            continue
+        for i, line in enumerate(lines, 1):
+            code = line.split("#", 1)[0]
+            m = sig.match(code)
+            if m:
+                for arg in split_top(m.group(1).split(")")[0]):
+                    name = arg.split(":")[0].split("=")[0].strip()
+                    if name in own:
+                        out.append((path, i, name, "parameter", code.strip()))
+                continue
+            m = local.match(code)
+            if m and m.group(1) in own:
+                out.append((path, i, m.group(1), "local", code.strip()))
+    return out
+
+
+def split_top(text):
+    """Comma split that ignores commas inside brackets."""
+    out, depth, cur = [], 0, ""
+    for ch in text:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        if ch == "," and depth == 0:
+            out.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    out.append(cur)
+    return out
+
+
 def check_stand_first(files):
     """THE WOOD MUST BE DRAWN FROM THE CHUNK'S RNG BEFORE ANYTHING ELSE IS.
 
@@ -1516,6 +1629,20 @@ def main():
               "and whatever follows works on a corpse (a cast of it is a crash). "
               "Ask `typeof(%s) == TYPE_OBJECT` instead."
               "\n    %s" % (path, lineno, name, name, name, line))
+    typed_has = check_typed_has(files)
+    for path, lineno, arr, verb, var, line in typed_has:
+        print("%s:%d: `%s` is a TYPED array, so `%s(%s)` does not answer false "
+              "for an element of the wrong class — it RAISES, once per element, "
+              "every time this runs. `%s` comes straight out of the scene tree "
+              "and is a mixed bag. Guard it: `%s is <Type> and %s.%s(%s)`."
+              "\n    %s" % (path, lineno, arr, verb, var, var, var, arr, verb,
+                            var, line))
+    shadowed_own = check_shadowed_own(files)
+    for path, lineno, name, kind, line in shadowed_own:
+        print("%s:%d: the %s '%s' is named after this class's own variable, "
+              "which Godot warns about at every load — and in a non-static "
+              "function the %s silently wins over the member. Rename it."
+              "\n    %s" % (path, lineno, kind, name, kind, line))
     stand = check_stand_first(files)
     for path, lineno, line in stand:
         print("%s:%d: this draws from the chunk's RNG before `_tree_stand(rng)` "
@@ -1544,7 +1671,7 @@ def main():
         + len(loose_arrays) + len(variants) + len(shadowed_members) \
         + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice) + len(loose_consts) + len(through) \
         + len(class_shadows) + len(confusable) + len(sim_clocks) + len(alive) \
-        + len(stand)
+        + len(stand) + len(typed_has) + len(shadowed_own)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0
