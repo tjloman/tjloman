@@ -65,6 +65,28 @@ extends RefCounted
 ## is a copy, so it is done rarely rather than every frame.
 const TIDY_AT := 256
 
+## HOW LONG A PLACE IN THE LINE SURVIVES WITHOUT BEING ASKED FOR.
+##
+## THE JAM THIS EXISTS FOR. A place used to be held by having asked ONCE, and
+## held forever after. An entity that joined the line and then stopped asking —
+## a villager pinned under a wolf, one that is dying, one far enough out that
+## Util.sim_stride only lets it run every fortieth frame — went on occupying one
+## of the `budget` places at the front of the queue, alive and never served,
+## because nothing in the walk below could tell "waiting" from "gone quiet".
+##
+## Collect `budget` of those and the spool STOPS. Not slows: stops. Nobody is
+## ever served again, every villager stands about with a plan that has run out,
+## and the town starves with a full granary. It takes hours to gather that many,
+## which is exactly when it was seen.
+##
+## So a place is held by asking, not by having asked. Two seconds of silence and
+## the entry is treated as gone; it rejoins at the back the moment it speaks up
+## again, which is correct, because an entity that was not asking was not
+## waiting for anything. The worst honest gap between two asks is
+## Util.sim_stride's 10 multiplied by Quality.sim_relief's 4 — forty frames — so
+## this is three times the longest wait any entity can legitimately have.
+const GONE_QUIET := 120
+
 ## THE LINE. An entry is servable only while it sits within `Quality.decisions()`
 ## live places of the front, which is what stops the order the askers happen to
 ## arrive in — Godot's tree order, which never changes — from deciding anything.
@@ -95,17 +117,19 @@ static func turn_to_think(who: Node) -> bool:
 	var id := who.get_instance_id()
 	if not _waiting.has(id):
 		_line.append(id)
-		_waiting[id] = now
+	# STAMPED ON EVERY ASK, not only the first. This is the whole of what keeps
+	# the line honest — see GONE_QUIET.
+	_waiting[id] = now
 	if _spent >= budget:
 		return false
-	# Walk the front of the line, dropping what is served or dead as we pass
-	# it, until we have looked at `budget` live entries. Bounded by the budget,
-	# so this costs the same on a frame with four in the queue and four hundred.
+	# Walk the front of the line, dropping what is served, dead or gone quiet as
+	# we pass it, until we have looked at `budget` live entries. Bounded by the
+	# budget, so this costs the same with four in the queue and four hundred.
 	var live := 0
 	var i := _head
 	while i < _line.size() and live < budget:
 		var other := _line[i]
-		if not _waiting.has(other) or not is_instance_valid(instance_from_id(other)):
+		if _lapsed(other, now):
 			_waiting.erase(other)
 			if i == _head:
 				_head += 1
@@ -116,13 +140,32 @@ static func turn_to_think(who: Node) -> bool:
 			if i == _head:
 				_head += 1
 			_spent += 1
+			_tidy()
 			return true
 		live += 1
 		i += 1
+	_tidy()
+	return false
+
+
+## Is this place no longer anybody's? Served, freed, or silent long enough that
+## whatever it was waiting for has stopped mattering.
+static func _lapsed(other: int, now: int) -> bool:
+	if not _waiting.has(other):
+		return true
+	if not is_instance_valid(instance_from_id(other)):
+		return true
+	return now - int(_waiting[other]) > GONE_QUIET
+
+
+## Throw away the served head of the line. On BOTH paths out, because doing it
+## only on the refusal path meant a busy queue — one that grants on nearly every
+## call — never compacted at all, and `_line` grew for as long as the session
+## lasted.
+static func _tidy() -> void:
 	if _head > TIDY_AT:
 		_line = _line.slice(_head)
 		_head = 0
-	return false
 
 
 ## How many are standing in the line right now. For the smoke test and for

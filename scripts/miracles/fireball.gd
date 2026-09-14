@@ -345,6 +345,8 @@ func _go_off() -> void:
 					< MiracleManager.CREATURE_SIGHT_RANGE:
 			creature.witness(float(due["creature"]))
 			creature.mind.witness_miracle(kind)
+	CreatureHead.startled(
+		get_tree().get_first_node_in_group("creature") as Creature, pos)
 
 	# The blast is the sermon: terror converts where the fire LANDS.
 	for v in get_tree().get_nodes_in_group("village"):

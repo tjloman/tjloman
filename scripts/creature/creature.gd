@@ -564,7 +564,7 @@ func _tick_feelings(delta: float) -> void:
 	if divine_hand != null and is_instance_valid(divine_hand):
 		var reach := 5.0 + scale.x * 2.0
 		if divine_hand.global_position.distance_to(global_position) < reach:
-			attention = minf(attention + 12.0 * delta, 100.0)
+			CreatureHead.watching(self, delta)   # settles at half, not all
 			bond = minf(bond + 0.3 * delta, 100.0)
 
 

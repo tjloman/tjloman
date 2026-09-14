@@ -41,6 +41,16 @@ const TURN := 3.6
 ## for the one thing it always wants to keep an eye on.
 const LOOK_WITHIN := 34.0
 const HAND_WATCH := 55.0
+## Where a hand merely BEING there settles the attention stat, and how fast it
+## is drawn to that level. A LEVEL, NOT A CEILING — pulled toward from either
+## side, so a creature that was ignoring you looks up, and one that was rapt
+## goes back to its own business. See the ATTENTION section at the foot.
+const HAND_CALM := 50.0
+const HAND_PULL := 12.0
+## How far off a DEED of yours still takes the whole of it. Wider than the reach
+## a merely present hand works at, because a thunderclap carries further than a
+## palm does. See `startled`.
+const STARTLE_WITHIN := 60.0
 ## How long it holds a subject before considering another. Without this the head
 ## snaps between two villagers standing near each other, forever.
 const HOLD_LOOK := 1.7
@@ -57,6 +67,7 @@ const PITCH_GIANT := 0.6
 ## in silence, which is most of them — a creature that voiced every passing mood
 ## would be unbearable within a minute.
 const SAYS := {
+
 	"fury": {"loud": 4.0, "pitch": 0.92},
 	"dread": {"loud": -2.0, "pitch": 1.18},
 	"pain": {"loud": 1.0, "pitch": 1.1},
@@ -219,3 +230,41 @@ func sound(who: Creature, felt: String, extra := 0.0) -> void:
 	SoundBank.play_at("roar", who.global_position,
 		float(row["loud"]) + extra, 0.09, size * float(row["pitch"]))
 	_voice_in = maxf(_voice_in, VOICE_LEAST)
+
+
+## ATTENTION ------------------------------------------------------------------
+##
+## HOW CLOSELY IT IS WATCHING YOU, which is a different question from where its
+## head is pointed and lives here for the same reason the head does: it was
+## competing with the creature's whole life and beating it.
+##
+## A HAND NEARBY USED TO PIN IT AT 100. The old rule added twelve a second up to
+## a ceiling of a hundred for as long as the hand was in reach, so a creature
+## with its god standing over it dropped whatever it was doing and watched —
+## for the whole session. That is not a companion, it is a dog staring at a
+## treat, and it is most of why the beast never got on with anything while
+## anybody was looking.
+##
+## So a hand being THERE settles it at half; a hand DOING something takes all of
+## it. Presence is scenery, and an event is an event.
+
+## The hand is within reach. Settle toward watchfulness, from whichever side.
+static func watching(who: Creature, delta: float) -> void:
+	who.attention = move_toward(who.attention, HAND_CALM, HAND_PULL * delta)
+
+
+## SOMETHING JUST HAPPENED AND IT IS WATCHING YOU NOW. A miracle conjured, a
+## miracle landing, a thing hurled. Straight to the top rather than a ramp,
+## because catching a thrown object needs attention over 35 on the very next
+## frame and a ramp would miss it — and because the whole point of an event is
+## that it interrupts.
+##
+## `where` is not optional on purpose: a wonder on the far side of the map is
+## not an event in this creature's life, and every caller knows where its own
+## deed happened.
+static func startled(who: Creature, where: Vector3) -> void:
+	if not is_instance_valid(who):
+		return
+	if where.distance_to(who.global_position) > STARTLE_WITHIN:
+		return
+	who.attention = 100.0

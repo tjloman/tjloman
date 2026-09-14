@@ -853,6 +853,12 @@ func _show_creature(verb: String, subject: Node3D, valence: float) -> void:
 	if creature == null or not is_instance_valid(creature) or subject == creature:
 		return
 	creature.witness_god(verb, CreatureEyes.kind_of(subject), valence)
+	# AND A HURLED THING IS AN EVENT. Setting something down is scenery and
+	# leaves the beast at its settled half-watchfulness; throwing it takes all
+	# of its attention, which is also what it needs to have any hope of
+	# catching the thing. See CreatureHead.startled.
+	if verb == "throw":
+		CreatureHead.startled(creature, subject.global_position)
 
 
 

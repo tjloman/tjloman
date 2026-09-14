@@ -330,6 +330,13 @@ func cast_runes(runes: Array) -> bool:
 		return false
 	casts_made += 1
 	last_rune_count = runes.size()
+	# A WONDER COMING INTO YOUR HAND IS AN EVENT, and an event takes the whole
+	# of the creature's attention rather than the half that your merely being
+	# there settles it at. See CreatureHead.startled.
+	if divine_hand != null and is_instance_valid(divine_hand):
+		CreatureHead.startled(
+			get_tree().get_first_node_in_group("creature") as Creature,
+			divine_hand.global_position)
 	return _conjure_reading(reading)
 
 
@@ -543,6 +550,8 @@ func resolve(miracle: String, pos: Vector3, momentum := Vector3.ZERO,
 		"healing_shower": _cast_healing_shower(pos, potency)
 		_: return
 	_apply_karma(miracle, pos)
+	CreatureHead.startled(
+		get_tree().get_first_node_in_group("creature") as Creature, pos)
 	for v in get_tree().get_nodes_in_group("village"):
 		(v as Village).witness_miracle(miracle, pos)
 
