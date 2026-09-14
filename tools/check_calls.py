@@ -1383,9 +1383,11 @@ def check_shadowed_own(files):
     quietly wins over the member — which is how a function comes to read an
     argument it was never passed.
 
-    Zero of these existed when the rule was written, so anything it finds is new.
+    METHOD NAMES COUNT TOO, and the first version of this rule did not know it:
+    `var lux := 0.0` inside a class that has a `lux()` method is the same
+    warning, and LightMeter shipped with one because nothing was watching.
     """
-    own_decl = re.compile(r"^(?:var|const)\s+(\w+)")
+    own_decl = re.compile(r"^(?:var|const)\s+(\w+)|^(?:static )?func (\w+)\(")
     sig = re.compile(r"^(?:static\s+)?func\s+\w+\((.*)$")
     local = re.compile(r"^\t+var\s+(\w+)")
     out = []
@@ -1395,16 +1397,21 @@ def check_shadowed_own(files):
         for line in lines:
             m = own_decl.match(line)
             if m:
-                own.add(m.group(1))
+                own.add(m.group(1) or m.group(2))
         if not own:
             continue
         for i, line in enumerate(lines, 1):
             code = line.split("#", 1)[0]
             m = sig.match(code)
             if m:
+                mine = re.match(r"^(?:static )?func (\w+)\(", code)
+                if mine is not None and mine.group(1) in own:
+                    own_here = mine.group(1)
+                else:
+                    own_here = ""
                 for arg in split_top(m.group(1).split(")")[0]):
                     name = arg.split(":")[0].split("=")[0].strip()
-                    if name in own:
+                    if name in own and name != own_here:
                         out.append((path, i, name, "parameter", code.strip()))
                 continue
             m = local.match(code)

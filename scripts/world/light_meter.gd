@@ -40,9 +40,13 @@ const STAR_LUX := 0.008
 const DAY_FROM := -0.14
 const DAY_TO := 0.28
 
-## What one hearth is worth at its own centre, and one carried torch. A town of
-## twenty torches should read as somewhere you can see, and nowhere near noon.
-const HEARTH_LUX := 0.30
+## What one hearth is worth at its own centre, and one carried torch.
+##
+## A TOTEM IS MIDDLING. Standing at one should thin the sky, not close it: a
+## town is a lit place and you can still see the brighter stars over it. At
+## LOCAL_WASH it wiped them entirely, which made every village a hole in the
+## night. Half of that leaves the sky about half out.
+const HEARTH_LUX := 0.155
 const TORCH_LUX := 0.011
 ## How far a village's torchlight is still worth counting.
 const TOWN_REACH := 70.0
@@ -51,6 +55,13 @@ const TOWN_REACH := 70.0
 ## dim one should let you have it back. That is a trade worth being able to
 ## feel.
 const HALO_LUX := 0.22
+
+## THE CREATURE'S OWN HEARTH, which is a different thing from a village's: it
+## is a bonfire in a walled yard and you are meant to be dazzled by it. Over
+## LOCAL_WASH, so the sky closes completely inside the nest and opens again as
+## you walk out of it.
+const NEST_LUX := 0.36
+const NEST_REACH := 26.0
 
 ## Seconds to adapt. See the class note: these are not the same number and the
 ## difference is the point.
@@ -118,13 +129,15 @@ func _sky() -> float:
 ## actually has: the hearth pool Nightfall follows the camera with, the torches
 ## a town carries after dark, and the creature's own radiance.
 func _local(at: Vector3, hearths: Array[OmniLight3D], tree: SceneTree) -> float:
-	var lux := 0.0
+	# `got` and not `lux`: this class has a `lux()` method, and a local of that
+	# name shadows it at every load.
+	var got := 0.0
 	for light in hearths:
 		if not is_instance_valid(light) or light.light_energy <= 0.01:
 			continue
 		var reach := maxf(light.omni_range, 1.0)
 		var fade := clampf(1.0 - light.global_position.distance_to(at) / reach, 0.0, 1.0)
-		lux += HEARTH_LUX * light.light_energy / 2.2 * fade * fade
+		got += HEARTH_LUX * light.light_energy / 2.2 * fade * fade
 	for v in tree.get_nodes_in_group("village"):
 		var town := v as Village
 		if not is_instance_valid(town):
@@ -133,12 +146,23 @@ func _local(at: Vector3, hearths: Array[OmniLight3D], tree: SceneTree) -> float:
 		if away > TOWN_REACH:
 			continue
 		var fade := 1.0 - away / TOWN_REACH
-		lux += TORCH_LUX * float(_torches_lit(town)) * fade * fade
+		got += TORCH_LUX * float(_torches_lit(town)) * fade * fade
 	var beast := tree.get_first_node_in_group("creature") as Node3D
 	if beast != null and is_instance_valid(beast):
 		var fade := clampf(1.0 - beast.global_position.distance_to(at) / 30.0, 0.0, 1.0)
-		lux += HALO_LUX * fade * fade
-	return lux
+		got += HALO_LUX * fade * fade
+	# THE NEST IS THE BRIGHTEST PLACE IN THE WORLD THAT IS NOT ON FIRE. It has
+	# a hearth of its own that Nightfall's pool knows nothing about — the pool
+	# only ever deals to village totems — so a player standing in their own
+	# creature's nest had a full sky of stars over a bonfire. Metered over the
+	# wash threshold on purpose: no stars here at all.
+	for n in tree.get_nodes_in_group("creature_nest"):
+		var nest := n as Node3D
+		if not is_instance_valid(nest):
+			continue
+		var fade := clampf(1.0 - nest.global_position.distance_to(at) / NEST_REACH, 0.0, 1.0)
+		got += NEST_LUX * fade * fade
+	return got
 
 
 ## HOW MANY FLAMES ARE BURNING OVER A TOWN RIGHT NOW.

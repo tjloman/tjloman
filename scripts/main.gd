@@ -18,7 +18,14 @@ extends Node3D
 ## rest now, which is the whole point of having built them.
 const MOONLIGHT := 0.48
 const STARLIGHT := 0.08
-const NIGHT_AMBIENT := 0.40
+## THE AMBIENT FLOOR AT NIGHT, and it came down with the sky.
+##
+## It was 0.40 because nothing else was lifting the dark, and a floor that high
+## is a grey wash over everything — which is what was drowning the stars as much
+## as the sky's own colour was. The exposure does the lifting now (LightMeter),
+## and an exposure lifts what is THERE rather than adding what is not, so the
+## dark can be dark and still be readable.
+const NIGHT_AMBIENT := 0.17
 const MOON_AMBIENT := Color(0.42, 0.52, 0.85)
 
 var camera_rig: CameraRig
@@ -229,8 +236,14 @@ func _update_daylight() -> void:
 	# The night sky is lifted off black — it is the ambient source, so a sky at
 	# 0.03 meant no bounced light at all — but only part of the way, so the sky
 	# still reads as night rather than as a late dusk.
-	var night_top := Color(0.05, 0.06, 0.14)
-	var night_horizon := Color(0.10, 0.12, 0.21)
+	# AND THE NIGHT SKY CAME DOWN, because it no longer has to do that job. It
+	# was lifted well off black so that a sky-sourced ambient would light
+	# anything at all — 0.03 bounced nothing — and the price was that a star
+	# added onto 0.14 is not much of a star. The light meter's exposure lifts
+	# the dark now, which is the right instrument for it, so the sky can be the
+	# colour night actually is and the stars can sit on top of it.
+	var night_top := Color(0.018, 0.022, 0.055)
+	var night_horizon := Color(0.045, 0.055, 0.105)
 	# TWILIGHT IS TWO COLOURS, NOT ONE, and it was only ever one here: a warm
 	# band at the horizon under a sky that went on lerping placidly from day
 	# blue to night blue, which is not what a sunset does. What a sunset does is

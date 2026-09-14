@@ -45,12 +45,17 @@ static var _made: ImageTexture = null
 static func texture() -> ImageTexture:
 	if _made != null:
 		return _made
-	var img := Image.create_empty(WIDE, TALL, true, Image.FORMAT_RGBA8)
+	var img := Image.create_empty(WIDE, TALL, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
 	_scatter(img)
 	_milky(img)
 	_band(img)
-	img.generate_mipmaps()
+	# NO MIPMAPS, AND THAT IS THE FIX. A mip level averages four texels into
+	# one, so a lone star at 0.3 becomes 0.075 at the first level and 0.019 at
+	# the second — a sparse field of points is precisely the thing mipmapping
+	# is worst at, and it averaged the whole sky to nothing before it was ever
+	# drawn. Stars twinkle a little when the camera pans now, which is what
+	# stars do.
 	_made = ImageTexture.create_from_image(img)
 	return _made
 
@@ -72,10 +77,12 @@ static func _scatter(img: Image) -> void:
 		var y := 1.0 - 2.0 * rng.randf()
 		var px := int(u * WIDE) % WIDE
 		var py := clampi(int((1.0 - (asin(y) / PI + 0.5)) * TALL), 0, TALL - 1)
-		# Most stars are faint. A handful are not, and those are the ones a
-		# player actually uses to tell one patch of sky from another.
-		var mag := pow(rng.randf(), 3.2)
-		var bright := 0.10 + 0.90 * mag
+		# Most stars are faint and a handful are not — but "faint" was taken far
+		# too literally the first time. The cover is ADDED to a night sky that
+		# is itself around 0.1, so a star at 0.12 is not a dim star, it is an
+		# invisible one. The floor is what a star has to beat to exist at all.
+		var mag := pow(rng.randf(), 1.9)
+		var bright := 0.45 + 0.55 * mag
 		# Blue-white to warm amber, with the hot ones commoner, as they look.
 		var warm := pow(rng.randf(), 2.0)
 		var tint := Color(0.78, 0.86, 1.0).lerp(Color(1.0, 0.84, 0.66), warm)
@@ -87,16 +94,24 @@ static func _scatter(img: Image) -> void:
 			img.set_pixel(x2, y2, Color(0, 0, 0, 0))
 
 
-## One star, with a soft neighbour or two if it is a bright one — a single lit
-## pixel disappears the moment the texture is filtered or mipped.
+## One star. TWO TEXELS ACROSS AT LEAST, because the sky texture is magnified
+## about five times on the way to the screen — 1024 texels carry 360 degrees and
+## a 1080p panel gives a degree fifteen pixels — and a bilinear filter spreads a
+## single lit texel into a soft smudge with nothing solid in the middle of it.
+## A 2x2 core survives that; one pixel does not.
 static func _dot(img: Image, px: int, py: int, colour: Color, mag: float) -> void:
 	_add(img, px, py, colour)
-	if mag < 0.55:
+	_add(img, px + 1, py, colour * 0.75)
+	_add(img, px, py + 1, colour * 0.75)
+	_add(img, px + 1, py + 1, colour * 0.55)
+	if mag < 0.5:
 		return
-	var halo := colour * 0.28
-	_add(img, px + 1, py, halo)
+	# The bright ones get a halo as well, which is most of what makes a sky
+	# read as having a few real stars in it rather than an even dusting.
+	var halo := colour * 0.3
+	_add(img, px + 2, py, halo)
 	_add(img, px - 1, py, halo)
-	_add(img, px, py + 1, halo)
+	_add(img, px, py + 2, halo)
 	_add(img, px, py - 1, halo)
 
 
@@ -126,7 +141,7 @@ static func _milky(img: Image) -> void:
 		var v := clampf(mid + spread, 0.0, 0.49)
 		var px := int(u * WIDE) % WIDE
 		var py := int(v * TALL)
-		var faint := 0.035 * (1.0 - absf(spread) * 14.0)
+		var faint := 0.085 * (1.0 - absf(spread) * 14.0)
 		if faint <= 0.0:
 			continue
 		_add(img, px, py, Color(0.72, 0.76, 0.92) * faint)
