@@ -286,8 +286,8 @@ func _ready() -> void:
 	_choose()
 
 
-## A DECISION IS WANTED — not taken. Every caller that used to decide now asks;
-## the spool says when, and until then they carry on exactly as they were.
+## A DECISION IS WANTED — not taken; the spool says when, and the state machine
+## stops until it does. See Spool's note on why stopping is not optional.
 func _rethink() -> void:
 	_decision_due = true
 
@@ -363,6 +363,11 @@ func _physics_process(delta: float) -> void:
 	if _animator != null:
 		_animator.play(VillagerLook.pose(self))
 
+	# THE PLAN IS OVER AND THE NEW ONE HAS NOT COME. Stand where you finished;
+	# do NOT run the arm again, or its one-shot runs again too. See `_rethink`.
+	if _decision_due and state != State.HELD and state != State.FALLING:
+		_apply_gravity_only(delta)
+		return
 	match state:
 		State.HELD:
 			velocity = Vector3.ZERO

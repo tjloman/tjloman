@@ -36,6 +36,22 @@ extends RefCounted
 ## the state directly and always has, so nobody waits in a queue while a wolf
 ## eats them.
 ##
+## AND THE ASKER MUST STOP. This is the one obligation a spool puts on its
+## callers, and it is not obvious until it bites.
+##
+## `_decide` used to change state the instant it was called, so an arm that had
+## completed could never run a second time. Asking does not change anything, so
+## an arm sits there with its plan already finished and its trigger already
+## tripped, and runs its completion AGAIN on every frame until its turn comes.
+## In Villager that meant BUILDING_FARM raised a field every frame — and at
+## Vector3.INF, because the sentinel that says "no spot" is written on the line
+## after the call. Three arms had that shape. The renderer logged it three
+## hundred and seventy-nine thousand times.
+##
+## So a caller that has finished a plan must do nothing further with it until
+## the answer arrives. Villager latches the whole match; anything else that
+## starts asking has to decide what its own version of standing still is.
+##
 ## THE CREATURE'S OWN LANE. It never asks. One entity, thinking every frame it
 ## wants to, ahead of everything: its mind is the game, and a creature that
 ## hesitated a third of a second before reacting to praise would be a different

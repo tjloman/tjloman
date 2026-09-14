@@ -467,6 +467,8 @@ func wants_new_farm() -> bool:
 
 
 func spawn_workshop_at(which: String, world_spot: Vector3) -> void:
+	if not world_spot.is_finite():
+		return        # see spawn_farm_at
 	var spec: Dictionary = Workshop.TRADES.get(which, {})
 	if spec.is_empty() or not store.try_spend_materials(
 			int(spec["lumber"]), int(spec["stone"])):
@@ -480,6 +482,13 @@ func spawn_workshop_at(which: String, world_spot: Vector3) -> void:
 
 
 func spawn_farm_at(world_spot: Vector3) -> void:
+	# NOWHERE IS NOT A PLACE. `Vector3.INF` is this codebase's "no spot yet", and
+	# a field raised at it puts NaN through the ground sampling, the normals and
+	# then the renderer's transform — which reports it once a frame, forever.
+	# Refused here as well as at the caller, because the sentinel is shared and
+	# the next caller to pass one will not be the last.
+	if not world_spot.is_finite():
+		return
 	var new_farm := Farm.new()
 	new_farm.position = _farm_position(to_local(world_spot))  # guaranteed dry
 	add_child(new_farm)
@@ -668,6 +677,8 @@ func wants_edubba() -> bool:
 
 
 func spawn_edubba_at(world_spot: Vector3) -> void:
+	if not world_spot.is_finite():
+		return        # see spawn_farm_at
 	if has_edubba():
 		return
 	if not store.try_spend_materials(8, 5):

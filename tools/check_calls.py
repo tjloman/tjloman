@@ -1430,6 +1430,88 @@ def split_top(text):
     return out
 
 
+def check_sentinel_passed(files):
+    """A "NOWHERE YET" SENTINEL HANDED TO SOMETHING THAT WILL BUILD THERE.
+
+    `Vector3.INF` is this codebase's "no spot has been chosen". It is a real
+    Vector3, so nothing refuses it: pass one to a spawner and a field is raised
+    at infinity, the ground sampling under it comes back NaN, `generate_normals`
+    cannot normalize, and the renderer reports a non-finite transform once a
+    frame for the rest of the session. That is not a hypothetical number — it
+    was three hundred and seventy-nine thousand lines of debugger.
+
+    The shape: a member that is assigned `Vector3.INF` somewhere in the file,
+    then passed as an argument to a call on another object, in a function that
+    never checks it. The check can be `is_finite()` or a comparison against the
+    sentinel; either satisfies this.
+
+    Assignments are not guards. `foo(_spot)` followed by `_spot = Vector3.INF`
+    is exactly the bug — the reset lands after the horse has left.
+    """
+    # Every function anywhere that takes a Vector3 and refuses a non-finite
+    # one. Collected across the whole project first, because the guard and the
+    # call are nearly always in different files.
+    guarded_takers = set()
+    for path in files:
+        src = open(path, encoding="utf-8").read().split("\n")
+        here, body = "", []
+        for line in src + ["func _end_():"]:
+            m = re.match(r"^(?:static )?func (\w+)\(.*Vector3", line)
+            if m or re.match(r"^(?:static )?func ", line):
+                if here and any("is_finite" in b for b in body[:12]):
+                    guarded_takers.add(here)
+                here = m.group(1) if m else ""
+                body = []
+                continue
+            if here:
+                body.append(line)
+
+    out = []
+    for path in files:
+        lines = open(path, encoding="utf-8").read().split("\n")
+        marked = set()
+        for line in lines:
+            m = re.match(r"^\s*(?:var\s+)?(_?\w+)\s*:?=\s*Vector3\.INF\s*$", line)
+            if m:
+                marked.add(m.group(1))
+        if not marked:
+            continue
+        # Walk function by function: a guard anywhere in the same function
+        # counts, since a state machine's arms share one.
+        start, func = 0, ""
+        bounds = []
+        for i, line in enumerate(lines):
+            if re.match(r"^(?:static )?func (\w+)", line):
+                if func:
+                    bounds.append((func, start, i))
+                func = re.match(r"^(?:static )?func (\w+)", line).group(1)
+                start = i
+        if func:
+            bounds.append((func, start, len(lines)))
+        for _name, lo, hi in bounds:
+            body = lines[lo:hi]
+            for name in marked:
+                guarded = any(
+                    re.search(r"\b%s\b" % re.escape(name), b)
+                    and ("is_finite" in b or "Vector3.INF" in b.split("=")[0]
+                         or re.search(r"%s\s*[!=]=\s*Vector3\.INF" % re.escape(name), b))
+                    for b in body)
+                if guarded:
+                    continue
+                for j, b in enumerate(body):
+                    code = b.split("#", 1)[0]
+                    hit = re.search(r"\w+\.(\w+)\([^)]*\b%s\b" % re.escape(name), code)
+                    if hit is None:
+                        continue
+                    # A GUARD IN THE CALLEE COUNTS, and is the better place for
+                    # it: the sentinel is shared, so one refusal at the thing
+                    # being built covers every caller that will ever pass one.
+                    if hit.group(1) in guarded_takers:
+                        continue
+                    out.append((path, lo + j + 1, name, code.strip()))
+    return out
+
+
 def check_stand_first(files):
     """THE WOOD MUST BE DRAWN FROM THE CHUNK'S RNG BEFORE ANYTHING ELSE IS.
 
@@ -1629,6 +1711,15 @@ def main():
               "and whatever follows works on a corpse (a cast of it is a crash). "
               "Ask `typeof(%s) == TYPE_OBJECT` instead."
               "\n    %s" % (path, lineno, name, name, name, line))
+    sentinels = check_sentinel_passed(files)
+    for path, lineno, name, line in sentinels:
+        print("%s:%d: `%s` is assigned Vector3.INF somewhere in this file — the "
+              "'no spot yet' sentinel — and is handed to something here without "
+              "this function ever checking it. A thing built at infinity puts "
+              "NaN through the ground, the normals and the renderer's "
+              "transform, once a frame, forever. Guard it with `is_finite()`; "
+              "resetting it AFTER the call is what caused this."
+              "\n    %s" % (path, lineno, name, line))
     typed_has = check_typed_has(files)
     for path, lineno, arr, verb, var, line in typed_has:
         print("%s:%d: `%s` is a TYPED array, so `%s(%s)` does not answer false "
@@ -1671,7 +1762,7 @@ def main():
         + len(loose_arrays) + len(variants) + len(shadowed_members) \
         + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice) + len(loose_consts) + len(through) \
         + len(class_shadows) + len(confusable) + len(sim_clocks) + len(alive) \
-        + len(stand) + len(typed_has) + len(shadowed_own)
+        + len(stand) + len(typed_has) + len(shadowed_own) + len(sentinels)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

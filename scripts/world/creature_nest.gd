@@ -123,6 +123,8 @@ static func wanted_by(town: Village) -> bool:
 ## already sitting exactly on its public-method limit — and this is a question
 ## about nests either way.
 static func raise_at(town: Village, world_spot: Vector3, beast: Creature) -> void:
+	if not world_spot.is_finite():
+		return        # see Village.spawn_farm_at: Vector3.INF is "no spot yet"
 	if town.nest != null or beast == null \
 			or not town.store.try_spend_materials(6, 10):
 		return

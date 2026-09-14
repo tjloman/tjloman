@@ -424,6 +424,12 @@ func _show_sling(weight: float) -> void:
 		_sling = Sling.new()
 		_sling.hand = self
 		get_tree().current_scene.add_child(_sling)
+	# NOTHING IN THE HAND IS NOT SOMEWHERE. `_held_at` is Vector3.INF until
+	# something is actually grasped, and a rope drawn to infinity is a non-finite
+	# transform the renderer complains about once a frame.
+	if not _held_at.is_finite():
+		_sling.hide_it()
+		return
 	var shot := Sling.launch(_sweep_velocity(), _held_vel - _sweep_velocity(), weight)
 	_sling.show_it(global_position, _held_at, shot, weight)
 
