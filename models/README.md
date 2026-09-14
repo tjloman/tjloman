@@ -36,7 +36,12 @@ Extensions checked, in order: `.glb` `.gltf` `.obj` `.scn` `.tscn` `.tres` `.res
   villager 400 · animal 300 · creature 6000 · tree 150 · bush 400 · rock 350 ·
   house 300 · school 500 · store 1800 · hand 600 · flower 150 (it's drawn many
   times over via MultiMesh, so keep it lean).
-- **Pivot at the feet** (model sits on Y=0), **+Z is forward** (the way it
+- **Pivot at the feet** (model sits on Y=0) — and this one is worth more care
+  than it sounds, because the pivot is SCALED. A tree grows up to five times
+  its rest size, so a base sitting 0.4m below the origin is two metres of trunk
+  underground on a full-grown one, and a trunk 0.3m off centre leans a metre
+  and a half out of its own collision capsule. `tools/model_budget.py` measures
+  both and says so. **+Z is forward** (the way it
   walks / the front of a building's door), scaled to roughly match the
   primitive it replaces so physics capsules and the throw arc still fit.
 - **Avoid transparency** unless essential — alpha blending is the most

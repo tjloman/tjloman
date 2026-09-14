@@ -333,7 +333,12 @@ static func board_size(kind: String, from_seed: int, carried: float) -> Vector2:
 	# is why the seed only matters on the fallback path below.
 	var box := ModelBank.bounds_any(["tree_" + kind, "tree"])
 	if box.size.y > 0.0:
-		return Vector2(maxf(box.size.x, box.size.z), box.size.y) * grown
+		# THE TOP ABOVE THE GROUND, not the height of the box. A model whose
+		# base sits below its own origin — tree_savanna does, by 0.39m — has
+		# that much of itself buried when it is planted, so its box is taller
+		# than the tree anybody can see. The board stands ON the ground, so what
+		# it needs is how far up the model reaches, which is `end.y`.
+		return Vector2(maxf(box.size.x, box.size.z), maxf(box.end.y, 0.1)) * grown
 	var rng := RandomNumberGenerator.new()
 	rng.seed = from_seed
 	var h := trunk_height(kind, rng)
