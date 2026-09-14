@@ -167,7 +167,36 @@ func _gather(node: Node, at: Transform3D, out: Array[AABB]) -> void:
 	var here := at
 	if node is Node3D:
 		here = at * (node as Node3D).transform
-	if node is VisualInstance3D:
+	if node is MeshInstance3D:
+		var mesh := (node as MeshInstance3D).mesh
+		if mesh != null:
+			out.append(_true_box(mesh, here))
+	elif node is VisualInstance3D:
 		out.append(here * (node as VisualInstance3D).get_aabb())
 	for kid in node.get_children():
 		_gather(kid, here, out)
+
+
+## THE REAL EXTENT OF A MESH UNDER A TRANSFORM, from its own vertices.
+##
+## NOT `transform * get_aabb()`, WHICH IS ONLY RIGHT FOR AN UPRIGHT MODEL. That
+## transforms the box's eight CORNERS and re-bounds them, and a corner of a box
+## is not a piece of geometry — rotate it and it sweeps somewhere no part of the
+## model ever goes. tree_savanna is a wind-bent acacia leaning nine degrees, and
+## the corner method made it 36% taller and 8% wider than it is, which is 36%
+## too tall for the billboard that stands in for it on the horizon.
+##
+## Every vertex instead. It is a few hundred points, read once per style and
+## kept, and it cannot be wrong.
+func _true_box(mesh: Mesh, at: Transform3D) -> AABB:
+	var box := at * mesh.get_aabb()        # the fallback, if there are no faces
+	var faces := mesh.get_faces()
+	if faces.is_empty():
+		return box
+	var lo := at * faces[0]
+	var hi := lo
+	for i in range(1, faces.size()):
+		var p := at * faces[i]
+		lo = Vector3(minf(lo.x, p.x), minf(lo.y, p.y), minf(lo.z, p.z))
+		hi = Vector3(maxf(hi.x, p.x), maxf(hi.y, p.y), maxf(hi.z, p.z))
+	return AABB(lo, hi - lo)

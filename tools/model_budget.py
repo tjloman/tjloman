@@ -27,6 +27,7 @@ Usage:
 """
 
 import json
+import math
 import os
 import struct
 import sys
@@ -126,8 +127,47 @@ def _at(m, p):
     return [sum(m[r][c] * p[c] for c in range(3)) + m[r][3] for r in range(3)]
 
 
-def bounds(doc):
-    """(low, high) in the model's own space, or None if it has no geometry."""
+## The component types a POSITION accessor can use, and how wide each is.
+_COMPONENTS = {5126: ("f", 4), 5125: ("I", 4), 5123: ("H", 2),
+               5122: ("h", 2), 5121: ("B", 1), 5120: ("b", 1)}
+_COUNTS = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}
+
+
+def _positions(doc, blob, acc_i):
+    """Every vertex of one accessor, decoded. Honours byteStride, which is how
+    interleaved exports pack position beside normal and UV."""
+    acc = doc["accessors"][acc_i]
+    if "bufferView" not in acc:
+        return []
+    view = doc["bufferViews"][acc["bufferView"]]
+    fmt, width = _COMPONENTS.get(acc["componentType"], (None, 0))
+    if fmt is None:
+        return []
+    lanes = _COUNTS.get(acc["type"], 3)
+    stride = view.get("byteStride") or width * lanes
+    base = view.get("byteOffset", 0) + acc.get("byteOffset", 0)
+    out = []
+    for k in range(acc.get("count", 0)):
+        out.append(struct.unpack_from("<" + fmt * lanes, blob, base + k * stride))
+    return out
+
+
+def bounds(doc, blob):
+    """(low, high) of the model as it will actually stand, or None.
+
+    EVERY VERTEX, NOT THE EIGHT CORNERS OF THE BOX. glTF stores an axis-aligned
+    min/max on the POSITION accessor and it is tempting to transform those eight
+    corners and re-bound them — which this did, and which is wrong the moment a
+    node carries a ROTATION. The corner at (min_x, min_y, min_z) is a corner of
+    the BOX; there is usually no geometry anywhere near it, and rotating it
+    sweeps it somewhere no part of the model ever goes.
+
+    It reported tree_savanna — a deliberately wind-bent acacia, tilted nine
+    degrees, whose trunk foot sits sixteen millimetres off the ground — as
+    having its pivot 0.39m underground, and sent somebody to Blender to "fix" a
+    model that was correct. Decoding the vertices costs a few milliseconds on
+    files this size and cannot be wrong.
+    """
     lo, hi = [1e30] * 3, [-1e30] * 3
     found = [False]
 
@@ -136,19 +176,15 @@ def bounds(doc):
         here = _mul(parent, _matrix(node))
         if "mesh" in node:
             for prim in doc["meshes"][node["mesh"]].get("primitives", []):
-                acc = doc["accessors"][prim.get("attributes", {}).get("POSITION", -1)] \
-                    if "POSITION" in prim.get("attributes", {}) else None
-                if acc is None or "min" not in acc:
+                which = prim.get("attributes", {}).get("POSITION")
+                if which is None:
                     continue
-                found[0] = True
-                a, b = acc["min"], acc["max"]
-                for cx in (a[0], b[0]):
-                    for cy in (a[1], b[1]):
-                        for cz in (a[2], b[2]):
-                            p = _at(here, [cx, cy, cz])
-                            for i in range(3):
-                                lo[i] = min(lo[i], p[i])
-                                hi[i] = max(hi[i], p[i])
+                for v in _positions(doc, blob, which):
+                    found[0] = True
+                    p = _at(here, list(v[:3]))
+                    for i in range(3):
+                        lo[i] = min(lo[i], p[i])
+                        hi[i] = max(hi[i], p[i])
         for kid in node.get("children", []):
             walk(kid, here)
 
@@ -157,6 +193,50 @@ def bounds(doc):
         for root in scene.get("nodes", []):
             walk(root, ident)
     return (lo, hi) if found[0] else None
+
+
+def foot(doc, blob):
+    """WHERE THE MODEL ACTUALLY STANDS: the centroid of its lowest band of
+    geometry, in world space. A bounding box cannot tell a leaning tree from a
+    misplaced one; this can, because a trunk is where the vertices are."""
+    got = []
+
+    def walk(idx, parent):
+        node = doc["nodes"][idx]
+        here = _mul(parent, _matrix(node))
+        if "mesh" in node:
+            for prim in doc["meshes"][node["mesh"]].get("primitives", []):
+                which = prim.get("attributes", {}).get("POSITION")
+                if which is None:
+                    continue
+                for v in _positions(doc, blob, which):
+                    got.append(_at(here, list(v[:3])))
+        for kid in node.get("children", []):
+            walk(kid, here)
+
+    ident = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+    for scene in doc.get("scenes", []):
+        for root in scene.get("nodes", []):
+            walk(root, ident)
+    if not got:
+        return None
+    low = min(p[1] for p in got)
+    high = max(p[1] for p in got)
+    band = low + (high - low) * 0.06
+    base = [p for p in got if p[1] <= band] or got
+    return [sum(p[i] for p in base) / len(base) for i in range(3)]
+
+
+def tilt(doc):
+    """How far off vertical the model leans, in degrees. A lean is a choice an
+    artist makes and this must not be mistaken for a fault."""
+    worst = 0.0
+    for node in doc.get("nodes", []):
+        m = _matrix(node)
+        up = m[1][1] / max(1e-9, math.sqrt(
+            m[0][1] ** 2 + m[1][1] ** 2 + m[2][1] ** 2))
+        worst = max(worst, math.degrees(math.acos(max(-1.0, min(1.0, up)))))
+    return worst
 
 
 def image_sizes(doc, blob):
@@ -237,7 +317,9 @@ def look(folder):
         try:
             doc, blob = read_glb(path)
             got = tally(doc)
-            got["bounds"] = bounds(doc)
+            got["bounds"] = bounds(doc, blob)
+            got["foot"] = foot(doc, blob)
+            got["tilt"] = tilt(doc)
             got["images"] = image_sizes(doc, blob)
             out[stem] = got
         except (ValueError, KeyError, struct.error, json.JSONDecodeError,
@@ -281,20 +363,25 @@ def main():
         if m["bones"] > 30 and name != "creature":
             says.append("%d bones, over the ~30 a crowd affords" % m["bones"])
         box = m.get("bounds")
-        if box is not None:
+        stands = m.get("foot")
+        if box is not None and stands is not None:
             lo, hi = box
-            size = [hi[i] - lo[i] for i in range(3)]
-            if abs(lo[1]) > PIVOT_SLACK:
-                says.append("pivot %.2fm %s the origin — it will sit %.1fm %s "
-                            "at full growth"
-                            % (abs(lo[1]), "below" if lo[1] < 0 else "above",
-                               abs(lo[1]) * FULL_GROWTH,
-                               "buried" if lo[1] < 0 else "in the air"))
-            lean = max(abs(lo[0] + hi[0]) / 2.0, abs(lo[2] + hi[2]) / 2.0)
-            if lean > PIVOT_SLACK * 4.0:
-                says.append("stands %.2fm off its own centre (%.1fm at full "
+            # WHERE IT STANDS, not where its box starts. A leaning model dips a
+            # branch below zero and that is not a pivot fault; what matters is
+            # whether the TRUNK is on the ground and over the origin.
+            if abs(stands[1]) > PIVOT_SLACK:
+                says.append("stands %.2fm %s the ground — %.1fm %s at full growth"
+                            % (abs(stands[1]), "below" if stands[1] < 0 else "above",
+                               abs(stands[1]) * FULL_GROWTH,
+                               "buried" if stands[1] < 0 else "in the air"))
+            off = max(abs(stands[0]), abs(stands[2]))
+            if off > PIVOT_SLACK * 4.0:
+                says.append("its foot is %.2fm off the origin (%.1fm at full "
                             "growth, and the collider does not move)"
-                            % (lean, lean * FULL_GROWTH))
+                            % (off, off * FULL_GROWTH))
+            under = -lo[1]
+            if under > 0.25:
+                says.append("%.2fm of it hangs below the ground" % under)
         for wh in m.get("images", []):
             if wh is not None and max(wh) > side:
                 says.append("texture %dx%d, over the %d asked for"
@@ -308,10 +395,12 @@ def main():
         if box is not None:
             lo, hi = box
             size = [hi[i] - lo[i] for i in range(3)]
+            lean = m.get("tilt", 0.0)
             print("%-18s   %.2fw x %.2fh x %.2fd at rest; %.1fm tall and %.1fm "
-                  "across at full growth"
+                  "across at full growth%s"
                   % ("", size[0], size[1], size[2], size[1] * FULL_GROWTH,
-                     max(size[0], size[2]) * FULL_GROWTH))
+                     max(size[0], size[2]) * FULL_GROWTH,
+                     "; leans %.1f deg" % lean if lean > 1.0 else ""))
         if m["clips"]:
             print("%-18s   clips: %s" % ("", ", ".join(m["clips"])))
 
