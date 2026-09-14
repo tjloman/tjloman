@@ -1,4 +1,7 @@
 extends Node
+## WALL CLOCK BY DESIGN: the autosave runs THROUGH a pause on purpose
+## (PROCESS_MODE_ALWAYS) and is counting real elapsed minutes, which is what an
+## autosave is for. See tools/pause_walk.py.
 ## Autoload `SaveGame`: writing a world down, and picking it back up.
 ##
 ## The terrain, the placement of towns and every tree regenerate exactly from
@@ -313,6 +316,10 @@ func snapshot(world: WorldGen, creature: Creature) -> Dictionary:
 		"scars": world.scars.to_save(),
 		# And the water standing in them, which no seed knows about either.
 		"ponds": world.ponds_to_save(),
+		# AND WHERE THE GOD HAS BEEN. The seed can redraw any valley on demand;
+		# only this says which ones were ever actually visited, and the temple's
+		# well fogs everything else. See WorldGen._known.
+		"known": world.known_to_save(),
 	}
 
 
@@ -476,6 +483,7 @@ func apply_pending(world: WorldGen, creature: Creature) -> void:
 			world.scars.from_save(scars)
 			world.rebuild_all()
 		world.ponds_from_save(pending_world.get("ponds", []) as Array)
+		world.known_from_save(pending_world.get("known", []) as Array)
 		GameState.announce("The world returns as you left it.")
 	# A brand-new profile names its creature the moment it draws breath.
 	var named := String(active_profile().get("name", ""))

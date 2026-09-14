@@ -217,7 +217,7 @@ var _cast_miracle := ""
 var _mood_before := 60.0   # mood when the deed began, to judge how it went
 var _deed_verb := ""       # the last FINISHED deed — what praise/scold judges
 var _deed_type := ""
-var _last_decision := 0    # ticks (ms) of the last real choice, for DEED_FLOOR
+var _last_decision := 0.0  # GameState.clock at the last real choice; DEED_FLOOR
 var _decay_tick := 0.0
 var _target := Vector3.ZERO
 var _target_food: Node3D = null      # FoodItem or Corpse
@@ -629,12 +629,12 @@ func _decide() -> void:
 	# next frame. Unbounded, the creature lives a hundred lifetimes a second and
 	# its habits, beliefs and character all form in a blur before you can see
 	# what it is doing. It rests a beat between deeds instead.
-	var since := float(Time.get_ticks_msec() - _last_decision) / 1000.0
-	if _last_decision > 0 and since < DEED_FLOOR:
+	var since := GameState.clock - _last_decision
+	if _last_decision > 0.0 and since < DEED_FLOOR:
 		state = State.IDLE
 		_action_time = DEED_FLOOR - since
 		return
-	_last_decision = Time.get_ticks_msec()
+	_last_decision = GameState.clock
 	# The situation is read once and used three times: for what it wants, for
 	# what it expects of the moment, and for what its beliefs are learned against.
 	var here := _circumstances()

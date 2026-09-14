@@ -61,7 +61,7 @@ func meet(who: Object) -> void:
 	var name := name_of(who)
 	if name == "":
 		return
-	_ledger(name)["seen_at"] = Time.get_ticks_msec()
+	_ledger(name)["seen_at"] = GameState.clock
 
 
 ## WHAT IT THINKS OF THIS PARTICULAR PERSON, laid on top of what it thinks of
@@ -81,7 +81,7 @@ func dealing_with(who: Object) -> void:
 	if _last != "":
 		var known := _ledger(_last)
 		known["met"] = int(known["met"]) + 1
-		known["seen_at"] = Time.get_ticks_msec()
+		known["seen_at"] = GameState.clock
 
 
 ## It went like that. Moves its opinion of whoever the dealing was with — and
@@ -129,7 +129,7 @@ func attachments(limit := 2) -> Array:
 
 func _ledger(name: String) -> Dictionary:
 	if not folk.has(name):
-		folk[name] = {"regard": 0.0, "met": 0, "seen_at": Time.get_ticks_msec()}
+		folk[name] = {"regard": 0.0, "met": 0, "seen_at": GameState.clock}
 		_forget_someone()
 	return folk[name]
 
@@ -143,7 +143,7 @@ func _forget_someone() -> void:
 	var least := INF
 	for name: String in folk:
 		# Somebody met often and recently is worth far more than a passing face.
-		var worth := float(folk[name]["met"]) * 1000.0 + float(folk[name]["seen_at"]) / 1000.0
+		var worth := float(folk[name]["met"]) * 1000.0 + float(folk[name]["seen_at"])
 		if worth < least:
 			least = worth
 			faintest = name
@@ -157,5 +157,13 @@ func to_dict() -> Dictionary:
 	return folk.duplicate(true)
 
 
+## A SAVE MADE BEFORE THE CLOCK EXISTED holds `seen_at` in wall-clock
+## milliseconds — numbers in the billions — so every acquaintance in it would
+## read as seen far more recently than anybody met since, and the ledger would
+## forget the new faces first and keep the old ones forever. Anything ahead of
+## the clock is brought back to it; a legitimate value never can be.
 func from_dict(data: Dictionary) -> void:
 	folk = (data as Dictionary).duplicate(true)
+	for name: String in folk:
+		var known: Dictionary = folk[name]
+		known["seen_at"] = minf(float(known.get("seen_at", 0.0)), GameState.clock)

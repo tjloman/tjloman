@@ -1,5 +1,7 @@
 class_name Sling
 extends Node3D
+## WALL CLOCK BY DESIGN: the aim arc throttles its own REDRAW, which is a
+## frame-rate concern and not a fact about the world. See tools/pause_walk.py.
 ## THE WEIGHT OF THE THING IN YOUR HAND, and what it is about to do.
 ##
 ## THE PROBLEM. A held object used to be glued to the hand by a constant lerp —
@@ -165,7 +167,7 @@ static func launch(sweep: Vector3, slung: Vector3, weight: float) -> Vector3:
 ## whatever is doing the falling.
 static func loft(body: Node3D) -> void:
 	if body != null and is_instance_valid(body):
-		body.set_meta("loft_until", Time.get_ticks_msec() / 1000.0 + FLOAT_SECONDS)
+		body.set_meta("loft_until", GameState.clock + FLOAT_SECONDS)
 
 
 ## What gravity actually is for this body right now. Eases back to full over the
@@ -173,7 +175,7 @@ static func loft(body: Node3D) -> void:
 static func gravity_for(body: Node3D, base: float) -> float:
 	if body == null or not body.has_meta("loft_until"):
 		return base
-	var left: float = float(body.get_meta("loft_until")) - Time.get_ticks_msec() / 1000.0
+	var left: float = float(body.get_meta("loft_until")) - GameState.clock
 	if left <= 0.0:
 		body.remove_meta("loft_until")
 		return base

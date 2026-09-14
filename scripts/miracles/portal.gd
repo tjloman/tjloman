@@ -72,7 +72,7 @@ func _process(delta: float) -> void:
 	_ring.rotation_degrees.y = rad_to_deg(_spin)
 	if twin == null or not is_instance_valid(twin):
 		return
-	var now := Time.get_ticks_msec() / 1000.0
+	var now := GameState.clock
 	for body in _area.get_overlapping_bodies():
 		_send(body, now)
 

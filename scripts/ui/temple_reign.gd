@@ -25,6 +25,8 @@ const GRAVES: Array[Array] = [
 	["age", "died of old age"],
 ]
 
+var world_gen: WorldGen
+
 var _body: VBoxContainer
 
 
@@ -56,6 +58,13 @@ func _fill() -> void:
 	_line("...of which hold your faith", str(faithful))
 	_line("Souls in them", str(souls))
 	_line("Villages met and left behind", str(SaveGame.village_memory.size()))
+	# HOW MUCH WORLD THERE IS OF YOURS. The land is endless, so this is not a
+	# fraction of anything — it is the size of the country the fog has been
+	# lifted from, which is the only honest way to say how far a god has gone.
+	if world_gen != null and is_instance_valid(world_gen):
+		var cells := world_gen.known_count()
+		var area := float(cells) * WorldGen.CHUNK_SIZE * WorldGen.CHUNK_SIZE
+		_line("Land you have raised", "%.2f km²" % (area / 1000000.0))
 	_line("Days elapsed", "%d" % int(GameState.game_years / GameState.DAY_YEARS))
 	_line("Your alignment", "%+d" % int(roundf(GameState.alignment)))
 

@@ -15,11 +15,19 @@ extends CanvasLayer
 ## (about seven degrees against its real half-degree) so that a thumb can find
 ## it — nothing else up there competes, so a generous target costs nothing.
 ##
-## IT DOES NOT PAUSE THE WORLD. A reflecting pool that shows a still frame is a
-## screenshot; one that shows your villages moving while you read is the thing
-## itself, and a god who steps into a temple has not stopped time. The cost is
-## real — wolves do not wait while you read a chart — so `HOLDS_THE_WORLD`
-## below is the one line that changes it, and it is a line not a rewrite.
+## IT HOLDS THE WORLD STILL, and this is how a game that never had a pause
+## gets one. There was nowhere to put a pause before — a god game has no menu
+## bar and stopping the world from the HUD would have needed a button on it —
+## and the temple is somewhere to put it that is also somewhere to be.
+##
+## THAT WAS NOT FREE. The tree had only ever been paused on the opening screen,
+## before there was a creature to get anything wrong about, so every "how long
+## since..." in the simulation was measured against Time.get_ticks_msec(),
+## which does not stop. Ten quiet minutes in here read as ten minutes of the
+## creature's life: its character took a full-strength lesson off the very
+## next deed, and everyone it knew aged out of its ledger at once. That is what
+## GameState.clock and tools/pause_walk.py are for, and neither of them would
+## exist without this door.
 ##
 ## WHAT IS ACTUALLY HERE, for anyone reading this before the rest is built: the
 ## shell, the pool, and the doors. Each door is a Control handed to `_show`,
@@ -37,8 +45,10 @@ const DISK_HOLD := 0.85
 ## and there is nothing else in the sky to hit by mistake.
 const DISK_GRAB := deg_to_rad(7.0)
 
-## Set true to hold the world still while the temple is open. See the header.
-const HOLDS_THE_WORLD := false
+## Set false to let the world run on while the temple is open. See the header —
+## and note that everything measuring an interval now reads GameState.clock,
+## which is correct either way.
+const HOLDS_THE_WORLD := true
 
 ## THE ROOMS. Title, the glyph that stands over the door, and the method that
 ## builds the room. Adding one is a row here and a builder below.
@@ -52,6 +62,7 @@ const DOORS: Array[Array] = [
 
 var world_gen: WorldGen
 var profiles: ProfileMenu
+var camera_rig: CameraRig
 
 var _backdrop: ColorRect
 var _pool: TemplePool
@@ -60,6 +71,10 @@ var _room_body: VBoxContainer
 var _room_title: Label
 var _doors: Array[Button] = []
 var _open_door := 0
+## Did THIS door stop the world? The opening screen and the profile menu pause
+## the tree too, and a temple that unpauses on the way out regardless would
+## start the world running behind whichever of them is still up.
+var _held_it := false
 
 
 ## IS THE PLAYER POINTING AT THE SUN OR THE MOON? Returns "sun", "moon" or "",
@@ -199,7 +214,8 @@ func open(why := "sun") -> void:
 	if visible:
 		return
 	visible = true
-	if HOLDS_THE_WORLD:
+	_held_it = HOLDS_THE_WORLD and not get_tree().paused
+	if _held_it:
 		get_tree().paused = true
 	_room_title.text = "The Temple" if why == "sun" else "The Temple, by moonlight"
 	_enter(_open_door)
@@ -207,8 +223,9 @@ func open(why := "sun") -> void:
 
 func close() -> void:
 	visible = false
-	if HOLDS_THE_WORLD:
+	if _held_it:
 		get_tree().paused = false
+	_held_it = false
 
 
 func toggle() -> void:
@@ -237,8 +254,20 @@ func _enter(which: int) -> void:
 
 func _room_pool() -> void:
 	_pool.world_gen = world_gen
+	if not _pool.travel_to.is_connected(_go_there):
+		_pool.travel_to.connect(_go_there)
 	_room_body.add_child(_pool)
 	_pool.look_again()
+
+
+## A PIN WAS TOUCHED. Leave, and be standing over that village — the same door
+## the village roster (V) uses, so there is one way to arrive somewhere and not
+## two. This is the answer to the lost player, and it is the reason the well is
+## worth more than a picture of the world.
+func _go_there(spot: Vector3) -> void:
+	close()
+	if camera_rig != null and is_instance_valid(camera_rig):
+		camera_rig.snap_to(spot)
 
 
 func _room_chronicle() -> void:
@@ -246,7 +275,9 @@ func _room_chronicle() -> void:
 
 
 func _room_reign() -> void:
-	_room_body.add_child(TempleReign.new())
+	var room := TempleReign.new()
+	room.world_gen = world_gen
+	_room_body.add_child(room)
 
 
 ## THE OPTIONS, which already exist and already work. A temple door onto a

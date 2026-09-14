@@ -41,6 +41,12 @@ const SHELLS_PER_FRAME := 2
 ## Chunk.coarse_due: the work is owed the moment a row is stripped, and paid off
 ## at the same rate everything else in this file is.
 const COARSEN_PER_FRAME := 1
+
+## HOW WELL A CELL IS KNOWN — the whole of the fog on the temple's well. Bare
+## ground raised out in the sight ring is SEEN; a full chunk with everything
+## living on it is WALKED. See `_known`.
+const SEEN := 1
+const WALKED := 2
 ## How many chunks either side of the creature stay loaded wherever it is. One
 ## is a three-by-three of them — about a hundred and fifty metres across, which
 ## is more than its senses reach — and it is deliberately far smaller than the
@@ -119,6 +125,17 @@ var _detail_noise := FastNoiseLite.new()
 var _temp_noise := FastNoiseLite.new()
 var _wet_noise := FastNoiseLite.new()
 var _jungle_noise := FastNoiseLite.new()
+## WHERE THE GOD HAS ACTUALLY BEEN. Cell -> SEEN or WALKED, and the whole of
+## the fog on the temple's well.
+##
+## The land is a function of the seed, so a map COULD draw country nobody has
+## ever visited — and should not. A god who has walked a valley and a god who
+## has merely been told a valley exists are in different positions, and the
+## well is the one place that difference is visible. Recorded here rather than
+## anywhere else because this is the one place that knows a chunk was raised at
+## all, and like the Chronicle it cannot be reconstructed later: an unvisited
+## cell and a visited-then-unloaded cell are identical from outside.
+var _known := {}                  # Vector2i -> SEEN or WALKED
 var _chunks := {}                 # Vector2i -> Chunk
 ## Where the far ring was last filled from, and whether it is complete. A full
 ## sweep of a 17x17 ring is 289 dictionary probes; doing that every frame to
@@ -871,8 +888,66 @@ func _spawn_chunk(cell: Vector2i, bare := false) -> void:
 	chunk.position = Vector3(cell.x * CHUNK_SIZE, 0, cell.y * CHUNK_SIZE)
 	add_child(chunk)
 	_chunks[cell] = chunk
+	# Seen once is seen forever, and walking a cell you had only glimpsed
+	# upgrades it — never the other way about.
+	var standing: int = WALKED if not bare else SEEN
+	if standing > int(_known.get(cell, 0)):
+		_known[cell] = standing
 	if not bare:
 		_maybe_found_village(cell)
+
+
+## HOW WELL THIS CELL IS KNOWN: 0, SEEN or WALKED. The well fogs the first,
+## dims the second and draws the third.
+func knows(cell: Vector2i) -> int:
+	return int(_known.get(cell, 0))
+
+
+## Which cell a point on the ground falls in — the one conversion between
+## metres and the units the fog is kept in, so nobody does it twice.
+static func cell_of(x: float, z: float) -> Vector2i:
+	return Vector2i(int(floorf(x / CHUNK_SIZE)), int(floorf(z / CHUNK_SIZE)))
+
+
+## THE BOX THE KNOWN WORLD FITS IN, in cells, so the well can stop the player
+## scrolling off into country that is not there. An empty world returns a
+## single cell at the origin rather than an inverted rectangle.
+func known_bounds() -> Rect2i:
+	if _known.is_empty():
+		return Rect2i(0, 0, 1, 1)
+	var lo := Vector2i(2147483647, 2147483647)
+	var hi := Vector2i(-2147483648, -2147483648)
+	for cell: Vector2i in _known:
+		lo.x = mini(lo.x, cell.x)
+		lo.y = mini(lo.y, cell.y)
+		hi.x = maxi(hi.x, cell.x)
+		hi.y = maxi(hi.y, cell.y)
+	return Rect2i(lo, hi - lo + Vector2i.ONE)
+
+
+## How many cells have ever been raised, which is the honest measure of how
+## much of the world this god has any business drawing.
+func known_count() -> int:
+	return _known.size()
+
+
+## Flat triples — x, z, standing — because a dictionary keyed by Vector2i does
+## not survive JSON and three ints per cell is the smallest thing that does.
+func known_to_save() -> Array:
+	var flat: Array = []
+	for cell: Vector2i in _known:
+		flat.append(cell.x)
+		flat.append(cell.y)
+		flat.append(int(_known[cell]))
+	return flat
+
+
+func known_from_save(flat: Array) -> void:
+	_known.clear()
+	var i := 0
+	while i + 2 < flat.size():
+		_known[Vector2i(int(flat[i]), int(flat[i + 1]))] = int(flat[i + 2])
+		i += 3
 
 
 func chunk_rng(cell: Vector2i, salt := 0) -> RandomNumberGenerator:

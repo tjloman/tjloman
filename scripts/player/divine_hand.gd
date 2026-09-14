@@ -1,5 +1,14 @@
 class_name DivineHand
 extends Node3D
+## WALL CLOCK BY DESIGN: this times the PLAYER'S FINGER, not the world.
+##
+## Throw velocity is distance over elapsed time between pointer samples, and
+## the reading has to survive a pause the way a resting hand does. On
+## GameState.clock a stroke spanning a pause would hold two samples a hand's
+## width apart with zero seconds between them, and `_stroke_is_throw` would
+## find the hand still moving and hurl a rock the player merely set down. On
+## the wall clock that gap reads as ten minutes, which is a hand at rest —
+## which is the truth. See tools/pause_walk.py.
 ## The player IS this hand — B&W style. It hovers over the terrain following
 ## the mouse, grabs the land to pan, picks up and throws physics objects and
 ## villagers, and draws miracle gestures while the right button is held.

@@ -25,6 +25,7 @@ gdparse scripts/**/*.gd          # syntax
 gdlint scripts/                  # style
 python3 tools/check_calls.py     # calls to methods that DON'T EXIST
 python3 tools/chronicle.py       # the record still spans the whole reign
+python3 tools/pause_walk.py      # nothing measures time on the WALL clock
 ```
 
 That last one matters: `gdparse` only checks syntax and `gdlint` only checks
@@ -1002,28 +1003,52 @@ game. The disks are genuinely unused. The grab cone is about **seven degrees**
 against the sun's real half-degree, because a thumb is about that wide at arm's
 length and there is nothing else up there to hit by mistake.
 
-**It does not pause the world.** A reflecting pool showing a still frame is a
-screenshot; one showing your villages moving while you read is the thing
-itself. Wolves do not wait while you read a chart. `Temple.HOLDS_THE_WORLD` is
-one line if you disagree.
+**It holds the world still** — and this is how a game that never had a pause
+got one. There was nowhere to put a pause before: a god game has no menu bar,
+and stopping the world from the HUD would have meant a button on it.
+
+That was not free. The tree had only ever been paused on the *opening screen*,
+before there was a creature to get anything wrong about, so every "how long
+since…" in the simulation was measured against `Time.get_ticks_msec()`, which
+does not stop. Ten quiet minutes in the temple read as ten minutes of the
+creature's life: `CreatureMind.shape` paces character-forming by elapsed time
+and took a **full-strength lesson off the very next deed**, and `CreatureBonds`
+ranks who it remembers by when it last saw them, so **everyone it knew aged out
+of its ledger at once**.
+
+`GameState.clock` advances in `_process` and therefore stops when the tree
+does, and `tools/pause_walk.py` fails the build on any *simulation* interval
+measured against the wall clock. Two files are exempt and have to say why at
+the top of themselves — `DivineHand` times the **player's finger**, not the
+world, and on a frozen clock a stroke spanning a pause would hold two samples a
+hand's width apart with zero seconds between them and hurl a rock the player
+merely set down.
 
 Inside:
 
 - **The Pool** — the land from above, in still water. The world is endless, so
-  this is a scrolling window rather than a map that fits on screen: drag to
-  scroll, wheel or pinch to change the span from 240m to 3.2km. Terrain is a
-  function of the seed, so it draws country **you have never walked on**.
-  Villages and creatures are **marks, never models** — a map that renders
-  anybody is a second world simulated for the sake of a dot — and each set
-  toggles off. Towns you have met and left behind are drawn hollow, because
-  that is honestly what they are. The water raises a few rows a frame and fades
-  in as it settles, which is both the cheap way and the right picture.
+  this is a scrolling window rather than a map that fits: drag to scroll, wheel
+  or pinch for a span from 240m to 3.2km.
+
+  **It is fogged, and that is the point.** The seed *could* draw a valley
+  nobody has ever visited, and drawing it would be a lie — a god who has walked
+  a country and a god handed a survey of it are in different positions.
+  `WorldGen` now records every cell it raises: **walked** cells draw in full,
+  **seen** ones (bare ground glimpsed out in the sight ring) draw dimmed, and
+  everything else is fog. The scroll stops at the edge of the fog.
+
+  **A pin is a door home.** Touch a village and you leave the temple standing
+  over it — the same `snap_to` the village roster uses. That answers the lost
+  player and the uninformed one with one gesture, and is most of why the well
+  is worth having. Villages and creatures are **marks, never models**, each set
+  toggleable; towns met and left behind draw hollow, because that is honestly
+  what they are.
 - **The Chronicle** — souls alive, median age, alignment, faithful villages,
   miracles by you *and* by the beast, and how grown it is, all against an axis
   in **game days** (a day is 320 real seconds and a villager lives about forty
   of them, so an evening's play is roughly one human lifetime).
-- **The Reign** — the ledger. What is standing, what is dead, and what killed
-  it, broken down by cause.
+- **The Reign** — the ledger. What is standing, how much land you have raised
+  the fog from, what is dead, and what killed it, by cause.
 - **Rites** and **Creatures** — options and saves. Doors, not yet rooms.
 
 ### The record had to be built first

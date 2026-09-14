@@ -183,7 +183,7 @@ func bias(key: String, ctx: Dictionary) -> float:
 ## `reminder`), and it will never be able to say why it does not like it here.
 func remember(key: String, ctx: Dictionary, where := Vector3.INF, felt := "") -> void:
 	episodes.append({
-		"key": key, "ctx": ctx.duplicate(), "at": Time.get_ticks_msec(),
+		"key": key, "ctx": ctx.duplicate(), "at": GameState.clock,
 		"place": patch(where), "felt": felt, "worth": 0.0,
 	})
 	if episodes.size() > MEMORY:

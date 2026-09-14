@@ -58,7 +58,7 @@ static func may_choose(who: Villager) -> bool:
 static func _pass_the_time(who: Villager) -> void:
 	if Spool.stalled_for(who) < DITHER or not who.is_adult():
 		return
-	var now := float(Time.get_ticks_msec()) / 1000.0
+	var now := GameState.clock
 	if now - _spoke_at < SPEAK_REST or randf() > SPEAK_ODDS:
 		return
 	_spoke_at = now

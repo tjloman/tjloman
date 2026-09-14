@@ -57,6 +57,24 @@ var max_prayer_power: float = 100.0
 ## Total elapsed game time, in years.
 var game_years := 0.0
 
+## THE CLOCK THE WORLD KEEPS, in seconds, and THE ONLY ONE ANYTHING IN THE
+## SIMULATION MAY MEASURE AN INTERVAL AGAINST.
+##
+## Everything that wanted to know "how long since..." used
+## Time.get_ticks_msec(), which is the wall clock and does not stop for
+## anything. That was harmless for as long as the game could not be paused
+## anywhere except the opening screen, before there was a creature to get it
+## wrong about. The temple pauses mid-game, and the wall clock turns ten
+## quiet minutes spent reading a chart into ten minutes of the creature's
+## life: its character takes a full-strength lesson off the very next deed
+## (CreatureMind.shape paces by elapsed time), and everyone it knows ages out
+## of its ledger at once (CreatureBonds).
+##
+## This advances in _process, so it stops dead when the tree is paused and the
+## simulation cannot tell a pause from a frame. tools/pause_walk.py fails the
+## build on any interval measured against the wall clock instead.
+var clock := 0.0
+
 ## Player karma: -100 (monstrous) .. +100 (saintly). Actions move it;
 ## the hand and influence ring recolor from gold to blood-red.
 var alignment := 0.0
@@ -122,6 +140,7 @@ var _tree_friends := true
 
 func _process(delta: float) -> void:
 	game_years += delta / YEAR_SECONDS
+	clock += delta
 
 
 ## 0.0 = midnight, 0.25 = dawn, 0.5 = noon, 0.75 = dusk. Play starts mid-morning.

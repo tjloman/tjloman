@@ -109,7 +109,7 @@ func _process(delta: float) -> void:
 		if rb == null or rb.freeze:
 			continue  # held things aren't deposits
 		if rb.has_meta("no_deposit_until") \
-				and Time.get_ticks_msec() < int(rb.get_meta("no_deposit_until")):
+				and GameState.clock < float(rb.get_meta("no_deposit_until")):
 			continue  # freshly withdrawn: give the hand time to carry it off
 		# HOW FAST IT ARRIVED, read before the body is freed. This is the whole
 		# difference between a gift carried in and a shot from the halfway line
@@ -205,7 +205,7 @@ func withdraw_at(world_point: Vector3) -> RigidBody3D:
 	if item == null:
 		return null
 	_refresh_stack()
-	item.set_meta("no_deposit_until", Time.get_ticks_msec() + 2500)
+	item.set_meta("no_deposit_until", GameState.clock + 2.5)
 	get_parent().add_child(item)
 	item.global_position = global_position + Vector3(0, 2.6, 0)
 	return item
@@ -241,7 +241,7 @@ func top_up(item: Node) -> bool:
 		if pulled:
 			r.refresh_bundle()
 	if pulled:
-		item.set_meta("no_deposit_until", Time.get_ticks_msec() + 2500)
+		item.set_meta("no_deposit_until", GameState.clock + 2.5)
 		_refresh_stack()
 	return pulled
 

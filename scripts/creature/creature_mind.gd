@@ -216,7 +216,7 @@ var foresight := CreatureForesight.new()
 ## thing only: to ask how an imagined future would FEEL (see CreatureForesight).
 var heart: CreatureHeart = null
 
-var _last_judged := 0       # ticks (ms) of the last judgement, for pacing
+var _last_judged := 0.0     # GameState.clock at the last judgement; pacing
 var _sated := {}            # "verb|type" -> how thoroughly sick of it it is
 var _last_key := ""         # the (verb,type) the next outcome is credited to
 var _last_verb := ""
@@ -445,9 +445,9 @@ func shape(profile: Dictionary, strength := DEED_ALPHA, paced := true,
 		direction := 1.0) -> void:
 	var force := clampf(strength, 0.0, 1.0)
 	if paced:
-		var now := Time.get_ticks_msec()
-		var lived := DEED_PERIOD if _last_judged == 0 \
-			else float(now - _last_judged) / 1000.0
+		var now := GameState.clock
+		var lived := DEED_PERIOD if _last_judged == 0.0 \
+			else now - _last_judged
 		_last_judged = now
 		force *= clampf(lived / DEED_PERIOD, 0.0, 1.0)
 	ethos.push(profile, force, direction)

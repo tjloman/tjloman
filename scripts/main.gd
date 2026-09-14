@@ -172,6 +172,7 @@ func _ready() -> void:
 	var temple := Temple.new()
 	temple.world_gen = world_gen
 	temple.profiles = profiles
+	temple.camera_rig = camera_rig
 	add_child(temple)
 	divine_hand.temple_asked.connect(temple.open)
 

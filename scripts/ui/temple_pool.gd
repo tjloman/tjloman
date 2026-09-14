@@ -2,25 +2,34 @@ class_name TemplePool
 extends Control
 ## THE REFLECTING POOL: the land, seen from above, in still water.
 ##
-## THE WORLD IS ENDLESS, so this is a window and not a map. There is no extent
-## to fit on screen — `WorldGen.seeded_height_at` answers for any coordinate
-## you care to name — which is why the pool scrolls rather than zooms-to-fit,
-## and why it can show you country you have never walked on: the land is a
-## function of the seed, and the function is as true a thousand metres out as
-## underfoot.
+## THE WORLD IS ENDLESS, so this is a window and not a map: there is no extent
+## to fit on screen, since `WorldGen.seeded_height_at` answers for any
+## coordinate you care to name.
 ##
-## WHAT IT CANNOT DO IS INVENT PEOPLE. Villages are nodes, and a node only
-## exists inside the streaming rings — so the pins are drawn from the villages
-## that are loaded now PLUS SaveGame.village_memory, which is every town you
-## have met and walked away from. A village in country you have never visited
-## has not been founded yet in any meaningful sense, and the pool honestly
-## shows nothing there. Terrain you have never seen is drawn; towns you have
-## never met are not.
+## WHICH IS EXACTLY WHY IT MUST BE FOGGED. The seed can draw a valley nobody
+## has ever visited, and drawing it would be a lie — a god who has walked a
+## country and a god who has been handed a survey of it are in different
+## positions, and this is the one place that difference is visible. So the
+## water shows only what WorldGen remembers raising: WALKED cells in full,
+## SEEN ones (bare ground glimpsed out in the sight ring) dimmed, everything
+## else fog. The scroll stops at the edge of the fog rather than drifting out
+## into country that is not there.
+##
+## AND A PIN IS A DOOR HOME. Touch one and you leave the temple standing over
+## that village, which answers the lost player and the uninformed one with the
+## same gesture and is most of why the well is worth having.
+##
+## Villages are nodes and a node only exists inside the streaming rings, so the
+## pins come from the villages loaded now PLUS SaveGame.village_memory: every
+## town met and walked away from.
 ##
 ## IT NEVER HITCHES. Sampling the terrain is noise lookups, and a full window
 ## is tens of thousands of them, so the image is raised a few rows per frame
 ## and fades in as it settles — which is both the cheap way and the right
 ## picture for a pool.
+
+## Somebody touched a pin and wants to be standing there. Temple relays it.
+signal travel_to(spot: Vector3)
 
 ## The image the water holds. Square, because the window is square, and modest
 ## because every pixel is a biome lookup plus a height lookup.
@@ -56,10 +65,25 @@ const PIN_LOST := Color(0.45, 0.45, 0.5)
 const PIN_BEAST := Color(0.9, 0.45, 0.95)
 const PIN_YOU := Color(1.0, 1.0, 1.0)
 
+## THE FOG, how far a dimmed cell is pulled toward it, and how close a finger
+## has to land to count as touching a pin — generous, because a village is a
+## dot and a thumb is not.
+const FOG := Color(0.09, 0.10, 0.14)
+const DIMMED := 0.45
+const PIN_REACH := 18.0
+
+## How far past the edge of the known world the scroll may drift, in chunks:
+## enough to see the coast you are standing on, not enough to wander.
+const FOG_MARGIN := 2
+
 var world_gen: WorldGen
 
 var show_villages := true
 var show_creatures := true
+
+## Where the pins landed on the last paint — {at, spot, name} — so a touch can
+## find them without walking the village list again in the input handler.
+var _pins: Array = []
 
 var _img: Image
 var _tex: ImageTexture
@@ -92,7 +116,17 @@ func look_again() -> void:
 	_restart()
 
 
+## THE SCROLL STOPS AT THE EDGE OF THE FOG — clamped to the box the known cells
+## fit in, with a couple of chunks of slack so the coast you are standing on is
+## visible, and never enough to drift into country that is not there.
 func _restart() -> void:
+	if world_gen != null and is_instance_valid(world_gen):
+		var box := world_gen.known_bounds()
+		var edge := float(FOG_MARGIN) * WorldGen.CHUNK_SIZE
+		var lo := Vector2(box.position) * WorldGen.CHUNK_SIZE
+		var hi := Vector2(box.end) * WorldGen.CHUNK_SIZE
+		_at.x = clampf(_at.x, lo.x - edge, hi.x + edge)
+		_at.y = clampf(_at.y, lo.y - edge, hi.y + edge)
 	_row = 0
 	_raised_at = _at
 	_raised_span = _span
@@ -121,7 +155,16 @@ func _raise_rows() -> void:
 		var z := top + (float(_row) + 0.5) * metres
 		for x in GRID:
 			var wx := left + (float(x) + 0.5) * metres
-			_img.set_pixel(x, _row, _tint(world_gen.seeded_height_at(wx, z)))
+			# THE FOG FIRST, and before the height is even asked for: an
+			# unvisited cell costs nothing to draw and must not be drawn.
+			var standing := world_gen.knows(WorldGen.cell_of(wx, z))
+			if standing == 0:
+				_img.set_pixel(x, _row, FOG)
+				continue
+			var tint := _tint(world_gen.seeded_height_at(wx, z))
+			if standing == WorldGen.SEEN:
+				tint = tint.lerp(FOG, 1.0 - DIMMED)
+			_img.set_pixel(x, _row, tint)
 		_row += 1
 	_tex.update(_img)
 
@@ -173,6 +216,7 @@ func _inside(box: Rect2, at: Vector2) -> bool:
 
 
 func _draw_villages(box: Rect2) -> void:
+	_pins.clear()
 	# The towns that exist right now, as nodes.
 	for n in get_tree().get_nodes_in_group("village"):
 		var town := n as Village
@@ -191,6 +235,8 @@ func _draw_villages(box: Rect2) -> void:
 		var r := clampf(2.5 + float(town.population()) * 0.22, 3.0, 9.0)
 		draw_circle(at, r, tint)
 		draw_arc(at, r + 1.5, 0.0, TAU, 18, tint * Color(1, 1, 1, 0.5), 1.0)
+		_pins.append({"at": at, "spot": town.global_position,
+			"name": town.village_name})
 	# And the towns you have met and left behind, which are memory and not
 	# nodes. Drawn hollow, because that is honestly what they are.
 	for entry: Variant in SaveGame.village_memory:
@@ -199,10 +245,15 @@ func _draw_villages(box: Rect2) -> void:
 		var pos: Variant = (entry as Dictionary).get("pos", [])
 		if not pos is Array or (pos as Array).size() < 2:
 			continue
-		var at := _spot(box, Vector2(float((pos as Array)[0]), float((pos as Array)[1])))
+		var flat := Vector2(float((pos as Array)[0]), float((pos as Array)[1]))
+		var at := _spot(box, flat)
 		if not _inside(box, at):
 			continue
 		draw_arc(at, 4.0, 0.0, TAU, 16, PIN_LOST, 1.5)
+		# A remembered town has no node and so no ground height; the world will
+		# put the camera down on whatever is actually there.
+		_pins.append({"at": at, "spot": Vector3(flat.x, 0.0, flat.y),
+			"name": String((entry as Dictionary).get("name", "a village"))})
 
 
 func _draw_creatures(box: Rect2) -> void:
@@ -252,6 +303,12 @@ func _gui_input(event: InputEvent) -> void:
 			MOUSE_BUTTON_WHEEL_DOWN:
 				_zoom(1.25)
 			MOUSE_BUTTON_LEFT:
+				# A PRESS ON A PIN IS A JOURNEY, not the start of a drag. Tested
+				# on press rather than release so that leaving the temple never
+				# depends on holding still — the whole point of this is the
+				# player who is lost, and a lost player is not a steady one.
+				if click.pressed and _touched_pin(click.position):
+					return
 				_dragging = click.pressed
 	elif event is InputEventMouseMotion and _dragging:
 		var side := maxf(minf(size.x, size.y), 1.0)
@@ -263,6 +320,22 @@ func _gui_input(event: InputEvent) -> void:
 		var side := maxf(minf(size.x, size.y), 1.0)
 		_at += (event as InputEventPanGesture).delta / side * _span * 24.0
 		_restart()
+
+
+## Did that land on a pin? Nearest wins, so two towns close together on a
+## zoomed-out well still resolve to whichever you actually meant.
+func _touched_pin(where: Vector2) -> bool:
+	var best: Dictionary = {}
+	var best_d := PIN_REACH
+	for pin: Dictionary in _pins:
+		var d: float = (pin["at"] as Vector2).distance_to(where)
+		if d < best_d:
+			best_d = d
+			best = pin
+	if best.is_empty():
+		return false
+	travel_to.emit(best["spot"] as Vector3)
+	return true
 
 
 func _zoom(by: float) -> void:

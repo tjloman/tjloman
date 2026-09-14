@@ -930,7 +930,7 @@ func _write_transforms(how_many := 0) -> void:
 	# frame. Everything below is a lookup and some adds — no trigonometry runs
 	# per member, which is the difference between a herd of two hundred costing
 	# what a herd of twenty costs and it costing ten times as much.
-	HerdMotion.refresh(float(Time.get_ticks_msec()) * 0.001)
+	HerdMotion.refresh(GameState.clock)
 	# A SLICE, ROUND-ROBIN, unless somebody asked for the lot. This was the last
 	# thing in here that still scaled with the head count: four hundred head
 	# meant four hundred transform writes several times a second, and a barn
