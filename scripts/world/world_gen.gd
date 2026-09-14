@@ -42,6 +42,13 @@ const SHELLS_PER_FRAME := 2
 ## at the same rate everything else in this file is.
 const COARSEN_PER_FRAME := 1
 
+## HOW A PLACE IS MADE LAND — six basins on a ring at nine tenths of the radius,
+## lifted until the wettest point under it is clear of the water by DRY_CLEAR.
+## See `make_dry` for why it is six and not one.
+const DRY_RING := 6
+const DRY_RING_AT := 0.9
+const DRY_CLEAR := 0.6
+
 ## HOW WELL A CELL IS KNOWN — the whole of the fog on the temple's well. Bare
 ## ground raised out in the sight ring is SEEN; a full chunk with everything
 ## living on it is WALKED. See `_known`.
@@ -648,6 +655,87 @@ func deform(kind: int, at: Vector2, radius: float, amount: float,
 
 ## Rebuild every LOADED chunk overlapping a patch of world. Chunks not loaded
 ## need nothing: they read the scars when they are next built.
+## MAKE A PLACE LAND, because something is standing on it.
+##
+## A village picks the spot for a nest by what a village cares about — near the
+## square, clear of the houses, room for the dancers — and nothing in that asks
+## whether the ground is under water. So a nest gets raised over a shallow, and
+## the creature and any villager who walks out to worship at it steps off the
+## stone into the sea. The fix is not to move the nest. It is that a nest is a
+## work of the whole town and the ground under it becomes land, which is what a
+## foundation IS.
+##
+## SIX BASINS IN A RING, NOT ONE DOME. One basin tapers as cos squared and is
+## down to a sixth of its height at the rim of a nest's footprint, so lifting
+## the EDGE clear of the water by two metres would pile eleven metres up under
+## the middle and stand the bed on a hill. Six overlapping basins on a ring at
+## nine tenths of the radius sum almost flat: the peak comes out at 1.17 times
+## the lift actually needed, so a nest in a shallow ends up on a shoal rather
+## than on a mound. (One scar cannot cover it alone in any case — TerrainScars
+## caps a scar's reach at BUCKET so the lookup stays nine buckets wide.)
+##
+## Returns whether the place ended up dry. Costs nothing and changes nothing
+## when the ground was never wet, which is what makes it safe to call every
+## time a nest is built OR LOADED — an old save with a drowned nest repairs
+## itself the first time it comes back.
+func make_dry(at: Vector2, radius: float, clearance := DRY_CLEAR) -> bool:
+	var marks := _dry_marks(at, radius)
+	# THE DEEPEST SHORTFALL ANYWHERE UNDER IT. `water_level_at` answers -INF for
+	# ground that is already dry, so a spot with nothing over it asks for
+	# nothing and the maximum is over the wet ones alone.
+	var need := 0.0
+	for p: Vector2 in marks:
+		var top := water_level_at(p.x, p.y)
+		if is_inf(top):
+			continue
+		need = maxf(need, top + clearance - height_at(p.x, p.y))
+	if need <= 0.0:
+		return true
+	# Laid at unit height first and then scaled to fit, because what six
+	# overlapping basins actually come to at any one point is not worth
+	# predicting when it can simply be measured. `add` returns the scar itself
+	# and the amount is only read when the ground is sampled, so setting it
+	# afterwards is the same as having set it now.
+	var was: Array[float] = []
+	for p: Vector2 in marks:
+		was.append(scars.offset_at(p.x, p.y))
+	var laid: Array[Dictionary] = []
+	for k in DRY_RING:
+		var a := TAU * float(k) / float(DRY_RING)
+		var where := at + Vector2(cos(a), sin(a)) * radius * DRY_RING_AT
+		laid.append(scars.add(TerrainScars.Kind.BASIN, where, TerrainScars.BUCKET, 1.0))
+	var unit := INF
+	for i in marks.size():
+		unit = minf(unit, scars.offset_at(marks[i].x, marks[i].y) - was[i])
+	if unit > 0.0:
+		for scar: Dictionary in laid:
+			scar["amount"] = clampf(need / unit, 0.0, TerrainScars.MOST_RELIEF)
+	_sea_cache.clear()
+	var touched := TerrainScars.reach_of(laid[0])
+	for scar: Dictionary in laid:
+		touched = touched.merge(TerrainScars.reach_of(scar))
+	rebuild_around(touched)
+	# Say honestly whether it worked: a nest raised in deep water may want more
+	# lift than one scar is allowed to give, and pretending otherwise would put
+	# the drowning back with a clean conscience.
+	for p: Vector2 in marks:
+		if is_underwater(p.x, p.y):
+			return false
+	return true
+
+
+## Where `make_dry` looks: the middle, and three rings out to the rim. Enough to
+## catch a channel running under one side of a footprint, which a centre sample
+## alone would sail straight over.
+func _dry_marks(at: Vector2, radius: float) -> Array[Vector2]:
+	var out: Array[Vector2] = [at]
+	for ring in [0.4, 0.75, 1.0]:
+		for k in 8:
+			var a := TAU * float(k) / 8.0
+			out.append(at + Vector2(cos(a), sin(a)) * radius * float(ring))
+	return out
+
+
 ## Pour a load of something onto the ground — merging into whatever is already
 ## piled there — and rebuild what stands on it. See TerrainScars.deposit.
 func pour(kind: int, at: Vector2, radius: float, amount: float,

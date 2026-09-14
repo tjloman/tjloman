@@ -32,8 +32,20 @@ const DECAY_START_AGE := 30.0   # years before a house starts crumbling
 const KNOCK_SPRING := 45.0
 const KNOCK_DAMP := 7.0
 
+
+## WHAT IT TAKES TO PULL THIS DOWN BY FORCE, against a villager's hundred.
+## A building is the thing that PROTECTS the villager, so it cannot be as easy
+## to break as the villager is — a fireball that kills the family should not
+## also flatten the house in the same instant, and a creature in a temper
+## should have to work at it.
+##
+## Fire is charged as a fraction of this rather than as a flat number, so a
+## stout building is stout against BLOWS and still burns to the ground in the
+## same minute and a half as a hut. See Kindling.tick.
+const MOST_HEALTH := 400.0
+
 var size := Size.HUT
-var health := 100.0
+var health := MOST_HEALTH
 ## Whether it is alight, and for how much longer. See Kindling.
 var kindling := Kindling.new()
 var age := 0.0                  # years
@@ -122,10 +134,24 @@ func repair(amount: float) -> void:
 
 
 ## Sudden harm (fireballs, catastrophes) — collapses outright at zero.
+
+## WHAT IT IS WORTH IN FULL, so a blow can be reckoned as a share of it. A
+## METHOD and not the constant itself: Object.get() does not see constants, so
+## anything asking `built.get("MOST_HEALTH")` gets null and quietly treats a
+## granary as a hut. See Fireball._most_of.
+func full_health() -> float:
+	return MOST_HEALTH
+
+
 func damage(amount: float) -> void:
 	if under_construction:
 		return
 	health -= amount
+	# AND IT SHOWS. See RuinBar: a thing that can be hurt without looking
+	# hurt is indistinguishable from a thing that cannot be hurt at all,
+	# which is exactly what "the mill will not burn" sounds like from
+	# the other side of the screen.
+	RuinBar.over(self, health / MOST_HEALTH, 3.2, kindling.alight)
 	if health <= 0.0:
 		_collapse()
 
@@ -184,7 +210,7 @@ func burn_down() -> void:
 
 
 func _tick_fire(delta: float) -> void:
-	var harm := kindling.tick(self, delta)
+	var harm := kindling.tick(self, delta, MOST_HEALTH)
 	if harm > 0.0:
 		damage(harm)
 

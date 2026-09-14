@@ -19,12 +19,24 @@ const MEAT_COLOR := Color(0.72, 0.22, 0.18)
 const LUMBER_COLOR := Color(0.55, 0.4, 0.25)
 const STONE_COLOR := Color(0.55, 0.54, 0.56)
 
+
+## WHAT IT TAKES TO PULL THIS DOWN BY FORCE, against a villager's hundred.
+## A building is the thing that PROTECTS the villager, so it cannot be as easy
+## to break as the villager is — a fireball that kills the family should not
+## also flatten the house in the same instant, and a creature in a temper
+## should have to work at it.
+##
+## Fire is charged as a fraction of this rather than as a flat number, so a
+## stout building is stout against BLOWS and still burns to the ground in the
+## same minute and a half as a hut. See Kindling.tick.
+const MOST_HEALTH := 700.0
+
 var plant_food := 14
 var meat_food := 0
 var lumber := 6
 var stone := 3
 ## How much of it is left, and whether it is alight. See Kindling.
-var health := 100.0
+var health := MOST_HEALTH
 var kindling := Kindling.new()
 
 var _stack: Array[MeshInstance3D] = []
@@ -355,14 +367,28 @@ func extinguish() -> void:
 
 
 ## Sudden harm — a fireball's core, a quake, a creature's boot.
+
+## WHAT IT IS WORTH IN FULL, so a blow can be reckoned as a share of it. A
+## METHOD and not the constant itself: Object.get() does not see constants, so
+## anything asking `built.get("MOST_HEALTH")` gets null and quietly treats a
+## granary as a hut. See Fireball._most_of.
+func full_health() -> float:
+	return MOST_HEALTH
+
+
 func damage(amount: float) -> void:
 	health -= amount
+	# AND IT SHOWS. See RuinBar: a thing that can be hurt without looking
+	# hurt is indistinguishable from a thing that cannot be hurt at all,
+	# which is exactly what "the mill will not burn" sounds like from
+	# the other side of the screen.
+	RuinBar.over(self, health / MOST_HEALTH, 4.0, kindling.alight)
 	if health <= 0.0:
 		burn_down()
 
 
 func _tick_fire(delta: float) -> void:
-	var harm := kindling.tick(self, delta)
+	var harm := kindling.tick(self, delta, MOST_HEALTH)
 	if harm > 0.0:
 		damage(harm)
 

@@ -1503,6 +1503,60 @@ def check_int_division(files):
     return out
 
 
+# WHAT A VILLAGE RAISES. Anything a town builds and stands behind belongs here,
+# and adding a new kind of building means adding a line — there is no way to
+# derive this list that does not also sweep up the pens, the totem and half the
+# helper classes, and a survey that quietly misses a building is worse than no
+# survey, because "the mill would not burn" is exactly the bug it exists to
+# prevent and it went unnoticed for months.
+VILLAGE_RAISES = {
+    "house.gd": "a house",
+    "workshop.gd": "a mill, tannery, smithy or barn",
+    "food_store.gd": "the granary",
+    "edubba.gd": "the school",
+    "farm.gd": "a field",
+    "creature_nest.gd": "the nest",
+}
+# What being burnable actually commits a building to. `ignite` without `damage`
+# is a building that catches and never falls; `damage` without `full_health` is
+# a building every blow treats as a hut.
+BURNABLE_OWES = ("ignite", "extinguish", "damage", "full_health", "burn_down")
+
+
+def check_burnable(files):
+    """EVERYTHING A VILLAGE RAISES CAN BE BURNED DOWN, AND KNOWS WHAT IT IS WORTH.
+
+    A building is the thing that protects the villager, so every one of them
+    has to be destructible -- and every one has to say how tough it is, or a
+    blow scaled as a share of a building's health silently treats a granary as
+    a hut.
+
+    Two ways to fail. A village-built thing that never joined "burnable" is
+    invisible to the sweep that sets a street alight AND to the fire spreading
+    from the barn next door: the farm was in exactly that state, so a fire
+    walked round a wheat field. And a thing in "burnable" that is missing one of
+    the five methods above is a building that catches fire and then cannot do
+    anything about it.
+    """
+    out = []
+    for path in files:
+        name = os.path.basename(path)
+        src = open(path, encoding="utf-8").read()
+        burns = 'add_to_group("burnable")' in src
+        if name in VILLAGE_RAISES and not burns:
+            out.append((path, 0, "%s is %s and never joins \"burnable\", so no "
+                        "fire can reach it and none can spread to it"
+                        % (name, VILLAGE_RAISES[name])))
+            continue
+        if not burns:
+            continue
+        for owed in BURNABLE_OWES:
+            if re.search(r"^func %s\(" % owed, src, re.M) is None:
+                out.append((path, 0, "%s is burnable but has no `%s`"
+                            % (name, owed)))
+    return out
+
+
 def check_tree_worth(files):
     """A TREE'S SIZE BANKED AS A TREE'S WORTH.
 
@@ -1836,6 +1890,11 @@ def main():
               "is what was wanted, say it: `@warning_ignore(\"integer_division\")` "
               "on the line above, and a comment saying why the floor is right."
               "\n    %s" % (path, lineno, expr, line))
+    burnable = check_burnable(files)
+    for path, _lineno, why in burnable:
+        print("%s: %s. Everything a village raises must be destructible and must "
+              "say what it is worth in full — see tools/check_calls.py, "
+              "VILLAGE_RAISES." % (path, why))
     worth = check_tree_worth(files)
     for path, lineno, line in worth:
         print("%s:%d: this banks a tree's SIZE as its WORTH. `lumber` is how big "
@@ -1895,7 +1954,7 @@ def main():
         + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice) + len(loose_consts) + len(through) \
         + len(class_shadows) + len(confusable) + len(sim_clocks) + len(alive) \
         + len(stand) + len(typed_has) + len(shadowed_own) + len(sentinels) \
-        + len(int_div) + len(worth)
+        + len(int_div) + len(worth) + len(burnable)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

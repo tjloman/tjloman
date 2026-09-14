@@ -1017,7 +1017,9 @@ func _quake_everything(pos: Vector3, reach: float, potency: float) -> void:
 		var built := b as Node3D
 		if is_instance_valid(built) and built.has_method("damage") \
 				and built.global_position.distance_to(pos) < reach:
-			built.call("damage", 18.0 * potency)
+			# A share of what the building is — see Fireball._most_of for why
+			# a flat number stopped meaning anything.
+			built.call("damage", 0.18 * potency * Fireball._most_of(built))
 	# Anything loose is thrown into the air — the readable signature of a quake.
 	for p in get_tree().get_nodes_in_group("pickable"):
 		var loose := p as RigidBody3D

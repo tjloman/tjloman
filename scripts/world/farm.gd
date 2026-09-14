@@ -19,6 +19,13 @@ const HALF_X := 3.5
 const HALF_Z := 2.5
 const BURN_SECONDS := 60.0   # a field ablaze is ash in a minute
 
+## WHAT IT TAKES TO WRECK A FIELD BY FORCE, against a villager's hundred. Less
+## than a building because it is soil and stalks rather than stone — but a
+## field is still a season's work and should not fall to one kick. Fire is
+## charged as a share of this; see Kindling.tick.
+const MOST_HEALTH := 200.0
+
+var health := MOST_HEALTH
 var growth := 0.4  # 0..1; harvestable at >= 0.8
 var burning := false
 ## The single villager who has laid claim to this field — reserved by WANTING
@@ -35,6 +42,11 @@ var _crop_meshes: Array[MeshInstance3D] = []
 
 func _ready() -> void:
 	add_to_group("farms")
+	# A FIELD IS SOMETHING A VILLAGE RAISED, and until now it was the one such
+	# thing outside this group — so the sweep that sets a street alight skipped
+	# it, and so did the fire SPREADING from the barn beside it. A fire that
+	# walks round a wheat field is not a fire.
+	add_to_group("burnable")
 	set_meta("hover_name", "Farm")
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	# A field whose ground is underwater can never be worked — flag it so
@@ -155,6 +167,32 @@ func ignite() -> void:
 	_build_fire(world)
 
 
+## WHAT IT IS WORTH IN FULL, so a blow can be reckoned as a share of it. See
+## House.full_health for why this is a method and not the constant.
+func full_health() -> float:
+	return MOST_HEALTH
+
+
+## Sudden harm — a fireball's core, a quake, a creature's boot. A field had no
+## way to take a blow at all: everything that flattens a house walked straight
+## past it, and the only thing that could ever end a farm was fire.
+func damage(amount: float) -> void:
+	health -= amount
+	# AND IT SHOWS. See RuinBar: a thing that can be hurt without looking
+	# hurt is indistinguishable from a thing that cannot be hurt at all,
+	# which is exactly what "the mill will not burn" sounds like from
+	# the other side of the screen.
+	RuinBar.over(self, health / MOST_HEALTH, 1.2, burning)
+	if health <= 0.0:
+		burn_down()
+
+
+## PLOUGHED UNDER. Freed like a burnt field, because a wrecked one is the same
+## absence to the village and `Village.pick_farm` prunes freed farms either way.
+func burn_down() -> void:
+	queue_free()
+
+
 func extinguish() -> void:
 	burning = false
 	if is_instance_valid(_fire_visual):
@@ -164,6 +202,7 @@ func extinguish() -> void:
 
 func _burn(delta: float) -> void:
 	_burn_time -= delta
+	health = maxf(health - MOST_HEALTH / BURN_SECONDS * delta, 0.0)
 	growth = maxf(growth - 0.03 * delta, 0.0)  # the crop chars away
 	var height := 0.15 + growth * 1.1
 	for crop in _crop_meshes:

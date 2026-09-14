@@ -95,8 +95,17 @@ const FLICKER := 1.0 / 9.0
 ## hive's feelings are stirred in lumps and sixty lumps a second would peg it.
 const CHEER_EVERY := 3.0
 
+## WHAT IT TAKES TO PULL A NEST DOWN, against a villager's hundred. The
+## stoutest thing a village ever raises and the one it raises last: six lumber,
+## ten stone, and a town that had to come to believe first. It should take some
+## doing, and it should not be immune — a god who burns a town's faith to the
+## ground ought to be able to burn the nest with it.
+const MOST_HEALTH := 1500.0
+
 var village: Village
 var creature: Creature
+var health := MOST_HEALTH
+var kindling := Kindling.new()
 
 var _effigy: Node3D = null
 var _faces: Array[MeshInstance3D] = []
@@ -141,7 +150,9 @@ static func raise_at(town: Village, world_spot: Vector3, beast: Creature) -> voi
 
 func _ready() -> void:
 	add_to_group("creature_nest")
+	add_to_group("burnable")
 	set_meta("hover_name", "The Nest")
+	_make_its_ground()
 	collision_layer = 4
 	collision_mask = 0
 	# THE WALL IS THE THING YOU TOUCH. The collider is the whole stone face and
@@ -198,6 +209,74 @@ func _build_lodge() -> void:
 ## THE GROUND UNDER A LOCAL POINT, in this node's own space. The nest may be
 ## turned to any heading and parented anywhere, so the sample has to go out to
 ## the world and come back rather than assume the two frames agree.
+## THE GROUND UNDER A NEST IS LAND, because a foundation is what a foundation
+## does. A village picks this spot by what a village cares about — near the
+## square, clear of the houses, room for the dancers — and nothing in that asks
+## whether it is under water, so a nest gets raised over a shallow and the
+## creature and every villager who walks out to worship at it steps off the
+## stone and drowns.
+##
+## BEFORE ANYTHING ELSE IN `_ready`, because every piece of this thing is built
+## against `_ground_local` and would otherwise be laid out on the seabed and
+## then have the land rise through it.
+##
+## Idempotent by construction: it measures what is actually under it and does
+## nothing at all when that is already dry. So it runs on a nest being raised
+## and on a nest coming back out of a save alike, and an old world with a
+## drowned nest in it repairs itself the first time it is loaded.
+func _make_its_ground() -> void:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world == null or not is_instance_valid(world):
+		return
+	var here := global_position
+	if not world.make_dry(Vector2(here.x, here.z), FOOTPRINT):
+		# Deep water wants more lift than one scar is allowed to give. Say so
+		# rather than leaving somebody to find out by walking into it.
+		push_warning("A nest at %v stands in water too deep to fill." % here)
+
+
+## Fire ------------------------------------------------------------------------
+
+## SET IT ALIGHT. The nest was the one thing a village raises that could not
+## burn at all — not by a fireball, not by the street catching, not by anything.
+func ignite() -> void:
+	kindling.light(self, 4.0)
+
+
+## Rain, a healing shower, or somebody with a bucket.
+func extinguish() -> void:
+	kindling.douse(self)
+
+
+## What it is worth in full, so a blow can be reckoned as a share of it.
+func full_health() -> float:
+	return MOST_HEALTH
+
+
+## Sudden harm — a fireball's core, a quake, a creature in a temper.
+func damage(amount: float) -> void:
+	health -= amount
+	# AND IT SHOWS. See RuinBar: a thing that can be hurt without looking
+	# hurt is indistinguishable from a thing that cannot be hurt at all,
+	# which is exactly what "the mill will not burn" sounds like from
+	# the other side of the screen.
+	RuinBar.over(self, health / MOST_HEALTH, WALL_HIGH, kindling.alight)
+	if health <= 0.0:
+		burn_down()
+
+
+## GONE, and the town knows it. The village's handle is cleared so it can want
+## another one — `wanted_by` asks for `town.nest == null` — which makes losing a
+## nest a thing a town recovers from rather than a permanent hole.
+func burn_down() -> void:
+	if village != null and is_instance_valid(village):
+		village.nest = null
+	if creature != null and is_instance_valid(creature):
+		creature.feel("grief", 0.9, 2.0)
+	GameState.announce("The nest burns down.")
+	queue_free()
+
+
 func _ground_local(x: float, z: float) -> float:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	if world == null:
@@ -367,6 +446,15 @@ func _build_fire() -> void:
 
 
 func _process(delta: float) -> void:
+	# BEFORE THE DISTANCE GATE. Everything below this is the nest's LOOK — the
+	# flicker of its fire pit, the recarving of its faces — and is rightly
+	# skipped when nobody is near. A nest burning down is not a look; a fire
+	# that paused because the player walked away would be a nest that could
+	# only ever be destroyed while watched.
+	var harm := kindling.tick(self, delta, MOST_HEALTH)
+	if harm > 0.0:
+		damage(harm)
+		return        # `damage` may have freed it
 	if Util.sim_stride(global_position) > 4:
 		return
 	_flicker_left -= delta

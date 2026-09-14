@@ -52,7 +52,21 @@ func light(who: Node3D, flame_high := 2.4) -> bool:
 
 ## ONE FRAME OF BURNING. Returns the harm to do this frame — zero when it is
 ## not alight — so the building goes on owning its own health and its own end.
-func tick(who: Node3D, delta: float) -> float:
+## `most` is the building's FULL health, and passing it is what keeps a stout
+## building stout without making it fireproof.
+##
+## This used to deal a flat hundred points over the burn, from back when every
+## building in the game had exactly a hundred health. The moment a granary is
+## worth seven hundred — which is the whole point of a granary — a flat hundred
+## stops being a fire and becomes a scorch mark: the thing stands there blazing
+## for its full minute and a half and then goes out, six sevenths intact.
+##
+## FIRE IS NOT AN IMPACT. A stone barn should shrug off a thrown rock and still
+## burn to the ground in the same minute and a half as a hut, because what
+## resists a rock is mass and what resists a fire is not being made of wood.
+## Health is what a building has against BLOWS; the burn is a fraction of
+## whatever that is, so the two cannot fight each other.
+func tick(who: Node3D, delta: float, most := 100.0) -> float:
 	if not alight:
 		return 0.0
 	_left -= delta
@@ -62,8 +76,8 @@ func tick(who: Node3D, delta: float) -> float:
 		_catch_the_neighbours(who)
 	if _left <= 0.0:
 		douse(who)
-		return 100.0        # whatever is left of it, all at once
-	return 100.0 / BURN_SECONDS * delta
+		return most        # whatever is left of it, all at once
+	return most / BURN_SECONDS * delta
 
 
 ## Rain, a healing shower, or the last of the fuel.

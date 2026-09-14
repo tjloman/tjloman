@@ -195,6 +195,15 @@ func _lay_trail(delta: float) -> void:
 
 
 ## The narrow trail catches trees, fields, and any soul it brushes.
+## WHAT A BUILDING IS WORTH IN FULL, for scaling a blow against it. Read off
+## the thing itself rather than kept in a table here, because a table here would
+## be a second opinion about how tough a granary is and the two would drift.
+static func _most_of(built: Node3D) -> float:
+	if built.has_method("full_health"):
+		return float(built.call("full_health"))
+	return 100.0
+
+
 func _ignite_trail(pos: Vector3, reach: float) -> void:
 	# ANYTHING THAT CAN SEE IT GOES. Fleeing reaches much further than burning:
 	# a beast does not wait to find out whether the fire rolling past will
@@ -304,7 +313,14 @@ func _go_off() -> void:
 				or built.global_position.distance_to(pos) > reach:
 			continue
 		if built.has_method("damage"):
-			built.call("damage", float(spec["house"]))
+			# A SHARE OF WHAT IT IS, not a flat number. These were written when
+			# every building in the game had a hundred health; now that a
+			# granary is worth seven hundred, fifty points off it is a scorch.
+			# Scaled by the building's own full health so the big core still
+			# takes half a hut down and correspondingly less of a barn — which
+			# is what "a barn is stouter than a hut" has to mean.
+			built.call("damage",
+				float(spec["house"]) * 0.01 * _most_of(built))
 		# ...and it CATCHES, which is the difference between a blast and a fire.
 		if built.has_method("ignite"):
 			built.call("ignite")
