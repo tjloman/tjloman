@@ -93,6 +93,18 @@ const BOOST_STRENGTH := 100.0
 const BASE_ENERGY := 100.0
 const ENERGY_PER_GROWTH := 280.0
 
+## HOW MUCH STONE GOES TO ONE UNIT OF LIFTING STRENGTH.
+##
+## `lift_limit` below is written in TREE-LUMBER, which runs one to ten, because
+## trees were the only heavy thing the creature was ever asked to weigh. Stone
+## runs one to twenty-four (ResourceItem.MOST_IN_A_BUNDLE), so the two scales
+## need a word between them or a beast that can shoulder a full-grown oak
+## cannot pick up a cobble. A whelp gets a pebble; a full-grown beast takes the
+## boulder off in one piece. See Creature.can_lift, and RockDeposit.prise for
+## what a creature does when the piece is too big for it — it cleaves a
+## smaller one.
+const STONE_PER_LIFT := 2.4
+
 var stomach := 0.0        # food units currently being digested
 var fat := 0.0            # 0..100 — sleek to obese
 var waste := 0.0          # 0..100 — how badly it needs to go
@@ -211,6 +223,7 @@ func toll(effort: float, growth: float) -> float:
 ## Effective strength, counting the miracle.
 func might() -> float:
 	return BOOST_STRENGTH if boost_time > 0.0 else strength
+
 
 
 ## How heavy a thing this creature can lift, in "tree lumber" terms — so a

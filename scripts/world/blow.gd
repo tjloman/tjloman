@@ -78,9 +78,55 @@ const YOURS_WHEN_IT_THREW := 0.35
 const STOPPED_BY := 0.45
 const FLIGHT_MOST := 12.0
 
+## SKIPPING ------------------------------------------------------------------
+##
+## WATER IS NOT A COLLIDER. A chunk's water is one MeshInstance3D quad with
+## nothing behind it, which is right — a lake you can walk into wants no
+## physics body — and it means a thrown stone passed straight through the
+## surface and landed on the seabed with a thump. There was no such thing as
+## hitting water at all.
+##
+## So the one thing already watching a thrown body every frame does it: a Blow
+## knows where the stone was last frame and where it is now, which is all a
+## skip needs. Cross the surface going down, shallow enough and fast enough,
+## and it comes back off it.
+##
+## THE ANGLE IS THE WHOLE GAME, exactly as it is on a real pond. Lob a rock in
+## and it sinks; send it out flat and it walks. SKIP_ANGLE is measured off the
+## water, so a smaller number is a stricter throw.
+const SKIP_ANGLE := deg_to_rad(22.0)
+const SKIP_ABOVE := 7.0
+## What a skip keeps: most of its forward run, and rather MORE than all of its
+## bounce — which looks like a mistake and is the thing that makes skipping
+## work at all.
+##
+## Water LIFTS a stone that hits it flat; that is the whole mechanism, and it
+## is why a skipping stone rises between hops instead of settling. At a bounce
+## of 0.45, correct for a rock hitting a rock, a pebble managed six skips over
+## a total run of THREE METRES — technically a skip, invisible at any camera
+## distance anybody plays at.
+##
+## And it is what ENDS the run, with no counter and no cutoff. The upward part
+## grows each hop while the forward part shrinks, so the angle steepens by
+## itself until it passes SKIP_ANGLE and the stone goes in. Which is exactly
+## how it ends on a real pond: the last skip is always the steep one.
+const SKIP_CARRY := 0.86
+const SKIP_BOUNCE := 1.15
+## And how heavy a thing can be and still skip. A pebble walks; a boulder is a
+## splash — which is funny once, and is why teaching a creature to skip a
+## BOULDER is a thing worth watching rather than a thing that works.
+const SKIP_HEFT := 6.0
+
+## How many times it has come off the water. Kept so the landing can say, and
+## so a creature watching has something to be impressed by.
+var skips := 0
+
 var _by_god := true
 var _was := 0.0
 var _left := FLIGHT_MOST
+## Where it was last frame, so a surface crossing can be spotted between two
+## positions rather than guessed at from one.
+var _last_at := Vector3.INF
 
 
 ## HANG ONE ON A THROW. `by_god` is false when the creature threw it — see
@@ -106,6 +152,11 @@ func _physics_process(delta: float) -> void:
 		queue_free()
 		return
 	_left -= delta
+	if _skipped(thing):
+		_was = thing.linear_velocity.length()
+		_last_at = thing.global_position
+		return
+	_last_at = thing.global_position
 	var now := thing.linear_velocity.length()
 	# THE SPEED THE INSTANT BEFORE is the one that matters: by the time a
 	# collision has been resolved the projectile is already slow, and reading it
@@ -118,6 +169,39 @@ func _physics_process(delta: float) -> void:
 		queue_free()
 		return
 	_was = now
+
+
+## DID IT COME OFF THE WATER? True on the frame it did, which is also a frame
+## on which nothing else should happen to it — it has not landed, it has
+## bounced, and reading its speed as an impact would end the throw.
+func _skipped(thing: RigidBody3D) -> bool:
+	if is_inf(_last_at.x) or thing.mass > SKIP_HEFT:
+		return false
+	var at := thing.global_position
+	var down := thing.linear_velocity
+	if down.y >= 0.0:
+		return false
+	var world := thing.get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world == null:
+		return false
+	var top := world.water_level_at(at.x, at.z)
+	# -INF is dry ground: there is no water here to come off.
+	if is_inf(top) or _last_at.y <= top or at.y > top:
+		return false
+	var speed := down.length()
+	if speed < SKIP_ABOVE:
+		return false
+	# THE ANGLE OFF THE WATER, not off the vertical. A stone falling steeply
+	# has a big number here and goes in.
+	var flat := Vector2(down.x, down.z).length()
+	if flat < 0.01 or atan2(-down.y, flat) > SKIP_ANGLE:
+		return false
+	skips += 1
+	thing.linear_velocity = Vector3(
+		down.x * SKIP_CARRY, -down.y * SKIP_BOUNCE, down.z * SKIP_CARRY)
+	thing.global_position = Vector3(at.x, top + 0.05, at.z)
+	SoundBank.play_at("whisper", at, -4.0, 0.3, 1.4 + float(skips) * 0.12)
+	return true
 
 
 ## IT CAME DOWN HERE, THIS FAST, WEIGHING THIS MUCH. The one door in, so a

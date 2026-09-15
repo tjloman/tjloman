@@ -2235,11 +2235,14 @@ func is_laden() -> bool:
 ## untaught, could lift and stagger with and never launch. Nothing announces
 ## this. It arrives because it spent its life throwing.
 func can_lift(thing: Node3D, to_throw := false) -> bool:
+	var limit := body.lift_limit(growth)
+	if to_throw:
+		limit *= 1.0 + mind.knack("throw") * THROW_MASTERY
 	if thing is WildTree:
-		var limit := body.lift_limit(growth)
-		if to_throw:
-			limit *= 1.0 + mind.knack("throw") * THROW_MASTERY
 		return (thing as WildTree).lumber <= limit
+	if thing is ResourceItem:   # see CreatureBody.STONE_PER_LIFT
+		return float((thing as ResourceItem).count) \
+			<= limit * CreatureBody.STONE_PER_LIFT
 	return true
 
 

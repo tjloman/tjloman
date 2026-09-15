@@ -42,6 +42,25 @@ const STAND := {
 	"wetland": [1, 3, "wetland"],
 }
 
+## STONE, AT EVERY SIZE IT COMES IN. Every rock in the world used to be the
+## same three-hundred-stone vein, two or three to a hillside — so a riverbank
+## had no pebbles on it and the only thing anybody could do with stone was
+## quarry it like a mine.
+##
+## The small ones far outnumber the big, because that is what ground looks
+## like, and because a pebble is the thing you actually want to hand: something
+## to skip, to throw at a bird, to give a whelp that cannot lift anything else.
+## Weighted so a scatter is mostly chips with the occasional tor in it.
+##
+## AND THE WATERLINE DECIDES. Stone at the water's edge is rounded and small —
+## it has been rolled — and stone up a dry hillside is whatever the hill is
+## made of. One check against the ground it lands on, and a riverbank shingles
+## itself without anything anywhere having to know where the rivers are.
+const STONE_SPREAD: Array[int] = [0, 0, 0, 0, 1, 1, 1, 2, 2, 3, 3, 4]
+const SHINGLE: Array[int] = [0, 0, 0, 1, 1, 2]
+## How close to the waterline counts as a shore, in metres of height above it.
+const SHORE_WITHIN := 1.6
+
 var world: WorldGen
 var cell := Vector2i.ZERO
 ## Set before the chunk enters the tree. See the class note above.
@@ -596,13 +615,13 @@ func _scatter() -> void:
 	_plant_stand(_tree_stand(rng))
 	match biome:
 		"forest":
-			_scatter_deposits(rng, rng.randi_range(0, 1))
+			_scatter_deposits(rng, rng.randi_range(1, 4))
 			_scatter_bushes(rng, rng.randi_range(1, 3))
 			_scatter_animals(rng, {"deer": 0.22, "elk": 0.18, "bear": 0.05,
 				"wolf": 0.05, "tiger": 0.02})
 		"grassland":
 			_scatter_flowers(rng, rng.randi_range(6, 12))
-			_scatter_deposits(rng, rng.randi_range(0, 1))
+			_scatter_deposits(rng, rng.randi_range(1, 4))
 			_scatter_bushes(rng, rng.randi_range(2, 3))
 			_scatter_animals(rng, {"sheep": 0.12, "horse": 0.1, "chicken": 0.12,
 				"pig": 0.08, "dog": 0.04, "bison": 0.12})
@@ -611,19 +630,19 @@ func _scatter() -> void:
 			_scatter_animals(rng, {"giraffe": 0.12, "lion": 0.06, "llama": 0.12,
 				"ox": 0.05, "anteater": 0.1, "coati": 0.12})
 		"rocky_hills":
-			_scatter_deposits(rng, rng.randi_range(2, 4))
+			_scatter_deposits(rng, rng.randi_range(4, 9))
 			_scatter_bushes(rng, rng.randi_range(0, 2))
 			_scatter_animals(rng, {"caribou": 0.03, "llama": 0.12, "elk": 0.1})
 		# THE HOT DRY COUNTRY. Almost nothing grows and almost nothing lives here,
 		# which is the point of it — a desert should be a place you cross.
 		"desert":
-			_scatter_deposits(rng, rng.randi_range(1, 2))
+			_scatter_deposits(rng, rng.randi_range(2, 5))
 			_scatter_animals(rng, {"llama": 0.1, "giraffe": 0.06, "lion": 0.05,
 				"dog": 0.03})
 		# THE FAR COLD. Open, flat and full of big grazing beasts with wolves
 		# and bears working them — the meat wall at its plainest.
 		"tundra":
-			_scatter_deposits(rng, rng.randi_range(1, 2))
+			_scatter_deposits(rng, rng.randi_range(2, 5))
 			_scatter_animals(rng, {"caribou": 0.07, "bison": 0.12, "elk": 0.14,
 				"deer": 0.12, "wolf": 0.07, "bear": 0.05, "dog": 0.03})
 		# WHERE WETLAND MEETS FOREST. The densest, loudest, most crowded ground
@@ -723,6 +742,9 @@ func _scatter_deposits(rng: RandomNumberGenerator, count: int) -> void:
 		if not _spot_ok(spot):
 			continue
 		var rock := RockDeposit.new()
+		var shore: bool = world != null and spot.y - WorldGen.WATER_LEVEL < SHORE_WITHIN
+		var ladder: Array[int] = SHINGLE if shore else STONE_SPREAD
+		rock.rung = ladder[rng.randi() % ladder.size()]
 		_place(rock, spot, 0.2)
 		rock.rotation.y = rng.randf() * TAU  # a random facing, not all alike
 		Util.apply_lod(rock, Quality.clutter_distance())

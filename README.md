@@ -31,6 +31,7 @@ python3 tools/herd_grow.py       # the meadow fills and then stops
 python3 tools/earshot.py         # the god hears what they are looking at
 python3 tools/blow.py            # a town can be wrecked by hand, and slowly
 python3 tools/kindle.py          # several cores to light a house; fire still spreads
+python3 tools/skip.py            # a flat pebble walks, a lobbed one sinks
 ```
 
 That last one matters: `gdparse` only checks syntax and `gdlint` only checks
@@ -758,6 +759,68 @@ business knowing any geology.
 `check_calls.py` reads the vocabulary out of `affords.gd` rather than keeping
 its own copy — which it used to, and which drifted within an hour of the file
 being written. So did `tools/blow.py`, twenty minutes later.
+
+## Stones, at every size they come in
+
+Every rock in the world used to be the same thing: a three-hundred-stone vein,
+one mesh, two or three to a hillside. So a riverbank had no pebbles on it, and
+the only thing anyone could do with stone was quarry it like a mine.
+
+| | stone | |
+|---|---|---|
+| pebble | 1 | lifted whole |
+| cobble | 4 | lifted whole |
+| block | 15 | lifted whole |
+| boulder | 60 | cleave it |
+| tor | 300 | cleave it |
+
+**The size decides the verb, and it does so as an adverb.** A small stone comes
+away entire on the first ask; a tor stays where it is and gives up pieces.
+Neither the hand nor the creature tests how heavy anything is to find that out —
+it asks `prise` and gets what it can manage.
+
+And *what it can manage* is the other half: `prise(most)` takes the amount the
+asker can actually carry, so a full-grown beast takes a boulder off in one piece
+and a whelp has to keep chipping. That is what cleaving down to size means, and
+it fell out of one argument. `can_lift` weighs stone now — it only ever weighed
+trees, so a whelp could shoulder a load of rock its own size.
+
+Riverbanks shingle themselves: one check against the waterline, and stone at the
+water's edge comes out rounded and small while stone up a dry hillside is
+whatever the hill is made of. Meshes climb a ladder — `rock_flint_pebble`,
+`rock_flint`, `rock_pebble`, `rock` — so a new kind of stone is a file in
+`res://models/` and a word, and no other file learns it.
+
+## Skipping stones
+
+**Water is not a collider.** A chunk's water is one `MeshInstance3D` quad with
+nothing behind it — right for a lake you can walk into, and it meant a thrown
+stone passed straight *through* the surface and landed on the seabed with a
+thump. There was no such thing as hitting water.
+
+`Blow` already rides every thrown body and knows where it was last frame and
+where it is now, which is all a skip needs.
+
+```
+A PEBBLE THROWN AT 22 m/s, by release angle:
+ANGLE         SKIPS        RUN
+2        °        8        13m
+5        °        6        25m
+10       °        3        25m
+20       °        1        16m
+25       °        0         0m
+```
+
+**The angle is the whole game**, exactly as on a real pond: lob it in and it
+sinks, send it out flat and it walks. A cobble skips; a boulder is a splash.
+
+The surprising constant is `SKIP_BOUNCE = 1.15` — *more* than all of its
+vertical. Water **lifts** a stone that hits it flat, and at a physically tidy
+0.45 a pebble managed six skips over a total run of **three metres**:
+technically a skip, invisible at any camera distance anyone plays at. It is also
+what *ends* the run with no counter and no cutoff — the upward part grows each
+hop while the forward part shrinks, so the angle steepens by itself until the
+stone goes in. The last skip is always the steep one.
 
 ## Rocks
 
