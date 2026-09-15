@@ -2204,13 +2204,13 @@ func die(of_old_age: bool) -> void:
 	_dismount()
 	# Killed by a beast? The whole village swears a blood debt against THAT
 	# animal and will hunt it down wherever it runs.
-	if not of_old_age and village != null and _last_attacker is Animal \
-			and is_instance_valid(_last_attacker):
+	# VALIDITY BEFORE `is`, ALWAYS — see tools/check_calls.py.
+	if not of_old_age and village != null \
+			and is_instance_valid(_last_attacker) and _last_attacker is Animal:
 		village.mark_for_death(_last_attacker as Animal)
 		# AND THE OATH IS SWORN OVER THE GRAVE. Three of these to the same kind
 		# of animal and this village hunts them on sight for a lifetime — see
-		# VillageFeud. A man pulled back from dying never reaches here, which is
-		# exactly right: the town counts burials, not near misses.
+		# VillageFeud. The town counts burials, not near misses.
 		village.feud.blooded((_last_attacker as Animal).species)
 	# Dying while the village was up in arms teaches them the cost of standing.
 	if not of_old_age and village != null and village.is_roused():

@@ -116,7 +116,7 @@ static func throw_answer(thing: Node3D) -> String:
 	if is_instance_valid(thing) and thing.has_meta("shielding"):
 		var child: Variant = thing.get_meta("shielding")
 		# They stop wrestling once there is nobody left to wrestle for.
-		if child is Villager and is_instance_valid(child as Villager):
+		if is_instance_valid(child) and child is Villager:
 			return HELD_FAST
 		thing.remove_meta("shielding")
 	return ""

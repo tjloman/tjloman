@@ -226,7 +226,7 @@ func _spot_of(what: Variant) -> Vector3:
 		return _spot_of((what as Callable).call())
 	if what is Vector3:
 		return what
-	if what is Node3D and is_instance_valid(what):
+	if is_instance_valid(what) and what is Node3D:
 		return (what as Node3D).global_position
 	return Vector3.INF
 
@@ -237,7 +237,7 @@ func _hold_camera(beat: Dictionary) -> void:
 	if not is_instance_valid(camera_rig):
 		return
 	var held = beat.get("hold", null)
-	if held is Node3D and is_instance_valid(held):
+	if is_instance_valid(held) and held is Node3D:
 		camera_rig.follow_target = held
 		return
 	if _aim == Vector3.INF:

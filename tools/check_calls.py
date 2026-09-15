@@ -974,7 +974,12 @@ def check_undeclared_names(files):
 
 # `var beast: Animal = row["agent"]` followed a line or two later by
 # `is_instance_valid(beast)`.
-typed_then_guarded = re.compile(r"^\s*var\s+(\w+)\s*:\s*([A-Z]\w+)\s*=")
+# ...but NOT `: Variant`, which is the fix this rule recommends. An untyped
+# variable takes a freed object without complaint — that is the whole point of
+# reading it untyped, guarding it, and only then giving it a type — and flagging
+# the cure as the disease is how a checker gets switched off.
+typed_then_guarded = re.compile(
+    r"^\s*var\s+(\w+)\s*:\s*(?!Variant\b)([A-Z]\w+)\s*=")
 
 
 def check_late_validity_guards(files):
@@ -1532,6 +1537,47 @@ LETS_GO = {
 }
 
 
+def check_valid_after_is(files):
+    """`x is SomeClass and is_instance_valid(x)` — THE GUARD BEHIND THE CRASH.
+
+    `is` on a previously freed instance is ITSELF the error. It is raised while
+    evaluating the left operand, so the `and is_instance_valid(x)` written right
+    after it -- put there by somebody who was thinking about exactly this
+    problem -- never gets to run. The line reads as careful and is not.
+
+    It crashed a session: a lightning storm killed a wolf and the man it had
+    mauled in the same breath, the wolf was freed first, and `Villager.die`
+    reached for `_last_attacker is Animal` on the frame after.
+
+    Five places in the codebase had it, written by different hands at different
+    times, which is what a rule is for. The fix is always to swap them: ask
+    whether it is still there, and only then ask what it is.
+    """
+    out = []
+    for path in files:
+        lines = open(path, encoding="utf-8").read().split("\n")
+        # Conditions run across continuations, so a logical line is what to
+        # test -- the crash itself was split over two physical ones.
+        joined, at, buf, start = [], 0, "", 1
+        for i, line in enumerate(lines, 1):
+            code = line.split("#", 1)[0].rstrip()
+            if buf == "":
+                start = i
+            if code.endswith("\\"):
+                buf += code[:-1] + " "
+                continue
+            joined.append((start, buf + code))
+            buf = ""
+        del at
+        for lineno, cond in joined:
+            for m in re.finditer(r"\b([a-z_]\w*)\s+is\s+[A-Z]", cond):
+                name = m.group(1)
+                rest = cond[m.end():]
+                if re.search(r"is_instance_valid\(\s*%s\b" % re.escape(name), rest):
+                    out.append((path, lineno, name, cond.strip()))
+    return out
+
+
 def check_bundles(files):
     """NOTHING MAY QUIETLY STACK HUMAN FLESH INTO A BUNDLE OF MUTTON.
 
@@ -1979,6 +2025,13 @@ def main():
               "is what was wanted, say it: `@warning_ignore(\"integer_division\")` "
               "on the line above, and a comment saying why the floor is right."
               "\n    %s" % (path, lineno, expr, line))
+    late_is = check_valid_after_is(files)
+    for path, lineno, name, line in late_is:
+        print("%s:%d: `%s is ...` is evaluated BEFORE the "
+              "`is_instance_valid(%s)` written after it, and `is` on a freed "
+              "instance is itself the error — so the guard never runs. Ask "
+              "whether it is still there first, then ask what it is."
+              "\n    %s" % (path, lineno, name, name, line))
     bundles = check_bundles(files)
     for path, why in bundles:
         print("%s: %s. Merging is where two different things silently become "
@@ -2052,7 +2105,8 @@ def main():
         + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice) + len(loose_consts) + len(through) \
         + len(class_shadows) + len(confusable) + len(sim_clocks) + len(alive) \
         + len(stand) + len(typed_has) + len(shadowed_own) + len(sentinels) \
-        + len(int_div) + len(worth) + len(burnable) + len(kids) + len(bundles)
+        + len(int_div) + len(worth) + len(burnable) + len(kids) + len(bundles) \
+        + len(late_is)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

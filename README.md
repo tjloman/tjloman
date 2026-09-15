@@ -57,6 +57,12 @@ because it shipped a broken build at least once:
 - **A `:=` inferring Variant** from `pop_back()`, `front()`, `get()` and
   friends, which this project builds as an *error* — one such line stops every
   dependent script loading.
+- **`x is SomeClass and is_instance_valid(x)`** — the right guard in the wrong
+  order. `is` on a freed instance is *itself* the error, raised evaluating the
+  left operand, so the check written to protect it never runs. The line reads as
+  careful and is not. Five places had it, written by different hands; one of
+  them crashed a session when a lightning storm killed a wolf and the man it had
+  mauled in the same breath.
 - **A local or parameter named after a base-class property** — `scale` in a
   `Control`, `basis` in a `Node3D`, `show` as a parameter. Godot warns and the
   build still runs, so these reach the player as log noise; worse, the next

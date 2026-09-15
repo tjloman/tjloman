@@ -912,7 +912,7 @@ func pick_up() -> void:
 	# noise in the log and the wrong thing to print.
 	if has_meta("herd"):
 		var from = get_meta("herd")
-		if from is Herd and is_instance_valid(from):
+		if is_instance_valid(from) and from is Herd:
 			(from as Herd).release(self)
 	Mauling.free_of(self)   # whatever it had hold of, it does not any more
 	state = State.HELD

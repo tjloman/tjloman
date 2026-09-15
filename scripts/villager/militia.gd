@@ -132,6 +132,8 @@ static func fight(who: Villager, delta: float) -> void:
 static func strike(who: Villager, foe: Node3D) -> void:
 	var town := who.village
 	var fury := 1.0
+	if not is_instance_valid(foe):
+		return          # it died between being chosen and being struck
 	if town != null and is_instance_valid(town) and foe is Animal:
 		fury = town.feud.wrath((foe as Animal).species)
 	var killed := Weapon.strike(who, foe, who.weapon, fury)
