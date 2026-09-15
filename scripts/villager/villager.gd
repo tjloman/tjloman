@@ -159,6 +159,17 @@ var morality := randf_range(10.0, 40.0)
 var pin: Mauling = null
 
 var state := State.WANDER
+## THE TRADE THIS ONE KEEPS, and how many more times it may go back to it
+## before stopping to reconsider the whole town. Dealt at founding by
+## VillageCharter and re-set whenever the board is actually consulted.
+##
+## A VILLAGER WHO HAS A TRADE GOES BACK TO IT. Scoring twelve jobs against each
+## other is the right way to answer "what does this town need of me" and the
+## wrong way to answer "what do I do after this harvest" — the second question
+## has an obvious answer and it was being paid for like the first, every time
+## anybody finished anything. See `_choose`.
+var calling := ""
+var calling_left := 0
 var _target := Vector3.ZERO
 var _action_time := 0.0
 ## A decision has been asked for and not yet granted. See `_rethink`.
@@ -1136,9 +1147,38 @@ func _choose() -> void:
 			_target = village.refuge(global_position)
 			Militia.report_terror(foe)
 			return
-	if _pick_job():
+	# BACK TO THE TRADE, if there is one and it still exists. This is the whole
+	# of the kick-start: a village is dealt its work at founding (see
+	# VillageCharter) and everybody goes on doing it, so the board below is
+	# consulted when a calling runs out or fails — not every time a farmer
+	# finishes a field.
+	if _resume_calling():
 		return
+	if _pick_job():
+		calling = current_job()
+		calling_left = VillageCharter.CALLING_HOLDS
+		return
+	calling = ""
 	VillageJobs.idle(self)   # every post taken: go and be a person
+
+
+## GO BACK TO WHAT I DO. False if there is nothing to go back to, the post has
+## filled, or the trade could not be taken up — in which case the caller falls
+## through to the full board, which is where a change of trade belongs.
+func _resume_calling() -> bool:
+	if calling == "" or calling_left <= 0:
+		return false
+	if VillageJobs.full(village, calling):
+		calling_left = 0
+		return false
+	calling_left -= 1
+	_start_job(calling)
+	if current_job() != calling:
+		calling_left = 0      # whatever it went for has gone; ask properly
+		return false
+	VillageJobs.claim(village, calling)
+	_held_post = calling
+	return true
 
 
 ## CARRIED ALONG BY THE CROWD. Returns true if the town's mood has taken this

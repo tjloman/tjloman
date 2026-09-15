@@ -175,6 +175,10 @@ const TALLY_EVERY := 0.35
 
 var village_name := "Elsmere"
 var is_player_home := true
+## WHAT KIND OF TOWN THIS IS — "tillage", "husbandry", "stone", "the chase".
+## Rolled at founding and kept, because the hands a village is dealt on day one
+## are visible in it for the rest of its life. See VillageCharter.
+var charter := ""
 ## HOW MANY SOULS THIS TOWN IS FOUNDED WITH, when somebody other than the world
 ## generator is founding it. Zero means the old rule (STARTING_SOULS at home,
 ## two thirds of it for a heathen hamlet); a Caravan sets it to whatever the
@@ -303,6 +307,16 @@ func _ready() -> void:
 	_update_influence()
 	_build_starting_houses()
 	GameState.alignment_changed.connect(_on_alignment_changed)
+	# AND EVERYBODY IS PUT TO WORK BEFORE THE FIRST FRAME RUNS.
+	#
+	# Founded without this, fifty people with no job all ask the board what the
+	# town needs on the same frame, and the board tells all fifty the same thing
+	# because none of them has acted yet. They sort it out by taking jobs and
+	# dropping them, badly, in front of the player. See VillageCharter — the
+	# mix is rolled offline out of a hundred thousand candidates, so a village
+	# starts viable AND starts with a character of its own.
+	_retally()             # the roster, so the charter has somebody to deal to
+	charter = VillageCharter.deal(self)
 	# If a saved game remembers a town that stood here, this IS that town —
 	# take back its name, its faith, its stocks and its people.
 	SaveGame.recall(self)
