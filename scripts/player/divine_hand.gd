@@ -70,6 +70,10 @@ const CURVE_GAIN := 3.2             # sideways flick -> in-flight lateral accel
 const SPIN_GAIN := 1.4              # flick deviation -> projectile spin (rad/s)
 const MAX_SPIN := 11.0              # cap so a wild flick doesn't blur into a top
 const BUNDLE_TOPUP := 0.06          # seconds between pulling each extra unit (hold-to-grab)
+## HOW FAR A CLOSED HAND SWEEPS UP LOOSE THINGS OF ITS OWN KIND. A hand's width
+## of ground and not a magnet: you gather a field of meat by dragging over it,
+## which is the gesture you were going to make anyway. See `_gather_kindred`.
+const GATHER_REACH := 2.6
 
 ## THE CASTING SESSION.
 ##
@@ -718,14 +722,72 @@ func _on_grab() -> void:
 ## into the hand — an armful that swells the longer you hold. Drag off the
 ## platform (or let go) to stop.
 func _tick_bundle_grab(delta: float) -> void:
-	if not _pointer_down or not (hover_target is FoodStore):
+	if not _pointer_down:
 		return
 	if camera_rig != null and camera_rig.is_multitouching():
 		return
 	_bundle_time -= delta
-	if _bundle_time <= 0.0:
-		_bundle_time = BUNDLE_TOPUP
+	if _bundle_time > 0.0:
+		return
+	_bundle_time = BUNDLE_TOPUP
+	# OVER THE STOREHOUSE it draws from the town's own stock, which is what this
+	# was written for. Anywhere else it sweeps up what is lying about.
+	if hover_target is FoodStore:
 		(hover_target as FoodStore).top_up(held_body)
+		return
+	_gather_kindred()
+
+
+## SWEEPING UP A FIELD, one thing every BUNDLE_TOPUP seconds.
+##
+## A slain beast leaves a heap of joints and a good harvest leaves a scatter of
+## sheaves, and picking them up was one grab, one carry and one walk back —
+## each. The storehouse could already stack things into the hand and the
+## bundle they stack into already existed; the only thing missing was that
+## loose things on the ground could not join one.
+##
+## THE SAME GESTURE AND THE SAME RHYTHM as the storehouse top-up, deliberately:
+## hold the hand closed and drag it over the pile. Nothing new to learn, no
+## modifier key — and on a phone, where there IS no modifier key, that is the
+## whole of why it works at all.
+##
+## What may join what is the item's own business — see FoodItem.absorb, which
+## is where the rule lives that a joint of human flesh can never be quietly
+## stacked into eleven of mutton.
+func _gather_kindred() -> void:
+	if not is_instance_valid(held_body):
+		return
+	var mine := held_body
+	# THE NARROW GROUP, NOT "pickable". This runs sixteen times a second for as
+	# long as a hand is closed, and "pickable" holds every tree in the streamed
+	# world — hundreds of them — none of which can ever join a bundle. "food"
+	# and "resource_items" are the things that actually can.
+	var flock := ""
+	if mine is FoodItem:
+		flock = "food"
+	elif mine is ResourceItem:
+		flock = "resource_items"
+	else:
+		return
+	var best: Node3D = null
+	var best_gap := GATHER_REACH
+	for n in get_tree().get_nodes_in_group(flock):
+		var loose := n as Node3D
+		if loose == null or not is_instance_valid(loose) or loose == mine:
+			continue
+		var gap := loose.global_position.distance_to(global_position)
+		if gap < best_gap:
+			best_gap = gap
+			best = loose
+	if best == null:
+		return
+	var took := false
+	if mine is FoodItem:
+		took = (mine as FoodItem).absorb(best as FoodItem)
+	else:
+		took = (mine as ResourceItem).absorb(best as ResourceItem)
+	if took:
+		hover_info_changed.emit(_describe(mine))
 
 
 func _on_release() -> void:

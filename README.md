@@ -109,6 +109,7 @@ you're done. No system install required.
 | Input | Action |
 |---|---|
 | Left mouse on land (drag) | Grab and drag the world (B&W style) |
+| **Hold and drag over a pile** | **Gather it all into one hand** — meat, sheaves, lumber, stone. The same hold-and-drag the storehouse already used; nothing new to learn and no modifier key, which is why it works on a phone |
 | Left mouse on things | Pick up food / villagers / animals — even **trees** (uproot any; gentle drop replants, hard throw splinters, dropped on a storehouse banks full lumber; your creature uproots trees smaller than itself) |
 | Gentle release **at your creature** | **Hand it the object** — innate; raises its attention and bond |
 | Throw **to your creature** | With attention and practice it **catches** — praise catches to train the skill |
@@ -690,6 +691,33 @@ The vapour texture is drawn in code like everything else here: a soft
 elliptical falloff multiplied by noise sampled with a squashed vertical, so the
 detail runs in horizontal **streaks** rather than reading as a stack of fuzzy
 balls. 64×64, built once at world load, shared by every cloud ever cast.
+
+## Gathering a field into one hand
+
+A slain beast leaves a heap of joints; a good harvest leaves a scatter of
+sheaves. Picking them up was one grab, one carry and one walk back — **each**.
+
+The bundle already existed: `count` on the item, a bigger bundle drawn bigger,
+and a storehouse that could stack its own stock into a hand you held over it.
+The only thing missing was that loose things on the ground could not join one.
+So hold the hand closed and drag it over the pile, and it draws them in one
+every 0.06s — the same gesture and the same rhythm as the storehouse top-up, on
+purpose. No modifier key, which on a phone is the whole of why it works.
+
+**What may join what is the item's own business.** `is_human_meat` decides
+whether an ordinary villager will touch a thing at all and what your creature
+thinks it just did — so a bundle that quietly took one joint of human flesh into
+eleven of mutton would **launder** it: the whole stack would be eaten by people
+who would have refused it, and the god who did it would never know. Kind, name
+and provenance all have to match, which is also why a fish never joins a joint.
+Lumber and stone never mix for a smaller version of the same reason — a
+storehouse banks them into different piles, so a bundle that was half of each
+could only be banked as a lie. `check_calls.py` fails the build if `absorb`
+stops testing any of it.
+
+The sweep walks the **narrow** group — `food` or `resource_items`, never
+`pickable`, which holds every tree in the streamed world and runs sixteen times
+a second for as long as a hand is closed.
 
 ## What a thrown thing does when it arrives
 

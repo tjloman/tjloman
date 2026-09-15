@@ -5,6 +5,9 @@ extends RigidBody3D
 ## by the creature), throwable like anything else, and absorbed back into
 ## whichever storehouse it comes to rest on.
 
+## MOST THAT WILL EVER GO IN ONE HAND. See FoodItem.MOST_IN_A_BUNDLE.
+const MOST_IN_A_BUNDLE := 24
+
 var kind := "lumber"  # or "stone"
 var count := 1        # a bundle: this many units in one carriable
 
@@ -44,6 +47,20 @@ func _ready() -> void:
 ## Re-fit the visual to the current count — called as a held bundle grows.
 func refresh_bundle() -> void:
 	scale = Vector3.ONE * clampf(1.0 + (count - 1) * 0.05, 1.0, 1.7)
+
+
+## TAKE THAT ONE INTO THIS ONE. True when it happened. Lumber and stone never
+## mix, for the same reason a fish never joins a joint: a storehouse banks them
+## into different piles and a bundle that was half of each could only ever be
+## banked as a lie.
+func absorb(other: ResourceItem) -> bool:
+	if other == null or not is_instance_valid(other) or other == self:
+		return false
+	if other.kind != kind or count + other.count > MOST_IN_A_BUNDLE:
+		return false
+	count += other.count
+	other.queue_free()
+	return true
 
 
 func hover_text() -> String:

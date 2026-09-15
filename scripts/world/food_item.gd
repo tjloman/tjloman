@@ -9,6 +9,11 @@ enum FoodType { PLANT, MEAT }
 
 const NUTRITION := 40.0
 
+## MOST THAT WILL EVER GO IN ONE HAND. A bundle is a convenience, not a cart:
+## past this the hand stops drawing things in and the pile on the ground is
+## still a pile you have to make a second trip for.
+const MOST_IN_A_BUNDLE := 24
+
 var food_type := FoodType.PLANT
 var meat_name := "mutton"
 var is_human_meat := false
@@ -47,6 +52,31 @@ func _ready() -> void:
 		_build_meat()
 
 	refresh_bundle()  # a bigger bundle looks bigger
+
+
+## TAKE THAT ONE INTO THIS ONE. True when it happened.
+##
+## WHAT MAY MERGE WITH WHAT IS NOT A DETAIL. `is_human_meat` decides whether an
+## ordinary villager will touch a thing at all (see Villager._will_eat_human_
+## flesh) and what the creature thinks it just did (Creature._deed_type), so a
+## bundle that quietly took one joint of human flesh into eleven of mutton
+## would launder it — the whole stack would then be eaten by people who would
+## have refused it, and the god who did it would never know. Kind, name and
+## provenance all have to match, and the name is why a fish never joins a
+## joint even though both are meat.
+func absorb(other: FoodItem) -> bool:
+	if other == null or not is_instance_valid(other) or other == self:
+		return false
+	if other.food_type != food_type or other.is_human_meat != is_human_meat:
+		return false
+	if food_type == FoodType.MEAT and other.meat_name != meat_name:
+		return false
+	if count + other.count > MOST_IN_A_BUNDLE:
+		return false
+	count += other.count
+	refresh_bundle()
+	other.queue_free()
+	return true
 
 
 ## Re-fit the visual to the current count — called when a bundle grows (held

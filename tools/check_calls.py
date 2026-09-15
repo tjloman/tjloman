@@ -1532,6 +1532,50 @@ LETS_GO = {
 }
 
 
+def check_bundles(files):
+    """NOTHING MAY QUIETLY STACK HUMAN FLESH INTO A BUNDLE OF MUTTON.
+
+    A bundle is one carriable holding several units, and the hand gathers a
+    field of meat into one by sweeping over it. Merging is therefore a place
+    where two different things can silently become one thing -- and for food,
+    one of those differences decides whether an ordinary villager will touch it
+    at all (Villager._will_eat_human_flesh) and what the creature thinks it just
+    did (Creature._deed_type).
+
+    So a bundle that took a single joint of human flesh into eleven of mutton
+    would LAUNDER it: the whole stack would be eaten by people who would have
+    refused it, and the god who did it would never find out. `absorb` has to
+    test provenance, and this fails the build if it stops.
+
+    The same rule, less gravely, for lumber and stone: a storehouse banks them
+    into different piles, so a bundle that was half of each could only ever be
+    banked as a lie.
+    """
+    out = []
+    owed = {
+        "food_item.gd": ("is_human_meat", "food_type"),
+        "resource_item.gd": ("kind",),
+    }
+    for path in files:
+        name = os.path.basename(path)
+        if name not in owed:
+            continue
+        src = open(path, encoding="utf-8").read()
+        body = re.search(r"^func absorb\(.*?\n((?:\t.*\n|\n)+)", src, re.M)
+        if body is None:
+            out.append((path, "%s has no `absorb`, so the hand cannot bundle "
+                        "it and nothing checks what may join what" % name))
+            continue
+        for field in owed[name]:
+            if field not in body.group(1):
+                out.append((path, "`%s.absorb` never compares `%s`"
+                            % (name[:-3], field)))
+        if "MOST_IN_A_BUNDLE" not in body.group(1):
+            out.append((path, "`%s.absorb` has no ceiling; a hand is a "
+                        "convenience, not a cart" % name[:-3]))
+    return out
+
+
 def check_children(files):
     """NO PATH LETS GO OF A CHILD WITH ANY SPEED.
 
@@ -1935,6 +1979,10 @@ def main():
               "is what was wanted, say it: `@warning_ignore(\"integer_division\")` "
               "on the line above, and a comment saying why the floor is right."
               "\n    %s" % (path, lineno, expr, line))
+    bundles = check_bundles(files)
+    for path, why in bundles:
+        print("%s: %s. Merging is where two different things silently become "
+              "one — see tools/check_calls.py, check_bundles." % (path, why))
     kids = check_children(files)
     for path, why in kids:
         print("%s: %s. There is no throwing of children in this game and the "
@@ -2004,7 +2052,7 @@ def main():
         + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice) + len(loose_consts) + len(through) \
         + len(class_shadows) + len(confusable) + len(sim_clocks) + len(alive) \
         + len(stand) + len(typed_has) + len(shadowed_own) + len(sentinels) \
-        + len(int_div) + len(worth) + len(burnable) + len(kids)
+        + len(int_div) + len(worth) + len(burnable) + len(kids) + len(bundles)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0
