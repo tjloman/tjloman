@@ -27,10 +27,27 @@ extends RefCounted
 ##   enough of a miracle to convert it, is the expedition this game did not
 ##   previously have a reason for.
 ##
-## THE HAND IS NOT LIMITED. You may still pick up a rock in the far mountains
-## and drop it on anything you like — the hand is your arm, and an arm has no
-## faith in it. What is limited is the POWER: a miracle that lands outside
-## every circle fizzles, and gives the prayer back.
+## IT IS A LIMIT ON WHERE YOU CAST FROM, NOT ON WHERE IT LANDS — and getting
+## that backwards is the most instructive mistake this file has made.
+##
+## The first version gated the LANDING: a miracle that came down outside every
+## circle guttered out and gave the prayer back. Which is defensible on paper
+## and awful in the hand, because the best thing in this game is winding up and
+## hurling a working across a valley, and every good throw came back "beyond
+## your reach by 88 metres". The rule read as a punishment for throwing well.
+##
+## So the gate is on the DRAWING. You may only open a casting session standing
+## over ground you hold (DivineHand._open_casting, judged on `cast_from` — the
+## spot where the hand was planted when the stroke began). Once a working is in
+## your hand it is yours: throw it over the mountain if you can throw that far,
+## and it goes off where it lands. That is also what Black & White actually did
+## — the circle bounded the hand, not the shot.
+##
+## THE HAND ITSELF IS NOT LIMITED. You may still pick up a rock in the far
+## mountains and drop it on anything you like; the hand is your arm, and an arm
+## has no faith in it. Nor is a fire already burning: lighting a thing is a
+## miracle, a thing being alight is weather, and a torch carried out of your
+## country goes on burning what it touches.
 ##
 ## THE CREATURE'S OWN WORKINGS ARE NOT GATED, and that is deliberate rather
 ## than an oversight. It pays for those out of its own energy rather than out of

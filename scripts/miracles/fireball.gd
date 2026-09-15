@@ -198,12 +198,6 @@ func _hearth(delta: float) -> void:
 	if _hearth_time > 0.0:
 		return
 	_hearth_time = HEARTH_EVERY
-	# THE SAME EDGE AS EVERYTHING ELSE. Lighting a thing is a miracle, and a
-	# miracle only happens on ground you hold — so the furnace in your hand
-	# goes on glowing outside your reach and stops setting things alight. One
-	# rule, no exception carved out for the fire you happen to be carrying.
-	if not MiracleReach.reaches(get_tree(), global_position):
-		return
 	# Trees, fields, and anything with legs — exactly what a thrown ball does
 	# as it rolls past, at the reach of an arm instead of the reach of a throw.
 	_ignite_trail(global_position, HEARTH_REACH)
@@ -319,17 +313,6 @@ func burst() -> void:
 ## a table rather than two copies of this function.
 func _go_off() -> void:
 	if _exploded or freeze:  # never in the player's grip
-		return
-	# AND NEVER OUTSIDE THE GROUND YOU HOLD. Fire is the one miracle with its
-	# own landing code, so it needs its own copy of the gate that `resolve`
-	# puts on everything else — see MiracleReach. Note what this does NOT
-	# touch: a tree that is already alight goes on burning wherever it is
-	# carried. Lighting a thing is a miracle; a thing being alight is weather.
-	if not MiracleReach.reaches(get_tree(), global_position):
-		var book := MiracleManager.of(get_tree())
-		if book != null:
-			book.fizzle(kind, global_position)
-		queue_free()
 		return
 	_exploded = true
 	var spec: Dictionary = KINDS[kind]

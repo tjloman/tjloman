@@ -166,6 +166,10 @@ var last_thrown: Node3D = null
 var drag_anchor := Vector3.ZERO
 var gesture_points := PackedVector2Array()
 var ground_point := Vector3.ZERO
+## WHERE THE CASTING SESSION BEGAN, on the land. Held for the whole session so
+## that the reach is judged on where you planted your hand and drew, not on
+## wherever the stroke wandered to. See MiracleReach.
+var cast_from := Vector3.ZERO
 
 ## WHAT THE HALF-DRAWN STROKE LOOKS LIKE SO FAR — read continuously while the
 ## finger is down, shown by RuneReadout, and never committed to the working.
@@ -1200,6 +1204,23 @@ func charge_fraction() -> float:
 func _open_casting() -> void:
 	if is_instance_valid(held_body):
 		return                       # not while your hand is full
+	# YOU MAY ONLY WORK ON GROUND YOU HOLD — refused HERE, before a stroke is
+	# drawn, rather than after one. Finding out that a rune was wasted only once
+	# it is finished is the worst possible moment to learn the rule, and it also
+	# reads as the drawing having failed rather than the place.
+	#
+	# `cast_from` is stamped now and used for the whole session: `ground_point`
+	# follows the pointer every frame, so a rune drawn across the screen would
+	# otherwise be judged on wherever the stroke happened to end.
+	if not MiracleReach.reaches(get_tree(), ground_point):
+		GameState.hint(MiracleReach.short_hint(get_tree(), ground_point))
+		SoundBank.play_at("whisper", global_position, -4.0, 0.12, 0.6)
+		if miracles != null and is_instance_valid(miracles) \
+				and miracles.reach_ring != null \
+				and is_instance_valid(miracles.reach_ring):
+			miracles.reach_ring.flare()
+		return
+	cast_from = ground_point
 	casting = true
 	_whisper_time = 0.6
 	live_shape = "none"

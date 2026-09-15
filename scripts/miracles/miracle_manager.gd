@@ -319,6 +319,14 @@ func cast_runes(runes: Array) -> bool:
 	if reading.is_empty():
 		GameState.hint("Those runes mean nothing together.")
 		return false
+	# THE BACKSTOP ON THE REACH. DivineHand refuses to open a casting session
+	# off your ground at all, which is where the player meets this rule; this is
+	# here so that nothing else can come through the door and skip it, and it is
+	# judged on `cast_from` — where the hand was planted when the drawing began.
+	if divine_hand != null and is_instance_valid(divine_hand) \
+			and not MiracleReach.reaches(get_tree(), divine_hand.cast_from):
+		GameState.hint(MiracleReach.short_hint(get_tree(), divine_hand.cast_from))
+		return false
 	# RUDIMENTS FIRST. You cannot hold a storm before you hold rain and
 	# lightning apart — and the moment you hold both, the storm is yours with
 	# nothing further to learn.
@@ -521,16 +529,17 @@ func _spare_orb_spot() -> Vector3:
 ## Called by a thrown orb when it lands: unleash the effect at that spot,
 ## apply karma, and let the villages witness it.
 ##
-## UNLESS IT LANDED OUTSIDE YOUR REACH, in which case nothing happens at all
-## and the prayer comes back. See MiracleReach: the hand goes anywhere, the
-## power does not. This is the one gate every orb passes through, which is why
-## it is here and not in each of thirty `_cast_` functions.
+## AND IT GOES OFF WHEREVER IT LANDS. The reach is a limit on WHERE YOU MAY
+## WORK FROM, not on where a thrown thing may come down — see MiracleReach and
+## DivineHand._open_casting, which is where that is enforced. A working already
+## in your hand is yours; hurl it over the mountain if you can throw that far.
+##
+## This once gated the landing instead, which was the wrong end of the throw:
+## it turned every long shot into "beyond your reach by 88 metres" and made the
+## most satisfying thing in the game feel broken.
 func resolve(miracle: String, pos: Vector3, momentum := Vector3.ZERO,
 		scale_up := 1.0) -> void:
 	pos.y = 0
-	if not MiracleReach.reaches(get_tree(), pos):
-		fizzle(miracle, pos)
-		return
 	var potency := power() * scale_up
 	match miracle:
 		"food": _cast_food(pos)
@@ -570,19 +579,6 @@ func resolve(miracle: String, pos: Vector3, momentum := Vector3.ZERO,
 		get_tree().get_first_node_in_group("creature") as Creature, pos)
 	for v in get_tree().get_nodes_in_group("village"):
 		(v as Village).witness_miracle(miracle, pos)
-
-
-## A WORKING THAT FOUND NO GROUND. It guts out where it landed and the prayer
-## it cost is returned, because a rule the player is still learning must not
-## also be a fine. The refund is the miracle's NAMED cost: a blend part is
-## charged as part of a reading and refunded as itself, which is within a rune
-## either way and not worth a second ledger.
-func fizzle(miracle: String, pos: Vector3) -> void:
-	GameState.add_prayer_power(float(MIRACLES.get(miracle, {}).get("cost", 0.0)))
-	GameState.hint(MiracleReach.short_hint(get_tree(), pos))
-	SoundBank.play_at("whisper", pos, -4.0, 0.12, 0.6)
-	if reach_ring != null and is_instance_valid(reach_ring):
-		reach_ring.flare()
 
 
 func _apply_karma(miracle: String, pos: Vector3) -> void:

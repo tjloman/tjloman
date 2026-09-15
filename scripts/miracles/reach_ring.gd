@@ -9,14 +9,15 @@ extends Node3D
 ## only reach you have out in the wild, and a permanent ring following a
 ## fifteen-metre animal around would be scenery within a minute.
 ##
-## So it appears when it matters and not before: the moment a miracle is in
-## your hand, the ground the beast holds lights up, and it fades out again
-## when you have thrown it. Which is the answer to "why did that fizzle" —
-## the game shows you, while you are still holding the thing, exactly how far
-## you may throw it.
+## So it appears when it matters and not before: the ground the beast holds
+## lights up the moment you start drawing a rune, and again while a working is
+## in your hand, and fades out when you are done. The reach limits where you
+## may CAST FROM rather than where a throw may land, so the moment that matters
+## is the moment the stroke begins — the game shows you the edge while you are
+## standing on the right side of it.
 ##
-## It also flares briefly after a working HAS fizzled, so that the answer
-## arrives even if you were not looking at your feet when you threw.
+## It also flares when a cast is refused for want of ground, so the answer
+## arrives even if you were not looking at your feet.
 
 ## How quickly it comes up and goes away, in ring-alpha per second. Up fast
 ## because you may already be winding up; down slow because it is pleasant.
@@ -86,6 +87,12 @@ func flare() -> void:
 func _holding_power() -> bool:
 	if divine_hand == null or not is_instance_valid(divine_hand):
 		return false
+	# WHILE YOU ARE DRAWING, above all. The reach is a limit on where you may
+	# CAST FROM, so the moment a casting session opens is the moment the answer
+	# to "may I work here" matters — before a rune is drawn, not after one is
+	# thrown. See MiracleReach.
+	if divine_hand.casting:
+		return true
 	var held := divine_hand.held_body
 	if held == null or not is_instance_valid(held):
 		return false
