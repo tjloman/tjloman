@@ -380,13 +380,15 @@ func _build_stand_in(spec: Dictionary) -> void:
 			# what it is from the hill, because it is the one building that is
 			# not in the town.
 			add_child(Util.box(Vector3(2.2, 0.28, 8.0), tint, Vector3(0, 0.6, 3.6)))
-			for post in 4:
+			# `pile` and not `post`: this class has a post() of its own, and a
+			# loop variable by that name shadows it.
+			for pile in 4:
 				add_child(Util.box(Vector3(0.22, 1.6, 0.22),
 					Color(0.36, 0.28, 0.2),
-					Vector3(0.85, 0.0, 1.2 + float(post) * 2.0)))
+					Vector3(0.85, 0.0, 1.2 + float(pile) * 2.0)))
 				add_child(Util.box(Vector3(0.22, 1.6, 0.22),
 					Color(0.36, 0.28, 0.2),
-					Vector3(-0.85, 0.0, 1.2 + float(post) * 2.0)))
+					Vector3(-0.85, 0.0, 1.2 + float(pile) * 2.0)))
 			# The net rack ashore, which is where the people actually stand.
 			add_child(Util.box(Vector3(2.6, 0.16, 0.16),
 				Color(0.5, 0.4, 0.26), Vector3(0, 1.9, -0.6)))

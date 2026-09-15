@@ -888,6 +888,23 @@ func _fill_sight(center: Vector2i) -> void:
 	_sight_filled = true
 
 
+## HOW MUCH OF THE WORLD IS ACTUALLY THERE, 0..1 — the far ring's cold fill,
+## which is 121 chunks on a budget phone and 289 on a flagship and is by a
+## distance the most expensive thing that happens when a game starts.
+##
+## It is exposed because the START SCREEN SHOULD NOT LET GO UNTIL IT IS DONE.
+## The streamer is exempt from the pause precisely so this can happen behind
+## the opening screen (see the header), and then the screen handed control over
+## the moment somebody pressed Begin — so a player who pressed it quickly got
+## the whole cold fill delivered into their first ten seconds of play, which is
+## exactly what "it gets slow on the first run" is.
+func land_progress() -> float:
+	if _sight_filled:
+		return 1.0
+	var across := sight_radius * 2 + 1
+	return clampf(float(_chunks.size()) / float(maxi(across * across, 1)), 0.0, 0.999)
+
+
 ## The cells exactly `ring` chunks out — the perimeter of the square, walked
 ## directly rather than sieved out of its interior.
 func _ring_cells(center: Vector2i, ring: int) -> Array[Vector2i]:

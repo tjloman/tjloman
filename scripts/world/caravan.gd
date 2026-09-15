@@ -133,8 +133,11 @@ static func pack(town: Village) -> Caravan:
 		return null
 	var cart := Caravan.create(town)
 	# THE HERDERS' BONUS. Stock in the books is experience at starting from
-	# nothing, and it buys people, timber and beasts to drive along.
-	var bonus := mini(town.tamed_count() / HEAD_PER_BONUS, BONUS_MOST)
+	# nothing, and it buys people, timber and beasts to drive along. Rounded
+	# DOWN on purpose: eleven head is not a twelfth of a bonus, it is no bonus.
+	@warning_ignore("integer_division")
+	var rungs := town.tamed_count() / HEAD_PER_BONUS
+	var bonus := mini(rungs, BONUS_MOST)
 	cart.souls = mini(SOULS_SENT + bonus * SOULS_PER_BONUS, SOULS_MOST)
 	cart.lumber = LUMBER_SENT + bonus * LUMBER_PER_BONUS
 	cart.head = mini(bonus, HEAD_MOST)
