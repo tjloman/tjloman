@@ -60,13 +60,41 @@ const CROWD_GROW_PENALTY := 0.22  # each neighbour cuts the grow roll by this mu
 const CROWD_SEED_PENALTY := 0.3   # ...and cuts the seeding roll harder
 const NEIGHBOUR_RECHECK := 9.0  # seconds between (costly) neighbour counts
 
-## FIRE — contained by default. A burning tree lasts a few seconds, spreads
-## only to close neighbours, and can't leap a gap or reach water — so a
-## blaze clears a stand of forest but burns out on its own. Rain douses it.
-const BURN_SECONDS := 9.0
+## FIRE — contained by default, and SLOW. It spreads only to close neighbours
+## and cannot leap a gap or reach water, so a blaze clears a stand of forest
+## and burns out on its own. Rain douses it.
+##
+## A TREE BURNED FOR NINE SECONDS, which is a flash. Long enough to be a way of
+## clearing forest, far too short to be a THING — you could not carry a burning
+## tree anywhere, could not javelin one across a valley and watch it arrive,
+## could not use one as a torch. And a blazing pine turning end over end is the
+## best picture this game has in it.
+##
+## BUT THE TWO NUMBERS PULL AGAINST EACH OTHER. Every extra second of burn is
+## another roll against every neighbour, so five times the burn with the same
+## odds is not a longer fire, it is a firestorm that takes the map. The odds
+## came down as the burn went up, and what that buys is the interesting
+## behaviour: fire CREEPS. It takes about ten seconds to reach the next trunk
+## instead of two, so a wood burns THROUGH over a couple of minutes rather than
+## going up all at once — and it is still something a player can outwait, and
+## still stops at a gap. See tools/forest_fire.py.
+const BURN_SECONDS := 45.0
 const SPREAD_RADIUS := 6.0
-const SPREAD_CHANCE := 0.35      # per spread-tick, per near neighbour
+const SPREAD_CHANCE := 0.05 # per spread-tick, per near neighbour
 const HARM_RADIUS := 3.5
+
+## HOW A THROWN TRUNK COMES TO REST. Under SETTLE_UNDER it has stopped; above
+## it, it kicks and goes over again. BOUNCE_KEEP is how much of the blow comes
+## back up and BOUNCE_SLIDE how much of the run survives — a log gives up its
+## height long before it gives up its direction, which is why a thrown tree
+## ends up a long way from where it first touched.
+const SETTLE_UNDER := 5.5
+const BOUNCE_KEEP := 0.34
+const BOUNCE_SLIDE := 0.72
+## How fast it turns coming off a blow, per metre a second of it, and the most
+## it will ever turn.
+const TUMBLE_PER_SPEED := 0.09
+const TUMBLE_MOST := 7.0
 
 ## Sway: when the creature wades through, trees lean out of its way and spring
 ## back. An underdamped spring gives the little bounce as they right themselves.
@@ -87,6 +115,9 @@ var burning := false
 var _felled := false
 var _held := false
 var _flying := false
+## The hardest blow it has taken this flight — what `_land` is judged on, and
+## not the gentle one it happened to stop on.
+var _hardest := 0.0
 var _fly_velocity := Vector3.ZERO
 var _target_scale := Vector3.ONE   # eased growth scale the tree animates toward
 var _grow_anim := false            # true while the visible scale is catching up
@@ -159,11 +190,15 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _felled:
 		return
-	# Held or in flight takes precedence — a thrown, blazing tree is a
-	# firebrand that ignites wherever it lands. Fire pauses while airborne.
 	if _held:
 		return
 	if _flying:
+		# THE FIRE GOES WITH IT. A blazing tree turning end over end across a
+		# valley is the picture this whole mechanic exists for, and the burn
+		# used to PAUSE in flight — so it arrived unchanged, having been a
+		# still image of a fire for the entire arc.
+		if burning:
+			_burn(delta)
 		_fly(delta)
 		return
 	_update_lean(delta)
@@ -441,10 +476,51 @@ func _fly(delta: float) -> void:
 	if world == null:
 		return
 	var ground := world.height_at(global_position.x, global_position.z)
-	if global_position.y <= ground:
-		_flying = false
-		_spin_ang = Vector3.ZERO
-		_land(_fly_velocity.length())
+	if global_position.y > ground:
+		return
+	var speed := _fly_velocity.length()
+	# THE HARDEST BLOW IS THE ONE THAT COUNTS. A tree that bounces four times
+	# used to be judged on the last and gentlest of them, so anything that
+	# tumbled at all came to rest and quietly replanted itself however hard it
+	# had been thrown. `_land` wants to know what happened to it, not what it
+	# was doing when it stopped.
+	_hardest = maxf(_hardest, speed)
+	if speed > SETTLE_UNDER:
+		_bounce(ground, speed)
+		return
+	_flying = false
+	_spin_ang = Vector3.ZERO
+	_land(_hardest)
+	_hardest = 0.0
+
+
+## IT CAME DOWN AND IT IS NOT DONE. A trunk hitting a hillside at speed does
+## not stop; it kicks, it slews, and it goes over again — and it kept that up
+## until it had spent itself, which is the whole difference between a thrown
+## tree and a placed one.
+##
+## THE SPIN CHANGES, and that is most of what reads as a bounce. A tumble that
+## comes off the ground turning exactly as it went in looks like a sprite being
+## teleported upward; one that slews onto a new axis looks like a tree hitting
+## a hillside. The new axis is the old one bent toward the way it is sliding,
+## so a trunk skidding downhill goes over sideways rather than cartwheeling on
+## for ever.
+func _bounce(ground: float, speed: float) -> void:
+	global_position.y = ground + 0.05
+	var slide := Vector3(_fly_velocity.x, 0.0, _fly_velocity.z)
+	_fly_velocity = Vector3(slide.x * BOUNCE_SLIDE,
+		absf(_fly_velocity.y) * BOUNCE_KEEP, slide.z * BOUNCE_SLIDE)
+	var axis := slide.normalized() if slide.length() > 0.5 else Vector3.FORWARD
+	# Across the way it is going, not along it: a log rolls about its length.
+	axis = axis.cross(Vector3.UP).normalized()
+	if axis.length() < 0.1:
+		axis = Vector3.FORWARD
+	_spin_ang = axis * clampf(speed * TUMBLE_PER_SPEED, 0.6, TUMBLE_MOST)
+	# AND IT HURTS WHATEVER IT LANDED ON, every time, not only the last time.
+	# See Blow: a burning pine cartwheeling through a street is several blows.
+	Blow.lands(self, global_position, speed,
+		2.0 + float(timber()) * 0.12, has_meta("hurled_by_god"))
+	SoundBank.play_at("boom", global_position, -10.0, 0.4, 0.7)
 
 
 ## Aftertouch hooks: nudge a thrown tree's flight (the curving arc) and set
@@ -529,10 +605,18 @@ func is_held() -> bool:
 
 ## Fire ------------------------------------------------------------------------
 
-## Set the tree alight. A tree in water, felled, or already ablaze won't
-## take. Fire is a tool: it clears forest that would otherwise creep.
+## Set the tree alight. A tree in water, felled, or already ablaze won't take.
+## Fire is a tool: it clears forest that would otherwise creep.
+##
+## A TREE IN FLIGHT CAN BE LIT, and this is the best thing in the game.
+## `_flying` was in the refusal below, which meant the one shot everybody
+## actually wants — the creature javelins a pine across the valley and you put
+## a fireball through it at the top of its arc — was the one shot the game
+## specifically forbade. There was no reason for it beyond the guard being
+## written as a list of "not now" states without anybody asking what a
+## firebrand is.
 func ignite() -> void:
-	if burning or _felled or _held or _flying:
+	if burning or _felled or _held:
 		return
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	if world != null and world.is_underwater(global_position.x, global_position.z):

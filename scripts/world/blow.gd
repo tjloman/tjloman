@@ -36,7 +36,13 @@ extends Node
 ## a field, and rather more than a villager can stand. Tuned so that throwing
 ## things at a town is a real way to wreck it and a slow one: a house is a
 ## dozen good hits, which is the difference between vandalism and a miracle.
-const PER_MOMENTUM := 1.0
+## RAISED WHEN THE THROWS WERE SLOWED. Damage is mass times speed, so cutting
+## the ceiling from 55 to 38 quietly took a third off every blow in the game —
+## a stone went from twelve throws to seventeen to fell a house without anybody
+## deciding it should. This is the knob that puts it back: what a throw is
+## WORTH is a separate question from how fast it flies, and slowing the flight
+## to make it watchable should not also make it feeble.
+const PER_MOMENTUM := 1.45
 
 ## Under this it is a thing being set down, not a blow.
 const MATTERS_ABOVE := 7.0

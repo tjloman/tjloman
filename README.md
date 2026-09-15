@@ -32,6 +32,7 @@ python3 tools/earshot.py         # the god hears what they are looking at
 python3 tools/blow.py            # a town can be wrecked by hand, and slowly
 python3 tools/kindle.py          # several cores to light a house; fire still spreads
 python3 tools/skip.py            # a flat pebble walks, a lobbed one sinks
+python3 tools/forest_fire.py     # a tree burns long enough to carry; a wood creeps
 ```
 
 That last one matters: `gdparse` only checks syntax and `gdlint` only checks
@@ -759,6 +760,67 @@ business knowing any geology.
 `check_calls.py` reads the vocabulary out of `affords.gd` rather than keeping
 its own copy — which it used to, and which drifted within an hour of the file
 being written. So did `tools/blow.py`, twenty minutes later.
+
+## A tree in the air
+
+**A tree could not be lit while it was flying.** `_flying` sat in `ignite()`'s
+list of refusals, written as a list of *not now* states without anyone asking
+what a firebrand is — so the one shot everybody actually wants, the creature
+javelining a pine across the valley and you putting a fireball through it at the
+top of its arc, was the one shot the game specifically forbade. The burn
+*paused* in flight too, so a tree that was already alight arrived unchanged,
+having been a still photograph of a fire for the whole trip.
+
+**And it stopped dead on the first thing it touched.** A thrown trunk resolved
+the instant it met the ground — banked, splintered, or replanted. Now it kicks,
+slews and goes over again until it has spent itself. The spin changes on each
+bounce, about an axis *across* the way it is sliding, because a tumble that
+comes off the ground turning exactly as it went in looks like a sprite being
+teleported upward. Every bounce is its own `Blow`, so a burning pine
+cartwheeling down a street is several blows and not one.
+
+The hardest blow is the one it is judged on, not the gentle one it happened to
+stop on — otherwise anything that tumbled at all came softly to rest and quietly
+replanted itself however hard it had been thrown.
+
+### Slower, so you can watch it
+
+| | was | now |
+|---|---|---|
+| hand → projectile | 1.6× | 1.15× |
+| ceiling | 55 m/s | 38 m/s |
+| loft window | 2.6s | 4.0s |
+
+Everything good about throwing happens **in the air** — the tumble, the arc,
+catching your own throw, lighting somebody else's. None of it is watchable at a
+speed that clears a valley in a second and a half.
+
+That quietly took a third off every blow in the game, since damage is mass ×
+speed: a stone went from twelve throws to seventeen to fell a house without
+anybody deciding it should. `PER_MOMENTUM` went up to put it back. What a throw
+is *worth* is a separate question from how fast it flies.
+
+### Fire that creeps
+
+A tree burned for **nine seconds** — long enough to clear forest, far too short
+to carry one anywhere, which is most of what a burning tree is for.
+
+But burn time and spread pull hard against each other: every extra second is
+another roll against every neighbour, so five times the burn at the same odds is
+not a longer fire, it is a firestorm that takes the map. The odds came down as
+the burn went up.
+
+```
+ONE TREE burns for 45s.
+IT TAKES ITS NEIGHBOUR after 9.8s.
+A STAND of 12 trees 4m apart: 12 of them gone in 156s.
+```
+
+Fire **creeps** now — about ten seconds to reach the next trunk instead of two,
+so a wood burns *through* over a couple of minutes rather than going up all at
+once. Still outwaitable, and still stops at a gap. `tools/forest_fire.py` fails
+on a burn too short to carry, on a fire that flashes, and on one that leaps a
+gap wider than its reach.
 
 ## Stones, at every size they come in
 

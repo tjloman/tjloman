@@ -75,7 +75,10 @@ const STEEP_BOOST := 1.45
 ## pleasure of hurling somebody is watching them HANG. It eases back to normal
 ## rather than switching, so the landing is still a landing.
 const FLOAT_SCALE := 0.42
-const FLOAT_SECONDS := 2.6
+## Long enough to swing the camera round and get under it. See
+## DivineHand.MAX_THROW_SPEED, which came down at the same time and for the
+## same reason: what is good about throwing happens in the air.
+const FLOAT_SECONDS := 4.0
 
 ## THE ROPE AND THE ARC, drawn.
 const ROPE_BORE := 0.09

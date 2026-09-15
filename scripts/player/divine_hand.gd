@@ -35,8 +35,21 @@ const BEAM_EASE := 1.4       # how fast it comes up at dusk and goes at dawn
 
 const RAY_LENGTH := 500.0
 const HIT_MASK := 1 | 2 | 4 | 8  # ground | units | props | trees
-const THROW_BOOST := 1.6     # hand velocity -> projectile velocity
-const MAX_THROW_SPEED := 55.0
+## HAND VELOCITY TO PROJECTILE VELOCITY, and the ceiling on it.
+##
+## SLOWED HARD, ON PURPOSE. At a boost of 1.6 into a ceiling of 55 a thrown
+## thing was gone — off the top of the screen and down somewhere before you
+## could turn the camera, let alone follow it, let alone get a hand under it
+## again. Everything good about throwing in this game happens IN THE AIR: the
+## tumble, the arc, catching your own throw, and putting a fireball through a
+## pine your creature has just javelined across the valley. None of it is
+## watchable at a speed that clears a valley in a second and a half.
+##
+## The loft in Sling does the other half — see FLOAT_SCALE and FLOAT_SECONDS,
+## which hold a thrown thing up at a fraction of its weight while it travels.
+## Between them a hard throw is now a thing you have time to react to.
+const THROW_BOOST := 1.15
+const MAX_THROW_SPEED := 38.0
 ## A release only THROWS if the pointer was dragged this far in one unbroken
 ## stroke AND was still moving at the moment of release. This is what tells a
 ## genuine throwing flick apart from tapping/poking around the screen (each
