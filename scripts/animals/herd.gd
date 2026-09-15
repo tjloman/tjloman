@@ -100,6 +100,9 @@ const AS_MOTION := {
 ## would be built and freed on alternate frames.
 ## How far off a herd's name still draws. See `_build_multimesh`.
 const HERD_TAG_REACH := 180.0
+## How many head it takes before the number over them is worth reading. Below
+## this you are looking at animals, not at a herd. See `_retag`.
+const TAG_WORTH_IT := 3
 ## THE HAND'S OWN RESERVE. How near counts as under it, and how many heads it
 ## may make real regardless of the world's allowance. See `_reach_of_the_hand`.
 const HAND_REACH := 6.0
@@ -337,6 +340,23 @@ const CALVE_WALK := 90.0
 ## This is what bounds the whole business: bands fill the neighbourhood and then
 ## no more are shed, rather than a rich meadow budding herds without end.
 const KIN_MOST := 3
+## HOW MANY HEAD OF ONE KIND THE COUNTRY ROUND HERE WILL HOLD, counting every
+## band of them together.
+##
+## `capacity()` is a ceiling on ONE HERD, worked from what that herd was
+## founded at and what forage it can reach — so two herds standing in the same
+## meadow each grew to their own full size and the meadow carried twice what
+## either of them thought it could. Three bands, three times. KIN_MOST bounds
+## how many bands may be SHED into a neighbourhood and does nothing whatever
+## about how big the ones already there get.
+##
+## This is the other half: the grass is finite and it does not care how the
+## mouths eating it are grouped. Counted over the same walk of the herd list
+## the look-about was making anyway, so it costs nothing.
+const HEAD_NEAR_MOST := 90
+## Over how wide a piece of country. Tighter than SEEK_WITHIN, which is how far
+## a herd will WALK to find company — this is how far it eats.
+const GRAZED_WITHIN := 120.0
 ## And how long a herd is left alone after joining or shedding, in seconds.
 const SETTLE := 240.0
 
@@ -493,6 +513,9 @@ var _burning: Array[Dictionary] = []
 var _kin: Herd = null
 var _kin_gap := INF
 var _kin_near := 0
+## Head of this kind standing within GRAZED_WITHIN, not counting this herd's
+## own — the neighbourhood's share of the grass. See HEAD_NEAR_MOST.
+var _head_near := 0
 var _joining: Herd = null
 var _settle_left := 0.0
 ## How far out this herd's widest living head actually stands. See `hand_span`:
@@ -694,6 +717,7 @@ func _look_about() -> void:
 	var kin: Herd = null
 	var kin_gap := INF
 	var near := 0
+	var head_near := 0
 	for h in get_tree().get_nodes_in_group("herds"):
 		var other := h as Herd
 		if other == self or not is_instance_valid(other) or other.alive() <= 0:
@@ -707,6 +731,10 @@ func _look_about() -> void:
 			if other.keeper == null:
 				if d < SEEK_WITHIN:
 					near += 1
+				# AND HOW MANY MOUTHS, not just how many bands. See
+				# HEAD_NEAR_MOST: the grass does not care how they are grouped.
+				if d < GRAZED_WITHIN:
+					head_near += other.alive()
 				if d < kin_gap:
 					kin_gap = d
 					kin = other
@@ -722,6 +750,7 @@ func _look_about() -> void:
 	_kin = kin
 	_kin_gap = kin_gap
 	_kin_near = near
+	_head_near = head_near
 	_go_join()
 	if closest == null:
 		return
@@ -1365,6 +1394,13 @@ func _reckon() -> void:
 	# gain of 0.4 head a season would never breed at all.
 	if randf() < absf(change - float(whole)):
 		whole += 1 if change > 0.0 else -1
+	# THE COUNTRY IS FULL, whoever is standing in it. A herd under its own
+	# ceiling still stops breeding when the neighbourhood has run out of grass,
+	# which is the thing that keeps a rich meadow from carrying three full
+	# herds of deer at once. It does not CULL for this — nothing starves for
+	# being in a crowd it did not choose — it simply stops adding.
+	if whole > 0 and n + _head_near >= HEAD_NEAR_MOST:
+		whole = 0
 	if whole > 0:
 		_grow(whole)
 	elif whole < 0:
@@ -1534,7 +1570,22 @@ func _shed_strays() -> void:
 	get_parent().add_child(band)
 	# After it is in the tree: `_ready` reads its own head count as the land's
 	# worth and deals itself a formation, and both are about to be replaced.
-	band.founded_by(_born_head, SETTLE)
+	# FOUNDED ON WHAT WALKED, NOT ON WHAT THE LAND IS WORTH — and this is the
+	# one line that separates shedding a stray from calving off a band.
+	#
+	# `_calve_off` hands its daughter the parent's `_born_head` on purpose: a
+	# party of eight setting out for new country deserves the country's worth,
+	# or it would starve back to eight on the day it was born. Copying that
+	# here was catastrophic. A stray is ONE animal that drifted, and giving it
+	# the worth of a forty-head range meant every accidental outlier founded a
+	# herd that then bred up to forty. Over an evening the wild country fills
+	# with bands that were each a single wandering deer, and the map is a
+	# forest of "1 deer" tags becoming forty each.
+	#
+	# Founded on its own size, it stays a stray: too small to breed away from,
+	# and `_consider_company` walks it into the next herd it meets, which is
+	# what should have happened to it all along.
+	band.founded_by(taken.size(), SETTLE)
 	band.settled_with(taken, global_position)
 	_members = kept
 	head = _members.size()
@@ -1791,7 +1842,13 @@ func lost_one() -> void:
 func _retag() -> void:
 	if _tag == null or not is_instance_valid(_tag):
 		return
-	_tag.text = "%d %s" % [alive(), species]
+	# A TAG IS FOR A MASS. One deer standing in a field is a deer — you can see
+	# it, it is the same size as the label over it, and a countryside of "1
+	# deer" floating over single animals is clutter that says nothing. The
+	# number earns its place once there are enough of them to be worth counting.
+	var many := alive()
+	_tag.visible = many >= TAG_WORTH_IT
+	_tag.text = "%d %s" % [many, species]
 
 
 ## A PREDATOR ATE. Kills bank toward the pack's own next head, which is how a

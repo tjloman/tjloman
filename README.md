@@ -27,6 +27,7 @@ python3 tools/check_calls.py     # calls to methods that DON'T EXIST
 python3 tools/chronicle.py       # the record still spans the whole reign
 python3 tools/pause_walk.py      # nothing measures time on the WALL clock
 python3 tools/herd_stray.py      # the hand can reach any beast you can see
+python3 tools/herd_grow.py       # the meadow fills and then stops
 python3 tools/earshot.py         # the god hears what they are looking at
 python3 tools/blow.py            # a town can be wrecked by hand, and slowly
 ```
@@ -900,6 +901,44 @@ gate is on cruelty, not on children.
 
 `check_calls.py` fails the build if either throwing path stops asking, or if
 the rule itself loses a method.
+
+## The meadow fills, and then it stops
+
+Shedding strays into their own herds fixed the beast the hand could not reach —
+and introduced a much worse problem, from **one line copied out of the wrong
+function**.
+
+`_calve_off` hands its daughter the parent's `_born_head` on purpose: a party of
+eight setting out for new country deserves the country's worth, or it starves
+back to eight on the day it is born. `_shed_strays` copied that. But a stray is
+**one animal that drifted**, and giving it the worth of a forty-head range meant
+every accidental outlier founded a herd that then bred up to forty.
+
+```
+                                       HEAD    BANDS     TAGS
+ONE band of deer in a meadow
+  as it shipped                         451     14.7     14.4
+  stray founded on its own size          32      1.3      1.0
+FOUR bands sharing one meadow
+  each to its own full size             127      4.8      4.0
+  ...and a ceiling on the place          96      4.8      4.0
+```
+
+Founded on its own size, a stray stays a stray — too small to breed away from,
+and the kin-joining walks it into the next herd it meets, which is what should
+have happened to it all along.
+
+**And a ceiling on the place, not just on the herd.** `capacity()` bounds one
+herd, from what it was founded at and the forage it can reach — so two herds in
+one meadow each grew to their own full size and the meadow carried twice what
+either of them thought it could. The grass is finite and does not care how the
+mouths eating it are grouped, so growth now stops when the neighbourhood is
+full. It never *culls* for this: nothing starves for being in a crowd it did not
+choose.
+
+**A tag is for a mass.** One deer standing in a field is a deer — you can see
+it, and the label is the same size as the animal. The number earns its place at
+three head.
 
 ## A beast a hundred metres from the herd is not in the herd
 
