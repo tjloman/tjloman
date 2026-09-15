@@ -19,6 +19,15 @@ var manager: MiracleManager = null
 var _armed := false
 var _spent := false
 var _momentum := Vector3.ZERO  # last real horizontal flight velocity of the throw
+## HOW MUCH FUSE IS LEFT, and it burns only while the orb is LOOSE.
+##
+## It was a SceneTree timer, which ran down in your hand — and `_resolve`
+## refuses to fire in the grip, so an orb carried around for half a minute
+## while you looked for the right spot passed its fuse, returned quietly, and
+## became a dead glowing ball that could never be cast at all. The prayer was
+## spent. Nothing said anything. A fuse is how long a thrown working has to
+## find something, not a limit on how long a god may hold one.
+var _fuse_left := FUSE_SECONDS
 
 
 func _init() -> void:
@@ -56,14 +65,19 @@ func _ready() -> void:
 	add_child(light)
 
 	body_entered.connect(_on_body_entered)
-	get_tree().create_timer(FUSE_SECONDS).timeout.connect(_resolve)
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
+	if freeze:
+		return  # in the grip: the fuse does not burn and nothing resolves
+	_fuse_left -= delta
+	if _fuse_left <= 0.0:
+		_resolve()
+		return
 	# Arms once genuinely thrown; a placed orb resolves when it settles.
-	if not _armed and not freeze and linear_velocity.length() > 1.5:
+	if not _armed and linear_velocity.length() > 1.5:
 		_armed = true
-	if _armed and not freeze:
+	if _armed:
 		# Remember the throw's heading (its last real horizontal speed) so the
 		# effect can fly the way you flung it — birds, tornado, and the rest.
 		var horiz := Vector3(linear_velocity.x, 0.0, linear_velocity.z)

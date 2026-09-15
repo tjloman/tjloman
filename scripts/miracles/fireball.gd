@@ -82,6 +82,29 @@ const GOUGE_CHAR := 0.9
 ## that are actually about moving earth.
 const DIG_FLOOR := 1.6
 
+## THE HEARTH ---------------------------------------------------------------
+##
+## A ball of fire is a thing you hold. It has always been a thing you held —
+## conjured into the grip, carried around, thrown — and for all that time it
+## was inert in the hand: a glowing prop with a light attached, which did
+## nothing whatever until you let go of it.
+##
+## So a held ball BURNS NOW, where it is, at what it is near. Hold it against
+## a wall and the wall gets hot; hold it there long enough and the wall
+## catches. Walk it through a wood and the wood goes up behind you. It is a
+## furnace on a hearth you can put wherever you need it, and the whole of the
+## difference is that the fire was always there and nothing was reading it.
+##
+## HOW LONG IT TAKES is Kindling's thermal mass, unchanged: heat goes in at
+## HEARTH_HEAT a tick against COOLING running the whole time, so a timber house
+## takes about four seconds of holding, a granary six, a stone school ten and
+## the nest the better part of twenty. See tools/hearth.py, which prints that
+## ladder off the shipped numbers and fails the build if the net rate ever goes
+## negative — at which point holding fire against a thing would cool it.
+const HEARTH_REACH := 2.4
+const HEARTH_EVERY := 0.25
+const HEARTH_HEAT := 14.0
+
 ## Which of the two this one is — a key of KINDS. Set by MiracleManager before
 ## the body enters the tree.
 var kind := "fireblast"
@@ -90,6 +113,14 @@ var _armed := false
 var _exploded := false
 var _trail_time := 0.0
 var _rolling := 0.0
+var _hearth_time := 0.0
+## How much fuse is left. It used to be a SceneTree timer, which meant it ran
+## down while the ball sat in your hand — and `_go_off` refuses to fire in the
+## grip, so a ball held past its fuse became a permanently inert glowing prop.
+## Now the fuse only burns while the ball is loose, which is also what a fuse
+## means: it is the time a thrown fire has to find something, not a limit on
+## how long a god may hold one.
+var _fuse_left := 0.0
 
 
 func _init() -> void:
@@ -131,7 +162,7 @@ func _ready() -> void:
 	embers.gravity = Vector3(0, 1.5, 0)
 	add_child(embers)
 
-	get_tree().create_timer(float(spec["fuse"])).timeout.connect(_go_off)
+	_fuse_left = float(spec["fuse"])
 
 
 ## Two triangles, glowing, always facing you. It was a full 64x32 UV sphere.
@@ -141,7 +172,12 @@ func _ember_mesh() -> QuadMesh:
 
 func _physics_process(delta: float) -> void:
 	if freeze:
-		return  # still in the grip
+		_hearth(delta)  # still in the grip, and burning what it is held against
+		return
+	_fuse_left -= delta
+	if _fuse_left <= 0.0:
+		_go_off()
+		return
 	# Arms the moment the hand lets go and it's genuinely in flight.
 	if not _armed and linear_velocity.length() > 2.0:
 		_armed = true
@@ -152,6 +188,33 @@ func _physics_process(delta: float) -> void:
 		if linear_velocity.length() < REST_SPEED \
 				or _rolling > float(KINDS[kind]["roll"]):
 			_go_off()
+
+
+## HELD, AND BURNING. Runs four times a second rather than every frame: this
+## walks the same groups the trail does, and a held ball is held for minutes
+## where a thrown one is in flight for a second and a half.
+func _hearth(delta: float) -> void:
+	_hearth_time -= delta
+	if _hearth_time > 0.0:
+		return
+	_hearth_time = HEARTH_EVERY
+	# THE SAME EDGE AS EVERYTHING ELSE. Lighting a thing is a miracle, and a
+	# miracle only happens on ground you hold — so the furnace in your hand
+	# goes on glowing outside your reach and stops setting things alight. One
+	# rule, no exception carved out for the fire you happen to be carrying.
+	if not MiracleReach.reaches(get_tree(), global_position):
+		return
+	# Trees, fields, and anything with legs — exactly what a thrown ball does
+	# as it rolls past, at the reach of an arm instead of the reach of a throw.
+	_ignite_trail(global_position, HEARTH_REACH)
+	# And what the town built, which the trail has never touched: those have
+	# thermal mass, so this is a dwell rather than a touch.
+	for b in get_tree().get_nodes_in_group(Affords.BURNABLE):
+		var built := b as Node3D
+		if not is_instance_valid(built) or not built.has_method("scorch"):
+			continue
+		if built.global_position.distance_to(global_position) < HEARTH_REACH:
+			built.call("scorch", HEARTH_HEAT)
 
 
 ## Slow the roll — but only once it is down. In the air it keeps every bit of
