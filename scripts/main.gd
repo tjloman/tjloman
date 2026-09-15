@@ -1129,7 +1129,8 @@ func _run_smoke_test() -> void:
 	mother._breed_cooldown = 0.0
 	village.store.plant_food += 20
 	print("SMOKE TEST: fertility — wants to breed=%s, dependent child blocks=%s" % [
-		mother.wants_to_breed(), mother._has_dependent_child()])
+		VillagerBreeding.wants_to(mother),
+		VillagerBreeding.dependent_child(mother)])
 	village.notice(100.0)
 	print("SMOKE TEST: trend readout -> '%s' (blank until there is history)" % village.trend())
 

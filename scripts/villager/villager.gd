@@ -793,7 +793,7 @@ func _physics_process(delta: float) -> void:
 			social = minf(social + 5.0 * delta, 100.0)
 			happiness = minf(happiness + 1.0 * delta, 100.0)
 			morality = minf(morality + 0.05, 100.0)
-			_try_conceive(delta)
+			VillagerBreeding.conceive(self, delta)
 			if _action_time <= 0.0:
 				_rethink()
 	_stick_to_ground()
@@ -1014,63 +1014,6 @@ func sit_down(down: bool) -> void:
 		_visuals.position.y = -VillagerLook.SIT_DROP if down else 0.0
 
 
-## Interest reawakens at adulthood and stays high while the body is fed
-## and rested — but a mother won't conceive again while a child still
-## trails her (they must be grown or gone to school first).
-func wants_to_breed() -> bool:
-	if not is_adult() or pregnant or age > 45.0:
-		return false
-	if _breed_cooldown > 0.0:
-		return false
-	if hunger > 55.0 or energy < 35.0 or happiness < 45.0:
-		return false
-	if village.store.total_food() < 4 or village.at_capacity():
-		return false
-	if is_teacher:
-		return false
-	return not _has_dependent_child()
-
-
-## A child of mine still at the breast (and no school to mind it).
-func _has_dependent_child() -> bool:
-	if village.has_edubba():
-		return false
-	for v in village.my_villagers():
-		if v.mother == self and v.age < WEANED_AGE:
-			return true
-	return false
-
-
-func _try_conceive(delta: float) -> void:
-	if not is_female or pregnant or not is_adult() or age > 45.0:
-		return
-	if happiness < 45.0 or village.store.total_food() < 4:
-		return
-	if village.at_capacity() or _has_dependent_child():
-		return  # shelter bounds the flock — and a mother finishes one child first
-	# Untended villages barely grow; tended ones quicken (see conception_chance).
-	if randf() > village.conception_chance() * delta:
-		return
-	# A partner who came to the totem for the same reason. Courting AND
-	# worshipping both count: insisting the man be mid-worship at the exact
-	# instant of the roll was a coincidence the pair could rarely manage.
-	for other in village.my_villagers():
-		if other == self or other.is_female or not other.is_adult():
-			continue
-		if other.state != State.WORSHIPPING and other.state != State.COURT:
-			continue
-		if other.happiness < 40.0 or other.age > 55.0:
-			continue
-		if global_position.distance_to(other.global_position) < 7.0:
-			pregnant = true
-			pregnancy_progress = 0.0
-			_breed_cooldown = 30.0
-			if village.is_player_home:
-				GameState.announce("%s and %s are expecting a child."
-					% [villager_name, other.villager_name])
-			return
-
-
 ## Needs ---------------------------------------------------------------------
 
 func _tick_needs(delta: float) -> void:
@@ -1131,7 +1074,7 @@ func _choose() -> void:
 	if is_teacher and not village.holds_teaching_post():
 		is_teacher = false
 	# Asked and taken in ONE act. See Village.claim_teaching_post.
-	if not is_teacher and not _has_dependent_child():
+	if not is_teacher and not VillagerBreeding.dependent_child(self):
 		var post := village.claim_teaching_post()
 		if post >= 0:
 			is_teacher = true
@@ -1142,7 +1085,7 @@ func _choose() -> void:
 		_target = village.edubba.yard_for(_class)   # this teacher's own corner
 		return
 	# Breeding is a high drive once of age, when body and larder allow.
-	if wants_to_breed():
+	if VillagerBreeding.wants_to(self):
 		state = State.COURT
 		# How OFTEN they court is what paces a village's growth now, so this is
 		# the number to turn if towns grow too fast or too slowly.

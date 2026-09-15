@@ -696,10 +696,23 @@ func _on_grab() -> void:
 	# reason the session exists.
 	if state != HandState.IDLE or casting:
 		return
+	# WHAT IS ACTUALLY UNDER THE POINTER, ASKED ONCE.
+	#
+	# `hover_target` is written by a raycast on one frame and read by a grab on
+	# a later one, and in between the thing it points at can be eaten, burned,
+	# butchered, freed by a chunk unloading or thrown off the edge of the world.
+	# Three of the four branches below then asked it something: `is` on a freed
+	# instance is an error, and `is_in_group` on null is a crash, and only the
+	# fourth branch had ever been given the guard.
+	#
+	# So it is settled here, once, for all of them — and a pointer over nothing
+	# falls through to the land drag at the foot, which is the honest answer:
+	# grabbing nothing is grabbing the ground.
+	var under := hover_target if is_instance_valid(hover_target) else null
 	# Grabbing a QUARTER of the storehouse platform withdraws that
 	# resource as a physical item, straight into the grip.
-	if hover_target is FoodStore:
-		var item := (hover_target as FoodStore).withdraw_at(ground_point)
+	if under is FoodStore:
+		var item := (under as FoodStore).withdraw_at(ground_point)
 		if item != null:
 			force_hold(item)
 		return
@@ -707,18 +720,18 @@ func _on_grab() -> void:
 	# class, so a flint outcrop and a chalk face and whatever is quarried next
 	# all come through here without this file ever learning their names. See
 	# Affords.QUARRIED.
-	if hover_target.is_in_group(Affords.QUARRIED):
-		var rock := hover_target.call("prise") as ResourceItem
+	if under != null and under.is_in_group(Affords.QUARRIED):
+		var rock := under.call("prise") as ResourceItem
 		if rock != null:
 			get_tree().current_scene.add_child(rock)
 			rock.global_position = ground_point + Vector3(0.0, 0.6, 0.0)
 			force_hold(rock)
 		return
-	if is_instance_valid(hover_target) and hover_target.is_in_group(Affords.PICKABLE):
+	if under != null and under.is_in_group(Affords.PICKABLE):
 		# WHO ACTUALLY ENDS UP IN YOUR HAND. A child reached for by a cruel god
 		# is not the thing that comes up — their mother is. See ChildSafety,
 		# which is the whole of that rule.
-		held_body = ChildSafety.in_your_hand(hover_target) as PhysicsBody3D
+		held_body = ChildSafety.in_your_hand(under) as PhysicsBody3D
 		if held_body == null:
 			return
 		# Lifting a dying villager with a clean conscience (neutral or better)

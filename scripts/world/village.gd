@@ -237,6 +237,13 @@ var resolve := RESOLVE_START
 
 ## The town's own numbers, kept between tallies. See TALLY_EVERY.
 var _roster: Array[Villager] = []
+## HOW MANY SOULS, kept rather than counted. `population()` is asked by the
+## influence ring, the job board, the barn's stalls, the field cap, the housing
+## and (through `at_capacity`) by every woman at prayer every frame — and it
+## answered by walking and PRUNING the roster, which is an O(n) pass per call.
+## The count is written wherever the roster is, which is every birth, death and
+## tally, so it is never more than a frame behind and costs nothing to read.
+var _population := 0
 var _tally_left := 0.0
 var _homeless := 0
 var _children := 0
@@ -986,6 +993,7 @@ func my_villagers() -> Array[Villager]:
 		_refresh_roster()
 	else:
 		Util.prune(_roster)
+		_population = _roster.size()
 	return _roster
 
 
@@ -998,6 +1006,7 @@ func _refresh_roster() -> void:
 		var villager := v as Villager
 		if is_instance_valid(villager) and villager.village == self:
 			_roster.append(villager)
+	_population = _roster.size()
 
 
 ## AND WHAT THEY ARE DOING, counted in one pass rather than four. Everything
@@ -1045,8 +1054,11 @@ func _watch_for_the_sworn() -> void:
 		raise_alarm(seen.global_position)
 
 
+## READ, NOT COUNTED. See `_population`: this is on the per-frame path of every
+## villager in the town by way of `at_capacity`, and walking the roster to
+## answer it was most of what made a crowded village slow.
 func population() -> int:
-	return my_villagers().size()
+	return _population
 
 
 ## How many of my villagers are currently occupied by each job — a deciding
