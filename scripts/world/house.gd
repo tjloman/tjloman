@@ -80,7 +80,12 @@ func _ready() -> void:
 	col.position = Vector3(0, 1.5, 0)
 	add_child(col)
 	if under_construction:
-		health = 100.0
+		# FULL HEALTH IS MOST_HEALTH, not a hundred. These were written when
+		# every building in the game had exactly a hundred, and a house that
+		# came out of its scaffolding at 100 of 400 was a brand-new home
+		# wearing a ruin bar three-quarters empty — and falling to the first
+		# thrown rock that should have taken twelve.
+		health = MOST_HEALTH
 		_build_scaffold_visuals()
 	else:
 		_build_visuals()
@@ -122,7 +127,7 @@ func advance_construction(amount: float) -> void:
 	if progress >= 100.0:
 		under_construction = false
 		age = 0.0
-		health = 100.0
+		health = MOST_HEALTH
 		_clear_visuals()
 		_build_visuals()
 		if village != null:

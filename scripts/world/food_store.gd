@@ -402,5 +402,5 @@ func burn_down() -> void:
 	lumber = 0
 	stone = 0
 	GameState.announce("The storehouse burns. A season's harvest with it.")
-	health = 100.0          # the frame stands; the stores are what was lost
+	health = MOST_HEALTH    # the frame stands; the stores are what was lost
 	kindling.douse(self)

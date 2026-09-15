@@ -1715,6 +1715,29 @@ func _trade_counts() -> Dictionary:
 func _rebuild(data: Dictionary) -> void:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	var want_houses: Array = data.get("houses", [])
+	# A SAVE THAT REMEMBERS NOTHING IS NOT A SAVE THAT REMEMBERS NOUGHT.
+	#
+	# Everything below trims the standing town DOWN to the saved counts and
+	# then builds back UP to them. That is right when the save has counts in
+	# it — a village that burned to two huts should not have three again on
+	# reload — and catastrophic when it does not: an entry with no "houses"
+	# key reads as a town that had none, so the trim demolishes every house,
+	# every field, and leaves the store, the pen and the totem standing,
+	# because those three are the only things a village builds at fixed
+	# offsets rather than through `find_build_spot`. Which is exactly what a
+	# stripped village looks like from the outside.
+	#
+	# An old save, a half-written one, or a memory entry matched by position
+	# to the wrong town all arrive here as the same empty dictionary. None of
+	# them mean "this town had nothing"; they mean "this told us nothing", and
+	# the safe reading of that is to leave the founding town alone.
+	if not data.has("houses"):
+		# LOUD, because it is silent otherwise and looks exactly like a bug in
+		# the builder rather than in what it was told.
+		push_warning(("%s was restored from a save entry with no building "
+			+ "counts in it (keys: %s). Its founding town is kept.")
+			% [village_name, ", ".join(PackedStringArray(data.keys()))])
+		return
 	# A TOWN CAN COME BACK SMALLER THAN IT WAS FOUNDED. Building up to the count
 	# is most of the job, but a village that burned down to two huts had three
 	# again on reload, because `_ready` had already put its founding houses up.
@@ -1760,6 +1783,11 @@ func _rebuild(data: Dictionary) -> void:
 			e.position = to_local(spot)
 			add_child(e)
 			edubba = e
+	if houses.size() != want_houses.size() or farms.size() != want_farms:
+		push_warning(("%s wanted %d house(s) and %d field(s) back from its "
+			+ "save and could place %d and %d — no room for the rest.")
+			% [village_name, want_houses.size(), want_farms,
+				houses.size(), farms.size()])
 	var trades: Dictionary = data.get("trades", {})
 	for which: String in trades:
 		if not Workshop.TRADES.has(which):
