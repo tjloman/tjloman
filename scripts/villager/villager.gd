@@ -2187,6 +2187,8 @@ func hurt_by(foe: Node3D, amount: float) -> void:
 func take_damage(amount: float, by_god := false, instant := false) -> void:
 	if state == State.DYING:
 		return
+	if by_god:
+		set_meta("struck_by_god", true)   # see VillagerNeeds._cause_of
 	health -= amount
 	happiness = maxf(happiness - 10.0, 0.0)
 	if health <= 0.0:

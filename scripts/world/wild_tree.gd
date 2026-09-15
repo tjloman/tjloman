@@ -466,6 +466,13 @@ func _land(impact_speed: float) -> void:
 	# coming down in the square is not a miracle and it is a very long way from
 	# nothing — and one coming down ON FIRE is the other kind of belief.
 	VillageWonder.landed(get_tree(), "tree", global_position, impact_speed, burning)
+	# A PINE COMING DOWN ON A HOUSE IS A PINE COMING DOWN ON A HOUSE. A tree
+	# does not fly on Godot's physics, so it cannot carry a Blow — but it knows
+	# its own impact speed, which is the only thing a Blow wanted. Weighted by
+	# what it was worth as timber, so a sapling is a thrown stick and a
+	# hundred-year giant is a battering ram.
+	Blow.lands(self, global_position, impact_speed,
+		2.0 + float(timber()) * 0.12, has_meta("hurled_by_god"))
 	for s in get_tree().get_nodes_in_group("stores"):
 		var store := s as FoodStore
 		if is_instance_valid(store) \

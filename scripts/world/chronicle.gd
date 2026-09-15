@@ -60,13 +60,16 @@ const FIELDS := {
 ## also starving is recorded as burnt, because the fire is what killed him and
 ## because it is the one a god is answerable for.
 ##
-## SUDDEN is the honest name for the bucket a lightning bolt lands in. An
-## instant kill leaves no attacker and no burn, so nothing in the world
-## distinguishes "struck by your miracle" from "fell off a cliff"; naming the
-## bucket after the evidence is better than guessing at a cause. Giving
-## Villager.take_damage's `by_god` flag somewhere to live would split it, and
-## that file is at its line cap.
-const CAUSES: Array[String] = ["age", "fire", "hunger", "beast", "war", "sudden"]
+## DIVINE is a death a god's own hand caused — a bolt, a fireball's core, a
+## stone hurled through a roof. It used to be lumped in with SUDDEN because
+## `Villager.take_damage` was being told the harm came from a god and had
+## nowhere to put it; it is a meta on the body now, set at the blow and read in
+## VillagerNeeds._cause_of.
+##
+## SUDDEN is what is left: a fall, a collapse, something with no attacker, no
+## burn and no god behind it. Still named after the evidence rather than
+## guessed at.
+const CAUSES: Array[String] = ["age", "fire", "hunger", "beast", "war", "divine", "sudden"]
 
 ## How often the ring is written out to the profile. Writing on every sample
 ## would rewrite the whole index file every forty seconds for a chart nobody

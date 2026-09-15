@@ -190,6 +190,10 @@ static func send(thing: Node3D, v: Vector3, gently := false) -> void:
 	if thing is RigidBody3D:
 		(thing as RigidBody3D).freeze = false
 		(thing as RigidBody3D).linear_velocity = v
+		# `false`: the beast threw it, not you. You are charged a share of it
+		# anyway, because it learned this from somebody. See Blow.
+		if not gently:
+			Blow.ride(thing as RigidBody3D, false)
 	elif thing.has_method("drop"):
 		thing.call("drop", v, gently)
 

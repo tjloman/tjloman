@@ -28,6 +28,7 @@ python3 tools/chronicle.py       # the record still spans the whole reign
 python3 tools/pause_walk.py      # nothing measures time on the WALL clock
 python3 tools/herd_stray.py      # the hand can reach any beast you can see
 python3 tools/earshot.py         # the god hears what they are looking at
+python3 tools/blow.py            # a town can be wrecked by hand, and slowly
 ```
 
 That last one matters: `gdparse` only checks syntax and `gdlint` only checks
@@ -689,6 +690,65 @@ The vapour texture is drawn in code like everything else here: a soft
 elliptical falloff multiplied by noise sampled with a squashed vertical, so the
 detail runs in horizontal **streaks** rather than reading as a stack of fuzzy
 balls. 64×64, built once at world load, shared by every cloud ever cast.
+
+## What a thrown thing does when it arrives
+
+It did nothing. A stone hurled through the wall of a house passed through the
+world without consequence — no damage to the house, no harm to anyone standing
+in it, no karma. Only three things could hurt a building at all: a fireball's
+core, an earthquake, and the creature deliberately smashing one. The whole
+throwing mechanic — the sling, the aftertouch, the arc, the momentum read off
+your finger — landed on a world that did not care.
+
+**The cost is paid at the landing, not every frame.** Nothing monitors contacts
+and no thrown object carries a physics callback: a `Blow` is a *node* that a
+throw hangs on its own projectile and that frees itself the moment the flight
+ends. A world of resting rocks costs exactly nothing. Three families of
+throwable, and every one already had a landing to hook — a rigid body watches
+for its own speed to fall off a cliff (which is what an impact *is*, read the
+instant *before* the collision resolves, or every blow is valued at nothing); a
+tree flies on its own arithmetic and calls `_land` with its own impact speed; a
+person or a beast lands in their own falling state and already takes their own
+fall damage.
+
+```
+HITS TO DESTROY, thrown at 30 m/s
+                          house     granary        farm   a villager
+a stone or a log             12          21           6          3.7
+a corpse                      6          11           3          1.9
+a tree, size 10               1           2           1            1
+```
+
+Throwing things at a town has to be a **real** way to wreck it, or the mechanic
+is a toy — and a **slow** one, or a god with a quarry never needs a miracle and
+the spellbook is decoration.
+
+**Nearly all the karma is at the outcome.** Chipping a wall is vandalism and is
+charged like vandalism; bringing the house down is the deed and carries the
+weight. A stone landing on a house is −0.13; pulling the whole house down, all
+twelve throws of it, is −9.6 — against −2.5 for a death by fire and −0.5 for a
+death nobody caused. And **the death a throw causes is charged again on top**,
+which is how a rock that takes a roof off is one price and a rock that takes a
+roof off and kills the family under it is two.
+
+Your creature's throws charge you a **share** of what your own do. Not nothing:
+a beast that hurls rocks at houses learned it from somebody, and you are the
+only teacher it has.
+
+### A death you caused was free in somebody else's village
+
+`mourn` only charged alignment for your own flock, or for fire. That rule was
+written about wolves and famine, where *not your business* is exactly right —
+but it was also letting through every death a god **caused** outside their own
+village. Hurling a rock through a heathen family's roof and killing them where
+they slept cost nothing at all.
+
+The flag was there the whole time: `Villager.take_damage` has always been told
+whether the harm came from a god, and had nowhere to put it — so a bolt, a
+fireball's core and a hurled stone all came out as *sudden* and were
+indistinguishable from a fall. It is a meta on the body now, set at the blow,
+and there is a **divine** cause in the Chronicle's ledger to go with it: *killed
+by your own hand*.
 
 ## Where the god is listening from
 

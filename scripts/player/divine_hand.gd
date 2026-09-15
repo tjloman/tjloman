@@ -917,6 +917,12 @@ func _release_body(body: Node3D, vel: Vector3, gentle: bool) -> void:
 		var rb := body as RigidBody3D
 		rb.freeze = false
 		rb.linear_velocity = vel
+		# WHAT IT DOES WHERE IT COMES DOWN. Only a real throw is worth
+		# watching, and the watcher frees itself the moment the flight ends —
+		# see Blow, which is why nothing in a world of resting stones is
+		# monitoring anything.
+		if not gentle:
+			Blow.ride(rb, true)
 	elif body.has_method("drop"):
 		body.call("drop", vel, gentle)
 	# Back on their feet and back to being an ordinary villager. See ChildSafety.

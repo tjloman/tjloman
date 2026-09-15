@@ -18,6 +18,7 @@ extends ScrollContainer
 ## listed in — worst first, because that is the one you want to see.
 const GRAVES: Array[Array] = [
 	["fire", "burnt"],
+	["divine", "killed by your own hand"],
 	["sudden", "struck down"],
 	["beast", "killed by animals"],
 	["war", "killed by their own kind"],

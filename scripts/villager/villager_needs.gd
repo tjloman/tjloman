@@ -24,6 +24,10 @@ extends RefCounted
 const DEATH_UNLOOKED_FOR := -0.5    # a beast, a fall, the sea
 const DEATH_BY_NEGLECT := -3.0      # starved, in a town that was yours to feed
 const DEATH_BY_FIRE := -2.5         # yours, or your creature's, nearly always
+## A GOD'S OWN HAND: a bolt, a fireball's core, a stone through a roof. The
+## same price as fire because it is the same act — you meant it, and the
+## difference between burning a man and stoning him is a matter of taste.
+const DEATH_BY_YOUR_HAND := -2.5
 
 ## And how far a death carries to the creature, which learns cruelty from what
 ## it watches its god allow.
@@ -88,17 +92,26 @@ static func mourn(who: Villager, of_old_age: bool) -> void:
 	if creature != null \
 			and creature.global_position.distance_to(who.global_position) < GRIEF_REACH:
 		creature.witness(-2.0)
+	var cause := _cause_of(who, false)
 	var karma := DEATH_UNLOOKED_FOR
 	if who.burning:
 		karma = DEATH_BY_FIRE
+	elif cause == "divine":
+		karma = DEATH_BY_YOUR_HAND
 	elif who.hunger >= 100.0:
 		karma = DEATH_BY_NEGLECT
 	# YOU ARE JUDGED FOR YOUR OWN FLOCK — unless you did it. A wolf in a village
 	# on the far side of the world is not a god's business; a man you set alight
 	# there is, wherever he lived.
+	#
+	# AND SO IS A MAN YOU STONED. That rule was written about wolves and famine,
+	# where "not your business" is exactly right — but it was also letting
+	# through every death a god CAUSED outside their own village. Hurling a rock
+	# through a heathen family's roof and killing them where they slept cost
+	# nothing at all, which is not a judgement about distance, it is a hole.
 	var mine := who.village != null and is_instance_valid(who.village) \
 		and who.village.is_player_home
-	if mine or karma == DEATH_BY_FIRE:
+	if mine or karma == DEATH_BY_FIRE or cause == "divine":
 		GameState.shift_alignment(karma)
 
 
@@ -113,8 +126,11 @@ static func _cause_of(who: Villager, of_old_age: bool) -> String:
 		return "hunger"
 	if is_instance_valid(who._last_attacker):
 		return "war" if who._last_attacker is Villager else "beast"
-	# Nothing struck him, nothing burnt him, he was not starving. In practice
-	# this is a miracle, but nothing in the world says so — an instant kill
-	# leaves no attacker — so it is named after the evidence. See
-	# Chronicle.CAUSES.
+	# A GOD'S OWN HAND. `take_damage` has always been told whether the harm came
+	# from a god — a bolt, a fireball's core, a hurled stone — and that flag had
+	# nowhere to live, so every one of those deaths came out as "sudden" and was
+	# indistinguishable from a fall. It is a meta on the body now, set at the
+	# blow and read here.
+	if who.has_meta("struck_by_god"):
+		return "divine"
 	return "sudden"
