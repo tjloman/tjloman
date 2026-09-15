@@ -326,6 +326,20 @@ func _collect(who: Creature, delta: float) -> void:
 		# second one.
 		_carry_the_arc(who)
 		return
+	# A ROCK FACE IS NOT LIFTED, IT IS BROKEN. The beast reaches the vein and
+	# comes away with a boulder — the same thing the god's own hand does, and
+	# the same thing a quarrier does with a pick, only faster and ruder. See
+	# RockDeposit.prise.
+	if next is RockDeposit:
+		var rock := (next as RockDeposit).prise()
+		_scooping = null
+		if rock == null:
+			return
+		who.get_parent().add_child(rock)
+		rock.global_position = next.global_position + Vector3(0.0, 1.0, 0.0)
+		rock.freeze = true
+		aloft.append(rock)
+		return
 	if next is RigidBody3D:
 		(next as RigidBody3D).freeze = true
 	elif next.has_method("pick_up"):
@@ -338,7 +352,10 @@ func _next_to_scoop(who: Creature) -> Node3D:
 	var best: Node3D = null
 	var best_d := INF
 	for node in who._things_around(GATHER_WITHIN):
-		if node is House or node is RockDeposit or aloft.has(node):
+		# A ROCK DEPOSIT IS NO LONGER SKIPPED. It used to be, because the beast
+		# cannot pick a hillside up — but it does not have to. It breaks a
+		# boulder off one, which `_collect` does when it arrives.
+		if node is House or aloft.has(node):
 			continue
 		if not who.can_lift(node, true):
 			continue

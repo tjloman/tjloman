@@ -57,9 +57,26 @@ for path in sorted((ROOT / "scripts/world").glob("*.gd")):
         TARGETS.append((path.stem, float(m.group(1))))
 TARGETS.append(("a villager", 100.0))
 
+# A load of stone weighs what its count says — see ResourceItem.refresh_bundle,
+# which is the thing that turns a boulder into a siege weapon rather than a
+# large-looking pebble.
+RES = (ROOT / "scripts/world/resource_item.gd").read_text()
+HEFT_BARE = const(RES, "HEFT_BARE", "resource_item.gd")
+HEFT_EACH = const(RES, "HEFT_EACH", "resource_item.gd")
+MOST_IN_A_BUNDLE = const(RES, "MOST_IN_A_BUNDLE", "resource_item.gd")
+PRISED = const((ROOT / "scripts/world/rock_deposit.gd").read_text(),
+               "STONE_PER_BOULDER", "rock_deposit.gd")
+
+
+def heft(count):
+    return HEFT_BARE + max(count - 1.0, 0.0) * HEFT_EACH
+
+
 # The things a hand can pick up and hurl, and what they weigh.
-THROWN = [("a loaf or a fish", 1.0), ("a stone or a log", 2.0),
-          ("a corpse", 4.0)]
+THROWN = [("a loaf or a fish", 1.0), ("one stone or a log", heft(1)),
+          ("a corpse", 4.0),
+          ("a boulder, %d stone" % PRISED, heft(PRISED)),
+          ("an armful, %d stone" % MOST_IN_A_BUNDLE, heft(MOST_IN_A_BUNDLE))]
 # A tree's mass is its timber, per WildTree._land.
 for size in (1, 5, 10):
     THROWN.append(("a tree, size %d" % size, 2.0 + float(TIMBER[size - 1]) * 0.12))
@@ -112,6 +129,16 @@ def main():
     oak = blow(2.0 + float(TIMBER[9]) * 0.12, speed)
     print("A FULL-GROWN TREE AT A HOUSE: %.1f hits."
           % (house / (oak * (1.0 - TO_FLESH))))
+    rock = blow(heft(PRISED), speed)
+    to_house_by_rock = house / (rock * (1.0 - TO_FLESH))
+    print("A BOULDER AT A HOUSE: %.1f hits." % to_house_by_rock)
+    # METHODICALLY. A boulder has to be a real siege weapon and still take
+    # several goes: one-shotting a house makes the vein a delete button, and
+    # ten makes it a chore nobody will do twice.
+    if not 2.0 <= to_house_by_rock <= 5.0:
+        bad.append("a boulder takes %.1f throws to fell a house — wanted 2..5, "
+                   "which is methodical rather than either a delete button or "
+                   "a chore" % to_house_by_rock)
 
     # WHAT IT COSTS, against the scale already in VillagerNeeds. Charged on the
     # damage actually LANDED, which for a building is the share that was not

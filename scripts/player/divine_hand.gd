@@ -690,6 +690,17 @@ func _on_grab() -> void:
 		if item != null:
 			force_hold(item)
 		return
+	# AND A ROCK FACE GIVES UP A BOULDER. A vein was scenery with a number on
+	# it — the only way stone ever left one was a villager with a pick, and a
+	# god who wanted a rock had no way to get one. Taking hold of it prises one
+	# loose, which is quarrying, rudely. See RockDeposit.prise.
+	if hover_target is RockDeposit:
+		var rock := (hover_target as RockDeposit).prise()
+		if rock != null:
+			get_tree().current_scene.add_child(rock)
+			rock.global_position = ground_point + Vector3(0.0, 0.6, 0.0)
+			force_hold(rock)
+		return
 	if is_instance_valid(hover_target) and hover_target.is_in_group("pickable"):
 		# WHO ACTUALLY ENDS UP IN YOUR HAND. A child reached for by a cruel god
 		# is not the thing that comes up — their mother is. See ChildSafety,

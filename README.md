@@ -726,6 +726,36 @@ The sweep walks the **narrow** group — `food` or `resource_items`, never
 `pickable`, which holds every tree in the streamed world and runs sixteen times
 a second for as long as a hand is closed.
 
+## Rocks
+
+A vein was scenery with a number on it. Three hundred stone, and the only way
+any of it ever left was a villager with a pick — a god who wanted a rock, to
+build with or to give or to throw, had no way to get one at all.
+
+**Take hold of a rock face and it gives up a boulder.** Fifteen stone, prised
+loose, in your hand. Twenty of them is the whole vein. Drop it on a storehouse
+and the town banks the stone; the creature does the same thing, walking to the
+vein and breaking a piece off rather than trying to lift the hillside.
+
+**And a load of stone now weighs what its count says.** `ResourceItem` set
+`mass = 2.0` once in `_init` and never touched it, so a bundle of twenty-four
+stone weighed exactly what one did. That did not matter while nothing read mass
+— and then `Blow` started reckoning a thrown thing's damage as mass × speed, at
+which point a boulder through a roof hit it exactly as hard as a pebble. One
+line, and a boulder becomes a siege weapon:
+
+```
+                          house     granary        farm   a villager
+one stone or a log           12          21           6          3.7
+a boulder, 15 stone           3           6           2            1
+an armful, 24 stone           2           4           1            1
+```
+
+**Three throws to a house.** That is the number the vein is sized around: one
+deposit is twenty boulders, which is about six houses — roughly one village. It
+is deliberately not a delete button and deliberately not a chore, and
+`tools/blow.py` fails the build if it drifts out of two-to-five.
+
 ## What a thrown thing does when it arrives
 
 It did nothing. A stone hurled through the wall of a house passed through the
