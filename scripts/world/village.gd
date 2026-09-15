@@ -175,6 +175,16 @@ const TALLY_EVERY := 0.35
 
 var village_name := "Elsmere"
 var is_player_home := true
+## HOW MANY SOULS THIS TOWN IS FOUNDED WITH, when somebody other than the world
+## generator is founding it. Zero means the old rule (STARTING_SOULS at home,
+## two thirds of it for a heathen hamlet); a Caravan sets it to whatever the
+## wagon was carrying. It is one number and it is the whole of what founding a
+## colony costs this file — everything else the wagon brought is poured into
+## `store` from outside once the town is standing. See Caravan.settle.
+var founding := 0
+## The wagon standing packed by the store, if there is one. A town keeps at most
+## one: a second would be a town emptying itself into carts.
+var wagon: Caravan = null
 var converted := false
 var belief := 0.0
 var influence_radius := MIN_INFLUENCE
@@ -282,10 +292,7 @@ func _ready() -> void:
 	# reach is worked out from how many people there are — so founding the
 	# houses first meant laying out a town of fifty inside the ring of a hamlet.
 	# _build_starting_houses hands out the beds when it is done.
-	# Two thirds, rounded down — a heathen hamlet is meant to be smaller.
-	@warning_ignore("integer_division")
-	var founding := STARTING_SOULS if is_player_home else STARTING_SOULS * 2 / 3
-	_spawn_villagers(founding)
+	_spawn_villagers(_founding_count())
 	_update_influence()
 	_build_starting_houses()
 	GameState.alignment_changed.connect(_on_alignment_changed)
@@ -522,11 +529,24 @@ func _build_influence_ring() -> void:
 	add_child(_influence_ring)
 
 
+## HOW MANY PEOPLE THIS TOWN STARTS WITH. Two thirds for a heathen hamlet,
+## rounded down — unless somebody handed it a wagonload, in which case that is
+## the answer and the old rule does not apply. Two callers, and they used to
+## keep separate copies of the same expression: the houses were laid out for one
+## number and the people spawned against another the moment either was touched.
+func _founding_count() -> int:
+	if founding > 0:
+		return founding
+	if is_player_home:
+		return STARTING_SOULS
+	@warning_ignore("integer_division")
+	var two_thirds := STARTING_SOULS * 2 / 3
+	return two_thirds
+
+
 func _build_starting_houses() -> void:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-	@warning_ignore("integer_division")
-	var souls := STARTING_SOULS if is_player_home else STARTING_SOULS * 2 / 3
-	var beds_wanted := int(float(souls) * FOUNDING_HOUSED)
+	var beds_wanted := int(float(_founding_count()) * FOUNDING_HOUSED)
 	var beds := 0
 	var raised := 0
 	while beds < beds_wanted and raised < FOUNDING_MOST:
@@ -837,6 +857,28 @@ func _process(delta: float) -> void:
 		_pop_samples.append(population())
 		if _pop_samples.size() > 12:      # about four minutes of history
 			_pop_samples.pop_front()
+		_maybe_pack_a_wagon()
+
+
+## A TOWN THAT HAS OUTGROWN ITS ROOFS PACKS A CART. People sleeping rough are
+## the colonists — the overcrowding that was only ever a drag on the mood is
+## the thing that produces expeditions now, which is what overcrowding means
+## everywhere else. Nothing happens to it here: it stands by the store until a
+## hand picks it up, and where that hand puts it down a town stands.
+func _maybe_pack_a_wagon() -> void:
+	if not converted or is_instance_valid(wagon):
+		return
+	var cart := Caravan.pack(self)
+	if cart == null:
+		return
+	wagon = cart
+	# Beside the market, on the far side from the field, and grounded like every
+	# other thing this town stands on the earth.
+	cart.position = _grounded(Vector3(-13.0, 0.0, 9.0), 2.0)
+	add_child(cart)
+	GameState.announce(
+		"%s has more people than roofs — a wagon stands packed by the market. Carry it where you want a new town."
+		% village_name)
 
 
 ## TORCHLIGHT ------------------------------------------------------------------

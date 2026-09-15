@@ -596,12 +596,6 @@ func _tick_watchdogs(delta: float) -> void:
 				velocity = Vector3.ZERO
 
 
-## The slow gaze: passively learn from whatever the villagers are doing
-## nearby — and simply watching them work holds its attention.
-##
-## This is also where it LOOKS AT PEOPLE. Watching somebody is how empathy is
-## earned, and reading their plight through its own history is how it comes to
-## feel anything about them at all (see CreatureHeart).
 ## Decision-making — THE MIND DECIDES ------------------------------------------
 ##
 ## The creature no longer follows a script of behaviours. Each time it must act,
@@ -1042,17 +1036,13 @@ func _enact(choice: Dictionary) -> void:
 ## WANDER SOMEWHERE NEARBY — and `_target` IS A WORLD POINT.
 ##
 ## It was not, here, and only here: every other writer sets a world position and
-## CreatureSteering.advance reads one (`target - who.global_position`, first
-## line). This set a bare offset, claimed in a comment that the field was local,
-## and converted that offset out to world and back for the tether — which
-## preserved the error in both directions instead of exposing it. So a wandering
-## creature walked toward a point within eighteen metres of the WORLD ORIGIN,
-## from wherever it stood.
-##
-## ON A ROPE THAT IS FATAL. `_enact` falls back here for anything out of reach,
-## which on a rope is most things: the creature set out for the origin, went
-## taut at twenty-two metres, and pull_in pinned it there for the whole
-## tutorial — which is why a player at the stake had nothing to hand food to.
+## CreatureSteering.advance reads one. This set a bare OFFSET and converted it
+## out to world and back for the tether, preserving the error in both directions
+## instead of exposing it — so a wandering creature walked toward a point near
+## the WORLD ORIGIN from wherever it stood. On a rope that is fatal: `_enact`
+## falls back here for anything out of reach, so the creature set out for the
+## origin, went taut at twenty-two metres and was pinned there for the whole
+## tutorial, which is why a player at the stake had nothing to hand food to.
 func _wander() -> void:
 	state = State.WANDER
 	var angle := randf() * TAU
@@ -1207,6 +1197,8 @@ func _intent_for(item: Node3D) -> String:
 		return "release"
 	if item is Corpse:
 		return "eat"  # feeding it the dead is a dark offering it won't refuse
+	if item is Caravan:
+		return "haul"   # a town on its back: it walks the expedition with you
 	if item is Villager:
 		# Force-fed a living villager: a wild or cruel beast DEVOURS them — a
 		# black deed that corrupts it fast. Only a good-hearted one (gentle+)
@@ -1344,6 +1336,16 @@ func _process_carrying(delta: float) -> void:
 				mood = minf(mood + 8.0, 100.0)
 				boredom = maxf(boredom - 25.0, 0.0)
 				_decide()
+		"haul":
+			# A WAGON ON ITS BACK. Caravan says where an expedition walks and
+			# when it is over; all that is needed here is the legs. See
+			# Caravan.walks_with.
+			var lead := Caravan.walks_with(self, delta)
+			if lead == Vector3.INF:
+				_release_carried(true)
+				_decide()
+			else:
+				_move_toward(lead, WALK_SPEED * 0.9, delta)
 		_:
 			_release_carried(true)
 			_decide()
@@ -2223,8 +2225,6 @@ func is_laden() -> bool:
 	return _carried != null and is_instance_valid(_carried)
 
 
-## Can it actually lift this? A sapling needs little; a forest giant needs real
-## muscle — earned by work, or lent by the Strength miracle.
 ## WHAT IT CAN GET OFF THE GROUND — and, for a throw, what it can get off the
 ## ground AND SEND SOMEWHERE, which is not the same question.
 ##

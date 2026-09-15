@@ -17,6 +17,9 @@ extends RefCounted
 ##   drawn on the grass. Its size is the population, so a town you have fed
 ##   and housed reaches further than a hamlet.
 ##
+##   A WAGON ON THE ROAD holds a little ground of its own, because a settling
+##   party is a town that has not arrived yet. See Caravan.
+##
 ##   YOUR CREATURE CARRIES A CIRCLE WITH IT, and this is the important one.
 ##   It is how you get anywhere: a whelp holds fourteen metres and a grown
 ##   beast holds forty, and wherever you walk it, you can work. Leading the
@@ -81,6 +84,19 @@ static func circles(tree: SceneTree) -> Array[Dictionary]:
 			"at": _flat(beast.global_position),
 			"r": beast_reach(beast),
 			"why": GameState.named("your creature"),
+		})
+	# AND EVERY WAGON ON THE ROAD. A settling party is a town that has not
+	# arrived yet, and it holds ground on the way — so leading one across the
+	# map carries your power with it, and the moment it unpacks the circle it
+	# was holding becomes the town's own.
+	for c in tree.get_nodes_in_group("caravans"):
+		var cart := c as Caravan
+		if cart == null or not is_instance_valid(cart):
+			continue
+		found.append({
+			"at": _flat(cart.global_position),
+			"r": Caravan.REACH,
+			"why": "the wagon out of %s" % cart.from_name,
 		})
 	return found
 
