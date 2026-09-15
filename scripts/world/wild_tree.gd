@@ -64,8 +64,15 @@ const NEIGHBOUR_RECHECK := 9.0  # seconds between (costly) neighbour counts
 ## and cannot leap a gap or reach water, so a blaze clears a stand of forest
 ## and burns out on its own. Rain douses it.
 ##
-## A TREE BURNED FOR NINE SECONDS, which is a flash. Long enough to be a way of
-## clearing forest, far too short to be a THING — you could not carry a burning
+## A TREE BURNS FOR WHAT IT IS WORTH, in seconds — see `timber` and the TIMBER
+## table, which is the running Fibonacci sum this game already reckons a tree's
+## value in. A sapling is gone in a second; a hundred-year giant burns for a
+## hundred and forty-three of them. The same curve serves both because it is
+## the same fact: a tree is everything it has been, whether you are cutting it
+## down or setting fire to it.
+##
+## It used to be a flat nine seconds for every tree in the world. Long enough
+## to clear forest, far too short to be a THING — you could not carry a burning
 ## tree anywhere, could not javelin one across a valley and watch it arrive,
 ## could not use one as a torch. And a blazing pine turning end over end is the
 ## best picture this game has in it.
@@ -78,6 +85,9 @@ const NEIGHBOUR_RECHECK := 9.0  # seconds between (costly) neighbour counts
 ## instead of two, so a wood burns THROUGH over a couple of minutes rather than
 ## going up all at once — and it is still something a player can outwait, and
 ## still stops at a gap. See tools/forest_fire.py.
+## What a tree of AVERAGE size comes to, kept only so tools and callers have a
+## single number to reason about the spread against. The real burn is `timber()`
+## seconds — see `ignite`.
 const BURN_SECONDS := 45.0
 const SPREAD_RADIUS := 6.0
 const SPREAD_CHANCE := 0.05 # per spread-tick, per near neighbour
@@ -622,7 +632,16 @@ func ignite() -> void:
 	if world != null and world.is_underwater(global_position.x, global_position.z):
 		return  # wet wood won't catch
 	burning = true
-	_burn_time = BURN_SECONDS * randf_range(0.8, 1.2)
+	# HOW LONG A TREE BURNS IS WHAT A TREE IS WORTH, in seconds. See `timber`:
+	# the running Fibonacci sum this game already reckons a tree's value in,
+	# which turns out to be exactly the curve a burn wants. A sapling is gone
+	# in a second, a size five is twelve seconds of light show, and a
+	# hundred-year giant burns for a hundred and forty-three — two and a half
+	# minutes of a thing you can pick up and carry somewhere.
+	#
+	# Nothing new had to be invented for this and that is the point: a tree is
+	# worth everything it has been, and it burns for everything it has been.
+	_burn_time = float(timber()) * randf_range(0.85, 1.15)
 	_build_fire_visual()
 
 

@@ -35,6 +35,12 @@ def const(name):
     return float(m.group(1))
 
 
+# A TREE BURNS FOR WHAT IT IS WORTH, in seconds — the running Fibonacci sum in
+# TIMBER, which this game already reckons a tree's value in. BURN_SECONDS is
+# only the middle of that range and is what the spread is reasoned about.
+import ast
+TIMBER = ast.literal_eval(
+    re.search(r"const TIMBER: Array\[int\] = (\[[^\]]*\])", TEXT).group(1))
 BURN = const("BURN_SECONDS")
 SPREAD_RADIUS = const("SPREAD_RADIUS")
 SPREAD_CHANCE = const("SPREAD_CHANCE")
@@ -83,7 +89,10 @@ def main():
     caught = [r[2] for r in runs if r[2] is not None]
     first = sum(caught) / len(caught) if caught else None
 
-    print("ONE TREE burns for %.0fs." % BURN)
+    print("A TREE BURNS FOR WHAT IT IS WORTH, in seconds:")
+    print("   " + "  ".join("%d:%ds" % (i + 1, v)
+                            for i, v in enumerate(TIMBER)))
+    print("\nONE MIDDLING TREE burns for %.0fs." % BURN)
     print("IT TAKES ITS NEIGHBOUR after %s."
           % ("%.1fs" % first if first else "never"))
     print("A STAND of %d trees %.0fm apart: %.0f of them gone in %.0fs."
@@ -92,6 +101,15 @@ def main():
     bad = []
     # LONG ENOUGH TO BE A THING. You have to be able to pick one up, carry it,
     # and throw it somewhere while it is still alight.
+    # A FULL-GROWN TREE HAS TO BE WORTH CARRYING. That is the whole ask: long
+    # enough to pick up, walk somewhere with, and throw while still alight.
+    if TIMBER[-1] < 90:
+        bad.append("the biggest tree burns %ds — not long enough to carry one "
+                   "anywhere, which is most of what a burning tree is for"
+                   % TIMBER[-1])
+    if TIMBER[0] > 3:
+        bad.append("a sapling burns %ds; the small end of the curve is supposed "
+                   "to be almost nothing" % TIMBER[0])
     if BURN < 25.0:
         bad.append("a tree burns %.0fs — too short to carry one anywhere, "
                    "which is most of what a burning tree is for" % BURN)
