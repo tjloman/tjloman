@@ -70,6 +70,24 @@ const TRADES := {
 		"wants": 1.0 / 25.0, "needs": "stock",
 		"label": "Barn", "tint": Color(0.55, 0.38, 0.26),
 	},
+	# THE SEA. The biggest timber investment a village ever makes, and the only
+	# building in the game that CANNOT BE RAISED WHEREVER THE TOWN LIKES: it
+	# wants real water beside it — a body you could row a boat round, not the
+	# wet patch at the end of the lane — and a town that has none simply never
+	# builds one however rich it gets. See Waters, which floods the shoreline to
+	# find out, and `needs: "water"`, which also wants two mills standing first.
+	#
+	# It takes nothing and gives back four fish a shift. Fishing is the one
+	# trade that makes food out of NOTHING BUT LABOUR — no seed corn, no herd,
+	# no field to water — which is exactly why it costs thirty timber and two
+	# mills to get to, and why a coastal village is a different kind of town
+	# rather than a village with a nice view.
+	"dock": {
+		"employs": 3, "lumber": 30, "stone": 6,
+		"takes": {}, "makes": {"meat": 4},
+		"wants": 1.0 / 20.0, "needs": "water",
+		"label": "Fishing dock", "tint": Color(0.42, 0.5, 0.58),
+	},
 	# A SECOND PLACE TO PRAY, so worship is not one queue at one totem.
 	# ONE PAIR OF HANDS. A shrine takes nothing and makes nothing; what it does
 	# is raise the town's belief and send prayer up, and a second person kneeling
@@ -106,6 +124,17 @@ const LOOSE_STOCK := 8
 ## a working farmyard; the other few hundred are inside. See Herd.shown.
 const IN_THE_YARD := 12
 
+## THE HARBOUR. How many mills must stand before a town will consider one — a
+## dock is not the thing a hungry village needs, and asking for two mills is
+## asking for a town that has already solved its grain.
+const DOCK_WANTS_MILLS := 2
+## What each boat costs on top of the dock, how many a harbour keeps, how long
+## one stays out per shift worked, and how far off the jetty the grounds are.
+const BOAT_LUMBER := 12
+const BOATS_MOST := 3
+const TRIP := 45.0
+const GROUNDS_OUT := 28.0
+
 ## How long one turn of work takes, and how far a well's or a shrine's good
 ## reaches. A shift is long enough that a villager is visibly AT work rather
 ## than touching the building and leaving.
@@ -134,6 +163,9 @@ var health := MOST_HEALTH
 var kindling := Kindling.new()
 var _leg := 0
 var _leg_left := 0.0
+## A harbour's boats, and where they fish. Empty for every other trade.
+var _fleet: Array[FishingBoat] = []
+var _grounds := Vector3.INF
 
 static func create(which: String, home: Village) -> Workshop:
 	var w := Workshop.new()
@@ -184,7 +216,28 @@ static func _makes_sense(town: Village, needs: String) -> bool:
 			return town.tamed_count() >= Village.MAX_TAMED - 2
 		"faith":
 			return town.belief > 25.0
+		"water":
+			# TWO MILLS, AND THEN REAL WATER. The mills are checked first on
+			# purpose: it is four comparisons, and almost every town in the
+			# game fails it, so almost no town ever pays for the flood below.
+			var mills := 0
+			for w in town.workshops:
+				if is_instance_valid(w) and (w as Workshop).trade == "mill":
+					mills += 1
+			if mills < DOCK_WANTS_MILLS:
+				return false
+			var world := town.get_tree().get_first_node_in_group("world_gen") as WorldGen
+			return Waters.harbour_for(town, world) != Vector3.INF
 	return true
+
+
+## WHERE THIS TRADE WANTS TO STAND. Everything a village raises goes in the
+## building ring round the totem — except a harbour, which goes where the water
+## is, and would otherwise have been laid out in the town square like a shrine.
+static func spot_for(which: String, town: Village, world: WorldGen) -> Vector3:
+	if which == "dock":
+		return Waters.harbour_for(town, world)
+	return town.find_build_spot(world, Village.ROOM_ROUND_A_SHOP)
 
 
 ## A trade with room at it, counting who is already posted where.
@@ -320,6 +373,28 @@ func _build_stand_in(spec: Dictionary) -> void:
 				Vector3(0, 2.4, 0)))
 			add_child(Util.box(Vector3(1.6, 1.6, 0.12), Color(0.3, 0.22, 0.14),
 				Vector3(0, 0.8, 1.75)))
+		"dock":
+			# A JETTY: a plank walk on posts, running out over the water, with a
+			# net rack and a lamp at the head of it. It is LONG rather than tall
+			# on purpose — the one building in the town whose silhouette says
+			# what it is from the hill, because it is the one building that is
+			# not in the town.
+			add_child(Util.box(Vector3(2.2, 0.28, 8.0), tint, Vector3(0, 0.6, 3.6)))
+			for post in 4:
+				add_child(Util.box(Vector3(0.22, 1.6, 0.22),
+					Color(0.36, 0.28, 0.2),
+					Vector3(0.85, 0.0, 1.2 + float(post) * 2.0)))
+				add_child(Util.box(Vector3(0.22, 1.6, 0.22),
+					Color(0.36, 0.28, 0.2),
+					Vector3(-0.85, 0.0, 1.2 + float(post) * 2.0)))
+			# The net rack ashore, which is where the people actually stand.
+			add_child(Util.box(Vector3(2.6, 0.16, 0.16),
+				Color(0.5, 0.4, 0.26), Vector3(0, 1.9, -0.6)))
+			for leg: float in [-1.2, 1.2]:
+				add_child(Util.box(Vector3(0.16, 2.0, 0.16),
+					Color(0.5, 0.4, 0.26), Vector3(leg, 0.95, -0.6)))
+			add_child(Util.sphere(0.24, Color(1.0, 0.86, 0.5),
+				Vector3(0, 1.9, 7.2), true))
 		_:
 			add_child(Util.box(Vector3(2.0, 0.5, 2.0), tint, Vector3(0, 0.25, 0)))
 			add_child(Util.cylinder(0.5, 2.2, tint.lightened(0.1), Vector3(0, 1.6, 0)))
@@ -382,6 +457,11 @@ func work_shift() -> void:
 			if village != null:
 				village.belief = minf(village.belief + 0.4, 100.0)
 				GameState.add_prayer_power(1.2)
+		"dock":
+			# A SHIFT WORKED IS A BOAT OUT. The catch is already in the store by
+			# the time this runs — `makes` did it — and this is only the part
+			# you can see from the hill. See FishingBoat.
+			_put_to_sea()
 
 
 ## Is the granary genuinely ahead — more than the meals its people are going to
@@ -442,9 +522,14 @@ func stock_is_in() -> bool:
 
 func _process(delta: float) -> void:
 	_tick_fire(delta)
-	if trade != "barn" or village == null or not is_instance_valid(village):
+	if village == null or not is_instance_valid(village):
 		return
 	if Util.sim_stride(global_position) > 4:
+		return
+	if trade == "dock":
+		_keep_the_fleet(delta)
+		return
+	if trade != "barn":
 		return
 	_leg_left -= delta
 	if _leg_left > 0.0:
@@ -474,6 +559,56 @@ func _process(delta: float) -> void:
 		if is_instance_valid(beast) and not beast.has_rider():
 			beast.drive_to(drove_spot(n))
 			n += 1
+
+
+## A HARBOUR BUYS ITS BOATS ONE AT A TIME, out of the town's spare timber, and
+## only ever when the town has some to spare — a dock is already thirty timber
+## and a village that put its last plank into a boat would be a village that
+## could not roof anybody. On the barn's own clock, which is slow enough that a
+## fleet takes a few minutes to appear and that is right: a harbour should fill
+## up over a season.
+func _keep_the_fleet(delta: float) -> void:
+	Util.prune(_fleet)
+	_leg_left -= delta
+	if _leg_left > 0.0:
+		return
+	_leg_left = LEG_SECONDS
+	if _fleet.size() >= mini(BOATS_MOST, employs()):
+		return
+	if village.store == null or not is_instance_valid(village.store):
+		return
+	if not village.store.try_spend_materials(BOAT_LUMBER, 0):
+		return
+	_launch()
+
+
+## ONE MORE HULL, tied up a little along the jetty from the last.
+func _launch() -> void:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if _grounds == Vector3.INF:
+		_grounds = Waters.off_shore(world, global_position, GROUNDS_OUT)
+	var boat := FishingBoat.new()
+	# Moored just off the jetty, strung along it rather than stacked on it.
+	var along := TAU * float(_fleet.size()) / float(maxi(BOATS_MOST, 1))
+	var tie := global_position + Vector3(cos(along), 0.0, sin(along)) * 4.0
+	if world != null:
+		tie.y = world.surface_at(tie.x, tie.z)
+	boat.mooring = tie
+	boat.grounds = _grounds if _grounds != Vector3.INF else tie
+	get_parent().add_child(boat)
+	boat.global_position = tie
+	_fleet.append(boat)
+
+
+## SEND THE FIRST BOAT THAT IS IN. Called once per shift worked, so three people
+## at the dock put three boats out and one person puts out one.
+func _put_to_sea() -> void:
+	Util.prune(_fleet)
+	for b in _fleet:
+		var boat := b as FishingBoat
+		if is_instance_valid(boat) and not boat.is_at_sea():
+			boat.put_to_sea(TRIP)
+			return
 
 
 ## TAKING THE SURPLUS IN. Everything past the loose few becomes numbers, sorted

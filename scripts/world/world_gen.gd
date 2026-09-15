@@ -1077,6 +1077,16 @@ func _maybe_found_village(cell: Vector2i) -> void:
 	# More tries now that the whole footprint must be dry — a cell near water
 	# may need several probes to find a clear pocket (and some simply won't
 	# host a village, which is fine in an endless world).
+	# SOME TOWNS SHOULD BE ON THE WATER. The footprint rule pushed every
+	# settlement inland — dry for eighteen metres in every direction is a rule
+	# a lakeshore passes only by accident — so the harbour was a building almost
+	# nothing in the world could ever raise. The rule is unchanged, and now the
+	# first candidate that is dry AND has a rowable body of water within reach
+	# WINS OUTRIGHT; anything merely dry is kept as the fallback and the search
+	# carries on looking for a coast. Costs nothing on an inland cell, where the
+	# shore probe finds no water and gives up in a few dozen comparisons.
+	var inland := Vector3.INF
+	var found := Vector3.INF
 	for attempt in 24:
 		var pos := center + Vector3(rng.randf_range(-16, 16), 0, rng.randf_range(-16, 16))
 		var biome := biome_at(pos.x, pos.z)
@@ -1086,6 +1096,15 @@ func _maybe_found_village(cell: Vector2i) -> void:
 		# no more villages founded straddling a lakeshore.
 		if not village_site_dry(pos.x, pos.z) or slope_at(pos.x, pos.z) > 0.8:
 			continue
+		if Waters.coast_at(pos, self):
+			found = pos
+			break
+		if inland == Vector3.INF:
+			inland = pos
+	if found == Vector3.INF:
+		found = inland
+	if found != Vector3.INF:
+		var pos := found
 		var village := Village.new()
 		village.is_player_home = false
 		village.village_name = _village_name(rng)
@@ -1096,7 +1115,6 @@ func _maybe_found_village(cell: Vector2i) -> void:
 		_village_cells[cell] = village
 		GameState.announce("Scouts speak of a village called %s, far away. It believes in nothing... yet."
 			% village.village_name)
-		return
 
 
 func _village_name(rng: RandomNumberGenerator) -> String:

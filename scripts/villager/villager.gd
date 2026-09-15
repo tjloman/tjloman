@@ -1356,17 +1356,16 @@ func _pick_job() -> bool:
 	# A village with children and no school wants an Edubba raised.
 	if village.wants_edubba():
 		scores["build_edubba"] = 34.0
-	# THE TRADES. A standing job at a well, a mill, a barn or a shrine — the
-	# answer to a town too big for four kinds of work. Scored modestly: nobody
-	# abandons a hungry village to mind a well, but a settled one fills them.
+	# THE TRADES. A standing job at a well, a mill, a barn, a shrine or the
+	# harbour — the answer to a town too big for four kinds of work, scored
+	# modestly so that nobody abandons a hungry village to mind a well.
 	# AND THEY WAIT ON THE PLOUGH. A flat 22 is above nothing, which is the
-	# problem: `farm` falls to its floor of 26 when the town is fed, and then
-	# loses several points per head to the crowd penalty because its room is
-	# only twice the number of FIELDS — while `work` is docked almost nothing,
+	# problem: `farm` falls to its floor of 26 when the town is fed, and loses
+	# several points per head to the crowd penalty because its room is only
+	# twice the number of FIELDS — while `work` is docked almost nothing,
 	# because its room is every stool at every trade in town. A village that
 	# had built its trades therefore sent the fifth farmer to a millstone, and
-	# the sixth, and the seventh, and stopped growing food. That is the
-	# population collapse: not a famine, a staffing decision.
+	# the sixth, and the seventh, and stopped growing food: a staffing decision.
 	#
 	# Nobody minds a well while the town is hungry. Past a third of a want the
 	# trades are simply not on the board.
@@ -1425,13 +1424,12 @@ func _pick_job() -> bool:
 	# HEAD regardless of how much work there was, so a job saturated at three or
 	# four people whether it was one field or ten, one well or eight. That is
 	# why raising buildings did nothing on its own: a town of fifty built its
-	# trades and then left them empty, because the fifth villager to consider a
-	# trade was already being told it was crowded.
-	#
+	# trades and left them empty, because the fifth villager to consider a trade
+	# was already being told it was crowded.
 	# Charged per POST instead, a job absorbs as many hands as it has places.
-	# The jobs left at one are the ones genuinely limited by the ground rather
-	# than by anything the village built: there is only so much game on a
-	# hillside, and only ever one building site.
+	# The jobs left at one are the ones limited by the ground rather than by
+	# anything the village built: only so much game on a hillside, and only
+	# ever one building site.
 	var best: String = ""
 	var best_score := -INF
 	for job: String in scores:
@@ -1575,7 +1573,9 @@ func _start_job(job: String) -> void:
 		"build_shop":
 			_shop_kind = Workshop.short_of(village)
 			var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-			_shop_spot = village.find_build_spot(world, Village.ROOM_ROUND_A_SHOP) \
+			# A harbour goes where the water is, everything else round the
+			# totem — see Workshop.spot_for, which is the whole difference.
+			_shop_spot = Workshop.spot_for(_shop_kind, village, world) \
 				if _shop_kind != "" else Vector3.INF
 			if _shop_spot == Vector3.INF:
 				state = State.WANDER
