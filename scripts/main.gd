@@ -107,6 +107,14 @@ func _ready() -> void:
 
 	camera_rig.divine_hand = divine_hand  # two-finger camera preempts the hand
 
+	# THE GROUND THE BEAST HOLDS, lit while a miracle is in your hand. A village
+	# wears its ring always; the creature's is only drawn when the answer to
+	# "how far may I throw this" is the question you are actually asking.
+	var reach_ring := ReachRing.new()
+	reach_ring.divine_hand = divine_hand
+	add_child(reach_ring)
+	miracles.reach_ring = reach_ring
+
 	hud = HUD.new()
 	hud.village = village
 	hud.divine_hand = divine_hand

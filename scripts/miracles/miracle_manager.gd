@@ -260,6 +260,10 @@ const FREEBOARD := 0.4
 const TOWN_CLEARANCE := 8.0
 
 var divine_hand: DivineHand = null  # wired by main; orbs land in the grip
+## The circle the creature carries, drawn on the grass. Wired by main; nothing
+## here needs it except the fizzle, which flares it so the player sees the edge
+## they just overthrew.
+var reach_ring: ReachRing = null
 ## What the PLAYER has cast, and how many runes went into the last one. Only
 ## `cast_runes` touches these, so the creature's own casting never counts —
 ## the tutorial watches them to know a lesson actually landed.
@@ -516,9 +520,17 @@ func _spare_orb_spot() -> Vector3:
 
 ## Called by a thrown orb when it lands: unleash the effect at that spot,
 ## apply karma, and let the villages witness it.
+##
+## UNLESS IT LANDED OUTSIDE YOUR REACH, in which case nothing happens at all
+## and the prayer comes back. See MiracleReach: the hand goes anywhere, the
+## power does not. This is the one gate every orb passes through, which is why
+## it is here and not in each of thirty `_cast_` functions.
 func resolve(miracle: String, pos: Vector3, momentum := Vector3.ZERO,
 		scale_up := 1.0) -> void:
 	pos.y = 0
+	if not MiracleReach.reaches(get_tree(), pos):
+		fizzle(miracle, pos)
+		return
 	var potency := power() * scale_up
 	match miracle:
 		"food": _cast_food(pos)
@@ -558,6 +570,19 @@ func resolve(miracle: String, pos: Vector3, momentum := Vector3.ZERO,
 		get_tree().get_first_node_in_group("creature") as Creature, pos)
 	for v in get_tree().get_nodes_in_group("village"):
 		(v as Village).witness_miracle(miracle, pos)
+
+
+## A WORKING THAT FOUND NO GROUND. It guts out where it landed and the prayer
+## it cost is returned, because a rule the player is still learning must not
+## also be a fine. The refund is the miracle's NAMED cost: a blend part is
+## charged as part of a reading and refunded as itself, which is within a rune
+## either way and not worth a second ledger.
+func fizzle(miracle: String, pos: Vector3) -> void:
+	GameState.add_prayer_power(float(MIRACLES.get(miracle, {}).get("cost", 0.0)))
+	GameState.hint(MiracleReach.short_hint(get_tree(), pos))
+	SoundBank.play_at("whisper", pos, -4.0, 0.12, 0.6)
+	if reach_ring != null and is_instance_valid(reach_ring):
+		reach_ring.flare()
 
 
 func _apply_karma(miracle: String, pos: Vector3) -> void:

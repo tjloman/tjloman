@@ -257,6 +257,17 @@ func burst() -> void:
 func _go_off() -> void:
 	if _exploded or freeze:  # never in the player's grip
 		return
+	# AND NEVER OUTSIDE THE GROUND YOU HOLD. Fire is the one miracle with its
+	# own landing code, so it needs its own copy of the gate that `resolve`
+	# puts on everything else — see MiracleReach. Note what this does NOT
+	# touch: a tree that is already alight goes on burning wherever it is
+	# carried. Lighting a thing is a miracle; a thing being alight is weather.
+	if not MiracleReach.reaches(get_tree(), global_position):
+		var book := MiracleManager.of(get_tree())
+		if book != null:
+			book.fizzle(kind, global_position)
+		queue_free()
+		return
 	_exploded = true
 	var spec: Dictionary = KINDS[kind]
 	var reach: float = spec["reach"]
