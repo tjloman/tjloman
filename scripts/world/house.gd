@@ -65,8 +65,9 @@ var _shove_vel := Vector3.ZERO
 
 
 func _ready() -> void:
+	kindling.temper = Kindling.TEMPER_TIMBER   # timber and thatch
 	add_to_group("houses")
-	add_to_group("burnable")
+	add_to_group(Affords.BURNABLE)
 	# A real body, so the hand's ray can hover it (census, health, age).
 	# Layer 4 = props: villagers walk through, the hand sees it.
 	collision_layer = 4
@@ -199,6 +200,14 @@ func _settle_knock(delta: float) -> void:
 		position = _base_pos + _shove
 
 
+## HEAT ON IT, from a fireball, a bolt, or the building next door. It catches
+## only when it has had enough of it for what it is made of — see
+## Kindling.warm, and Kindling's TEMPER_ table for why a granary takes longer
+## than a hut.
+func scorch(joules: float) -> void:
+	kindling.warm(self, joules, 2.6)
+
+
 ## SET IT ALIGHT. A house could always be knocked down and never set on fire.
 func ignite() -> void:
 	if under_construction:
@@ -215,6 +224,9 @@ func burn_down() -> void:
 
 
 func _tick_fire(delta: float) -> void:
+	# COOL OFF between blows: three fireballs in ten seconds is a fire,
+	# three across an afternoon is three scorch marks. See Kindling.
+	kindling.cool(delta)
 	var harm := kindling.tick(self, delta, MOST_HEALTH)
 	if harm > 0.0:
 		damage(harm)

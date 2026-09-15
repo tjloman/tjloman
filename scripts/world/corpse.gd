@@ -32,7 +32,7 @@ func _init() -> void:
 
 func _ready() -> void:
 	add_to_group("corpses")
-	add_to_group("pickable")
+	add_to_group(Affords.PICKABLE)
 
 	var col := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()

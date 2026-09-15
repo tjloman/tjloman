@@ -1522,19 +1522,70 @@ VILLAGE_RAISES = {
     "farm.gd": "a field",
     "creature_nest.gd": "the nest",
 }
-# What being burnable actually commits a building to. `ignite` without `damage`
-# is a building that catches and never falls; `damage` without `full_health` is
-# a building every blow treats as a hut.
-BURNABLE_OWES = ("ignite", "extinguish", "damage", "full_health", "burn_down")
 
 
-# EVERY PLACE IN THE GAME THAT LETS GO OF SOMETHING WITH SPEED. Each one has
-# to ask ChildSafety first, and a new one added without asking is how the rule
-# quietly stops being a rule.
-LETS_GO = {
-    "divine_hand.gd": "the player's own hand",
-    "creature_throwing.gd": "everything the creature hurls",
-}
+def adverbs(root):
+    """THE GAME'S ADVERBS, read off scripts/affords.gd rather than kept here.
+
+    A second copy of a vocabulary is a vocabulary that drifts. This one drifted
+    within an hour of being written: the six burnable buildings were migrated
+    from the string "burnable" to Affords.BURNABLE and a checker holding its own
+    list immediately reported all six as no longer burnable.
+
+    Returns (name -> group string, name -> methods it owes).
+    """
+    src = open(os.path.join(root, "affords.gd"), encoding="utf-8").read()
+    names = dict(re.findall(r'^const ([A-Z_]+) := "(\w+)"', src, re.M))
+    owes = {}
+    body = re.search(r"const OWES := \{(.*?)\n\}", src, re.S)
+    if body:
+        for const_name, listed in re.findall(r"(\w+): \[([^\]]*)\]", body.group(1)):
+            owes[const_name] = re.findall(r'"(\w+)"', listed)
+    return names, owes
+
+
+def check_affords(files, root):
+    """EVERY MEMBER OF AN ADVERB CAN ANSWER WHAT THAT ADVERB PROMISES.
+
+    Godot groups are one flat namespace, and this codebase's thirty-odd are
+    nearly all NOUNS -- registries, one class each, "where do I find the X".
+    Two of them are adverbs: things spoken across many classes by code that must
+    not care which class it is holding. An adverb is a promise, and nothing
+    checked that the things making it could keep it.
+
+    `ignite` without `damage` is a building that catches and never falls.
+    `damage` without `full_health` is a building every blow treats as a hut.
+    And a rock face in QUARRIED without `prise` is a hand that closes on a
+    hillside and gets nothing, on the frame that line finally runs.
+
+    Also: everything a village raises must be BURNABLE. A village-built thing
+    outside that group is invisible to the sweep that sets a street alight AND
+    to the fire spreading from the barn next door -- the farm was in exactly
+    that state, so a fire walked round a wheat field.
+    """
+    names, owes = adverbs(root)
+    out = []
+    for path in files:
+        name = os.path.basename(path)
+        if name == "affords.gd":
+            continue
+        src = open(path, encoding="utf-8").read()
+        joined = set()
+        for const_name, group in names.items():
+            if ("add_to_group(Affords.%s)" % const_name) in src \
+                    or ('add_to_group("%s")' % group) in src:
+                joined.add(const_name)
+        if name in VILLAGE_RAISES and "BURNABLE" not in joined:
+            out.append((path, "%s is %s and never joins Affords.BURNABLE, so no "
+                        "fire can reach it and none can spread to it"
+                        % (name, VILLAGE_RAISES[name])))
+            continue
+        for const_name in sorted(joined):
+            for method in owes.get(const_name, []):
+                if re.search(r"^func %s\(" % method, src, re.M) is None:
+                    out.append((path, "%s is Affords.%s but has no `%s`"
+                                % (name, const_name, method)))
+    return out
 
 
 def check_valid_after_is(files):
@@ -1620,6 +1671,15 @@ def check_bundles(files):
             out.append((path, "`%s.absorb` has no ceiling; a hand is a "
                         "convenience, not a cart" % name[:-3]))
     return out
+
+
+# EVERY PLACE IN THE GAME THAT LETS GO OF SOMETHING WITH SPEED. Each one has
+# to ask ChildSafety first, and a new one added without asking is how the rule
+# quietly stops being a rule.
+LETS_GO = {
+    "divine_hand.gd": "the player's own hand",
+    "creature_throwing.gd": "everything the creature hurls",
+}
 
 
 def check_children(files):
@@ -2041,11 +2101,10 @@ def main():
         print("%s: %s. There is no throwing of children in this game and the "
               "rule is enforced at every place that lets go — see "
               "scripts/villager/child_safety.gd." % (path, why))
-    burnable = check_burnable(files)
-    for path, _lineno, why in burnable:
-        print("%s: %s. Everything a village raises must be destructible and must "
-              "say what it is worth in full — see tools/check_calls.py, "
-              "VILLAGE_RAISES." % (path, why))
+    burnable = check_affords(files, root)
+    for path, why in burnable:
+        print("%s: %s. An adverb is a promise — see scripts/affords.gd, which is "
+              "the one list of them." % (path, why))
     worth = check_tree_worth(files)
     for path, lineno, line in worth:
         print("%s:%d: this banks a tree's SIZE as its WORTH. `lumber` is how big "

@@ -78,7 +78,7 @@ func _on_leash_pressed() -> void:
 		# keyboard, and the same two sentences. See CreatureLead.
 		var under := divine_hand.hover_target
 		if under != null and is_instance_valid(under) and under != creature \
-				and under.is_in_group("pickable"):
+				and under.is_in_group(Affords.PICKABLE):
 			creature.leash_to_thing(under)
 		else:
 			creature.leash_to(divine_hand.ground_point)

@@ -18,6 +18,10 @@ const TOTAL_STONE := 300
 ## house — see tools/blow.py.
 const STONE_PER_BOULDER := 15
 
+## WHAT KIND OF ROCK THIS IS. Names a mesh and nothing else so far — the
+## adverb is what the hand and the creature go by, so a new kind of stone is a
+## file in res://models/ and a word here, and neither of them ever learns it.
+var style := "rock"
 var stone_left := TOTAL_STONE
 var _boulders: Array[MeshInstance3D] = []
 
@@ -27,8 +31,13 @@ func _ready() -> void:
 	# THE HAND CAN REACH IT NOW. A vein was scenery with a number on it: the
 	# only way stone ever left one was a villager with a pick, and a god who
 	# wanted a rock — to build with, to give, or to throw — had no way to get
-	# one at all. See `prise`.
-	add_to_group("pickable")
+	# one at all.
+	#
+	# QUARRIED AND NOT PICKABLE, and the difference is not a nicety: a hand
+	# that tries to LIFT this drags a StaticBody3D through the terrain. You
+	# take a piece off it and leave the rest. See Affords.
+	add_to_group(Affords.PICKABLE)
+	add_to_group(Affords.QUARRIED)
 	collision_layer = 1
 	collision_mask = 0
 	set_meta("hover_name", "Rock deposit")
@@ -40,7 +49,11 @@ func _ready() -> void:
 	col.position = Vector3(0, 0.7, 0)
 	add_child(col)
 
-	var custom := ModelBank.instantiate("rock")
+	# THE STYLED MESH FIRST, then the plain one — the same ladder a tree climbs
+	# (see WildTree). Drop `rock_flint.glb` in res://models/ and every flint
+	# outcrop in the world takes it, with `rock.glb` still answering for the
+	# rest and the generated boulders answering for both if neither exists.
+	var custom := ModelBank.instantiate_any(["rock_" + style, "rock"])
 	if custom != null:
 		# A custom rock model won't shrink as it's worked, but quarries fine.
 		add_child(custom)

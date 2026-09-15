@@ -34,7 +34,7 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	add_to_group("pickable")
+	add_to_group(Affords.PICKABLE)
 	var col := CollisionShape3D.new()
 	var shape := SphereShape3D.new()
 	shape.radius = 0.35

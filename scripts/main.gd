@@ -505,7 +505,7 @@ func _lead_at() -> Node3D:
 	var under := divine_hand.hover_target
 	if under == null or not is_instance_valid(under) or under == creature:
 		return null
-	return under if under.is_in_group("pickable") else null
+	return under if under.is_in_group(Affords.PICKABLE) else null
 
 
 func _touch_creature(kindly: bool) -> void:

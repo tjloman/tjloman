@@ -81,8 +81,9 @@ var _left: Array[float] = []
 var _drift: Array[float] = []
 
 func _ready() -> void:
+	kindling.temper = Kindling.TEMPER_STONE   # mostly walls
 	add_to_group("edubba")
-	add_to_group("burnable")
+	add_to_group(Affords.BURNABLE)
 	for i in CLASSES_MOST:
 		_lesson.append(LESSONS[randi() % LESSONS.size()])
 		_left.append(randf_range(LESSON_LEAST, LESSON_MOST))
@@ -267,6 +268,14 @@ func hover_text() -> String:
 
 ## Fire ------------------------------------------------------------------------
 
+## HEAT ON IT, from a fireball, a bolt, or the building next door. It catches
+## only when it has had enough of it for what it is made of — see
+## Kindling.warm, and Kindling's TEMPER_ table for why a granary takes longer
+## than a hut.
+func scorch(joules: float) -> void:
+	kindling.warm(self, joules, 2.8)
+
+
 ## SET IT ALIGHT. Everything a village raises can burn now — see Kindling for
 ## why that had to change and what it costs a town.
 func ignite() -> void:
@@ -300,6 +309,9 @@ func damage(amount: float) -> void:
 
 
 func _tick_fire(delta: float) -> void:
+	# COOL OFF between blows: three fireballs in ten seconds is a fire,
+	# three across an afternoon is three scorch marks. See Kindling.
+	kindling.cool(delta)
 	var harm := kindling.tick(self, delta, MOST_HEALTH)
 	if harm > 0.0:
 		damage(harm)

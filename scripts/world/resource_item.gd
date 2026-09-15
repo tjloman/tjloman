@@ -41,7 +41,7 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	add_to_group("pickable")
+	add_to_group(Affords.PICKABLE)
 	add_to_group("resource_items")
 
 	var col := CollisionShape3D.new()

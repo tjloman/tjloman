@@ -109,7 +109,7 @@ var _lean_target := Vector3.ZERO   # where a push wants it; decays back to zero
 
 func _ready() -> void:
 	add_to_group("trees")
-	add_to_group("pickable")  # any tree can be UPROOTED by the hand
+	add_to_group(Affords.PICKABLE)  # any tree can be UPROOTED by the hand
 	collision_layer = 8  # its own layer: walkers collide + steer, the creature passes through
 	collision_mask = 0
 	set_meta("hover_name", "Tree")

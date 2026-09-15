@@ -328,10 +328,10 @@ func _collect(who: Creature, delta: float) -> void:
 		return
 	# A ROCK FACE IS NOT LIFTED, IT IS BROKEN. The beast reaches the vein and
 	# comes away with a boulder — the same thing the god's own hand does, and
-	# the same thing a quarrier does with a pick, only faster and ruder. See
-	# RockDeposit.prise.
-	if next is RockDeposit:
-		var rock := (next as RockDeposit).prise()
+	# the same thing a quarrier does with a pick, only faster and ruder.
+	# Asked of the adverb; this file knows no geology. See Affords.QUARRIED.
+	if next.is_in_group(Affords.QUARRIED):
+		var rock := next.call("prise") as ResourceItem
 		_scooping = null
 		if rock == null:
 			return
@@ -352,9 +352,10 @@ func _next_to_scoop(who: Creature) -> Node3D:
 	var best: Node3D = null
 	var best_d := INF
 	for node in who._things_around(GATHER_WITHIN):
-		# A ROCK DEPOSIT IS NO LONGER SKIPPED. It used to be, because the beast
-		# cannot pick a hillside up — but it does not have to. It breaks a
-		# boulder off one, which `_collect` does when it arrives.
+		# A QUARRIED THING IS NO LONGER SKIPPED. Rock deposits used to be, by
+		# name, because the beast cannot pick a hillside up — but it does not
+		# have to. It breaks a piece off one, which `_collect` does when it
+		# arrives, and it no longer matters what kind of rock it was.
 		if node is House or aloft.has(node):
 			continue
 		if not who.can_lift(node, true):

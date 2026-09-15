@@ -44,8 +44,9 @@ var _intake: Area3D
 var _intake_time := 0.5
 
 func _ready() -> void:
+	kindling.temper = Kindling.TEMPER_STORES   # timber, but packed and damp inside
 	add_to_group("stores")
-	add_to_group("burnable")
+	add_to_group(Affords.BURNABLE)
 	set_meta("hover_name", "Storehouse")
 	collision_layer = 4  # hoverable/grabbable by the hand; villagers pass through
 	collision_mask = 0
@@ -355,6 +356,14 @@ func hover_text() -> String:
 
 ## Fire ------------------------------------------------------------------------
 
+## HEAT ON IT, from a fireball, a bolt, or the building next door. It catches
+## only when it has had enough of it for what it is made of — see
+## Kindling.warm, and Kindling's TEMPER_ table for why a granary takes longer
+## than a hut.
+func scorch(joules: float) -> void:
+	kindling.warm(self, joules, 3.2)
+
+
 ## SET IT ALIGHT. Everything a village raises can burn now — see Kindling for
 ## why that had to change and what it costs a town.
 func ignite() -> void:
@@ -388,6 +397,9 @@ func damage(amount: float) -> void:
 
 
 func _tick_fire(delta: float) -> void:
+	# COOL OFF between blows: three fireballs in ten seconds is a fire,
+	# three across an afternoon is three scorch marks. See Kindling.
+	kindling.cool(delta)
 	var harm := kindling.tick(self, delta, MOST_HEALTH)
 	if harm > 0.0:
 		damage(harm)

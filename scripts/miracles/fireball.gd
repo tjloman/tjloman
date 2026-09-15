@@ -103,7 +103,7 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	add_to_group("pickable")
+	add_to_group(Affords.PICKABLE)
 	var spec: Dictionary = KINDS[kind]
 
 	var col := CollisionShape3D.new()
@@ -226,8 +226,11 @@ func _ignite_trail(pos: Vector3, reach: float) -> void:
 			if not is_instance_valid(node):
 				continue
 			var d := node.global_position.distance_to(pos)
-			if d < reach and node.has_method("ignite"):
-				node.call("ignite")
+			# A TRAIL IS A LICK OF FLAME, not a bonfire: a third of a core, so
+			# something skidding past a wall scorches it and something landing
+			# on it does not.
+			if d < reach and node.has_method("scorch"):
+				node.call("scorch", Kindling.HEAT_OF_A_BLAZE / 3.0)
 			# Wider than it burns: they run from the flame rolling past them
 			# whether or not it is going to touch them.
 			if d < reach * Herd.FIRE_FLEES and node.has_method("scare"):
@@ -307,7 +310,7 @@ func _go_off() -> void:
 	# mill, the well, the barn, the school and the granary was a fire the town
 	# could shrug off, and every building added since the houses was in effect
 	# fireproof. See Kindling.
-	for b in get_tree().get_nodes_in_group("burnable"):
+	for b in get_tree().get_nodes_in_group(Affords.BURNABLE):
 		var built := b as Node3D
 		if not is_instance_valid(built) \
 				or built.global_position.distance_to(pos) > reach:
@@ -321,9 +324,13 @@ func _go_off() -> void:
 			# is what "a barn is stouter than a hut" has to mean.
 			built.call("damage",
 				float(spec["house"]) * 0.01 * _most_of(built))
-		# ...and it CATCHES, which is the difference between a blast and a fire.
-		if built.has_method("ignite"):
-			built.call("ignite")
+		# ...AND IT IS HEATED, which is now the difference between a blast and
+		# a fire. It used to CATCH — one core, one building alight, whether it
+		# was thatch or a stone granary. A fireball is a great deal of heat and
+		# not a decision: whether a thing burns is a question about the thing.
+		# See Kindling.warm.
+		if built.has_method("scorch"):
+			built.call("scorch", Kindling.HEAT_OF_A_BLAZE)
 
 	# Fire catches on the trees it touches — and spreads from there. This is
 	# the whole of what a gout is FOR.

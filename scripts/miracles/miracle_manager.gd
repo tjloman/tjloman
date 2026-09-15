@@ -406,7 +406,7 @@ func is_unlocked(miracle: String) -> bool:
 ## everything in it has to be quenchable by the same water; a building that was
 ## never alight simply ignores this.
 func _douse_the_built(pos: Vector3, reach: float) -> void:
-	for b in get_tree().get_nodes_in_group("burnable"):
+	for b in get_tree().get_nodes_in_group(Affords.BURNABLE):
 		var built := b as Node3D
 		if is_instance_valid(built) and built.has_method("extinguish") \
 				and built.global_position.distance_to(pos) < reach:
@@ -1013,7 +1013,7 @@ func _quake_everything(pos: Vector3, reach: float, potency: float) -> void:
 		if is_instance_valid(animal) and animal.global_position.distance_to(pos) < reach:
 			animal.scare(pos)
 	# A quake shakes down everything the town built, not only where it sleeps.
-	for b in get_tree().get_nodes_in_group("burnable"):
+	for b in get_tree().get_nodes_in_group(Affords.BURNABLE):
 		var built := b as Node3D
 		if is_instance_valid(built) and built.has_method("damage") \
 				and built.global_position.distance_to(pos) < reach:
@@ -1021,7 +1021,7 @@ func _quake_everything(pos: Vector3, reach: float, potency: float) -> void:
 			# a flat number stopped meaning anything.
 			built.call("damage", 0.18 * potency * Fireball._most_of(built))
 	# Anything loose is thrown into the air — the readable signature of a quake.
-	for p in get_tree().get_nodes_in_group("pickable"):
+	for p in get_tree().get_nodes_in_group(Affords.PICKABLE):
 		var loose := p as RigidBody3D
 		if not is_instance_valid(loose) or loose.freeze:
 			continue

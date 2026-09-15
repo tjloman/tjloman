@@ -46,7 +46,7 @@ func _ready() -> void:
 	# thing outside this group — so the sweep that sets a street alight skipped
 	# it, and so did the fire SPREADING from the barn beside it. A fire that
 	# walks round a wheat field is not a fire.
-	add_to_group("burnable")
+	add_to_group(Affords.BURNABLE)
 	set_meta("hover_name", "Farm")
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	# A field whose ground is underwater can never be worked — flag it so
@@ -155,6 +155,14 @@ func is_workable() -> bool:
 
 
 ## Fire -----------------------------------------------------------------------
+
+## A FIELD IS TINDER and keeps its own fire rather than a Kindling — see
+## BURN_SECONDS here, which is shorter than a building's. There is nothing to
+## warm up: dry crops go at a spark, which is what Kindling.TEMPER_TINDER says
+## about them and why this path stays as direct as it always was.
+func scorch(_joules: float) -> void:
+	ignite()
+
 
 func ignite() -> void:
 	if burning:

@@ -158,7 +158,7 @@ func _ready() -> void:
 	health = 20.0 + spec["body"].length() * 15.0
 	_full_health = health
 	add_to_group("animals")
-	add_to_group("pickable")
+	add_to_group(Affords.PICKABLE)
 	collision_layer = 2
 	collision_mask = 1 | 8  # world + trees (their own layer)
 

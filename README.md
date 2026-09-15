@@ -30,6 +30,7 @@ python3 tools/herd_stray.py      # the hand can reach any beast you can see
 python3 tools/herd_grow.py       # the meadow fills and then stops
 python3 tools/earshot.py         # the god hears what they are looking at
 python3 tools/blow.py            # a town can be wrecked by hand, and slowly
+python3 tools/kindle.py          # several cores to light a house; fire still spreads
 ```
 
 That last one matters: `gdparse` only checks syntax and `gdlint` only checks
@@ -726,6 +727,38 @@ The sweep walks the **narrow** group — `food` or `resource_items`, never
 `pickable`, which holds every tree in the streamed world and runs sixteen times
 a second for as long as a hand is closed.
 
+## Adverbs
+
+Godot groups are one flat namespace, and this game had thirty-one of them — of
+which **twenty-nine are nouns**. `trees`, `houses`, `stores`, `camera_rig`:
+registries, one class each, *where do I find the X*. Those are fine.
+
+Exactly **two were adverbs** — `pickable` and `burnable` — the ones spoken
+across many classes by code that must not care which class it is holding. Two
+is not enough vocabulary to describe a world, and the symptom is easy to spot
+once you know it: every time the answer to *what can I do with this?* is missing
+an adverb, somebody writes `if thing is SomeClass` instead, and that file knows
+about that class forever.
+
+`scripts/affords.gd` is the list, and the rule for joining it: **an adverb earns
+its place when at least two unrelated classes can be spoken to the same way, and
+the code doing the speaking has no business knowing which is which.** A verb
+only one class answers is a method, not an adverb.
+
+- **`PICKABLE`** — the hand closes on it and carries it away, whole.
+- **`BURNABLE`** — it catches, and fire can destroy it. Owes five methods.
+- **`QUARRIED`** — you take a piece off it and leave the rest. Owes `prise`.
+
+That last one is why rocks needed this. A flint outcrop, a chalk face and a
+granite tor are three meshes and three yields and **one adverb**. With it, the
+hand and the creature never learn any of their names. Without it, each new kind
+of rock is another `is RockDeposit` beside the last, in two files that have no
+business knowing any geology.
+
+`check_calls.py` reads the vocabulary out of `affords.gd` rather than keeping
+its own copy — which it used to, and which drifted within an hour of the file
+being written. So did `tools/blow.py`, twenty minutes later.
+
 ## Rocks
 
 A vein was scenery with a number on it. Three hundred stone, and the only way
@@ -814,6 +847,39 @@ fireball's core and a hurled stone all came out as *sudden* and were
 indistinguishable from a fall. It is a meta on the body now, set at the blow,
 and there is a **divine** cause in the Chronicle's ledger to go with it: *killed
 by your own hand*.
+
+## Thermal mass
+
+Nothing used to *catch* fire; things were *set* on fire. `Kindling.light` was
+called and the thing was burning — first touch, every time, whether it was a
+stack of thatch or a stone granary. One fireball lit a street, and what a
+building was made of meant nothing at all. The same flatness that had a single
+hundred points of health standing in for every building in the game.
+
+Heat **accumulates and bleeds away** now. That is the whole mechanism, and it is
+what separates a nuisance from a siege: one core on a house is a scorch mark
+that cools off, three in quick succession is a house on fire.
+
+```
+                   MADE OF       CORES FROM NEXT DOOR
+house              timber            3            42s
+workshop           timber            3            42s
+food_store         stores            4            63s
+edubba             stone             6          never
+creature_nest      menhir           11          never
+```
+
+It also makes spreading honest: a barn burning across the lane heats your wall
+for as long as it burns, and whether you catch is a question about what you are
+made of. Thatch goes at once. The school does not go at all.
+
+**`HEAT_FROM_NEXT_DOOR` is half again what a fireball is**, which looks wrong
+and is not — a core arrives once, a neighbour arrives every seven seconds at
+45% odds with cooling running the whole time in between. At the value I first
+wrote, the arithmetic came out *negative* over a burn: a wall shed heat faster
+than the barn beside it delivered, and **fire silently stopped crossing a lane
+at all** while every other number still looked sensible. `tools/kindle.py` is
+what caught that, and it fails the build if it happens again.
 
 ## Where the god is listening from
 

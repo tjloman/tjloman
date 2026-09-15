@@ -133,7 +133,7 @@ static func lands(thing: Node3D, at: Vector3, speed: float, mass: float,
 		return
 	var wrecked := 0
 	var hurt := 0.0
-	for b in tree.get_nodes_in_group("burnable"):
+	for b in tree.get_nodes_in_group(Affords.BURNABLE):
 		var built := b as Node3D
 		if not is_instance_valid(built) or built == thing:
 			continue

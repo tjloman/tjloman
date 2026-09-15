@@ -149,8 +149,9 @@ static func raise_at(town: Village, world_spot: Vector3, beast: Creature) -> voi
 
 
 func _ready() -> void:
+	kindling.temper = Kindling.TEMPER_MENHIR   # a rock with a fire in it
 	add_to_group("creature_nest")
-	add_to_group("burnable")
+	add_to_group(Affords.BURNABLE)
 	set_meta("hover_name", "The Nest")
 	_make_its_ground()
 	collision_layer = 4
@@ -236,6 +237,14 @@ func _make_its_ground() -> void:
 
 
 ## Fire ------------------------------------------------------------------------
+
+## HEAT ON IT, from a fireball, a bolt, or the building next door. It catches
+## only when it has had enough of it for what it is made of — see
+## Kindling.warm, and Kindling's TEMPER_ table for why a granary takes longer
+## than a hut.
+func scorch(joules: float) -> void:
+	kindling.warm(self, joules, 4.0)
+
 
 ## SET IT ALIGHT. The nest was the one thing a village raises that could not
 ## burn at all — not by a fireball, not by the street catching, not by anything.
@@ -451,6 +460,9 @@ func _process(delta: float) -> void:
 	# skipped when nobody is near. A nest burning down is not a look; a fire
 	# that paused because the player walked away would be a nest that could
 	# only ever be destroyed while watched.
+	# COOL OFF between blows: three fireballs in ten seconds is a fire,
+	# three across an afternoon is three scorch marks. See Kindling.
+	kindling.cool(delta)
 	var harm := kindling.tick(self, delta, MOST_HEALTH)
 	if harm > 0.0:
 		damage(harm)

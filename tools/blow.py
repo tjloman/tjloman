@@ -49,12 +49,25 @@ TIMBER = ast.literal_eval(
 # What a village raises, and what it is worth in full. Read off each building
 # rather than listed here, so a change to a building's toughness shows up in
 # this table without anybody remembering to come and edit it.
+#
+# THE GROUP NAME COMES OUT OF Affords, not out of a string in this file. It was
+# a string in this file, and the day the six burnable buildings moved from
+# `add_to_group("burnable")` to `add_to_group(Affords.BURNABLE)` this tool
+# quietly found no buildings at all and died on the next line. A second copy of
+# a vocabulary is a vocabulary that drifts, which is the whole reason
+# scripts/affords.gd exists.
+AFFORDS = (ROOT / "scripts/affords.gd").read_text()
+BURNABLE = re.search(r'^const BURNABLE := "(\w+)"', AFFORDS, re.M).group(1)
 TARGETS = []
 for path in sorted((ROOT / "scripts/world").glob("*.gd")):
     src = path.read_text()
     m = re.search(r"^const MOST_HEALTH := ([0-9.]+)", src, re.M)
-    if m and 'add_to_group("burnable")' in src:
+    joined = ("add_to_group(Affords.BURNABLE)" in src
+              or ('add_to_group("%s")' % BURNABLE) in src)
+    if m and joined:
         TARGETS.append((path.stem, float(m.group(1))))
+if not TARGETS:
+    sys.exit("no burnable buildings found — has the Affords vocabulary moved?")
 TARGETS.append(("a villager", 100.0))
 
 # A load of stone weighs what its count says — see ResourceItem.refresh_bundle,

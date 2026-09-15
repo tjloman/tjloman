@@ -239,7 +239,7 @@ var _body_mesh: Node3D   # MeshInstance3D (procedural) or a custom model root
 
 func _ready() -> void:
 	add_to_group("villagers")
-	add_to_group("pickable")
+	add_to_group(Affords.PICKABLE)
 	collision_layer = 2
 	collision_mask = 1 | 8  # world + trees (their own layer)
 	villager_name = _random_name()

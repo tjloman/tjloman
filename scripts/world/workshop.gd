@@ -271,8 +271,9 @@ static func wanted(which: String, population: int) -> int:
 
 
 func _ready() -> void:
+	kindling.temper = Kindling.TEMPER_TIMBER   # a timber shed full of work
 	add_to_group("workshops")
-	add_to_group("burnable")
+	add_to_group(Affords.BURNABLE)
 	var spec: Dictionary = TRADES[trade]
 	set_meta("hover_name", String(spec["label"]))
 	collision_layer = 4     # hoverable; villagers walk through it
@@ -541,6 +542,14 @@ func hover_text() -> String:
 
 ## Fire ------------------------------------------------------------------------
 
+## HEAT ON IT, from a fireball, a bolt, or the building next door. It catches
+## only when it has had enough of it for what it is made of — see
+## Kindling.warm, and Kindling's TEMPER_ table for why a granary takes longer
+## than a hut.
+func scorch(joules: float) -> void:
+	kindling.warm(self, joules, 3.0)
+
+
 ## SET IT ALIGHT. Everything a village raises can burn now — see Kindling for
 ## why that had to change and what it costs a town.
 func ignite() -> void:
@@ -574,6 +583,9 @@ func damage(amount: float) -> void:
 
 
 func _tick_fire(delta: float) -> void:
+	# COOL OFF between blows: three fireballs in ten seconds is a fire,
+	# three across an afternoon is three scorch marks. See Kindling.
+	kindling.cool(delta)
 	var harm := kindling.tick(self, delta, MOST_HEALTH)
 	if harm > 0.0:
 		damage(harm)
