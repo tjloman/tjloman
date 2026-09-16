@@ -116,7 +116,7 @@ func _process(delta: float) -> void:
 	# THE SENSOR FIRST, AND WHATEVER THE POOL IS DOING. A device with no hearth
 	# lights at all still has a sky, a town's torches and a creature in it, and
 	# it is the tier that needs the exposure most.
-	meter.tick(GameState.camera_focus, _lights, get_tree(), delta)
+	meter.take_reading(GameState.camera_focus, _lights, get_tree(), delta)
 	if _lights.is_empty():
 		return
 	_redeal -= delta

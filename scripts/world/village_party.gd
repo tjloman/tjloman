@@ -78,7 +78,7 @@ func settled() -> bool:
 
 ## THE MUSTER, ON THE VILLAGE'S OWN CLOCK. It sets off when it is full, or when
 ## it has waited long enough and has anybody at all.
-func tick(delta: float, town: Village) -> void:
+func muster(delta: float, town: Village) -> void:
 	_prune()
 	if means != "":
 		# Home again — or dead, or wandered off. Either way the party is over

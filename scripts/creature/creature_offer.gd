@@ -78,7 +78,7 @@ var _want: Node3D = null
 
 ## Every frame, from the creature's own tick. Costs one null check on a world
 ## where nothing is being held, which is nearly all of them.
-func tick(who: Creature, delta: float) -> void:
+func consider(who: Creature, delta: float) -> void:
 	_shy = maxf(_shy - delta, 0.0)
 	var hand := who.divine_hand
 	if hand == null or not is_instance_valid(hand):

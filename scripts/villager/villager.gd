@@ -33,6 +33,10 @@ const MALE_NAMES: Array[String] = [
 ]
 
 const WALK_SPEED := 3.0
+## How near the camera's focus a villager's label is worth drawing at all. In a
+## crowd the labels overlap into an unreadable smear long before this, so the
+## band costs nothing anybody was getting any good out of.
+const LABEL_WITHIN := 38.0
 const FLEE_SPEED := 5.5
 const GRAVITY := 20.0
 const ARRIVE_DIST := 0.9
@@ -308,7 +312,7 @@ func _rethink() -> void:
 func _physics_process(delta: float) -> void:
 	# ALIGHT, OR IN THE AIR — before the LOD below, because a scream arriving
 	# every fourth frame would not be a scream. See Agitation.
-	_agitation.tick(self, _visuals, burning,
+	_agitation.judder(self, _visuals, burning,
 		state == State.FALLING and not _gentle_drop, _burn_visual)
 	# Simulation LOD: a villager the player isn't looking at runs on a slower
 	# clock — it still lives and works, just updated every few frames with the
@@ -374,9 +378,18 @@ func _physics_process(delta: float) -> void:
 	_tick_needs(delta)
 	_tick_watchdogs(delta)
 	_tick_hazards(delta)
-	var status := _status_text()
-	if _label.text != status:  # Label3D re-renders on every assignment
-		_label.text = status
+	# THE NAME OVER THEIR HEAD, only where it can be read. Two hundred Label3Ds
+	# is two hundred pieces of text being laid out and drawn, and in a crowd
+	# they are not legible anyway — a town at prayer was a white smear with
+	# "pray" in it somewhere. Near enough to read, and the rest is silence.
+	var shown := GameState.camera_focus.distance_squared_to(global_position) \
+		< LABEL_WITHIN * LABEL_WITHIN
+	if _label.visible != shown:
+		_label.visible = shown
+	if shown:
+		var status := _status_text()
+		if _label.text != status:  # Label3D re-renders on every assignment
+			_label.text = status
 	if _animator != null:
 		_animator.play(VillagerLook.pose(self))
 
@@ -1028,7 +1041,7 @@ func sit_down(down: bool) -> void:
 ## Needs ---------------------------------------------------------------------
 
 func _tick_needs(delta: float) -> void:
-	VillagerNeeds.tick(self, delta)
+	VillagerNeeds.live(self, delta)
 
 
 func cheer(amount: float) -> void:
@@ -2267,6 +2280,9 @@ func _on_placed_gently() -> void:
 		_rethink()  # two heathen villages; they will simply walk home
 
 
+## O(N) BY DESIGN: there is no index of villages by place, and there are a
+## handful of them, not a townful. Reached only when somebody the hand threw
+## actually LANDS — once per throw, not once per frame.
 func _village_here() -> Village:
 	var best: Village = null
 	var best_dist := INF

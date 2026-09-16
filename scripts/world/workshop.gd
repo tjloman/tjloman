@@ -723,7 +723,7 @@ func _tick_fire(delta: float) -> void:
 	# COOL OFF between blows: three fireballs in ten seconds is a fire,
 	# three across an afternoon is three scorch marks. See Kindling.
 	kindling.cool(delta)
-	var harm := kindling.tick(self, delta, MOST_HEALTH)
+	var harm := kindling.smoulder(self, delta, MOST_HEALTH)
 	if harm > 0.0:
 		damage(harm)
 

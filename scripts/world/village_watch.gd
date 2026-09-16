@@ -59,7 +59,7 @@ var _left := 0.0
 
 ## The town looks round. Everything here is one pass per group, once a second,
 ## for a village — not once per villager per decision.
-func tick(delta: float, town: Village) -> void:
+func scan(delta: float, town: Village) -> void:
 	_left -= delta
 	if _left > 0.0:
 		return

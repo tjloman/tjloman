@@ -107,7 +107,7 @@ var _adapted := 1.0
 ## Take a reading, and let the eye move toward it. Called on a slow tick; the
 ## adaptation is time-based, so the rate it is called at does not change how it
 ## feels — only how smoothly.
-func tick(at: Vector3, hearths: Array[OmniLight3D], tree: SceneTree,
+func take_reading(at: Vector3, hearths: Array[OmniLight3D], tree: SceneTree,
 		delta: float) -> void:
 	_lux = _sky() + _local(at, hearths, tree)
 	var toward := STOP_DOWN if _lux > _adapted else OPEN_UP

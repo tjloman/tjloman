@@ -1053,15 +1053,15 @@ func _run_smoke_test() -> void:
 		var mind := VillageHive.new()
 		for i in 3:
 			mind.witness(String(scene[1]), village.global_position, float(scene[2]))
-		mind.tick(VillageHive.PERIOD, village)
+		mind.murmur(VillageHive.PERIOD, village)
 		print("SMOKE TEST: hive — after %-38s the town is %s" % [scene[0], mind.report()])
 	# An invitation is not a summons: a frightened town declines it.
 	crowd.invite("dance", creature, creature.global_position, 1.0)
-	crowd.tick(VillageHive.PERIOD, village)
+	crowd.murmur(VillageHive.PERIOD, village)
 	var welcoming := crowd.stance
 	crowd.witness("horror", village.global_position, 2.0)
 	crowd.invite("dance", creature, creature.global_position, 1.0)
-	crowd.tick(VillageHive.PERIOD, village)
+	crowd.murmur(VillageHive.PERIOD, village)
 	print("SMOKE TEST: hive — the same dance: a calm town %s, a terrified one %s" % [
 		welcoming, crowd.stance])
 
@@ -1310,7 +1310,7 @@ func _run_smoke_test() -> void:
 		var pinned := eaten.pin != null
 		var gripped := jaws.state == Animal.State.MAUL
 		var outraged: bool = village.feud.outraged(eaten.global_position)
-		village.feud.tick(12.0)          # twelve seconds under the jaws
+		village.feud.seethe(12.0)          # twelve seconds under the jaws
 		var part_way := eaten.pin.gone() if eaten.pin != null else -1.0
 		var would_rise := eaten.pin.rise_health() if eaten.pin != null else -1.0
 		print("SMOKE TEST: mauling — pinned=%s held=%s outraged=%s after 12s %d%% done, rises at %.0f%%" % [

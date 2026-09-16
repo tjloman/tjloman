@@ -440,9 +440,9 @@ func _physics_process(delta: float) -> void:
 		State.LEASHED:
 			CreatureLead.walk(self, delta)
 		State.WEIGHING:
-			intent.tick(self, delta)
+			intent.simmer(self, delta)
 		State.JUGGLE:
-			throwing.tick(self, delta)
+			throwing.wind_up(self, delta)
 		State.LOUNGE:
 			CreatureLeisure.lounge(self, delta)
 		State.DANCE:
@@ -470,7 +470,7 @@ func _physics_process(delta: float) -> void:
 	# busy or not, and a well-kept creature with attention to spare does it
 	# oftener — while a wretched or frightened one has little left over to look
 	# up with. This is the cheapest and truest statement of what welfare buys.
-	welfare.tick(delta, body.fullness(growth), body.fat, energy, mood)
+	welfare.weigh(delta, body.fullness(growth), body.fat, energy, mood)
 	CreatureWelfare.shed(self, delta)
 	_observe_time -= delta * welfare.watchfulness()
 	if _observe_time <= 0.0:
@@ -487,7 +487,7 @@ func _physics_process(delta: float) -> void:
 	# AND WHAT IS STILL IN YOUR HAND. A thrown thing is a catch; a held thing
 	# is an offer, and the creature has its own reach for those. See
 	# CreatureOffer — it is what makes a staked creature feedable.
-	offer.tick(self, delta)
+	offer.consider(self, delta)
 
 	# Bulldoze the meadow: nearby trees lean out of the giant's way (they spring
 	# back once it passes). Throttled — the trees' own spring keeps it smooth.
@@ -2254,7 +2254,7 @@ func is_flying() -> bool:
 ## above the ground, footing on water holding it at the surface. All of it lives
 ## in CreatureBlessings; what comes back is a line to say when one runs out.
 func _tick_flight(delta: float) -> void:
-	var ended := blessings.tick(self, delta)
+	var ended := blessings.wane(self, delta)
 	if ended != "":
 		GameState.announce(ended)
 

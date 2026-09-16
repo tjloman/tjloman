@@ -49,7 +49,7 @@ func grant_water_walking(seconds: float) -> void:
 ## Run the clocks down and move the body accordingly. Returns a word when a
 ## blessing has just ENDED, so the creature can announce it — this file knows
 ## when things expire but has no business talking to the player.
-func tick(who: Creature, delta: float) -> String:
+func wane(who: Creature, delta: float) -> String:
 	var ended := ""
 	if water_walk_time > 0.0:
 		water_walk_time -= delta

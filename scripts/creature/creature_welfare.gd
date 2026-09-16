@@ -108,7 +108,7 @@ var _since_hurt := 999.0
 ## harm; both fade, so a creature is always mostly what it has been LATELY.
 ## `belly` is 0..1 of the stomach and `reserve` is the fat, 0..100 — the two
 ## facts that between them say whether this animal is actually going without.
-func tick(delta: float, belly: float, reserve: float, energy: float,
+func weigh(delta: float, belly: float, reserve: float, energy: float,
 		mood: float) -> void:
 	pain = maxf(pain - PAIN_FADE * delta, 0.0)
 	_since_hurt += delta

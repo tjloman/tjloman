@@ -145,7 +145,7 @@ func light(who: Node3D, flame_high := 2.4) -> bool:
 ## resists a rock is mass and what resists a fire is not being made of wood.
 ## Health is what a building has against BLOWS; the burn is a fraction of
 ## whatever that is, so the two cannot fight each other.
-func tick(who: Node3D, delta: float, most := 100.0) -> float:
+func smoulder(who: Node3D, delta: float, most := 100.0) -> float:
 	if not alight:
 		return 0.0
 	_left -= delta

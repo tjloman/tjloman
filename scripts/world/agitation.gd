@@ -72,7 +72,7 @@ var _gripped := false
 ## because a guttering flame is the same fact about the same body as the
 ## thrashing and the cry, and it was previously a third function on a third
 ## clock doing it from two call sites that had to remember to.
-func tick(who: Node3D, visuals: Node3D, burning: bool, airborne: bool,
+func judder(who: Node3D, visuals: Node3D, burning: bool, airborne: bool,
 		flame: Node3D = null, human := true) -> void:
 	if is_instance_valid(flame):
 		flame.scale.y = 1.0 + sin(GameState.clock * 16.0) * 0.2

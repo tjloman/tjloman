@@ -29,6 +29,17 @@ const FRAIL_REACH := 1.4
 ## this, they go in with their hands.
 const ARMS_WORTH_IT := 9.0
 
+## HOW LONG A COUNT OF YOUR FRIENDS IS GOOD FOR, in seconds. Far shorter than it
+## takes a line to break, and long enough that `allies_near` stops being a walk
+## over the town on every frame of every fight.
+const ALLY_MEMORY := 0.4
+## And how many such counts are kept before the whole ledger is thrown away. It
+## only ever holds people who have been in a fight, and fights end.
+const MEMORIES_MOST := 512
+
+## villager id -> [when it was counted, how many]. See ALLY_MEMORY.
+static var _counted := {}
+
 
 ## Draw a weapon from the storehouse (paying its materials). Bare hands if the
 ## village is too poor — a mob is still a mob.
@@ -46,15 +57,35 @@ static func take_up_arms(who: Villager) -> void:
 
 
 ## How many of my people are close enough to fight alongside me.
+## O(N) BY DESIGN: counting who is standing with you means looking at who is
+## standing with you, and there is no tally of "near ME" a town could keep. It
+## is not paid every frame, though — see ALLY_MEMORY. A battle is the moment
+## the game is already busiest, and twenty people each walking two hundred
+## every frame is the cost of a battle rather than the cost of a fight.
 static func allies_near(who: Villager) -> int:
 	if who.village == null:
 		return 0
+	# NOBODY COUNTS THEIR FRIENDS SIXTY TIMES A SECOND. Held for a moment, which
+	# is far shorter than it takes a line to break and long enough to take the
+	# walk off the frame.
+	var id := who.get_instance_id()
+	var now := GameState.clock
+	var held: Array = _counted.get(id, [])
+	if not held.is_empty() and now - float(held[0]) < ALLY_MEMORY:
+		return int(held[1])
 	var n := 0
 	for v in who.village.my_villagers():
 		if v == who or not v.is_adult() or v.state == Villager.State.DYING:
 			continue
 		if v.global_position.distance_to(who.global_position) < Villager.ALLY_RADIUS:
 			n += 1
+	# The ledger is only ever as big as the number of people who have been in a
+	# fight, and a fight ends. Emptied wholesale rather than swept, because a
+	# stale entry is worth nothing and finding it costs more than forgetting
+	# everybody and counting again.
+	if _counted.size() > MEMORIES_MOST:
+		_counted.clear()
+	_counted[id] = [now, n]
 	return n
 
 

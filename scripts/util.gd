@@ -500,7 +500,14 @@ static func sim_stride(pos: Vector3) -> int:
 		return 10 * relief
 	if d2 > 130.0 * 130.0:
 		return 4 * relief
-	return 1 if relief == 1 else 2
+	# THE NEAR BAND COUNTS ITSELF. A city of two hundred fits inside a hundred
+	# and thirty metres, so the band meant to protect the frame handed full rate
+	# to every one of them precisely because they were all standing together
+	# where the player was looking. See Crowd: past what a frame can carry, the
+	# stride rises for everybody until the work fits, and Scheduler deals that
+	# evenly across the cycle as it always has.
+	Crowd.counted_near()
+	return maxi(Crowd.stride(), 1 if relief == 1 else 2)
 
 
 ## Simple billboard status label used above villagers/creature heads.

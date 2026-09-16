@@ -109,7 +109,7 @@ func said(who: Creature) -> String:
 
 ## Runs while it is weighing. Nothing else about the creature is suspended: it
 ## is standing there thinking, not frozen.
-func tick(who: Creature, delta: float) -> void:
+func simmer(who: Creature, delta: float) -> void:
 	who._apply_gravity_only(delta)
 	if not _asked:
 		_asked = true

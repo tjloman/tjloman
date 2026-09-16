@@ -282,7 +282,7 @@ func begin(who: Creature) -> void:
 
 
 ## Runs every physics frame while the creature is juggling.
-func tick(who: Creature, delta: float) -> void:
+func wind_up(who: Creature, delta: float) -> void:
 	_forget_the_lost()
 	if aloft.size() < _want and _gathering > 0.0:
 		_collect(who, delta)

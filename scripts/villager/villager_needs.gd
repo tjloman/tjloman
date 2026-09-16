@@ -34,7 +34,7 @@ const DEATH_BY_YOUR_HAND := -2.5
 const GRIEF_REACH := 40.0
 
 
-static func tick(who: Villager, delta: float) -> void:
+static func live(who: Villager, delta: float) -> void:
 	# NO CHILD IS EVER HUNGRY. Not fed first, not fed cheaply — not hungry at
 	# all, so the question never reaches the granary, the job board, or the
 	# player. There are no starving children in this game under any

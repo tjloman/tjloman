@@ -844,8 +844,8 @@ func _process(delta: float) -> void:
 	# The maulings under way, and the town's memory of wonders. Both are small
 	# and both must run at real pace whatever the simulation stride is doing to
 	# this town — a pack is not slower because nobody is looking.
-	feud.tick(delta)
-	wonder.tick(delta)
+	feud.seethe(delta)
+	wonder.keep(delta)
 	if alarm > 0.0:
 		alarm -= delta
 	if grudge > 0.0:
@@ -857,9 +857,9 @@ func _process(delta: float) -> void:
 	if _tally_left <= 0.0:
 		_tally_left = TALLY_EVERY
 		_retally()
-	hive.tick(delta, self)
-	watch.tick(delta, self)
-	party.tick(delta, self)
+	hive.murmur(delta, self)
+	watch.scan(delta, self)
+	party.muster(delta, self)
 
 	_housing_timer -= delta
 	if _housing_timer <= 0.0:

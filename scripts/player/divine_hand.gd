@@ -1452,7 +1452,7 @@ func _tick_pose(delta: float) -> void:
 	_stirred += delta
 	if _knuckles.is_empty():
 		return
-	_pose.tick(HandPose.shape_for(is_instance_valid(held_body),
+	_pose.ease(HandPose.shape_for(is_instance_valid(held_body),
 		state == HandState.DRAG_LAND, hover_target, _stirred),
 		_knuckles, _thumb_joint, delta)
 

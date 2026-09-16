@@ -67,7 +67,7 @@ var _heat := {}
 
 
 ## Heat bleeds off. Called from the village's own clock.
-func tick(delta: float) -> void:
+func keep(delta: float) -> void:
 	# A TOWN THAT HAS SEEN NOTHING COSTS NOTHING. `.keys()` builds a fresh Array
 	# every call, and this runs once a frame for every village in the world —
 	# so an empty ledger was allocating and freeing a throwaway array per town

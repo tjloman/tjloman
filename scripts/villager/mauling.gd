@@ -129,7 +129,7 @@ func gone() -> float:
 
 ## Runs on the village's clock. False once this is over and the village should
 ## forget it.
-func tick(delta: float) -> bool:
+func worry_at(delta: float) -> bool:
 	if victim == null or not is_instance_valid(victim) or victim.is_queued_for_deletion():
 		_let_all_go()
 		return false

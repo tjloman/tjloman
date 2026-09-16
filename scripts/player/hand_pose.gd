@@ -50,7 +50,7 @@ var _drift := 0.0
 ## Take up `shape` and write it onto the knuckles. `knuckles` are the four
 ## finger pivots in order, `thumb` the thumb's pivot; either may be empty, which
 ## is the case for a rigged custom hand model that animates itself.
-func tick(shape: Dictionary, knuckles: Array, thumb: Node3D, delta: float) -> void:
+func ease(shape: Dictionary, knuckles: Array, thumb: Node3D, delta: float) -> void:
 	var take := clampf(1.0 - exp(-EASE * delta), 0.0, 1.0)
 	var want: Array = shape["curl"]
 	for i in mini(_curl.size(), want.size()):

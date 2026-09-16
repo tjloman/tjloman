@@ -10,8 +10,12 @@ extends RefCounted
 ## THE COMMENT BELOW IS THE REASON IT MOVED. `conceive` is the most expensive
 ## thing in a crowded village and it had no business being — see `ROLL FIRST`.
 
-## A CHILD OF MINE STILL AT THE BREAST, and no school to mind it. This walks
-## every soul in the village, which is why nothing calls it on a whim.
+## O(N) BY DESIGN: a mother's own children are not something a town keeps a
+## tally of, so finding out means looking. It is behind `conceive`'s roll, which
+## rejects better than a thousand to one — see the note there, which is the
+## whole reason that roll comes first.
+##
+## A CHILD OF MINE STILL AT THE BREAST, and no school to mind it.
 static func dependent_child(who: Villager) -> bool:
 	if who.village.has_edubba():
 		return false
@@ -72,6 +76,10 @@ static func conceive(who: Villager, delta: float) -> void:
 	_with_whoever_came(who)
 
 
+## O(N) BY DESIGN: finding whoever else came to the totem means looking at who
+## came to the totem. Reached only after `conceive`'s roll has already passed,
+## which happens about once a minute across a whole village.
+##
 ## A PARTNER WHO CAME TO THE TOTEM FOR THE SAME REASON. Courting AND
 ## worshipping both count: insisting the man be mid-worship at the exact instant
 ## of the roll was a coincidence the pair could rarely manage.

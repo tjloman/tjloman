@@ -141,7 +141,7 @@ func invite(what: String, who: Node3D, where: Vector3, warmth := 1.0) -> void:
 
 ## The town's thinking, done once for everybody. Cheap by construction: a few
 ## dozen arithmetic operations however many people live here.
-func tick(delta: float, village: Village) -> void:
+func murmur(delta: float, village: Village) -> void:
 	_think += delta
 	# A struggling device lets the towns think less often. Twice a second and
 	# once every second and a half are indistinguishable from outside a crowd.

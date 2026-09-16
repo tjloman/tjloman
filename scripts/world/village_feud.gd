@@ -75,9 +75,9 @@ func seize(prey: Villager, beast: Animal) -> void:
 			GameState.announce("%s is down — %ss have them!" % [prey.villager_name, beast.species])
 
 
-func tick(delta: float) -> void:
+func seethe(delta: float) -> void:
 	for i in range(maulings.size() - 1, -1, -1):
-		if not maulings[i].tick(delta):
+		if not maulings[i].worry_at(delta):
 			maulings.remove_at(i)
 
 
