@@ -32,10 +32,31 @@ const ENOUGH := 2400.0
 ## and this is what stops it when somebody raises ENOUGH and forgets.
 const PROBES_MOST := 700
 
-## How far from the middle of a town its harbour may stand, and how close to the
-## water's edge the dock itself sits.
+## How far from the middle of a town its harbour may stand.
 const SHORE_WITHIN := 75.0
-const DOCK_OFF_THE_WATER := 3.0
+
+## THE JETTY, in metres out from the dock's root along the bearing — and the
+## reason these live HERE rather than with the mesh that draws them.
+##
+## A harbour is the one building in this game whose placement has to be CHECKED
+## rather than computed. Everywhere else, "a flat dry spot" is the whole
+## requirement and any such spot will do. A jetty has to start on land and end
+## over water, and whether a given spot manages that depends on the shape of a
+## shoreline nobody wrote down. So the shape of the jetty is a fact the finder
+## needs, and the finder rejects any spot that cannot carry one.
+##
+## The deck starts just past the net rack, runs out to JETTY_TO, and everything
+## from WET_FROM outward must be over water or it is not a harbour — it is a
+## shed by a lake.
+const JETTY_FROM := 0.6
+const JETTY_TO := 7.6
+const JETTY_WET_FROM := 2.5
+## How far inland of the waterline the root stands, so the net rack has ground
+## under it. The ONLY part of a dock that is on land.
+const SHORE_FOOTING := 1.0
+## How finely the waterline is found, and how finely the deck is checked.
+const WATERLINE_STEP := 0.25
+const DECK_STEP := 1.0
 
 ## How long a village's answer about its own water is good for. The land moves —
 ## an earthquake, a volcano, a deluge — so this is a memory, not a fact.
@@ -130,21 +151,66 @@ static func _look_for_a_shore(from: Vector3, world: WorldGen) -> Dictionary:
 	return {}
 
 
-## IS THIS PROBE A LANDING? It has to be wet, on a body big enough to matter,
-## and to have dry ground just inshore of it to stand the dock on.
+## IS THIS PROBE A LANDING, AND WOULD A JETTY ACTUALLY REACH THE WATER FROM IT?
+##
+## The first version asked only the first half: wet here, big enough body, and
+## then it walked back to the first dry ground and called that a harbour. Which
+## is a spot NEAR water, and near water is what every other building in the
+## village already is. On a shallow shore the walk-back landed metres inland,
+## the jetty ran out over grass, and the boats moored on the lawn.
+##
+## So the waterline is found properly — bisected, not stepped — the root stands
+## one metre inland of it, and then the whole deck is WALKED and every plank
+## past JETTY_WET_FROM has to be over water. A spot that cannot carry a jetty is
+## not a harbour and is refused, and the search goes on looking.
 static func _dock_spot(probe: Vector3, world: WorldGen, angle: float) -> Vector3:
 	if not world.is_underwater(probe.x, probe.z):
 		return Vector3.INF
 	if surface_from(world, probe) < ENOUGH:
 		return Vector3.INF
-	# Walk back toward the town until the ground comes up, and stand there.
-	var back := -Vector3(cos(angle), 0.0, sin(angle))
-	for i in range(1, 7):
-		var at := probe + back * (DOCK_OFF_THE_WATER * float(i) * 0.5)
-		if not world.is_underwater(at.x, at.z):
-			at.y = world.height_at(at.x, at.z)
-			return at
-	return Vector3.INF
+	var out := Vector3(cos(angle), 0.0, sin(angle))
+	var shore := _waterline(probe, out, world)
+	if shore == Vector3.INF:
+		return Vector3.INF
+	var root := shore - out * SHORE_FOOTING
+	if world.is_underwater(root.x, root.z):
+		return Vector3.INF          # nowhere to stand the net rack
+	if not _deck_is_over_water(root, out, world):
+		return Vector3.INF
+	root.y = world.height_at(root.x, root.z)
+	return root
+
+
+## THE WATERLINE, between a wet point and the dry land behind it. Bisected to
+## WATERLINE_STEP, so the answer is the edge itself rather than whichever of a
+## handful of paces happened to be the first one on grass.
+static func _waterline(wet: Vector3, out: Vector3, world: WorldGen) -> Vector3:
+	# Far enough back to be sure of finding dry ground; if the whole span is
+	# water this is a spot in the middle of a lake and no use for a jetty.
+	var dry := wet - out * (JETTY_TO + SHORE_FOOTING * 2.0)
+	if world.is_underwater(dry.x, dry.z):
+		return Vector3.INF
+	while wet.distance_to(dry) > WATERLINE_STEP:
+		var mid := (wet + dry) * 0.5
+		if world.is_underwater(mid.x, mid.z):
+			wet = mid
+		else:
+			dry = mid
+	return wet
+
+
+## WALK THE DECK. Every plank from JETTY_WET_FROM out to the end must be over
+## water — this is the whole difference between a harbour and a shed by a lake,
+## and it is a check rather than a calculation because the shape of a shoreline
+## is not something anybody wrote down.
+static func _deck_is_over_water(root: Vector3, out: Vector3, world: WorldGen) -> bool:
+	var along := JETTY_WET_FROM
+	while along <= JETTY_TO:
+		var plank := root + out * along
+		if not world.is_underwater(plank.x, plank.z):
+			return false
+		along += DECK_STEP
+	return true
 
 
 ## IS THERE A HARBOUR HERE AT ALL — asked of a bare point rather than of a

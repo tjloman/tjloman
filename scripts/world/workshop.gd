@@ -404,7 +404,12 @@ func _build_stand_in(spec: Dictionary) -> void:
 			# on purpose — the one building in the town whose silhouette says
 			# what it is from the hill, because it is the one building that is
 			# not in the town.
-			add_child(Util.box(Vector3(2.2, 0.28, 8.0), tint, Vector3(0, 0.6, 3.6)))
+			# ONE SET OF DIMENSIONS, in Waters, where the finder checks them.
+			# A deck drawn longer than the span that was verified is a deck
+			# whose far end is over grass, and nothing would say so.
+			var deck: float = Waters.JETTY_TO - Waters.JETTY_FROM
+			add_child(Util.box(Vector3(2.2, 0.28, deck), tint,
+				Vector3(0, 0.6, Waters.JETTY_FROM + deck * 0.5)))
 			# `pile` and not `post`: this class has a post() of its own, and a
 			# loop variable by that name shadows it.
 			for pile in 4:
@@ -431,6 +436,11 @@ func _build_stand_in(spec: Dictionary) -> void:
 ## Where a worker stands. Just outside, so a crowd of them is not inside the
 ## walls of a building three metres across.
 func post() -> Vector3:
+	# A DOCK'S POST IS ASHORE. Two metres to the side is two metres into the
+	# lake for a building that stands at the waterline, and the net rack — the
+	# one part of a harbour that is on land at all — is behind the root.
+	if trade == "dock":
+		return global_position - global_transform.basis.z.normalized() * 2.0
 	return global_position + Vector3(2.2, 0.0, 0.0)
 
 
@@ -606,21 +616,29 @@ func _keep_the_fleet(delta: float) -> void:
 		return
 	if village.store == null or not is_instance_valid(village.store):
 		return
+	# THE MOORING IS FOUND BEFORE THE TIMBER IS SPENT. A boat with nowhere to
+	# tie up is not a boat, and a village that paid twelve timber for one it
+	# never got would go on paying every leg for ever.
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	var along := (float(_fleet.size()) - float(BOATS_MOST - 1) * 0.5) * 2.4
+	var tie := _tie_up(world, along)
+	if tie == Vector3.INF:
+		return
 	if not village.store.try_spend_materials(BOAT_LUMBER, 0):
 		return
-	_launch()
+	_launch(world, tie)
 
 
 ## ONE MORE HULL, tied up a little along the jetty from the last.
-func _launch() -> void:
-	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+func _launch(world: WorldGen, tie: Vector3) -> void:
 	if _grounds == Vector3.INF:
-		_grounds = Waters.off_shore(world, global_position, GROUNDS_OUT)
+		# From the END of the jetty, not from the dock's root — the root stands
+		# on land, and open water measured from a spot on land is measured
+		# through the beach.
+		var deck_end := global_position \
+			+ global_transform.basis.z.normalized() * Waters.JETTY_TO
+		_grounds = Waters.off_shore(world, deck_end, GROUNDS_OUT)
 	var boat := FishingBoat.new()
-	# Strung ALONG the jetty rather than stacked on it: each new hull ties up a
-	# couple of metres further down the beam. See `_tie_up`.
-	var along := (float(_fleet.size()) - float(BOATS_MOST - 1) * 0.5) * 2.4
-	var tie := _tie_up(world, along)
 	boat.mooring = tie
 	boat.grounds = _grounds if _grounds != Vector3.INF else tie
 	boat.home_store = village.store if village != null else null
@@ -633,17 +651,28 @@ func _launch() -> void:
 ## the beach beside it. The mooring used to be a ring round the dock's own
 ## position, which is a spot chosen for being DRY; half the fleet was moored in
 ## somebody's field.
+## PLUS Z, NOT MINUS. `_ready` turns the building so its +Z runs out to sea, and
+## this read -Z — so every mooring was probed INLAND, found no water, fell
+## through to the fallback and put the boat on the lawn behind the jetty. That
+## is the whole of why no boat in the game was ever on water.
+##
+## And there is no fallback any more. A mooring that cannot be found is a boat
+## that should not be launched; putting it "somewhere" is how a bug becomes a
+## feature nobody can see the edge of. INF, and `_launch` refuses.
 func _tie_up(world: WorldGen, along: float) -> Vector3:
 	if world == null:
-		return global_position
-	var out_to_sea := -global_transform.basis.z.normalized()
+		return Vector3.INF
+	var out_to_sea := global_transform.basis.z.normalized()
 	var beam := Vector3(out_to_sea.z, 0.0, -out_to_sea.x)
-	for reach: float in [5.0, 7.5, 10.0, 13.0]:
+	# From the end of the deck outward — a boat tied up alongside the planks,
+	# not under them.
+	for reach: float in [Waters.JETTY_TO + 1.5, Waters.JETTY_TO + 4.0,
+			Waters.JETTY_TO + 7.0, Waters.JETTY_TO + 11.0]:
 		var tie := global_position + out_to_sea * reach + beam * along
 		if world.is_underwater(tie.x, tie.z):
 			tie.y = world.water_level_at(tie.x, tie.z)
 			return tie
-	return global_position + out_to_sea * 6.0
+	return Vector3.INF
 
 
 ## HOW MANY OF THIS HARBOUR'S BOATS ARE ACTUALLY ON THE WATER. Not moored, not
