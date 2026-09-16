@@ -14,6 +14,14 @@ outside, and there is nothing in the log to find. They are alive. They are
 ticking. Their hunger is climbing. They are simply never going to ask what to
 do next, because the arm they are in never asks.
 
+AND A THIRD SHAPE, which is the same illness wearing a different coat: a GATE
+NOBODY CAN PASS. A child's energy climbs four a second and is never spent, so
+it sits pinned at a hundred -- and the rule that sends a villager to bed asks
+whether they are TIRED. Children therefore never slept. Not once, in any
+village, ever. They stood in the school yard reciting their letters all night
+and the teachers stood over them doing it, and every number involved was
+correct.
+
 TWO SHAPES OF IT, and this looks for both:
 
   A STATE WITH NO CASE AT ALL. Fifty-two states and however many cases; a
@@ -101,6 +109,17 @@ BY_DESIGN = {
 }
 
 
+def code(text):
+    """Source with its COMMENTS TAKEN OUT. A note about a thing is not the
+    thing, and three checks in this toolbox have now tripped over that."""
+    out = []
+    for row in text.split("\n"):
+        bare = row.split("#")[0].rstrip()
+        if bare:
+            out.append(bare)
+    return "\n".join(out)
+
+
 def states():
     block = SRC[SRC.index("enum State {"):]
     block = block[:block.index("}")]
@@ -169,9 +188,36 @@ for name, why in sorted(BY_DESIGN.items()):
     mark = "" if name in ARMS else "   (no arm)"
     print("   %-10s %s%s" % (name, why, mark))
 
+# -- AND A GATE NOBODY CAN PASS --------------------------------------------
+#
+# VillagerNeeds.live gives a child energy and never takes any, so anything
+# gating on a child's tiredness gates on a number that is always a hundred.
+NEEDS = code((ROOT / "scripts/villager/villager_needs.gd").read_text())
+child = NEEDS[NEEDS.index("if not who.is_adult():"):]
+child = child[:child.index("return")]
+spends = "who.energy = maxf" in child or "who.energy -=" in child
+print()
+print("A CHILD'S ENERGY %s." % ("rises and falls" if spends else "only ever rises"))
+
+# THE GATE THAT PRECEDES GOING TO BED, which is not merely "a line mentioning
+# the night". The first version of this took the WAKE-UP condition, a few
+# hundred lines away, and reported on it confidently.
+bed = ""
+rows = code(SRC).split("\n")
+for i, row in enumerate(rows[:-1]):
+    if "is_night()" in row and "_go_sleep()" in rows[i + 1]:
+        bed = row
+        break
+print("GOING TO BED reads: %s" % bed.strip())
+if not spends and bed and "is_adult" not in bed and "Edubba" not in bed:
+    fail.append("a child's energy only ever rises, and the rule that sends a "
+                "villager to bed asks whether they are tired. Children never "
+                "sleep — not once, in any village, ever — and every number "
+                "involved is correct")
+
 print()
 if fail:
     for line in fail:
         print("BROKEN: " + line)
     sys.exit(1)
-print("OK: every state a villager can be in has a way out of it.")
+print("OK: every state has a way out, and every gate can be passed.")

@@ -654,7 +654,7 @@ func _physics_process(delta: float) -> void:
 			if _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
 				_apply_gravity_only(delta)
 			_action_time -= delta
-			if _action_time <= 0.0 or not village.has_edubba():
+			if _action_time <= 0.0 or not village.has_edubba() or not Edubba.in_session():
 				_rethink()
 		State.MUSTERING:
 			# Standing about at the totem until enough have come. What the party
@@ -1071,7 +1071,8 @@ func _choose() -> void:
 	if hunger > 60.0 and _plan_eating():
 		return
 	# Night is for sleeping — though the well-rested potter about a while.
-	if GameState.is_night() and energy < 85.0:
+	# A CHILD'S ENERGY ONLY EVER CLIMBS, so tiredness is a gate they never pass.
+	if GameState.is_night() and (energy < 85.0 or not is_adult()):
 		_go_sleep()
 		return
 	# School if the village has one, else trailing their mother; orphans play.
@@ -1102,7 +1103,7 @@ func _choose() -> void:
 		if post >= 0:
 			is_teacher = true
 			_class = post
-	if is_teacher and village.has_edubba():
+	if is_teacher and village.has_edubba() and Edubba.in_session():
 		state = State.TEACH
 		_action_time = randf_range(8.0, 16.0)
 		_target = village.edubba.yard_for(_class)   # this teacher's own corner
@@ -2020,7 +2021,7 @@ func _set_out() -> void:
 
 
 func _process_at_school(delta: float) -> void:
-	if not village.has_edubba() or not Edubba.schools(self):
+	if not village.has_edubba() or not Edubba.schools(self) or not Edubba.in_session():
 		_rethink()
 		return
 	village.edubba.attend(self, delta)

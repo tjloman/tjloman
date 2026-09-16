@@ -94,6 +94,16 @@ var _left: Array[float] = []
 ## so a class is never a diagram.
 var _drift: Array[float] = []
 
+## IS THE SCHOOL OPEN? It was never shut, so the children stood in the yard
+## reciting their letters all night and the teachers stood over them doing it.
+## Nobody had to decide to stay: a child's energy only ever goes UP (they gain
+## four a second and spend none), so the night gate — which asks whether you
+## are tired — was a question a child could never answer yes to, and school was
+## what they did instead of everything, for ever.
+static func in_session() -> bool:
+	return not GameState.is_night()
+
+
 ## IS THIS ONE STILL OF AN AGE TO BE TAUGHT? The one place that answers it, so
 ## the school, the seating, the class sizes and the villager's own decision
 ## cannot come to different conclusions about who is a pupil.
