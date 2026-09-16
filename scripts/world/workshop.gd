@@ -430,6 +430,17 @@ func _ready() -> void:
 		var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 		var out_to_sea := Waters.bearing_for(village, world)
 		rotation.y = atan2(cos(out_to_sea), sin(out_to_sea)) - village.rotation.y
+		return
+	# AND IT SITS DOWN ON THE GROUND THAT IS DRAWN, not on the noise the placer
+	# measured. See Footing — a barn is five metres across and was settled
+	# against a sample four metres wide, on a surface that is a grid of flat
+	# triangles rather than the smooth function it was sampled from.
+	#
+	# NOT THE DOCK, which is the one building in the village whose height is a
+	# decision rather than a consequence: its deck stands at the waterline with
+	# most of its footprint over open water, and the highest ground under that
+	# footprint is the beach it is trying to get away from.
+	Footing.settle(self, get_tree().get_first_node_in_group("world_gen") as WorldGen)
 
 
 ## THE YARD: A LAMP AND A TROUGH.

@@ -163,7 +163,10 @@ static func form_up(rows: Array, many: int, heading: float) -> void:
 		# Centred on the herd's own heart rather than trailing behind it, or
 		# `Herd._recentre` would spend the rest of the day dragging the mass
 		# forward onto the column and the column back off it.
-		var back := (float(i / ABREAST) - float(ranks - 1) * 0.5) * RANK_GAP
+		# Integer division ON PURPOSE: which RANK of the column this one is in.
+		@warning_ignore("integer_division")
+		var rank := i / ABREAST
+		var back := (float(rank) - float(ranks - 1) * 0.5) * RANK_GAP
 		var side := (float(i % ABREAST) - float(ABREAST - 1) * 0.5) * FILE_GAP
 		# AND NOBODY IS QUITE IN LINE. Off the row's own index, so it is the
 		# same lean every time this column forms — a drove, not a parade, and

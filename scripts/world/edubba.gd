@@ -145,6 +145,16 @@ func _ready() -> void:
 		# A little standing tablet by the door, to read as "school".
 		add_child(Util.box(Vector3(0.5, 0.7, 0.08), Color(0.72, 0.64, 0.5), Vector3(1.5, 0.9, 1.2)))
 
+	# AND THEN IT SITS DOWN ON THE GROUND THAT IS ACTUALLY DRAWN.
+	#
+	# This is the building it was found on: the town raised a school, the school
+	# sank into the green, and the children gave up and walked back to the
+	# totem. The placer settles a spot against `height_at`, which is the noise —
+	# and the hillside you can see is a four-metre grid of samples off that
+	# noise with flat triangles between them, so in a hollow the drawn ground
+	# sits most of a metre ABOVE the number the school was given. See Footing.
+	Footing.settle(self, get_tree().get_first_node_in_group("world_gen") as WorldGen)
+
 
 ## HOW MANY CLASSES ARE RUNNING — one per teacher actually standing in the
 ## yard, so an unstaffed school still gathers its children into one group

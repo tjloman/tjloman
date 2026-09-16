@@ -88,7 +88,11 @@ static func fan(first: Node3D, vel: Vector3) -> Array:
 		# LEFT, RIGHT, FURTHER LEFT, FURTHER RIGHT — so the volley grows out
 		# from the shot the player actually took, and the one they aimed is
 		# always the one in the middle.
-		var lean := float((i + 1) / 2) * (-1.0 if i % 2 == 1 else 1.0)
+		# Integer division ON PURPOSE: 1,2,3,4 become ranks 1,1,2,2 — which is
+		# what "one out on each side, then two out on each side" means.
+		@warning_ignore("integer_division")
+		var rank := (i + 1) / 2
+		var lean := float(rank) * (-1.0 if i % 2 == 1 else 1.0)
 		where.add_child(twin)
 		twin.global_position = first.global_position + side * (gap * lean)
 		var away := vel.rotated(Vector3.UP, deg_to_rad(step * lean)) \

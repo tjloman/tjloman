@@ -90,6 +90,11 @@ func _ready() -> void:
 		_build_scaffold_visuals()
 	else:
 		_build_visuals()
+	# AND IT SITS DOWN ON THE GROUND THAT IS DRAWN. A longhouse is nearly six
+	# metres long and was settled against a square sample of three and a half,
+	# taken off the smooth noise rather than off the four-metre grid of flat
+	# triangles the player can actually see. See Footing.
+	Footing.settle(self, get_tree().get_first_node_in_group("world_gen") as WorldGen)
 
 
 func capacity() -> int:
