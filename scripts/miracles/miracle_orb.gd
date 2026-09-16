@@ -101,6 +101,18 @@ func _resolve() -> void:
 	queue_free()
 
 
+## ANOTHER OF EXACTLY THIS ONE, unthrown. What makes an orb volley — Volley
+## asks every thrown body for this and for nothing else, so a working the
+## player invented tomorrow comes through here without that file learning it.
+func another() -> MiracleOrb:
+	var twin := MiracleOrb.new()
+	twin.miracle_name = miracle_name
+	twin.potency = potency
+	twin.color = color
+	twin.manager = manager
+	return twin
+
+
 func hover_text() -> String:
 	var strength := ""
 	if potency > 1.4:

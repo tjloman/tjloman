@@ -105,9 +105,41 @@ const HEARTH_REACH := 2.4
 const HEARTH_EVERY := 0.25
 const HEARTH_HEAT := 14.0
 
+## THREE SIZES OF FIRE, AND THE DRAWING SAYS WHICH ---------------------------
+##
+## `fire` is a gout; `fire fire` is a bigger one; `fire fire fire` is bigger
+## again. It cost more every time and did exactly as much, because `_make_orb`
+## handed the potency to every orb in the game EXCEPT this one — the fireball
+## branch built the ball off `kind` alone and dropped the number on the floor.
+## So three fires cost two and a half times one fire and threw the same ball.
+##
+## The rungs are the spellbook's own repetition ladder: one rune is potency
+## 1.0, two is 1.75, three is 2.5 (see Spellbook, rule 2). The thresholds sit
+## under each rung with room either side, so a blend that lands between them
+## rounds down to the size it has actually paid for.
+const HEFTS: Array[Dictionary] = [
+	{"from": 0.0, "grows": 1.0, "called": ""},
+	{"from": 1.5, "grows": 1.45, "called": "Greater "},
+	{"from": 2.2, "grows": 1.9, "called": "Greatest "},
+]
+
+## CATCHING. Fire catches fire, and nothing else does: to take a ball out of
+## the air you must already be holding one, which is the whole of the Black &
+## White 2 trick and the whole of the Nemesis duel on the first island.
+##
+## An arm's length, and it must be COMING AT YOU. A ball rolling past your feet
+## is not a thing anybody caught, and a hand that hoovered up its own spent
+## throws would make the fire miracle impossible to actually use.
+const CATCH_REACH := 3.4
+
 ## Which of the two this one is — a key of KINDS. Set by MiracleManager before
 ## the body enters the tree.
 var kind := "fireblast"
+## HOW MUCH FIRE, from the drawing. Also set before the body enters the tree.
+var potency := 1.0
+## What that works out to as a multiplier on every number in the KINDS row.
+## Settled once in `_ready`; 1.0 for anything built without an opinion.
+var grew := 1.0
 
 var _armed := false
 var _exploded := false
@@ -136,20 +168,25 @@ func _init() -> void:
 func _ready() -> void:
 	add_to_group(Affords.PICKABLE)
 	var spec: Dictionary = KINDS[kind]
+	grew = float(HEFTS[rung()]["grows"])
+	# A GREATER FIRE IS HEAVIER, which is why it shrugs off a gust and lands
+	# where it was aimed. Set here rather than in `_init`, where the potency is
+	# not known yet.
+	mass = 2.0 * grew
 
 	var col := CollisionShape3D.new()
 	var shape := SphereShape3D.new()
-	shape.radius = 0.35
+	shape.radius = 0.35 * grew
 	col.shape = shape
 	add_child(col)
 
-	add_child(Util.sphere(0.35, Color(1.0, 0.45, 0.1), Vector3.ZERO, true))
-	add_child(Util.sphere(0.22, Color(1.0, 0.85, 0.3), Vector3.ZERO, true))
+	add_child(Util.sphere(0.35 * grew, Color(1.0, 0.45, 0.1), Vector3.ZERO, true))
+	add_child(Util.sphere(0.22 * grew, Color(1.0, 0.85, 0.3), Vector3.ZERO, true))
 
 	var light := OmniLight3D.new()
 	light.light_color = Color(1.0, 0.55, 0.15)
-	light.light_energy = 2.5
-	light.omni_range = 9.0
+	light.light_energy = 2.5 * grew
+	light.omni_range = 9.0 * grew
 	add_child(light)
 
 	var embers := CPUParticles3D.new()
@@ -170,6 +207,60 @@ func _ember_mesh() -> QuadMesh:
 	return Util.speck_mesh(0.1, 0.1, Color(1.0, 0.7, 0.2), true)
 
 
+## WHICH OF THE THREE SIZES THIS IS — an index into HEFTS. The highest rung the
+## potency actually reaches, so everything below the second threshold is a
+## plain gout and nothing is ever bigger than it was paid for.
+func rung() -> int:
+	var which := 0
+	for i in HEFTS.size():
+		if potency >= float(HEFTS[i]["from"]):
+			which = i
+	return which
+
+
+## A NUMBER OFF THE KINDS ROW, GROWN. Every reach, every harm and the trail all
+## take the size whole — this is the one place that multiplication happens, so
+## adding a fourth rung tomorrow needs nothing but a row in HEFTS.
+func heft(key: String) -> float:
+	return float(KINDS[kind][key]) * grew
+
+
+## ANOTHER OF EXACTLY THIS ONE, unthrown — same kind, same size. What makes a
+## fireball volley; see Volley, which asks for this by name and nothing else.
+func another() -> Fireball:
+	var twin := Fireball.new()
+	twin.kind = kind
+	twin.potency = potency
+	return twin
+
+
+## CAUGHT. A ball already burning in your hand takes another one out of the
+## air: it is not destroyed, it is ADDED — the volley in your grip goes up by
+## one, and whatever you have caught goes back wherever you throw next.
+##
+## Two gates, and both matter. You must be HOLDING fire, because an empty hand
+## catching a fireball is just a hand that cannot be hit; and the thing must be
+## CLOSING on you, because a hand that swallowed the balls rolling past its own
+## feet would make the fire miracle unusable by the people who use it most.
+func _try_catch() -> bool:
+	var manager := MiracleManager.of(get_tree())
+	if manager == null or manager.divine_hand == null \
+			or not is_instance_valid(manager.divine_hand):
+		return false
+	var mitt := manager.divine_hand.held_body as Fireball
+	if mitt == null or not is_instance_valid(mitt) or mitt == self:
+		return false
+	var toward := mitt.global_position - global_position
+	if toward.length() > CATCH_REACH * maxf(grew, mitt.grew) \
+			or linear_velocity.dot(toward) <= 0.0:
+		return false
+	Volley.mark(mitt, Volley.count(mitt) + Volley.count(self))
+	SoundBank.play_at("boom", global_position, -7.0, 0.1, 1.7)
+	GameState.hint("Caught it — %d in your hand now." % Volley.count(mitt))
+	queue_free()
+	return true
+
+
 func _physics_process(delta: float) -> void:
 	if freeze:
 		_hearth(delta)  # still in the grip, and burning what it is held against
@@ -182,6 +273,11 @@ func _physics_process(delta: float) -> void:
 	if not _armed and linear_velocity.length() > 2.0:
 		_armed = true
 	if _armed:
+		# FIRE CATCHES FIRE, and it has to be asked before anything else this
+		# frame: a ball that is about to be caught must not lay a trail of
+		# flame across the ground the player is standing on first.
+		if _try_catch():
+			return
 		_lay_trail(delta)
 		_brake(delta)
 		# It rolls until it stops, then goes off where it settles.
@@ -200,7 +296,7 @@ func _hearth(delta: float) -> void:
 	_hearth_time = HEARTH_EVERY
 	# Trees, fields, and anything with legs — exactly what a thrown ball does
 	# as it rolls past, at the reach of an arm instead of the reach of a throw.
-	_ignite_trail(global_position, HEARTH_REACH)
+	_ignite_trail(global_position, HEARTH_REACH * grew)
 	# And what the town built, which the trail has never touched: those have
 	# thermal mass, so this is a dwell rather than a touch.
 	for b in get_tree().get_nodes_in_group(Affords.BURNABLE):
@@ -210,8 +306,8 @@ func _hearth(delta: float) -> void:
 		# Held AGAINST the wall, which is what holding a furnace against a
 		# building means. Measured to the middle, an arm's reach never got
 		# near anything bigger than a hut.
-		if Util.within(built, global_position, HEARTH_REACH):
-			built.call("scorch", HEARTH_HEAT)
+		if Util.within(built, global_position, HEARTH_REACH * grew):
+			built.call("scorch", HEARTH_HEAT * grew)
 
 
 ## Slow the roll — but only once it is down. In the air it keeps every bit of
@@ -247,11 +343,11 @@ func _lay_trail(delta: float) -> void:
 	if world != null:
 		ground_y = world.surface_at(gp.x, gp.z)
 	var flame := Util.small_flame(0.4)
-	flame.scale = Vector3.ONE * 0.5
+	flame.scale = Vector3.ONE * 0.5 * grew
 	flame.position = Vector3(gp.x, ground_y, gp.z)
 	scene.add_child(flame)
 	get_tree().create_timer(2.2).timeout.connect(flame.queue_free)
-	_ignite_trail(gp, float(KINDS[kind]["trail"]))
+	_ignite_trail(gp, heft("trail"))
 
 
 ## The narrow trail catches trees, fields, and any soul it brushes.
@@ -329,10 +425,10 @@ func _go_off() -> void:
 		return
 	_exploded = true
 	var spec: Dictionary = KINDS[kind]
-	var reach: float = spec["reach"]
-	var kill: float = spec["kill"]
+	var reach := heft("reach")
+	var kill := heft("kill")
 	var pos := global_position
-	SoundBank.play_at("boom", pos, float(spec["loud"]))
+	SoundBank.play_at("boom", pos, float(spec["loud"]) * grew)
 	_blast_visuals(pos, reach * float(spec["flare"]))
 
 	for v in get_tree().get_nodes_in_group("villagers"):
@@ -345,7 +441,7 @@ func _go_off() -> void:
 			GameState.shift_alignment(KARMA_PER_KILL)
 			villager.take_damage(999.0, true, true)  # point-blank is instant
 		elif d < reach:
-			villager.take_damage(float(spec["hurt"]), true)
+			villager.take_damage(heft("hurt"), true)
 			villager.ignite()  # the fire sets them alight
 			villager.scare(pos)
 
@@ -394,8 +490,7 @@ func _go_off() -> void:
 			# Scaled by the building's own full health so the big core still
 			# takes half a hut down and correspondingly less of a barn — which
 			# is what "a barn is stouter than a hut" has to mean.
-			built.call("damage",
-				float(spec["house"]) * 0.01 * _most_of(built))
+			built.call("damage", heft("house") * 0.01 * _most_of(built))
 		# ...AND IT IS HEATED, which is now the difference between a blast and
 		# a fire. It used to CATCH — one core, one building alight, whether it
 		# was thatch or a stone granary. A fireball is a great deal of heat and
@@ -464,14 +559,14 @@ func _gouge(pos: Vector3) -> void:
 	# How much hollowing is left in this ground. Eases into the floor rather
 	# than snapping at it, so the last throw that reaches it still does a
 	# little rather than nothing.
-	var depth := minf(GOUGE_DEPTH,
+	var depth := minf(GOUGE_DEPTH * grew,
 		maxf(0.0, DIG_FLOOR + world.scars.offset_at(here.x, here.y)))
 	# POURED, not cut afresh. A divot laid near one already there GROWS it (see
 	# TerrainScars.deposit): shelling one field a hundred times leaves a
 	# handful of scars rather than a hundred, which matters because `offset_at`
 	# walks every scar near a point on every routing and meshing query in the
 	# game. Dry ground — the guard above already turned back over water.
-	world.pour(TerrainScars.Kind.CRATER, here, GOUGE_RADIUS, -depth, GOUGE_CHAR)
+	world.pour(TerrainScars.Kind.CRATER, here, GOUGE_RADIUS * grew, -depth, GOUGE_CHAR)
 	# THE WATERLINE IS A THING YOU CAN DIG THROUGH, and it stays that way — but
 	# not with fireballs any more. At 0.45m a throw against a 1.6m floor, the
 	# ground never opens under a village standing two metres clear of the sea;
@@ -512,4 +607,6 @@ func _blast_visuals(pos: Vector3, size: float) -> void:
 
 
 func hover_text() -> String:
-	return str(KINDS[kind]["label"])
+	var said := "%s%s" % [str(HEFTS[rung()]["called"]), str(KINDS[kind]["label"])]
+	var many := Volley.count(self)
+	return said if many < 2 else "%s  ·  x%d" % [said, many]

@@ -1067,6 +1067,12 @@ func _release_body(body: Node3D, vel: Vector3, gentle: bool) -> void:
 		# monitoring anything.
 		if not gentle:
 			Blow.ride(rb, true)
+			# AND THE REST OF THE VOLLEY GOES WITH IT. The sky sigil conjures
+			# ONE working into the grip however many it promised; the others
+			# are born here, at the moment the hand opens, already flying. See
+			# Volley — anything that cannot make another of itself simply goes
+			# alone, so this line is a no-op for a thrown cow.
+			Volley.fan(rb, vel)
 	elif body.has_method("drop"):
 		body.call("drop", vel, gentle)
 	# Back on their feet and back to being an ordinary villager. See ChildSafety.

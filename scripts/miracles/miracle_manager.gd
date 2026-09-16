@@ -386,15 +386,27 @@ func _said_before() -> Array:
 
 
 ## What a drawing costs: the sum of what it is made of, eased a little so that
-## combining is always worth doing rather than a tax on ambition.
+## combining is always worth doing rather than a tax on ambition — and then
+## multiplied out if the drawing asked for more than one of it.
 func _cost_of(reading: Dictionary) -> float:
+	var price := 0.0
 	if reading.has("miracle"):
 		var base: float = MIRACLES.get(reading["miracle"], {}).get("cost", 25.0)
-		return base * (1.0 + (float(reading.get("potency", 1.0)) - 1.0) * 0.7)
-	var total := 0.0
-	for part: Dictionary in reading.get("blend", []):
-		total += float(MIRACLES.get(part["miracle"], {}).get("cost", 25.0)) * float(part["potency"])
-	return total * Spellbook.COMBO_MULTIPLIER
+		price = base * (1.0 + (float(reading.get("potency", 1.0)) - 1.0) * 0.7)
+	else:
+		var total := 0.0
+		for part: Dictionary in reading.get("blend", []):
+			total += float(MIRACLES.get(part["miracle"], {}).get("cost", 25.0)) \
+				* float(part["potency"])
+		price = total * Spellbook.COMBO_MULTIPLIER
+	# A VOLLEY IS PAID FOR PER PROJECTILE. The sky sigil is not a discount on
+	# ambition and it is not free: what it saves you is the DRAWING, which is
+	# the thing a god has too little of in the middle of a fight. Each one past
+	# the first is charged at VOLLEY_EACH of full price.
+	var volley := int(reading.get("volley", 1))
+	if volley > 1:
+		price *= 1.0 + float(volley - 1) * Spellbook.VOLLEY_EACH
+	return price
 
 
 ## The runes your dominion has taught you. Villages teach RUDIMENTS; every
@@ -474,11 +486,12 @@ func next_tier_preview() -> Array:
 ## one orb per part, so an invented combination lands as several effects at
 ## once wherever you throw them.
 func _conjure_reading(reading: Dictionary) -> bool:
+	var volley := int(reading.get("volley", 1))
 	if reading.has("miracle"):
-		return _make_orb(reading["miracle"], float(reading.get("potency", 1.0)))
+		return _make_orb(reading["miracle"], float(reading.get("potency", 1.0)), volley)
 	var made := false
 	for part: Dictionary in reading.get("blend", []):
-		made = _make_orb(part["miracle"], float(part["potency"])) or made
+		made = _make_orb(part["miracle"], float(part["potency"]), volley) or made
 	if made:
 		GameState.hint("A working of your own making, conjured — THROW it.")
 	return made
@@ -505,14 +518,20 @@ func conjure(miracle: String) -> bool:
 
 
 ## The orb itself. `potency` rides along so that the same miracle can arrive
-## as a sprinkle or as a downpour without needing a separate name for each.
-func _make_orb(miracle: String, potency: float) -> bool:
+## as a sprinkle or as a downpour without needing a separate name for each, and
+## `many` is how many of it leave the hand at once (see Volley — they are not
+## made until the throw).
+func _make_orb(miracle: String, potency: float, many := 1) -> bool:
 	if not MIRACLES.has(miracle):
 		return false
 	var body: RigidBody3D
 	if Fireball.KINDS.has(miracle):
 		var ball := Fireball.new()
 		ball.kind = miracle
+		# AND HOW MUCH FIRE. This line did not exist: the fireball branch read
+		# `kind` and nothing else, so one fire and three fires — which cost two
+		# and a half times as much — threw exactly the same ball.
+		ball.potency = potency
 		body = ball
 	else:
 		var orb := MiracleOrb.new()
@@ -537,8 +556,12 @@ func _make_orb(miracle: String, potency: float) -> bool:
 		# was cast. Two of them dug below the waterline, and that is what
 		# drowned the town — not the player's aim.
 		body.global_position = _spare_orb_spot()
-	GameState.hint("%s conjured — now THROW it where you want it."
-		% miracle.capitalize().replace("_", " "))
+	var named := miracle.capitalize().replace("_", " ")
+	if many > 1:
+		Volley.mark(body, many)
+		GameState.hint("%s x%d conjured — now THROW them." % [named, many])
+	else:
+		GameState.hint("%s conjured — now THROW it where you want it." % named)
 	return true
 
 

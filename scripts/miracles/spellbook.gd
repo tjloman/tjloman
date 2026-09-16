@@ -6,7 +6,7 @@ class_name Spellbook
 ## MEAN TOGETHER. Water is rain. Water and force is a thunderstorm. Air, air
 ## and water is a hurricane.
 ##
-## Three rules make this work, and all three matter:
+## Four rules make this work, and all four matter:
 ##
 ##  1. NAMED RECIPES. A combination the world has a name for becomes that
 ##     miracle outright, at full strength.
@@ -16,7 +16,12 @@ class_name Spellbook
 ##     a cloudburst, water-water-water a deluge. This is how one rune covers a
 ##     whole range without a gesture for every rung of it.
 ##
-##  3. BLENDING, for everything else. An unnamed combination is not an error —
+##  3. AND REPETITION WORKS ON A NAME TOO. `fire fury` is the fireblast, and
+##     `fire fire fire fury` is the greatest one there is — the same ladder as
+##     rule 2, climbed by a compound. Without this, drawing a thing harder
+##     worked for the alphabet and silently stopped working for the words.
+##
+##  4. BLENDING, for everything else. An unnamed combination is not an error —
 ##     it casts every rune's own miracle at once, each somewhat weakened. So
 ##     fire-and-life really does scatter burning food, and no combination the
 ##     player invents is ever a dead end. This is what makes the system feel
@@ -200,6 +205,31 @@ const RECIPES := {
 ## whole point is that combining is worth doing.
 const COMBO_MULTIPLIER := 0.8
 
+## ONE RUNG OF "AGAIN, BUT MORE". Every stroke a drawing carries over the
+## shortest way of saying the same thing buys this much potency — for a single
+## rune (rule 2) and for a named compound (rule 3) alike, so the two halves of
+## the grammar agree about what saying a thing harder is worth.
+const REPEAT_RUNG := 0.75
+
+## THE SKY SIGIL IS A NUMBER.
+##
+## Every other rune is a thing in the world — water, fire, fury, the ground.
+## `sky` alone still is one: a flock of birds. Put it with anything else and it
+## stops being a noun and becomes a COUNT, because that is what a sky full of
+## something means. Three fires and a fury is one great exploding gout; three
+## fires, a fury and a sky is a volley of them, which is Dragon's Claws.
+##
+## One sky is three; each further sky adds two, to a ceiling. Past seven
+## projectiles nobody can tell how many there were, and the frame cannot either.
+const VOLLEY_AT_ONE := 3
+const VOLLEY_PER_EXTRA := 2
+const VOLLEY_MOST := 7
+## And what each one past the first costs, as a share of full price. Blending
+## DIVIDES one price between several weakened effects; a volley MULTIPLIES it,
+## because every one of them is whole. Not the full price, though, or the sigil
+## would save strokes and nothing else — and strokes are not what it is for.
+const VOLLEY_EACH := 0.8
+
 ## The rudiments, taught a tier at a time by the villages that come to believe.
 ## Everything castable follows from which of these you hold.
 ## AIR IS A RUDIMENT, NOT A REWARD.
@@ -252,6 +282,23 @@ static func interpret(runes: Array) -> Dictionary:
 	# rather than quietly dropped, or `again + water` would silently be rain.
 	if runes.has(AGAIN):
 		return {}
+	# THE SKY IS A COUNT WHEN IT IS NOT ALONE. Strip the skies, read what is
+	# left, and say how many of it. `sky` on its own falls through to BASE and
+	# is still a flock of birds.
+	var skies := _count(runes, "sky")
+	if skies > 0 and skies < runes.size():
+		var rest := []
+		for rune: String in runes:
+			if rune != "sky":
+				rest.append(rune)
+		var many := interpret(rest)
+		if many.is_empty():
+			return {}
+		many["volley"] = mini(
+			VOLLEY_AT_ONE + (skies - 1) * VOLLEY_PER_EXTRA, VOLLEY_MOST)
+		many["runes"] = runes.duplicate()
+		many["label"] = "%s x%d" % [many.get("label", "a working"), many["volley"]]
+		return many
 	var key := key_for(runes)
 	# 1. A combination the world has a name for.
 	if RECIPES.has(key):
@@ -268,10 +315,28 @@ static func interpret(runes: Array) -> Dictionary:
 		if base == "":
 			return {}
 		return {
-			"miracle": base, "potency": 1.0 + (runes.size() - 1) * 0.75,
+			"miracle": base, "potency": 1.0 + (runes.size() - 1) * REPEAT_RUNG,
 			"runes": runes.duplicate(), "label": base,
 		}
-	# 3. Anything else BLENDS: every rune's own miracle at once, each weakened
+	# 3. A NAMED COMBINATION, SAID HARDER.
+	#
+	#    Rule 2 is repetition for ONE rune. This is the same rule for a
+	#    compound, and it was missing: `fire fury` is the fireblast, so three
+	#    flames and a Z is unmistakably a player asking for the biggest one
+	#    there is — and what they got was a BLEND. A middling gout standing
+	#    next to a middling something else, for more than the blast costs.
+	#
+	#    The exact drawing is still checked first (rule 1), so `water water`
+	#    is the cloudburst it has always been rather than a loud sprinkle.
+	#    Only what has no name of its own comes this far.
+	var named := key_for(distinct)
+	if RECIPES.has(named):
+		var over := runes.size() - distinct.size()
+		return {
+			"miracle": RECIPES[named], "potency": 1.0 + over * REPEAT_RUNG,
+			"runes": runes.duplicate(), "label": RECIPES[named],
+		}
+	# 4. Anything else BLENDS: every rune's own miracle at once, each weakened
 	#    for being one voice among several. Nothing the player draws is wasted.
 	var parts := []
 	var share := 1.0 / sqrt(float(distinct.size()))
