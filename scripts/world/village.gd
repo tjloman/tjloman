@@ -66,7 +66,15 @@ const MAX_TAMED := 8
 ## three barns were twelve hundred head for a village of eighty, and it is
 ## fifteen hundred pigs that makes a barn the strongest thing in the game.
 const BARN_STALLS := 150
-const HEAD_PER_KEEPER := 4
+## HOW MANY HEAD ONE PAIR OF HANDS CAN KEEP. Four was found to mean twelve
+## villagers keeping a hundred and sixty head — the town's whole day was stock,
+## and its own growth was crowded out by it. Two is a farm: enough that a barn
+## visibly changes what a village is, not so much that the village becomes the
+## barn's staff.
+const HEAD_PER_KEEPER := 2
+## AND THE FLAT CEILING OVER ALL OF IT, whatever the town's size or its stalls.
+## See Workshop.stalls: everything else here is a RATIO, and a ratio has no top.
+const HEAD_AT_MOST := 60
 const PRAYER_PER_VILLAGE := 120.0   # each convert widens your prayer reservoir
 const FARM_HALF := 3.9              # a field's clearance radius (no overlaps)
 
@@ -544,6 +552,15 @@ func spawn_workshop_at(which: String, world_spot: Vector3) -> void:
 			push_warning("%s: refusing a dock at %s — the harbour is at %s"
 				% [village_name, world_spot, harbour])
 			return
+	# AND ONE BARN, for the same reason and by the same last ditch. `wanted`
+	# already caps it at one and `being_raised` already stops two builders being
+	# sent — and the dock was found standing twice anyway, through a path
+	# neither of those watched. A ceiling that matters is a ceiling refused at
+	# the door it has to come through.
+	if which == "barn":
+		for w in workshops:
+			if is_instance_valid(w) and (w as Workshop).trade == "barn":
+				return
 	var spec: Dictionary = Workshop.TRADES.get(which, {})
 	if spec.is_empty() or not store.try_spend_materials(
 			int(spec["lumber"]), int(spec["stone"])):

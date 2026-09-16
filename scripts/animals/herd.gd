@@ -149,6 +149,12 @@ const STRAY_GATHER_SHARE := 0.75
 const RECENTRE_LEAST := 1.0
 const PROMOTE_WITHIN := 40.0
 const DEMOTE_BEYOND := 54.0
+## HOW MANY ROWS ARE LOOKED AT per tick when a herd is near enough to be worth
+## looking at. A constant, like everything else per-frame in this file: the herd
+## in front of you fills the world's whole agent budget several times over
+## inside a second, and the one beast under the player's cursor is promoted by
+## `_reach_of_the_hand` on the spot regardless.
+const PROMOTES_SCANNED := 32
 
 ## ROOM PER HEAD, in metres. The spread grows as the square root of the count so
 ## that a herd of two hundred is a wide dark mass rather than two hundred beasts
@@ -232,6 +238,25 @@ const FORAGE_REACH := 34.0
 const BREED := 0.16
 const FEAR_PER_LOSS := 0.22
 const FEAR_FADE := 0.34
+
+## ONE HUNGER FOR THE WHOLE HERD -------------------------------------------
+##
+## Not one per beast. A hundred and sixty appetites is a hundred and sixty
+## numbers to carry, decrement and compare, to say a thing the player can only
+## ever see about the mass anyway: they are being fed, or they are not. So the
+## herd is hungry, and every beast in it is exactly as hungry as the herd.
+##
+## It rises every season and comes down when somebody fills the trough (see
+## Drove, and `fed`). What it costs is growth first and head second: a hungry
+## herd does not calve, and a starving one thins — which is the honest answer
+## to a barn that had grown to a hundred and sixty head beside twelve hungry
+## villagers. Stock eat the town's grain now. A herd too big for its village
+## empties the granary and then becomes a herd the village can feed.
+const HUNGER_PER_SEASON := 0.16
+const HUNGER_MOST := 1.6
+## Above this it is not hunger, it is starvation, and a share of them go.
+const STARVES_ABOVE := 1.0
+const STARVE_SHARE := 0.07
 
 ## WHAT A PREDATOR GETS OUT OF IT. Kills bank against the pack's own next head:
 ## a wolf pack living off fat cattle becomes a bigger wolf pack, which is the
@@ -463,6 +488,9 @@ var head := 0
 ## promotion of the nearest few into real animals — is identical, which is the
 ## whole reason a barn can hold four hundred head for what forty used to cost.
 var keeper: Village = null
+## HOW HUNGRY THEY ALL ARE — one number, shared. Zero is fed. See the note by
+## HUNGER_PER_SEASON for why this is not a field on every beast.
+var hunger := 0.0
 
 ## WHAT THE HERD IS DOING, as one word. It is the herd that has a mood, not the
 ## beast: the mood decides the PROPORTIONS in which its members are dealt their
@@ -493,6 +521,19 @@ var _ground_cursor := 0
 ## be sized by how far it has walked since.
 var _ground_from := Vector2.ZERO
 var _write_cursor := 0
+## WHICH ROWS HOLD A REAL BEAST. A candidate list, not a truth: `_promote` is
+## the only thing that ever puts an agent in a row so nothing is ever missing,
+## and the several things that take one out may leave an index behind, which
+## costs one null test and is dropped. See `_tend_the_promoted`.
+var _afoot: Array[int] = []
+var _promote_cursor := 0
+## The `shown` the hidden tail was last put away for, and how far up the book
+## the putting away has reached. `_hidden_at` is never a legal value of `shown`
+## to begin with and `_hidden_to` is past the end of any book, so the first
+## write collapses the whole tail and no write after it collapses twice. See
+## `_write_transforms`.
+var _hidden_at := -99
+var _hidden_to := 1 << 30
 var _written_y := 0.0
 var _spread := 0.0
 var _redeal_left := 0
@@ -968,6 +1009,25 @@ func _drift(delta: float) -> void:
 ## Ground heights, a slice at a time. `height_at` is noise plus a walk over
 ## every scar in range, and calling it for two hundred head every tick would
 ## cost more than the animals it is standing in for.
+## HOW MANY HEAD THIS HERD ACTUALLY SIMULATES.
+##
+## A wild herd simulates all of itself. A BARN'S BOOK DOES NOT, and the whole
+## of why is that `shown` already says so: the barn puts a dozen head in the
+## street and keeps the rest inside, and none at all once they are in for the
+## night. Everything past that number is a row nobody can see, cannot point at,
+## and will not be promoted — and it was being given a ground height several
+## times a second, a fresh idea of what it was doing, and an instance transform
+## set to zero on top of the zero already there.
+##
+## A hundred and sixty head in a barn cost a hundred and sixty heads' worth of
+## that, for twelve animals of visible result. This is the number that ends it,
+## and it is not a new budget — it is the one the barn was already keeping.
+func _simulated() -> int:
+	if shown < 0:
+		return _members.size()
+	return mini(shown, _members.size())
+
+
 ## HOW MANY WE OWE THIS SHUFFLE. However far the herd has walked since the last
 ## one, every head should have been re-read once per GROUND_DRIFT of it.
 func _grounds_owed() -> int:
@@ -977,15 +1037,16 @@ func _grounds_owed() -> int:
 	if moved < 0.01:
 		return GROUNDS_PER_TICK
 	var sweeps := moved / GROUND_DRIFT
-	return clampi(int(float(_members.size()) * sweeps),
+	return clampi(int(float(_simulated()) * sweeps),
 		GROUNDS_PER_TICK, GROUNDS_MOST)
 
 
 func _resample_grounds(how_many: int) -> void:
-	if world == null or _members.is_empty():
+	var live := _simulated()
+	if world == null or live <= 0:
 		return
-	for i in mini(how_many, _members.size()):
-		var m := _members[_ground_cursor % _members.size()]
+	for i in mini(how_many, live):
+		var m := _members[_ground_cursor % live]
 		var p := global_position + Vector3(m["offset"].x, 0.0, m["offset"].y)
 		# SURFACE, not height. `height_at` is the rock; a head standing in a
 		# pond was drawn at the bottom of it.
@@ -1013,10 +1074,30 @@ func _write_transforms(how_many := 0) -> void:
 	# often. That is invisible at the distance a four-hundred-head herd is seen
 	# from, and the beasts close enough to look at are promoted to real animals
 	# with real clips anyway.
-	var todo := _members.size() if how_many <= 0 else mini(how_many, _members.size())
+	# THE TAIL IS PUT AWAY ONCE, AND ONLY THE PART OF IT THAT IS NEW. Every row
+	# past `shown` is drawn at zero scale, and the loop below used to walk into
+	# them and set that same zero again several times a second — for a barn's
+	# book, most of the work in this function was rewriting nothing as nothing.
+	#
+	# `_hidden_to` is how far the collapse has already reached, so a herd drawn
+	# in for the night pays for the rows that just went indoors and not for the
+	# hundred already there. It starts past the end of any book, which is what
+	# makes the first write collapse the whole tail — once, which is the one
+	# time it has to happen.
+	var live := maxi(_simulated(), 0)
+	if _hidden_at != shown:
+		_hidden_at = shown
+		for i in range(live, mini(_hidden_to, _members.size())):
+			_mm.set_instance_transform(i, Transform3D().scaled(Vector3.ZERO))
+		_hidden_to = live
+		_write_cursor = 0
+	if live <= 0:
+		_written_y = global_position.y
+		return
+	var todo := live if how_many <= 0 else mini(how_many, live)
 	var here := global_position
 	for step in todo:
-		var i := (_write_cursor + step) % _members.size()
+		var i := (_write_cursor + step) % live
 		var m := _members[i]
 		# Collapsed to nothing in two cases: a real Animal is standing here
 		# instead, or this one was eaten. Scaling the instance away beats
@@ -1046,7 +1127,7 @@ func _write_transforms(how_many := 0) -> void:
 		var turn := Basis.from_euler(Vector3(p.y, float(m["facing"]) + p.w, p.z))
 		_mm.set_instance_transform(i, Transform3D(turn, Vector3(
 			off.x, float(m["ground"]) - here.y + p.x, off.y)))
-	_write_cursor = (_write_cursor + todo) % _members.size()
+	_write_cursor = (_write_cursor + todo) % live
 	_written_y = here.y
 
 
@@ -1066,13 +1147,14 @@ func set_mood(to: String) -> void:
 
 
 func _redeal(how_many: int) -> void:
-	if _redeal_left <= 0 or _members.is_empty():
+	var live := _simulated()
+	if _redeal_left <= 0 or live <= 0:
 		return
 	for i in mini(how_many, _redeal_left):
 		# Picked at random, not walked in order: a block of neighbours all
 		# changing together is a wipe across the formation, which is exactly
 		# the tell that gives away that these are not animals.
-		var m := _members[randi() % _members.size()]
+		var m := _members[randi() % live]
 		if not m["dead"]:
 			m["motion"] = HerdMotion.draw_motion(mood, randf())
 		_redeal_left -= 1
@@ -1103,18 +1185,33 @@ func _tend_agents() -> void:
 	# it — the two foci are the same place and nothing changes at all. When it
 	# is not, some of the allowance goes where the creature is, and that is
 	# right: those are the animals the simulation actually needs bodies for.
+	#
+	# AND NEITHER HALF OF IT WALKS THE BOOK ANY MORE. This function was three
+	# passes over every row in the herd, several times a second: one to count
+	# the promoted, one to tend them, one to look for more. The file's own
+	# header promises that every per-frame cost here is bounded by a constant,
+	# and this was the line that made that untrue — a barn of a hundred and
+	# sixty head paid three hundred and forty rows a second to find the same
+	# dozen animals, and a caribou herd across the map paid two hundred to find
+	# none at all.
 	var focus := GameState.camera_focus
 	var beast := GameState.creature_at
-	var budget := Quality.herd_agents()
-	# WHAT THIS HERD ACTUALLY HAS, from the rows rather than from memory — the
-	# demote pass below keeps `_afoot_here` right as it goes, and this is what
-	# repairs it after anything freed a beast without telling the herd.
-	_afoot_here = 0
-	for m in _members:
-		if _living(m) != null:
-			_afoot_here += 1
 	_agents_afoot = _afoot_everywhere(get_tree())
-	for i in _members.size():
+	_tend_the_promoted(focus, beast)
+	_look_for_more(focus, beast, Quality.herd_agents())
+
+
+## THE ONES THAT ARE ALREADY REAL. Walked off the short list of rows holding a
+## beast rather than off the herd — `_promote` is the only thing in the game
+## that puts an agent in a row, so the list is complete by construction, and
+## everything that takes one out may simply leave its index behind: a stale
+## entry costs one null test and is dropped here.
+func _tend_the_promoted(focus: Vector3, beast: Vector3) -> void:
+	var still: Array[int] = []
+	_afoot_here = 0
+	for i in _afoot:
+		if i >= _members.size():
+			continue
 		var m := _members[i]
 		# UNTYPED ON PURPOSE, and this is the whole of why. Writing
 		# `var agent: Animal = m["agent"]` looks harmless and is not: assigning
@@ -1138,7 +1235,6 @@ func _tend_agents() -> void:
 			m["dead"] = true
 			lost_one()
 			_agents_afoot -= 1
-			_afoot_here = maxi(_afoot_here - 1, 0)
 			continue
 		# Keep the row in step with where the animal actually walked to, so
 		# demoting it does not teleport it back into formation.
@@ -1155,26 +1251,51 @@ func _tend_agents() -> void:
 		# simply vanished from the hand that was holding it. It is also the one
 		# beast whose distance from the camera means nothing about whether it
 		# matters.
-		if agent.state == Animal.State.HELD or agent.state == Animal.State.FALLING:
-			continue
-		if _watched_from(agent.global_position, focus, beast) > DEMOTE_BEYOND:
+		if agent.state != Animal.State.HELD and agent.state != Animal.State.FALLING \
+				and _watched_from(agent.global_position, focus, beast) > DEMOTE_BEYOND:
 			# And hands back what it was doing, so the seam is silent in both
 			# directions: a beast that ran off keeps running as a number.
 			m["motion"] = AS_MOTION.get(agent.state, mood if mood != "move" else "walk")
 			agent.queue_free()
 			m["agent"] = null
 			_agents_afoot -= 1
-			_afoot_here = maxi(_afoot_here - 1, 0)
-	for i in _members.size():
+			continue
+		still.append(i)
+		_afoot_here += 1
+	_afoot = still
+
+
+## AND WHETHER ANY MORE SHOULD BE.
+##
+## ONE CHECK BEFORE ANY THOUGHT OF WALKING THE ROWS. A member stands at most
+## `_widest` from the heart, so a herd whose heart is further off than the
+## promotion range plus its own reach cannot possibly hold a head worth
+## promoting — which is nearly every herd in the world, nearly all of the time,
+## and every one of them used to find that out one row at a time.
+##
+## When it does look, it looks at a SLICE, round-robin, the way the ground
+## sweep and the transform writes already do. A herd standing in front of you
+## fills its share of the budget inside a tick or two, and the beast actually
+## under the cursor never waits for this at all — see `_reach_of_the_hand`.
+func _look_for_more(focus: Vector3, beast: Vector3, budget: int) -> void:
+	var live := _simulated()
+	if _agents_afoot >= budget or live <= 0:
+		return
+	if _watched_from(global_position, focus, beast) - hand_span() > PROMOTE_WITHIN:
+		return
+	var scan := mini(PROMOTES_SCANNED, live)
+	for step in scan:
 		if _agents_afoot >= budget:
-			return
+			break
+		var i := (_promote_cursor + step) % live
 		var m := _members[i]
 		if m["agent"] != null or m["dead"]:
 			continue
 		var p := _stands_at(m)
 		if _watched_from(p, focus, beast) > PROMOTE_WITHIN:
 			continue
-		_promote(m, p)
+		_promote(i, p)
+	_promote_cursor = (_promote_cursor + scan) % live
 
 
 ## WHAT THE PLAYER'S HAND IS OVER, WHATEVER ELSE IS GOING ON.
@@ -1214,7 +1335,9 @@ func _reach_of_the_hand() -> void:
 	var near := 0
 	var best := -1
 	var closest := INF
-	for i in _members.size():
+	# AND ONLY AT WHAT IS ACTUALLY STANDING THERE. A barn's book is mostly
+	# indoors; you cannot point at a pig that is not in the street.
+	for i in _simulated():
 		var m := _members[i]
 		if m["dead"]:
 			continue
@@ -1230,7 +1353,7 @@ func _reach_of_the_hand() -> void:
 			closest = gap
 			best = i
 	if best >= 0:
-		_promote(_members[best], _stands_at(_members[best]))
+		_promote(best, _stands_at(_members[best]))
 
 
 ## THE SPAN A TIDY HERD OF THIS SIZE OCCUPIES — what the shedding measures
@@ -1272,7 +1395,12 @@ func _stands_at(m: Dictionary) -> Vector3:
 
 
 ## A ROW BECOMES A BEAST.
-func _promote(m: Dictionary, p: Vector3) -> void:
+## BY INDEX, not by the row itself. The row is what everything below wants, and
+## the INDEX is what `_afoot` has to remember — and looking one up from the
+## other is a walk over the book, which is the thing this whole pass exists to
+## stop doing.
+func _promote(i: int, p: Vector3) -> void:
+	var m := _members[i]
 	var born := Animal.create(species)
 	# A BARN'S BEAST COMES BACK TAMED. Promotion has to restore what the animal
 	# WAS, or every time you walked up to the barn its stock would turn feral in
@@ -1296,6 +1424,7 @@ func _promote(m: Dictionary, p: Vector3) -> void:
 	# victim's — which is the whole food chain in one reference.
 	born.set_meta("herd", self)
 	m["agent"] = born
+	_afoot.append(i)
 	_agents_afoot += 1
 	_afoot_here += 1
 
@@ -1322,6 +1451,7 @@ func _exit_tree() -> void:
 	# The beasts are going too — freed with the chunk — so this is a release of
 	# SLOTS, not a demotion, and it does not care whether the node is still valid.
 	_agents_afoot = maxi(_agents_afoot, 0)
+	_afoot.clear()
 
 
 ## HOW FAR THIS SPOT IS FROM ANYBODY WHO MATTERS: the camera, or the creature,
@@ -1381,10 +1511,25 @@ func _reckon() -> void:
 	if n <= 0:
 		queue_free()          # the last of them went; the herd is not a thing
 		return
+	# THEY GET HUNGRIER. Only a KEPT herd: a wild one feeds itself, and what
+	# the country will carry is already said by `capacity`.
+	if keeper != null:
+		hunger = minf(hunger + HUNGER_PER_SEASON, HUNGER_MOST)
+		if hunger >= STARVES_ABOVE:
+			var gone := maxi(int(float(n) * STARVE_SHARE), 1)
+			_cull(gone)
+			n = alive()
+			if n <= 0:
+				queue_free()
+				return
 	var ceiling := capacity()
 	var room := 1.0 - float(n) / maxf(ceiling, 1.0)
 	var calm := 1.0 - clampf(_fear, 0.0, 1.0)
-	var change := BREED * float(n) * room * calm
+	# AND A HUNGRY HERD DOES NOT CALVE, which is the part that matters: growth
+	# stops long before anything starves, so an overstocked barn levels off
+	# rather than boom-and-busting.
+	var well_fed := clampf(1.0 - hunger, 0.0, 1.0)
+	var change := BREED * float(n) * room * calm * well_fed
 	# Over its ceiling the herd thins whether it is calm or not — hunger does
 	# not care how safe you feel — so the calm factor only ever helps growth.
 	if room < 0.0:
@@ -1851,6 +1996,12 @@ func _retag() -> void:
 	_tag.text = "%d %s" % [many, species]
 
 
+## THE TROUGH WAS FILLED. `share` is how good the feed was — a full trough is
+## Drove.A_GOOD_FEED — and it comes off the one hunger the whole herd shares.
+func fed(share: float) -> void:
+	hunger = maxf(hunger - share, 0.0)
+
+
 ## A PREDATOR ATE. Kills bank toward the pack's own next head, which is how a
 ## wolf pack living beside fat cattle becomes a bigger wolf pack.
 func fed_on(worth: float) -> void:
@@ -1880,6 +2031,31 @@ func drive_toward(where: Vector3, step: float) -> void:
 	_target = _home
 	_graze_left = 0.0
 	set_mood("move")
+
+
+## FORM UP FOR THE NEXT LEG — the barn's one order, and the only thing in a
+## kept herd's whole day that touches a row.
+##
+## `many` is how many of them are actually out (the rest are indoors) and
+## `toward` is where they are going. The column is laid out once, here, and then
+## nobody in it decides anything until the next order twenty-six seconds later.
+## A wild herd is not a drove and keeps the scatter it was dealt.
+##
+## The walk over the members past `many` is the one O(book) pass a barn herd
+## makes, once a leg: it puts the ones who stayed inside at the barn's own spot,
+## which is where they are. Six rows a second for a book of a hundred and sixty.
+func form_up(many: int, toward: Vector3) -> void:
+	if keeper == null or _members.is_empty():
+		return
+	var to := toward - global_position
+	to.y = 0.0
+	if to.length() > 0.5:
+		_heading = atan2(to.x, to.z)
+	_turning = true
+	Drove.form_up(_members, many if many >= 0 else _members.size(), _heading)
+	_remeasure()
+	if _mm != null:
+		_write_transforms()
 
 
 ## FIRE LANDS IN THE HERD. Returns how many head it caught.

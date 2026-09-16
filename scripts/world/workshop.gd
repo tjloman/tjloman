@@ -61,13 +61,20 @@ const TRADES := {
 		"label": "Mill", "tint": Color(0.74, 0.66, 0.48),
 	},
 	# STOCK. This is the one that changes what a village CAN BE. A pen holds
-	# eight beasts; a barn holds forty more, which is the difference between
-	# keeping animals and keeping a herd. Only ever raised by a town already
-	# herding to the limit of its pen — see `_makes_sense`.
+	# eight beasts; a barn holds a herd, which is the difference between keeping
+	# animals and keeping stock. Only ever raised by a town already herding to
+	# the limit of its pen — see `_makes_sense`.
+	#
+	# ONE TO A TOWN, like the harbour and for a plainer reason: twelve villagers
+	# were found keeping a hundred and sixty head, which is not a village with a
+	# farm, it is a feedlot with twelve staff — and it crowded the town's own
+	# growth out. A second barn doubled the room without doubling anything that
+	# has to feed it. See `stalls`, where the hands and the ceiling are, and
+	# `spawn_workshop_at`, which refuses the second one at the door.
 	"barn": {
 		"employs": 3, "lumber": 10, "stone": 2,
 		"takes": {"plant": 2}, "makes": {"meat": 3},
-		"wants": 1.0 / 25.0, "needs": "stock",
+		"wants": 1.0 / 25.0, "most": 1, "needs": "stock",
 		"label": "Barn", "tint": Color(0.55, 0.38, 0.26),
 	},
 	# THE SEA. The biggest timber investment a village ever makes, and the only
@@ -113,16 +120,24 @@ const TRADES := {
 }
 
 ## THE DROVE. Stock does not stand in a barn all day: it is let out in the
-## morning, walked past the well to drink, put on pasture, and drawn back in at
-## dusk. The whole of a barn's day is these four places in order, and it is
-## worth having for exactly one reason — a village with forty beasts in it
-## should LOOK like a village with forty beasts in it, twice a day, in a line.
-const DROVE: Array[String] = ["out", "well", "pasture", "in"]
-## How long each leg lasts, and how far pasture stands from the barn.
-const LEG_SECONDS := 26.0
-const PASTURE := 17.0
-## How far out of line a beast walks. Nothing here is a formation: they string
-## out and bunch up, which is what makes it read as animals rather than a parade.
+## morning, walked down a street, past the well to drink, put on pasture, and
+## drawn back in at dusk — and a village with forty beasts in it should LOOK
+## like one, twice a day, in a line down its own main street.
+##
+## THE ROUTE ITSELF LIVES IN Drove, and it is plotted once each morning. What is
+## left here is the barn's part: the clock, the yard, and the books. A leg costs
+## this file one lookup and one order to each herd, whatever is in them.
+##
+## Drove's numbers are read where they are USED and never copied into a const
+## here. A `const X := Drove.Y` has to be resolved while this file is compiling,
+## which makes Workshop depend on Drove at COMPILE time in a graph that already
+## runs Herd -> Workshop -> Drove -> Herd — and a cycle that Godot cannot settle
+## does not fail politely. It fails as "Failed to compile depended scripts",
+## fourteen times, with the game stopped on the logo screen and nothing in the
+## error naming the const that did it. Once was enough.
+## How far out of line a beast in the YARD walks — the loose few, who are real
+## animals and are not in the column. The book's own column is laid out by
+## Drove.form_up.
 const STRAGGLE := 3.2
 
 ## HOW MANY BEASTS STAND ABOUT AS REAL ANIMALS before the barn takes the rest
@@ -151,6 +166,13 @@ const DOCK_WANTS_MILLS := 2
 ## into a lake does not hold the place for ever. Long enough to cover the walk
 ## out and the eighteen seconds of hammering.
 const RAISING_HOLDS := 90.0
+## THE BARN'S LAMP — yellow when the herd is fed, a sullen ember when it is not.
+## See `_show_the_yard`.
+const LAMP_SIZE := 0.34
+const LAMP_ENERGY := 2.2
+const LAMP_FED := Color(1.0, 0.86, 0.28)
+const LAMP_STARVED := Color(0.5, 0.31, 0.12)
+
 ## What each boat costs on top of the dock, how many a harbour keeps, how long
 ## one stays out per shift worked, and how far off the jetty the grounds are.
 const BOAT_LUMBER := 12
@@ -186,9 +208,17 @@ var health := MOST_HEALTH
 var kindling := Kindling.new()
 var _leg := 0
 var _leg_left := 0.0
+## THE DAY'S ROUTE, one spot per leg, worked out at dawn and then only indexed.
+## See Drove.plot — this is the whole of what "preprogrammed" means here.
+var _route: Array[Vector3] = []
+## Which day it was plotted for, so it is replotted once and not every leg.
+var _plotted := -1
 ## A harbour's boats, and where they fish. Empty for every other trade.
 var _fleet: Array[FishingBoat] = []
 var _grounds := Vector3.INF
+## The barn's lamp and the grain in its trough. Null for every other trade.
+var _lamp: MeshInstance3D = null
+var _feed: MeshInstance3D = null
 
 static func create(which: String, home: Village) -> Workshop:
 	var w := Workshop.new()
@@ -314,7 +344,12 @@ static func stalls(town: Village) -> int:
 			barns += 1
 	var built := Village.MAX_TAMED + barns * Village.BARN_STALLS
 	var hands := Village.MAX_TAMED + town.population() * Village.HEAD_PER_KEEPER
-	return mini(built, hands)
+	# AND A FLAT CEILING OVER BOTH. The two numbers above are a ratio, and a
+	# ratio has no top: a town that grows to two hundred souls would keep eight
+	# hundred head by the same rule that gives twelve souls forty-eight. A
+	# village is a village. Past this it is an industry, and the game does not
+	# have one.
+	return mini(mini(built, hands), Village.HEAD_AT_MOST)
 
 
 ## IS THERE ANY MEAT ON THE HOOF AT ALL — loose in the yard or in a barn's book.
@@ -397,6 +432,64 @@ func _ready() -> void:
 		rotation.y = atan2(cos(out_to_sea), sin(out_to_sea)) - village.rotation.y
 
 
+## THE YARD: A LAMP AND A TROUGH.
+##
+## The lamp sits on the ridge of the roof and it is the one thing in a village
+## that says how the farm is doing from across the valley — it burns yellow when
+## the herd is fed and guts down to a sullen ember when the trough has been
+## empty for a few mornings. A barn is the building whose state you most want to
+## read at a distance and had no way to, because a full book and an empty one
+## are the same shed from outside.
+##
+## The trough stands where the stock actually come to eat — Drove.trough_at, the
+## same answer the beasts are driven to, so the prop and the destination cannot
+## drift apart.
+func _build_the_yard() -> void:
+	_lamp = Util.sphere(LAMP_SIZE, LAMP_FED, Vector3(0, 2.95, 0), true)
+	add_child(_lamp)
+	var glow := OmniLight3D.new()
+	glow.light_color = LAMP_FED
+	glow.light_energy = LAMP_ENERGY
+	glow.omni_range = 7.0
+	_lamp.add_child(glow)
+	# THE TROUGH. A long low box with grain showing in it when there is any —
+	# see `_show_the_yard`, which is the other half of the lamp.
+	var at := Drove.trough_at(Vector3.ZERO)
+	add_child(Util.box(Vector3(3.0, 0.42, 0.7), Color(0.44, 0.33, 0.21),
+		at + Vector3(0, 0.21, 0)))
+	_feed = Util.box(Vector3(2.7, 0.16, 0.48), Color(0.86, 0.72, 0.32),
+		at + Vector3(0, 0.4, 0))
+	add_child(_feed)
+
+
+## WHAT THE LAMP AND THE TROUGH ARE SAYING. Called once a leg — six times a day,
+## not sixty times a second — because it reports a number that only ever changes
+## once a season.
+func _show_the_yard() -> void:
+	if _lamp == null or not is_instance_valid(_lamp):
+		return
+	var worst := 0.0
+	for h in stock:
+		if is_instance_valid(h):
+			worst = maxf(worst, (h as Herd).hunger)
+	var full := clampf(1.0 - worst / Herd.STARVES_ABOVE, 0.0, 1.0)
+	var lit := LAMP_FED.lerp(LAMP_STARVED, 1.0 - full)
+	var skin := _lamp.get_active_material(0) as StandardMaterial3D
+	if skin != null:
+		skin.albedo_color = lit
+		skin.emission = lit
+		skin.emission_energy_multiplier = lerpf(0.35, 1.6, full)
+	var glow := _lamp.get_child(0) as OmniLight3D
+	if glow != null:
+		glow.light_color = lit
+		glow.light_energy = LAMP_ENERGY * lerpf(0.25, 1.0, full)
+	if _feed != null and is_instance_valid(_feed):
+		# The GRAIN in it, not the trough: an empty trough is a trough with
+		# nothing in it, which is a thing a player can see across a yard.
+		_feed.visible = full > 0.15
+		_feed.scale = Vector3(1.0, maxf(full, 0.08), 1.0)
+
+
 ## A plain stand-in until art ships, distinct enough per trade to be told apart
 ## across a village square: a ring for the well, a tall house with a wheel for
 ## the mill, a long low shed for the barn, a pale stone for the shrine.
@@ -426,6 +519,7 @@ func _build_stand_in(spec: Dictionary) -> void:
 				Vector3(0, 2.4, 0)))
 			add_child(Util.box(Vector3(1.6, 1.6, 0.12), Color(0.3, 0.22, 0.14),
 				Vector3(0, 0.8, 1.75)))
+			_build_the_yard()
 		"dock":
 			# A JETTY: a plank walk on posts, running out over the water, with a
 			# net rack and a lamp at the head of it. It is LONG rather than tall
@@ -555,19 +649,73 @@ func _water_the_fields() -> void:
 ## not the animals: they are only ever told where to go, which means a herd of
 ## forty costs one decision rather than forty.
 func drove_spot(which: int) -> Vector3:
-	var leg: String = DROVE[_leg % DROVE.size()]
 	var scatter := Vector3(
 		sin(float(which) * 2.399) * STRAGGLE, 0.0, cos(float(which) * 2.399) * STRAGGLE)
-	match leg:
-		"well":
-			var well := _nearest_well()
-			return (well if well != Vector3.INF else global_position) + scatter
-		"pasture":
-			var a := float(_leg) * 1.1
-			return global_position + Vector3(cos(a), 0.0, sin(a)) * PASTURE + scatter
-		"out":
-			return post() + scatter
-	return global_position + scatter * 0.4
+	if _route.is_empty():
+		return global_position + scatter * 0.4
+	return _route[_leg % _route.size()] + scatter
+
+
+## Are they in for the night? Butchering and feeding want to know.
+func stock_is_in() -> bool:
+	return Drove.DAY[_leg % Drove.DAY.size()] == "in"
+
+
+## THE MORNING. Plotted once a day, and everything the rest of the day does is
+## a lookup into what this settled. See Drove.
+func _plot_the_day() -> void:
+	var today := int(GameState.clock / GameState.DAY_SECONDS)
+	if today == _plotted:
+		return
+	_plotted = today
+	_route = Drove.plot(village, global_position, _nearest_well(), today)
+	_fill_the_trough()
+	_send_to_the_store()
+
+
+## FILL THE TROUGH, out of the town's own grain. This is the barn's daily cost
+## and it is the thing that was missing: stock that ate nothing could grow to
+## any size the stalls allowed while the people beside them starved. A herd is
+## fed or it is hungry, and a hungry herd stops calving. See Herd.hunger.
+func _fill_the_trough() -> void:
+	if village.store == null or not is_instance_valid(village.store):
+		return
+	var mouths := stock_held()
+	if mouths <= 0:
+		return
+	var asks := maxi(int(float(mouths) * Drove.FEED_PER_HEAD), 1)
+	var got := village.store.take(FoodItem.FoodType.PLANT, asks)
+	if got <= 0:
+		return
+	# WHAT THEY ACTUALLY GOT, not what was asked for. Half a trough is half a
+	# feed, so a town running out of grain watches its herd get hungry over
+	# several mornings rather than being fine and then suddenly starving.
+	var share := Drove.A_GOOD_FEED * float(got) / float(asks)
+	for h in stock:
+		if is_instance_valid(h):
+			h.fed(share)
+
+
+## AND THE DAY'S YIELD GOES TO THE STOREHOUSE. A share of the book, every
+## morning, which is what keeping stock is FOR — the one thing a barn does that
+## a pen full of loose animals does not.
+func _send_to_the_store() -> void:
+	if village.store == null or not is_instance_valid(village.store):
+		return
+	var meat := 0
+	for h in stock:
+		var herd := h as Herd
+		if not is_instance_valid(herd):
+			continue
+		# NOT WHILE THEY ARE HUNGRY. A farm that went on sending beasts to the
+		# store out of a herd it could not feed would empty itself, and the
+		# player would never see why.
+		if herd.hunger >= Herd.STARVES_ABOVE:
+			continue
+		for i in int(float(herd.alive()) * Drove.TO_THE_STORE):
+			meat += herd.slaughter() + Drove.DRESSED_OUT
+	if meat > 0:
+		village.store.add(FoodItem.FoodType.MEAT, meat)
 
 
 ## A barn drives its beasts past the well because that is where they drink, and
@@ -582,15 +730,20 @@ func _nearest_well() -> Vector3:
 	return Vector3.INF
 
 
-## Are they in for the night? Butchering and feeding want to know.
-func stock_is_in() -> bool:
-	return DROVE[_leg % DROVE.size()] == "in"
-
-
 func _process(delta: float) -> void:
 	_tick_fire(delta)
 	if village == null or not is_instance_valid(village):
 		return
+	# THE FARM'S DAY RUNS WHEREVER THE PLAYER IS STANDING, and the parade does
+	# not. Everything below the stride gate is the drove — the legs, the column,
+	# who is out in the street — and none of that matters in a town nobody can
+	# see. The trough is not that: a herd gets hungrier on its own clock
+	# wherever it is, so a barn that only fed its stock when the camera was
+	# within a couple of hundred metres would starve every herd in every village
+	# the player has ever walked away from. It costs a compare a frame; the work
+	# behind it happens once a day.
+	if trade == "barn":
+		_plot_the_day()
 	if Util.sim_stride(global_position) > 4:
 		return
 	if trade == "dock":
@@ -601,30 +754,45 @@ func _process(delta: float) -> void:
 	_leg_left -= delta
 	if _leg_left > 0.0:
 		return
-	_leg_left = LEG_SECONDS
+	_leg_left = Drove.LEG_SECONDS
 	# Night draws them in whatever leg they were on. A barn is a place animals
 	# sleep, and stock still out at dusk is stock somebody has lost.
-	_leg = DROVE.find("in") if GameState.is_night() else (_leg + 1) % DROVE.size()
+	_leg = Drove.DAY.find("in") if GameState.is_night() \
+		else (_leg + 1) % Drove.DAY.size()
 	_take_in()
-	# THE WHOLE MASS MOVES AS ONE. A herd's pasture is a single position, so
-	# droving four hundred head costs exactly what droving four costs — which is
-	# the entire reason the surplus is a herd and not four hundred animals.
+	_show_the_yard()
+	# THE WHOLE MASS MOVES AS ONE, ON ONE ORDER. A herd's destination is a
+	# single position, so droving four hundred head costs exactly what droving
+	# four costs — which is the entire reason the surplus is a herd and not four
+	# hundred animals. The column is laid out here too, once, and then nothing
+	# in it decides anything until the next leg.
 	var spot := drove_spot(0)
 	var out := 0 if stock_is_in() else IN_THE_YARD
 	for h in stock:
-		if is_instance_valid(h):
-			# ONLY A FEW OF THEM ARE ACTUALLY OUT. The book goes on being the
-			# book — they eat, breed, and are butchered out of it all the same —
-			# but a barn keeping four hundred head does not put four hundred
-			# animals in the street, and five barns doing it made a town you
-			# could not see. None at all once they are in for the night.
-			h.shown = out
-			h.drive_toward(spot, 999.0)
+		var herd := h as Herd
+		if not is_instance_valid(herd):
+			continue
+		# ONLY A FEW OF THEM ARE ACTUALLY OUT. The book goes on being the book —
+		# they eat, breed, and are butchered out of it all the same — but a barn
+		# keeping four hundred head does not put four hundred animals in the
+		# street, and five barns doing it made a town you could not see. None at
+		# all once they are in for the night. `shown` is now also what the herd
+		# SIMULATES, so this is the number that makes a big book cheap rather
+		# than merely quiet. See Herd.shown and Herd._simulated.
+		herd.shown = out
+		herd.drive_toward(spot, 999.0)
+		herd.form_up(out, spot)
+	# AND THE YARD'S OWN FEW. A share of them never leave it: heads down at the
+	# trough from dawn to dusk, which is what most of a farm's animals are
+	# actually doing whenever you look at one.
 	var n := 0
+	var eating := int(float(village.tamed_animals.size()) * Drove.AT_THE_TROUGH)
+	var trough := Drove.trough_at(global_position)
 	for a in village.tamed_animals:
 		var beast := a as Animal
 		if is_instance_valid(beast) and not beast.has_rider():
-			beast.drive_to(drove_spot(n))
+			beast.drive_to(trough + Vector3(float(n) * 0.9 - 1.2, 0.0, 0.0)
+				if n < eating else drove_spot(n))
 			n += 1
 
 
@@ -639,7 +807,7 @@ func _keep_the_fleet(delta: float) -> void:
 	_leg_left -= delta
 	if _leg_left > 0.0:
 		return
-	_leg_left = LEG_SECONDS
+	_leg_left = Drove.LEG_SECONDS
 	if _fleet.size() >= mini(BOATS_MOST, employs()):
 		return
 	if village.store == null or not is_instance_valid(village.store):
@@ -756,7 +924,7 @@ func _herd_for(kind: String) -> Herd:
 			return h
 	var made := Herd.create(kind, 0, null)
 	made.keeper = village
-	made.position = Vector3(0, 0, PASTURE * 0.4)
+	made.position = Vector3(0, 0, Drove.PASTURE_OUT * 0.4)
 	add_child(made)
 	stock.append(made)
 	return made
