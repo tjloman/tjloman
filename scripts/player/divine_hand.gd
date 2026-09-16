@@ -902,27 +902,19 @@ func _on_release() -> void:
 						held_body = null
 						state = HandState.IDLE
 						return
-					# AND A SPENT LEASH WILL NOT THROW.
+					# A SPENT LEASH LETS GO OF NOTHING AT ALL.
 					#
-					# A MIRACLE IS NOT SET DOWN, IT IS KEPT. Setting one down is
-					# CASTING it — an orb resolves wherever it comes to rest —
-					# so "you may not throw it, but you may put it down" was a
-					# way of casting a miracle with no leash left at all, which
-					# is the one thing this is for. It stays in your hand until
-					# you are home. Everything else may be set down where you
-					# stand and picked up again later.
+					# Not "you may not throw it, but you may set it down" —
+					# putting a thing somewhere IS influencing it, and setting
+					# an orb down is outright CASTING it, since a working
+					# resolves wherever it comes to rest. Out past your reach
+					# with the leash run out, your hand means nothing: it
+					# cannot take, it cannot place, it cannot throw. What is in
+					# it stays in it until you are back on your own ground.
 					if not MiracleReach.may_act(get_tree(), ground_point):
-						if _is_a_working(held_body):
-							GameState.hint("Your reach has run out — carry it "
-								+ "back to your own ground.")
-							return       # still in your hand, still unspent
-						GameState.hint("Too far from your own ground to throw — "
-							+ "set it down, or carry it home.")
-						_release_body(held_body, Vector3.ZERO, true)
-						_stow_sling()
-						held_body = null
-						state = HandState.IDLE
-						return
+						GameState.hint("Your reach has run out — carry it back "
+							+ "to your own ground.")
+						return       # still in your hand, and still yours
 					# Aftertouch shapes the shot from the final flick: a lofted
 					# and/or curving launch, plus a lingering in-flight steer.
 					var shot := _compute_throw()
@@ -937,12 +929,6 @@ func _on_release() -> void:
 			held_body = null
 			state = HandState.IDLE
 			_stow_sling()
-
-
-## IS THIS A WORKING RATHER THAN A THING? A conjured miracle casts itself
-## wherever it is put down, so out past the leash it may not be put down at all.
-func _is_a_working(what: Node3D) -> bool:
-	return what is MiracleOrb or what is Fireball
 
 
 ## IT TOOK IT OUT OF YOUR HAND. Called BY the creature (CreatureOffer), not by

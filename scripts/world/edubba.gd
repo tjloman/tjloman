@@ -20,6 +20,20 @@ extends StaticBody3D
 ## LESSONS[i] is a Variant and `var next := LESSONS[i]` has nothing to infer
 ## from — which this project builds as an error that stops every dependent
 ## script loading, and took the whole village down with it.
+## WHEN SCHOOL ENDS, and it is not when childhood does.
+##
+## It ended at ADULT_AGE, which is sixteen — so a village's young stood in the
+## yard reciting their letters right up to the day they became adults, and the
+## day after that they were hungry for the first time in their lives with no
+## trade, no habit of working and no place at any post. They had spent every
+## year they had standing about.
+##
+## Fourteen. Two years of working before hunger is ever a thing that happens to
+## them, which is what an apprenticeship is for. They are still children in
+## every other way the game means it -- they do not breed, they do not take up
+## arms, they cannot starve, and a god who picks one up gets their mother.
+const SCHOOL_UNTIL := 14.0
+
 const LESSONS: Array[String] = [
 	"circle", "horseshoe", "square", "line", "dance", "huddle"]
 ## WHICH OF THEM ARE SAT DOWN. A seated class does not drift, does not turn and
@@ -79,6 +93,13 @@ var _left: Array[float] = []
 ## Turns slowly under the dance, and gives the other formations a little life
 ## so a class is never a diagram.
 var _drift: Array[float] = []
+
+## IS THIS ONE STILL OF AN AGE TO BE TAUGHT? The one place that answers it, so
+## the school, the seating, the class sizes and the villager's own decision
+## cannot come to different conclusions about who is a pupil.
+static func schools(who: Villager) -> bool:
+	return who.age < SCHOOL_UNTIL
+
 
 func _ready() -> void:
 	kindling.temper = Kindling.TEMPER_STONE   # mostly walls
@@ -225,7 +246,7 @@ func seat_of(child: Node) -> int:
 	for v in village.my_villagers():
 		if v == child:
 			return seat
-		if not v.is_adult():
+		if schools(v):
 			seat += 1
 	return seat
 
@@ -255,7 +276,7 @@ func hover_text() -> String:
 	var n := 0
 	if village != null and is_instance_valid(village):
 		for v in village.my_villagers():
-			if not v.is_adult():
+			if schools(v):
 				n += 1
 	var groups := classes()
 	if n <= 0:

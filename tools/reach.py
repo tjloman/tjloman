@@ -212,18 +212,20 @@ for where, text, name, must in [
                     "drawing -- it is the mistake that made every long throw "
                     "come back \"beyond your reach by 88 metres\"" % (where, name))
 
-# -- A WORKING IS NOT SET DOWN, IT IS KEPT ----------------------------------
-# Setting a miracle down IS casting it -- an orb resolves wherever it comes to
-# rest -- so "you may not throw it, but you may put it down" was a way of
-# casting with no leash left at all, which is the one thing the leash is for.
+# -- A SPENT LEASH LETS GO OF NOTHING --------------------------------------
+# Putting a thing somewhere IS influencing it, and setting an ORB down is
+# outright casting it, since a working resolves wherever it comes to rest. The
+# refusal has to be total: no taking, no placing, no throwing.
 release = body_of(HAND, "_on_release")
+spent = release[release.index("may_act"):] if "may_act" in release else ""
+lets_go = "_release_body" in spent[:spent.index("return")] if "return" in spent else True
 print()
-print("A SPENT LEASH %s a miracle in the hand."
-      % ("keeps" if "_is_a_working" in release else "LETS GO OF"))
-if "_is_a_working" in HAND and "_is_a_working" not in release:
-    fail.append("_on_release does not ask whether what it is letting go of is a "
-                "working. Setting a miracle down casts it, so a spent leash "
-                "that permits setting things down permits casting")
+print("A SPENT LEASH %s."
+      % ("PUTS DOWN what is in the hand" if lets_go else "lets go of nothing"))
+if lets_go:
+    fail.append("_on_release still puts something down when the leash is spent. "
+                "Placing a thing IS influencing it, and placing an ORB casts "
+                "it — so any release out there is a way round the rule")
 
 print()
 if fail:

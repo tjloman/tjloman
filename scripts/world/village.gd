@@ -1054,7 +1054,10 @@ func _retally() -> void:
 	for v in _roster:
 		if v.home == null:
 			_homeless += 1
-		if not v.is_adult():
+		# PUPILS, not children — see Edubba.SCHOOL_UNTIL. This sizes the school
+		# and its teaching posts, and a school built for pupils who have already
+		# left it is a school standing empty.
+		if Edubba.schools(v):
 			_children += 1
 		if v.is_teacher:
 			_teachers += 1

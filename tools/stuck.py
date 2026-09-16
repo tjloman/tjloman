@@ -1,0 +1,177 @@
+#!/usr/bin/env python3
+"""A STATE WITH NO WAY OUT IS A VILLAGER WHO HAS STOPPED LIVING.
+
+A villager is a state machine with fifty-two states, and each one is a case in
+one long `match` in one long file. Every case has to do one of three things
+before it is finished: ask for a new plan (`_rethink`), decide on the spot
+(`_choose` / `_decide`), or move to another state itself. A case that does none
+of them is a body that walks into that state and stands in it for the rest of
+its life -- not frozen, not erroring, just permanently busy with something that
+never ends.
+
+That is what "the villagers stopped taking care of themselves" looks like from
+outside, and there is nothing in the log to find. They are alive. They are
+ticking. Their hunger is climbing. They are simply never going to ask what to
+do next, because the arm they are in never asks.
+
+TWO SHAPES OF IT, and this looks for both:
+
+  A STATE WITH NO CASE AT ALL. Fifty-two states and however many cases; a
+  state added without an arm falls through to the default, or to nothing.
+
+  A CASE WITH NO EXIT. The arm runs for ever and never yields.
+
+WHAT IT CANNOT SEE: an exit that is real but UNREACHABLE -- a `_rethink()`
+behind a condition that is never true, or behind a timer nothing decrements.
+That is a harder question than this answers, and it is worth knowing that the
+cheap version does not cover it: a break written to test exactly that case went
+undetected, correctly, and looked for a moment like a hole in the tool.
+"""
+import pathlib
+import re
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+SRC = (ROOT / "scripts/villager/villager.gd").read_text()
+
+# The ways out. `_rethink` asks for a plan; `_choose` and `_decide` take one;
+# assigning `state` moves along by itself; and a handful of helpers exist
+# precisely to end an arm.
+EXITS = ("_rethink()", "_choose()", "_decide()", "state = State.",
+         "_set_out()", "die(", "scare(")
+
+
+def bodies(src):
+    """Every function in a script, by name, so an arm that delegates can be
+    followed. Most arms are one line — `_process_go_eat(delta)` — and the way
+    out is inside it; a tool that could not see through that reported five
+    perfectly healthy states as dead ends."""
+    out, name, lines = {}, "", []
+    for line in src.split("\n"):
+        m = re.match(r"^(?:static )?func (\w+)\(", line)
+        if m:
+            if name:
+                out[name] = "\n".join(lines)
+            name, lines = m.group(1), []
+            continue
+        if name:
+            lines.append(line)
+    if name:
+        out[name] = "\n".join(lines)
+    return out
+
+
+FUNCS = {}
+for rel in ("scripts/villager/villager.gd", "scripts/villager/militia.gd",
+            "scripts/villager/villager_needs.gd", "scripts/world/village_jobs.gd",
+            "scripts/world/edubba.gd"):
+    FUNCS.update(bodies((ROOT / rel).read_text()))
+
+CALL = re.compile(r"(?:^|[^\w.])(?:[A-Z]\w*\.)?(\w+)\(")
+
+
+def reaches_an_exit(body):
+    """Does this arm, or a helper it calls DIRECTLY, yield the body back to the
+    decision-maker?
+
+    ONE LEVEL, and that is a correction rather than a limitation. Following
+    calls three deep through a file where everything calls everything found an
+    exit from absolutely anywhere -- `_apply_gravity_only` reaches something
+    that assigns `state` if you are willing to walk far enough -- so the check
+    went from over-strict to unfalsifiable, which is the same failure the last
+    three checks in this toolbox had in a different costume.
+
+    One level is the real shape anyway: an arm is either a few lines that end
+    themselves, or a single call to a `_process_*` helper that does. Nothing
+    legitimate hides its exit two hops down."""
+    if any(door in body for door in EXITS):
+        return True
+    for name in CALL.findall(body):
+        if name in FUNCS and any(door in FUNCS[name] for door in EXITS):
+            return True
+    return False
+
+# Arms that END THE BODY or hand it to somebody else, and so cannot be expected
+# to ask for a plan. Each says why, here, where it can be argued with.
+BY_DESIGN = {
+    "HELD": "in a god's hand; the hand decides when it is over",
+    "FALLING": "in the air; landing is what ends it",
+    "PINNED": "under a beast's jaws; the Mauling's clock is the only one",
+    "DYING": "the window is run by _process_dying, above the match",
+}
+
+
+def states():
+    block = SRC[SRC.index("enum State {"):]
+    block = block[:block.index("}")]
+    block = block[block.index("{") + 1:]
+    return [w.strip() for w in block.replace("\n", " ").split(",") if w.strip()]
+
+
+def arms():
+    """State name -> the body of its case in the big match."""
+    body = SRC[SRC.index("\tmatch state:"):]
+    out, here, lines = {}, [], []
+    for line in body.split("\n")[1:]:
+        m = re.match(r"^\t\t(State\.[A-Za-z_, .]+|_):$", line.rstrip())
+        if m:
+            for name in here:
+                out[name] = "\n".join(lines)
+            lines = []
+            here = [w.strip().replace("State.", "")
+                    for w in m.group(1).split(",")]
+            continue
+        if line and not line.startswith("\t\t"):
+            break                      # out of the match
+        lines.append(line)
+    for name in here:
+        out[name] = "\n".join(lines)
+    return out
+
+
+ALL = states()
+ARMS = arms()
+fail = []
+
+missing = [s for s in ALL if s not in ARMS and s not in BY_DESIGN]
+print("%d states, %d with an arm of their own." % (len(ALL), len(ARMS) - (1 if "_" in ARMS else 0)))
+print()
+if missing:
+    has_default = "_" in ARMS
+    print("NO ARM AT ALL:")
+    for name in missing:
+        print("   %-18s %s" % (name, "falls to the default" if has_default
+                               else "FALLS THROUGH TO NOTHING"))
+        if not has_default:
+            fail.append("State.%s has no case in the match and there is no "
+                        "default: a villager in it does nothing at all, for "
+                        "ever, while its hunger goes on climbing" % name)
+
+stuck = []
+for name in ALL:
+    arm = ARMS.get(name)
+    if arm is None or name in BY_DESIGN:
+        continue
+    if not reaches_an_exit(arm):
+        stuck.append(name)
+
+print("NO WAY OUT:" if stuck else "EVERY ARM HAS A WAY OUT.")
+for name in stuck:
+    print("   %-18s never asks for a new plan" % name)
+    fail.append("State.%s runs for ever: nothing in its arm asks for a new "
+                "plan, changes the state, or ends the body. A villager who "
+                "enters it is alive, ticking, getting hungrier, and never "
+                "going to decide anything again" % name)
+
+print()
+print("EXEMPT, because the body is not its own to end:")
+for name, why in sorted(BY_DESIGN.items()):
+    mark = "" if name in ARMS else "   (no arm)"
+    print("   %-10s %s%s" % (name, why, mark))
+
+print()
+if fail:
+    for line in fail:
+        print("BROKEN: " + line)
+    sys.exit(1)
+print("OK: every state a villager can be in has a way out of it.")

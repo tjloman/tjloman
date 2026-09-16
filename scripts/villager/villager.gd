@@ -1074,9 +1074,9 @@ func _choose() -> void:
 	if GameState.is_night() and energy < 85.0:
 		_go_sleep()
 		return
-	# Children: off to school if the village has one, otherwise trailing
-	# their mother; only orphans and idlers just play.
-	if not is_adult():
+	# School if the village has one, else trailing their mother; orphans play.
+	# SCHOOL-AGED and not merely young — see Edubba.SCHOOL_UNTIL.
+	if Edubba.schools(self):
 		if village.has_edubba():
 			state = State.AT_SCHOOL
 			_school_seat = village.edubba.seat_of(self)
@@ -2020,7 +2020,7 @@ func _set_out() -> void:
 
 
 func _process_at_school(delta: float) -> void:
-	if not village.has_edubba() or is_adult():
+	if not village.has_edubba() or not Edubba.schools(self):
 		_rethink()
 		return
 	village.edubba.attend(self, delta)
