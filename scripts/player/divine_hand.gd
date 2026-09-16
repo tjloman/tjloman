@@ -713,6 +713,27 @@ func _on_grab() -> void:
 	# falls through to the land drag at the foot, which is the honest answer:
 	# grabbing nothing is grabbing the ground.
 	var under := hover_target if is_instance_valid(hover_target) else null
+	# AND NOTHING IS TAKEN FROM GROUND YOU DO NOT HOLD.
+	#
+	# The reach was put on casting first and left the hand alone, on the
+	# argument that an arm has no faith in it. That was wrong in play: a god who
+	# cannot call down a fire on the far mountain but can reach over and pull
+	# the mountain's trees up by the roots has not been limited at all — the
+	# most destructive thing in the game was still anytime, anywhere, and the
+	# circles only stopped the pretty half of it.
+	#
+	# So the whole hand works where your power works. Note what this does NOT
+	# touch: dragging the land is the camera, not the hand, so a refused grab
+	# falls through to it rather than doing nothing — and anything already in
+	# your grip stays there. You may carry a tree out of your country; you may
+	# not reach into somebody else's and take one.
+	if under != null and not MiracleReach.reaches(get_tree(), ground_point):
+		GameState.hint(MiracleReach.short_hint(get_tree(), ground_point))
+		if miracles != null and is_instance_valid(miracles) \
+				and miracles.reach_ring != null \
+				and is_instance_valid(miracles.reach_ring):
+			miracles.reach_ring.flare()
+		under = null
 	# Grabbing a QUARTER of the storehouse platform withdraws that
 	# resource as a physical item, straight into the grip.
 	if under is FoodStore:

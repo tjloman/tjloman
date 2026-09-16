@@ -1,5 +1,11 @@
 class_name WorldGen
 extends Node3D
+## WALL CLOCK BY DESIGN: `_frame_spent` measures how much of a REAL frame this
+## frame's world-building has eaten. It is the streamer measuring the machine,
+## not the world measuring itself — and it must go on working while the tree is
+## paused, which is the one time GameState.clock is deliberately stopped and the
+## one time loading matters most.
+##
 ## The endless world. Terrain streams in as 48m chunks around the camera;
 ## elevation, biome, and everything scattered on a chunk is deterministic
 ## from the world seed, so the same hill is always in the same place.
@@ -21,26 +27,26 @@ extends Node3D
 
 const CHUNK_SIZE := 48.0
 const WATER_LEVEL := 0.0
-const CHUNKS_PER_FRAME := 1      # one chunk a frame: gentle, no startup stall
-## ...and the far ring only ever gets a frame the near ring did not want. The
-## two budgets do not add: `_fill_near` returning true skips `_fill_sight`
-## outright, so a frame builds either one near chunk or two far ones, never
-## three of anything.
+## HOW MUCH OF A FRAME THE WORLD MAY HAVE, in milliseconds — near ring, far
+## ring and coarsening together. See `_frame_spent` for why this is a budget
+## and not the count it used to be.
 ##
-## Two, because a far chunk is cheaper than a near one — same mesh cut, but no
-## collision heightmap, no water and no scatter, so the pair comes to something
-## like one and a half near chunks — and because the moment they are being
-## built is the moment nothing else is: the near ring finishes in its first
-## twenty-five to fifty frames and everything after that is horizon. It halves
-## the cold fill, which is 121 chunks on a budget phone and 289 on a flagship:
-## about a second and two and a half seconds at 60fps, twice that at 30.
+## A fifth of a sixty-hertz frame. Small enough that a chunk arriving is not a
+## hitch anybody sees, large enough that a cold fill still finishes in seconds.
+const WORLD_MILLIS := 3.0
+const CHUNKS_PER_FRAME := 1      # the floor under the budget: never fewer
+## ...and the far ring only ever gets what the near ring did not want. The two
+## do not add: `_fill_near` returning true skips `_fill_sight` outright, so the
+## whole of a frame's world-building is WORLD_MILLIS however it is divided.
 ##
-## In the steady state this costs nothing at all. See `_sight_filled`.
-const SHELLS_PER_FRAME := 2
-## And one chunk a frame put back down to the far ring's resolution. See
-## Chunk.coarse_due: the work is owed the moment a row is stripped, and paid off
-## at the same rate everything else in this file is.
-const COARSEN_PER_FRAME := 1
+## The near ring is filled first because it is the ground you are about to
+## stand on; the far ring is the horizon, and a horizon that arrives a frame
+## late is a horizon. In the steady state both cost nothing at all — see
+## `_sight_filled`, which stops the far sweep for good once it finds no gaps.
+##
+## And chunks put back down to the far ring's resolution come off the same
+## budget, because a coarsening is a mesh cut like any other. See
+## Chunk.coarse_due: the work is owed the moment a row is stripped.
 
 ## HOW A PLACE IS MADE LAND — six basins on a ring at nine tenths of the radius,
 ## lifted until the wettest point under it is clear of the water by DRY_CLEAR.
@@ -154,6 +160,10 @@ var _sight_filled := false
 var _village_cells := {}          # Vector2i -> Village (spawned, persistent)
 var _wolf_raid_cooldown := 0.0
 var _burn_tick := 0.0
+## When this frame's world-building began, in real milliseconds. See
+## `_frame_spent` — and the pragma at the top of this file for why the wall
+## clock is the right clock for a loader.
+var _frame_began := 0
 
 
 func _ready() -> void:
@@ -806,6 +816,7 @@ func blooms_near(at: Vector3, within: float) -> Array[Vector3]:
 ## Chunk streaming ------------------------------------------------------------
 
 func _stream_chunks() -> void:
+	_frame_began = Time.get_ticks_msec()
 	var focus := focus_node.global_position
 	var center := Vector2i(floori(focus.x / CHUNK_SIZE), floori(focus.z / CHUNK_SIZE))
 	# THE GROUND THE CREATURE IS STANDING ON IS NEVER UNLOADED.
@@ -831,21 +842,46 @@ func _stream_chunks() -> void:
 ## stands. Returns true when the frame's one chunk has been spent, so the far
 ## ring knows to wait its turn.
 func _fill_near(center: Vector2i, kept: Dictionary) -> bool:
+	# NEAREST FIRST, which it was not. This walked the square in raster order —
+	# the north-west corner of the ring before the cell you are standing in —
+	# so the chunk arriving on the frame you needed it was as likely to be the
+	# one behind you as the one you were walking into. Rings out from the
+	# middle, exactly as the far ring has always been filled.
 	var made := 0
-	for dz in range(-load_radius, load_radius + 1):
-		for dx in range(-load_radius, load_radius + 1):
-			if not _make_whole(center + Vector2i(dx, dz)):
+	for ring in range(0, load_radius + 1):
+		for cell: Vector2i in _ring_cells(center, ring):
+			if not _make_whole(cell):
 				continue
 			made += 1
-			if made >= CHUNKS_PER_FRAME:
+			if _frame_spent(made):
 				return true
 	for cell: Vector2i in kept:
 		if not _make_whole(cell):
 			continue
 		made += 1
-		if made >= CHUNKS_PER_FRAME:
+		if _frame_spent(made):
 			return true
 	return false
+
+
+## HAS THE FRAME'S SHARE OF WORLD-BUILDING BEEN SPENT?
+##
+## It was a COUNT — one near chunk and two far ones, every frame. A count is
+## not a budget: it is a guess that every chunk costs the same, and they do not
+## come close. Cutting a mesh for the far ring is a fraction of what fleshing a
+## cell out costs, and fleshing one out varies by an order of magnitude with
+## what happens to live on it — a cell with a village and three herds on it is
+## not the cell next door with two bushes.
+##
+## So a frame builds whatever fits in WORLD_MILLIS, and ALWAYS AT LEAST ONE
+## thing, so that a machine slow enough to blow the budget on a single chunk
+## still finishes loading rather than stalling for good. The stutter that is
+## left is one chunk wide, which is the smallest it can be without cutting a
+## chunk in half.
+func _frame_spent(made: int) -> bool:
+	if made < 1:
+		return false
+	return Time.get_ticks_msec() - _frame_began > WORLD_MILLIS
 
 
 ## Make this cell a real place, whatever it is now. Returns true if that cost
@@ -883,7 +919,7 @@ func _fill_sight(center: Vector2i) -> void:
 				continue
 			_spawn_chunk(cell, true)
 			made += 1
-			if made >= SHELLS_PER_FRAME:
+			if _frame_spent(made):
 				return
 	_sight_filled = true
 
@@ -954,7 +990,7 @@ func _shed(center: Vector2i, kept: Dictionary) -> void:
 		# A chunk left cut for walking on that nobody can walk to. This sweep
 		# runs every frame it is reached, so anything that misses its turn is
 		# simply picked up on the next one — no queue, no state.
-		if coarsened < COARSEN_PER_FRAME and chunk.coarse_due():
+		if chunk.coarse_due() and not _frame_spent(coarsened):
 			chunk.coarsen()
 			coarsened += 1
 

@@ -49,9 +49,19 @@ def shipped():
                 load=tiers("load_radius"), unload=tiers("unload_radius"),
                 sight=tiers("sight_radius"),
                 chunk_size=float(re.search(r"const CHUNK_SIZE := ([\d.]+)", w).group(1)),
-                per_frame=const("CHUNKS_PER_FRAME", w),
-                shells=const("SHELLS_PER_FRAME", w),
-                coarsen=const("COARSEN_PER_FRAME", w))
+                # ONE OF EACH, WHICH IS WHAT A BUDGET LEAVES.
+                #
+                # These were counts -- one near chunk, two far ones, one
+                # coarsening a frame -- and they are a millisecond budget now
+                # (WorldGen.WORLD_MILLIS), because a count is a guess that every
+                # chunk costs the same and they do not come close.
+                #
+                # A budget always does at least one thing and then stops when it
+                # is over, so the WORST FRAME is one cut of the dearest kind,
+                # and that is the number this tool exists to report. The fill
+                # times below are therefore a pessimistic bound: the real
+                # streamer does more per frame whenever the chunks are cheap.
+                per_frame=1, shells=1, coarsen=1)
 
 
 def samples(cells):
@@ -144,10 +154,14 @@ def walk(k, tier, speed):
 def main():
     k = shipped()
     budget = k["per_frame"] * samples(k["chunk_cells"][2])
+    world = open("scripts/world/world_gen.gd", encoding="utf-8").read()
+    millis = float(re.search(r"const WORLD_MILLIS := ([\d.]+)", world).group(1))
     print("Read off the source: near %s cells, far %s, rings load %s / unload %s"
-          " / sight %s,\n%d chunk a frame, %d shells, %d coarsened.\n"
+          " / sight %s.\nThe streamer has %.1fms of each frame and always does at"
+          " least one cut, so the\nworst frame is ONE cut of the dearest kind --"
+          " which is what is measured below.\n"
           % (k["chunk_cells"], k["far_cells"], k["load"], k["unload"],
-             k["sight"], k["per_frame"], k["shells"], k["coarsen"]))
+             k["sight"], millis))
     print("%-8s %-14s %10s %10s %9s %9s %11s"
           % ("TIER", "SPEED", "WORST FRAME", "BUDGET", "CUTS", "BACKLOG",
              "STRANDED"))

@@ -21,12 +21,15 @@ and asserts four things.
 
   * THE RING YOU SEE IS THE RING THAT WORKS -- GRACE stays a hair.
 
-  * AND THE GATE IS ON THE DRAWING, NOT ON THE LANDING. This one is here
+  * AND THE GATE IS ON REACHING OUT, NOT ON WHERE IT LANDS. This one is here
     because the first version got it backwards, and the bug was not a crash: a
     working hurled across a valley came back "beyond your reach by 88 metres",
-    so the best thing in the game read as a punishment for throwing well. The
-    circle bounds where you may STAND AND CAST. A working already in your hand
-    goes off wherever it comes down.
+    so the best thing in the game read as a punishment for throwing well.
+
+    The circle bounds where you may STAND AND ACT -- casting AND grabbing, since
+    a god who cannot call down a fire on the far mountain but can pull its trees
+    up by the roots has not been limited at all. What is already in your hand
+    goes wherever you throw it, and goes off where it lands.
 
 Run it after touching any of: MiracleReach's constants, Village.MIN/MAX_INFLUENCE,
 Village.STARTING_SOULS, or WorldGen's village spacing.
@@ -168,6 +171,7 @@ print()
 print("WHERE THE RULE IS ENFORCED:")
 for where, text, name, must in [
         ("divine_hand.gd", HAND, "_open_casting", True),
+        ("divine_hand.gd", HAND, "_on_grab", True),
         ("miracle_manager.gd", BOOK, "cast_runes", True),
         ("miracle_manager.gd", BOOK, "resolve", False),
         ("fireball.gd", BALL, "_go_off", False),
@@ -178,7 +182,7 @@ for where, text, name, must in [
     print("   %-20s %-14s %s" % (where, name, "asks" if asks else "does not ask"))
     if must and not asks:
         fail.append("%s.%s does not consult MiracleReach: there is a door into "
-                    "casting that skips the rule entirely" % (where, name))
+                    "reaching out that skips the rule entirely" % (where, name))
     if not must and asks:
         fail.append("%s.%s gates on the reach. That is the LANDING, not the "
                     "drawing -- it is the mistake that made every long throw "

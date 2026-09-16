@@ -84,6 +84,8 @@ print("   %d public, %d private." % (len(public), len(private)))
 
 # -- AND THE THREE NUMBERS --------------------------------------------------
 millis = const("WARM_MILLIS")
+WORLD = (SCRIPTS / "world/world_gen.gd").read_text()
+world_millis = const("WORLD_MILLIS", WORLD, "world_gen.gd")
 caches = const("CACHES_WORTH")
 patience = const("PATIENCE")
 FRAME_60 = 1000.0 / 60.0
@@ -97,6 +99,20 @@ elif millis >= FRAME_60:
     fail.append("the warming budget is %.1fms of a %.1fms frame: the loading "
                 "screen stutters while it promises smoothness"
                 % (millis, FRAME_60))
+
+print("THE STREAMER'S SHARE is %.1fms -- the near ring, the far ring and the"
+      % world_millis)
+print("   coarsening together, and it was a COUNT of chunks until it was not.")
+if world_millis <= 0.0 or world_millis >= FRAME_60:
+    fail.append("the streamer's budget is %.1fms of a %.1fms frame: chunks "
+                "arriving is a hitch again" % (world_millis, FRAME_60))
+# The two budgets land on DIFFERENT frames -- one while the opening screen is
+# up, one in play -- but a machine that gave both of them everything at once
+# would have nothing left, so they are held to a share of a frame between them.
+if millis + world_millis >= FRAME_60 * 0.75:
+    fail.append("warming and streaming together may take %.1fms of a %.1fms "
+                "frame, which leaves the game less than a quarter of it"
+                % (millis + world_millis, FRAME_60))
 
 print("THE BAR gives the caches %.0f%% and the land the rest." % (caches * 100.0))
 if not 0.0 < caches < 1.0:

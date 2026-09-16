@@ -43,11 +43,21 @@ extends RefCounted
 ## and it goes off where it lands. That is also what Black & White actually did
 ## — the circle bounded the hand, not the shot.
 ##
-## THE HAND ITSELF IS NOT LIMITED. You may still pick up a rock in the far
-## mountains and drop it on anything you like; the hand is your arm, and an arm
-## has no faith in it. Nor is a fire already burning: lighting a thing is a
-## miracle, a thing being alight is weather, and a torch carried out of your
-## country goes on burning what it touches.
+## AND THE HAND IS LIMITED TOO, which took a second pass to get right. The
+## first version left it alone on the argument that an arm has no faith in it —
+## and a god who cannot call down a fire on the far mountain, but CAN reach over
+## and pull that mountain's trees up by the roots and hurl them, has not been
+## limited at all. The most destructive thing in the game was still anytime,
+## anywhere; the circles only bounded the pretty half of it.
+##
+## So the whole hand works where your power works. Two things it does not touch:
+## dragging the land is the CAMERA rather than the hand, and goes anywhere; and
+## whatever is already in your grip stays there. You may carry a tree out of
+## your country. You may not reach into somebody else's and take one.
+##
+## Nor is a fire already burning limited: lighting a thing is a miracle, a thing
+## being alight is weather, and a torch carried abroad goes on burning what it
+## touches.
 ##
 ## THE CREATURE'S OWN WORKINGS ARE NOT GATED, and that is deliberate rather
 ## than an oversight. It pays for those out of its own energy rather than out of
