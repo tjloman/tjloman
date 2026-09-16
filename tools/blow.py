@@ -180,6 +180,33 @@ def main():
         bad.append("pulling one house down (%.1f) costs more than eight deaths "
                    "by fire; that is not a scale, it is a wall" % whole_house)
 
+    # -- AND EVERY REACH IS MEASURED TO THE WALL --------------------------
+    #
+    # The numbers above were all fine and buildings could not be hurt, because
+    # every reach in the game measured to a building's ORIGIN. A blow reaches
+    # 2.4m; a longhouse's far corner is 3.67m from its middle, a granary's rim
+    # 3.4m, and a jetty's deck runs out to 7.6m from a root standing on the
+    # shore. So huts burned and took damage and nothing larger than a hut was
+    # touchable at all -- which reads exactly like "the damage model is broken"
+    # and is one missing term.
+    here = pathlib.Path(__file__).resolve().parent.parent
+    reaches = [
+        ("blow.gd", "world/blow.gd", "the blow a thrown thing lands"),
+        ("fireball.gd", "miracles/fireball.gd", "the blast, the trail and the hearth"),
+    ]
+    print("\nEVERY REACH MEASURED TO THE WALL, NOT THE MIDDLE:")
+    for label, rel, what in reaches:
+        body = (here / "scripts" / rel).read_text()
+        body = "\n".join(r.split("#")[0] for r in body.split("\n"))
+        uses = body.count("Util.within(")
+        print("   %-14s %-38s %d place%s"
+              % (label, what, uses, "" if uses == 1 else "s"))
+        if uses == 0:
+            bad.append("%s measures to a building's origin. Anything larger "
+                       "than a hut -- a longhouse, a granary, a school, a dock "
+                       "-- is immune to it, and every number in it looks right"
+                       % label)
+
     if bad:
         print("\nFAIL:")
         for line in bad:

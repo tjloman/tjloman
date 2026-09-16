@@ -227,7 +227,10 @@ static func lands(thing: Node3D, at: Vector3, speed: float, mass: float,
 		var built := b as Node3D
 		if not is_instance_valid(built) or built == thing:
 			continue
-		if built.global_position.distance_to(at) > SPLASH:
+		# TO THE WALL, NOT TO THE MIDDLE. See Util.within: a longhouse's corner
+		# is 3.67m from its origin and this reached 2.4m, so every building
+		# bigger than a hut was simply immune to being hit.
+		if not Util.within(built, at, SPLASH):
 			continue
 		if not built.has_method("damage"):
 			continue

@@ -65,15 +65,36 @@ const SETS_IT_DOWN := 20.0
 ## timer is not worth a line of it — the same trick `struck_by_god` uses.
 const ALONE_META := "hauled_alone"
 
-## HOW MUCH GROUND A WAGON HOLDS while it is on the road. Rather less than the
-## smallest village — it is a dozen people and an ox, not a town.
-const REACH := 20.0
+## HOW MUCH GROUND A WAGON HOLDS while it is on the road — and it is ONE METRE,
+## which is not a typo.
+##
+## It was twenty, on the reasoning that a settling party is a town that has not
+## arrived yet. In the hand that is a town you can carry: park the wagon and
+## you have twenty metres of castable country anywhere on the map, refilling
+## your leash as fast as a real village does. A wagon is not a country. It is a
+## thing you are moving.
+##
+## So the circle is exactly wide enough to pick the wagon up and put it down
+## again, and no wider — and standing in it fills the leash to ONE PER CENT,
+## which is a moment's grip and not a breath of a gesture. Everything a wagon
+## affords is moving the wagon.
+const REACH := 1.0
+## What standing on a wagon's ground refills your leash to, as a share of the
+## whole. Enough to take hold of it; not enough to finish a rune or lift a
+## tree. See MiracleReach.pay_out.
+const REFILLS_TO := 0.01
 
 ## AND HOW CLEAR OF AN EXISTING TOWN IT HAS TO STAND. Two influence radii of
 ## the largest village in the game, so a colony is never founded inside one.
 const CLEAR_OF_TOWNS := 90.0
-## The slope a cart can be unloaded on, and how much room the town needs dry.
+## The slope a cart can be unloaded on, how much ground a town needs, and how
+## many places that ground is read at. A settlement is not a point.
 const STEEPEST := 0.8
+const FOOTPRINT := 18.0
+const SLOPE_PROBES := 8
+## What it says when the ground will not do, and how long it says it for.
+const NOT_HERE := "on to greener pastures..."
+const SAYS_NO_FOR := 1.8
 
 ## For naming colonies after their mother. Past the end of this a town is simply
 ## the last numeral again, which will do: nobody is founding eleven colonies out
@@ -270,6 +291,7 @@ func settle() -> void:
 		if _travelled and trouble != _complained:
 			_complained = trouble
 			GameState.hint(trouble)
+			_say_no(trouble)
 		return
 	var town := Village.new()
 	town.is_player_home = false
@@ -312,6 +334,22 @@ func _colony_name() -> String:
 	return "%s %s" % [root, NUMERALS[mini(nth, NUMERALS.size() - 1)]]
 
 
+## THE WAGON'S OWN ANSWER, over its head, where the player is already looking.
+## A hint at the foot of the screen is the right place for a rule and the wrong
+## place for "not here" — by the time you have read it you have stopped looking
+## at the thing that said it.
+func _say_no(why: String) -> void:
+	var said := Util.status_label(NOT_HERE, 0.016)
+	said.position = Vector3(0, 2.6, 0)
+	said.modulate = Color(1.0, 0.92, 0.7)
+	add_child(said)
+	set_meta("refused", why)
+	var fade := create_tween()
+	fade.tween_interval(SAYS_NO_FOR)
+	fade.tween_property(said, "modulate:a", 0.0, 0.8)
+	fade.tween_callback(said.queue_free)
+
+
 func _unload_stock(town: Village) -> void:
 	var pen := town.pen_position()
 	for i in stock.size():
@@ -324,6 +362,13 @@ func _unload_stock(town: Village) -> void:
 
 
 ## WHY THIS GROUND WILL NOT TAKE A TOWN, or "" when it will.
+##
+## THE WHOLE FOOTPRINT, not the spot the wheels are on. A wagon set down on the
+## one dry rock in a marsh passed every test and founded a town whose houses,
+## fields and pen were all underwater — `village_site_dry` rings out to the
+## radius a settlement actually occupies, which is the question that was meant
+## to be asked. The slope is sampled the same way: flat here and a cliff eight
+## metres on is not a place to unload a wagon.
 func _ground_trouble() -> String:
 	var here := global_position
 	for v in get_tree().get_nodes_in_group("village"):
@@ -335,8 +380,20 @@ func _ground_trouble() -> String:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	if world == null:
 		return ""
-	if not world.village_site_dry(here.x, here.z):
-		return "The wagon is standing in water — carry it to dry ground."
-	if world.slope_at(here.x, here.z) > STEEPEST:
-		return "Too steep to unload a wagon — find flatter ground."
+	if not world.village_site_dry(here.x, here.z, FOOTPRINT):
+		return "There is water across this ground — carry it further in."
+	if _roughest(world, here) > STEEPEST:
+		return "Too broken to unload a wagon — find flatter ground."
 	return ""
+
+
+## THE WORST SLOPE ANYWHERE UNDER THE TOWN THAT WOULD STAND HERE. One reading
+## at the wheels says nothing about the field forty paces off.
+func _roughest(world: WorldGen, here: Vector3) -> float:
+	var worst := world.slope_at(here.x, here.z)
+	for ring: float in [FOOTPRINT * 0.5, FOOTPRINT]:
+		for i in SLOPE_PROBES:
+			var turn := TAU * float(i) / float(SLOPE_PROBES)
+			worst = maxf(worst, world.slope_at(
+				here.x + cos(turn) * ring, here.z + sin(turn) * ring))
+	return worst

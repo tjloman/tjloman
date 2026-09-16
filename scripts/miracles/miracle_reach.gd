@@ -17,8 +17,11 @@ extends RefCounted
 ##   drawn on the grass. Its size is the population, so a town you have fed
 ##   and housed reaches further than a hamlet.
 ##
-##   A WAGON ON THE ROAD holds a little ground of its own, because a settling
-##   party is a town that has not arrived yet. See Caravan.
+##   A WAGON ON THE ROAD holds ONE METRE and fills your leash to one per cent.
+##   It is not a country, it is a thing you are moving: the circle exists so
+##   that you can take hold of the wagon and put it down again, and it affords
+##   nothing else. See Caravan.REACH, and `pay_out` for how a circle can be
+##   stood in without being rested in.
 ##
 ##   YOUR CREATURE CARRIES A CIRCLE WITH IT, and this is the important one.
 ##   It is how you get anywhere: a whelp holds fourteen metres and a grown
@@ -148,6 +151,7 @@ static func circles(tree: SceneTree) -> Array[Dictionary]:
 		found.append({
 			"at": _flat(town.global_position),
 			"r": town.influence_radius,
+			"fills": 1.0,
 			"why": town.village_name,
 		})
 	var beast := tree.get_first_node_in_group("creature") as Creature
@@ -155,6 +159,7 @@ static func circles(tree: SceneTree) -> Array[Dictionary]:
 		found.append({
 			"at": _flat(beast.global_position),
 			"r": beast_reach(beast),
+			"fills": 1.0,
 			"why": GameState.named("your creature"),
 		})
 	# AND EVERY WAGON ON THE ROAD. A settling party is a town that has not
@@ -168,6 +173,7 @@ static func circles(tree: SceneTree) -> Array[Dictionary]:
 		found.append({
 			"at": _flat(cart.global_position),
 			"r": Caravan.REACH,
+			"fills": Caravan.REFILLS_TO,
 			"why": "the wagon out of %s" % cart.from_name,
 		})
 	return found
@@ -265,10 +271,29 @@ static func may_act(tree: SceneTree, pos: Vector3) -> bool:
 ## it is — this is the only thing that moves the meter.
 static func pay_out(tree: SceneTree, pos: Vector3, delta: float) -> void:
 	var over := how_short(tree, pos)
-	if over <= 0.0:
-		_left = minf(left() + full() / REFILLS_IN * delta, full())
+	if over > 0.0:
+		_left = maxf(left() - over * PER_METRE * delta, 0.0)
 		return
-	_left = maxf(left() - over * PER_METRE * delta, 0.0)
+	# INSIDE SOMETHING — but not all ground rests you equally. A village or
+	# your creature fills the leash whole; a WAGON fills it to one per cent,
+	# which is a moment's grip on the wagon and nothing else. Standing on a
+	# cart is not standing in a country.
+	var ceiling := full() * _rests_to(tree, pos)
+	if left() >= ceiling:
+		return
+	_left = minf(left() + full() / REFILLS_IN * delta, ceiling)
+
+
+## THE BEST REST THIS SPOT OFFERS, as a share of a whole leash. The kindest
+## circle you are standing in wins, so a wagon parked in a village is simply a
+## wagon in a village.
+static func _rests_to(tree: SceneTree, pos: Vector3) -> float:
+	var flat := _flat(pos)
+	var best := 0.0
+	for ring in circles(tree):
+		if flat.distance_to(ring["at"]) <= float(ring["r"]) + GRACE:
+			best = maxf(best, float(ring.get("fills", 1.0)))
+	return best
 
 
 ## Give it all back. For a world teardown and for the debug menu — a new map

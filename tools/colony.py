@@ -87,11 +87,46 @@ print("A WAGON ON THE ROAD holds %.0fm. The poorest colony it can become holds"
       % CART_REACH)
 print("   %.0fm, and the best %.0fm." % (ring(bare["souls"]), ring(best["souls"])))
 
-# -- SETTLING MUST NEVER SHRINK YOUR REACH ----------------------------------
-if ring(bare["souls"]) < CART_REACH:
-    fail.append("the poorest wagon becomes a %.0fm town but was a %.0fm wagon: "
-                "founding a colony would SHRINK the ground you can cast on"
-                % (ring(bare["souls"]), CART_REACH))
+# -- A WAGON IS NOT A PORTABLE COUNTRY --------------------------------------
+#
+# This used to check the opposite: that a colony's ring was never SMALLER than
+# the wagon's, back when a wagon held twenty metres on the reasoning that a
+# settling party is a town that has not arrived. In the hand that is a country
+# you can carry — park it anywhere on the map and you have castable ground and
+# a leash that refills as fast as a real village fills it.
+#
+# A wagon holds exactly enough to be picked up and put down, and rests you to a
+# sliver: a grip on the cart, not a breath of a gesture.
+REFILLS_TO = const("REFILLS_TO", CART)
+print()
+print("A WAGON HOLDS %.0fm and rests your leash to %.0f%% of a whole one."
+      % (CART_REACH, REFILLS_TO * 100.0))
+if CART_REACH > 3.0:
+    fail.append("a wagon holds %.0fm of castable ground. That is a country you "
+                "can carry: park it anywhere and you may work there"
+                % CART_REACH)
+if REFILLS_TO > 0.05:
+    fail.append("standing on a wagon fills your leash to %.0f%%. It is meant to "
+                "be enough to take hold of the cart and nothing else"
+                % (REFILLS_TO * 100.0))
+
+# -- AND SETTLERS ARE PEOPLE WHO COULD ACTUALLY GO SOMEWHERE -----------------
+# They came out of the same age ladder a generated village uses, so the oldest
+# colonist anybody ever saw was thirteen: a whole new town of children who
+# cannot work, cannot breed and cannot defend themselves.
+YOUNGEST = const("SETTLER_YOUNGEST", TOWN)
+ELDEST = const("SETTLER_ELDEST", TOWN)
+ADULT = const("ADULT_AGE", "scripts/villager/villager.gd")
+print()
+print("SETTLERS ARE %.0f TO %.0f, against adulthood at %.0f." % (YOUNGEST, ELDEST, ADULT))
+if YOUNGEST < ADULT:
+    fail.append("settlers may be as young as %.0f and adulthood is %.0f: a "
+                "wagon of children founds a town that cannot work, cannot "
+                "breed and cannot defend itself" % (YOUNGEST, ADULT))
+if ELDEST > 40.0:
+    fail.append("settlers may be as old as %.0f, and nobody conceives past 45: "
+                "a colony founded by the elderly has no second generation"
+                % ELDEST)
 
 # -- A COLONY IS A HAMLET, NOT A CITY ---------------------------------------
 # It has to be visibly smaller than a town the world generator laid down, or

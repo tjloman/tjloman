@@ -207,7 +207,10 @@ func _hearth(delta: float) -> void:
 		var built := b as Node3D
 		if not is_instance_valid(built) or not built.has_method("scorch"):
 			continue
-		if built.global_position.distance_to(global_position) < HEARTH_REACH:
+		# Held AGAINST the wall, which is what holding a furnace against a
+		# building means. Measured to the middle, an arm's reach never got
+		# near anything bigger than a hut.
+		if Util.within(built, global_position, HEARTH_REACH):
 			built.call("scorch", HEARTH_HEAT)
 
 
@@ -277,6 +280,16 @@ func _ignite_trail(pos: Vector3, reach: float) -> void:
 		var farm := f as Farm
 		if is_instance_valid(farm) and farm.global_position.distance_to(pos) < reach:
 			farm.ignite()
+	# AND WHAT THE TOWN BUILT, which the trail has never touched. A gout rolling
+	# down a street past six houses did nothing to any of them — it lit the
+	# trees and the fields and left the village standing, which is not what
+	# anybody throwing a gout of flame down a street is expecting.
+	for b in get_tree().get_nodes_in_group(Affords.BURNABLE):
+		var built := b as Node3D
+		if not is_instance_valid(built) or not built.has_method("scorch"):
+			continue
+		if Util.within(built, pos, reach):
+			built.call("scorch", Kindling.HEAT_OF_A_BLAZE / 3.0)
 	for grp in ["villagers", "animals"]:
 		for n in get_tree().get_nodes_in_group(grp):
 			var node := n as Node3D
@@ -369,8 +382,10 @@ func _go_off() -> void:
 	# fireproof. See Kindling.
 	for b in get_tree().get_nodes_in_group(Affords.BURNABLE):
 		var built := b as Node3D
-		if not is_instance_valid(built) \
-				or built.global_position.distance_to(pos) > reach:
+		# To the WALL. A gout reaches 3.2m and a longhouse's corner is 3.67m
+		# from its middle — see Util.within, and the note there for why every
+		# building in the game larger than a hut would not burn.
+		if not is_instance_valid(built) or not Util.within(built, pos, reach):
 			continue
 		if built.has_method("damage"):
 			# A SHARE OF WHAT IT IS, not a flat number. These were written when

@@ -23,6 +23,12 @@ const MAX_INFLUENCE := 65.0
 ## all of at once; fifty is a place, with enough hands that the town has to be
 ## ORGANISED rather than merely fed — which is what the workshops are for.
 const STARTING_SOULS := 50
+## THE AGE OF PEOPLE WHO GO SOMEWHERE. A wagon of settlers came out of the same
+## ladder a generated village does, so the oldest colonist anybody ever saw was
+## thirteen — a whole new town of children, who cannot work, cannot breed and
+## cannot defend themselves. Grown, and not yet too settled to leave.
+const SETTLER_YOUNGEST := 16.0
+const SETTLER_ELDEST := 28.0
 ## And how many fields it will ever break. Four was written for twelve people.
 const FARMS_MOST := 10
 ## A school is a civic building: it has posts, like the rest of them.
@@ -689,6 +695,14 @@ func _spawn_villagers(count: int) -> void:
 ## a row — it spreads each one over eight years, so the second rung holds
 ## children and the teens who are nearly done being them.
 func _founding_age(i: int, count: int) -> float:
+	# A COLONY IS NOT A TOWN THAT HAS ALWAYS BEEN HERE. The ladder below spreads
+	# a generated village across every generation, newborns included, which is
+	# right for a place the world says has stood for years — and wrong for
+	# people who WALKED here. Nobody sends a wagon of toddlers across a
+	# continent. Settlers are the age people who go somewhere are: grown, and
+	# not yet too settled to leave. See Caravan.
+	if founding > 0:
+		return randf_range(SETTLER_YOUNGEST, SETTLER_ELDEST)
 	@warning_ignore("integer_division")
 	var rungs := int(COHORT_ELDEST / COHORT_YEARS) + 1
 	var laddered := mini(rungs * COHORT, count)

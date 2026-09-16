@@ -136,7 +136,11 @@ func advance_construction(amount: float) -> void:
 
 
 func repair(amount: float) -> void:
-	health = minf(health + amount, 100.0)
+	# MOST_HEALTH, not a hundred. A house that had been patched once was capped
+	# at a quarter of what a new one is worth, for ever — the same "everything
+	# used to have a hundred health" hangover the note above records, left in
+	# the one place that puts health back.
+	health = minf(health + amount, MOST_HEALTH)
 
 
 ## Sudden harm (fireballs, catastrophes) — collapses outright at zero.

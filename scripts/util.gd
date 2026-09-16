@@ -466,6 +466,57 @@ static func _glow_texture() -> ImageTexture:
 	return _glow
 
 
+## HOW BIG A THING IS, from its middle to its edge, in metres on the flat.
+##
+## EVERYTHING IN THIS GAME MEASURED TO A BUILDING'S ORIGIN, and buildings are
+## bigger than the reaches that were being measured. A blow reached 2.4m, a
+## gout of flame 3.2m, a held furnace 2.4m — and a longhouse's far corner is
+## 3.67m from its middle, a granary's rim is 3.4m, and a jetty's deck runs out
+## to 7.6m from the root standing on the shore.
+##
+## So huts burned and took damage, and longhouses, granaries, schools and docks
+## were simply immune: you hit the wall, and the wall was further from the
+## middle of the building than the blow could reach. It reads exactly like "the
+## damage model is broken" and every number in it was fine.
+##
+## Read off whatever collision shape the thing already has, so nothing had to
+## grow a `footprint()` method, and kept in a meta because a building does not
+## change size.
+static func bulk_of(what: Node3D) -> float:
+	if what == null or not is_instance_valid(what):
+		return 0.0
+	var known: Variant = what.get_meta("bulk", null)
+	if known != null:
+		return float(known)
+	var span := 0.0
+	for child in what.get_children():
+		var col := child as CollisionShape3D
+		if col == null or col.shape == null:
+			continue
+		# `crate` and not `box`: this class has a `box()` of its own.
+		var crate := col.shape as BoxShape3D
+		if crate != null:
+			span = maxf(span, Vector2(crate.size.x, crate.size.z).length() * 0.5)
+			continue
+		var tube := col.shape as CylinderShape3D
+		if tube != null:
+			span = maxf(span, tube.radius)
+			continue
+		var ball := col.shape as SphereShape3D
+		if ball != null:
+			span = maxf(span, ball.radius)
+	what.set_meta("bulk", span)
+	return span
+
+
+## IS `at` WITHIN `reach` OF THIS THING'S EDGE? The question every blow, every
+## flame and every furnace meant to ask and none of them did. See `bulk_of`.
+static func within(what: Node3D, at: Vector3, reach: float) -> bool:
+	if what == null or not is_instance_valid(what):
+		return false
+	return what.global_position.distance_to(at) - bulk_of(what) < reach
+
+
 ## Distance culling: every renderable under `root` stops drawing past
 ## `end_dist` metres (with a soft margin). Distance fog hides the cutoff.
 ## Physics and gameplay are untouched — only the GPU work goes away.
