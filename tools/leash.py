@@ -46,6 +46,7 @@ PER_METRE = const("PER_METRE", REACH, "miracle_reach.gd")
 REFILLS_IN = const("REFILLS_IN", REACH, "miracle_reach.gd")
 PITCH_FULL = const("PITCH_FULL", RING, "reach_ring.gd")
 PITCH_SPENT = const("PITCH_SPENT", RING, "reach_ring.gd")
+SOUNDS_BELOW = const("SOUNDS_BELOW", RING, "reach_ring.gd")
 PER_VILLAGE = const("PRAYER_PER_VILLAGE", TOWN, "village.gd")
 
 # GameState.set_max_prayer_power, as Village._update_influence calls it.
@@ -125,6 +126,34 @@ if spends:
                 "that seems to leak" % ", ".join(spends))
 
 # -- AND YOU CAN HEAR IT ----------------------------------------------------
+# -- AND IT IS A WARNING, NOT FURNITURE -------------------------------------
+# The first version started the moment you crossed the edge and held for as
+# long as you stayed out. On a long leash that is a drone running under a whole
+# expedition, and a sound that is always there is a sound nobody hears.
+print()
+print("THE TONE IS SILENT until %.0f%% of the leash is gone, and stops at"
+      % ((1.0 - SOUNDS_BELOW) * 100.0))
+print("   nothing left. How long it actually sounds for:")
+for label, villages, belief in REIGNS[:1] + REIGNS[2:3]:
+    full = leash(villages, belief)
+    row = "  ".join("%5.1f" % (seconds(full, m) * SOUNDS_BELOW) for m in OUT)
+    print("   %-22s %8s  %s" % (label, "", row))
+if not 0.0 < SOUNDS_BELOW < 1.0:
+    fail.append("SOUNDS_BELOW is %.2f: at 1 it is the constant hum this "
+                "replaced, and at 0 it never sounds at all" % SOUNDS_BELOW)
+# The pitch has to be spread over the AUDIBLE part, or the fall a player hears
+# is the bottom half of the range rather than the whole of it.
+# THE LINE THAT DIVIDES, not "does the name appear in the function". It appears
+# twice — once to decide whether to sound at all — so looking for the name let
+# the very change this forbids pass. That is the second time in two days a
+# check here has been written loose enough that it could not fail.
+tone_fn = RING[RING.index("func _sound_the_leash"):]
+tone_fn = tone_fn[:tone_fn.index("\n\n\n")] if "\n\n\n" in tone_fn else tone_fn
+if "share / maxf(SOUNDS_BELOW" not in tone_fn:
+    fail.append("the pitch is not divided through SOUNDS_BELOW, so the tone "
+                "only ever uses the part of its range below halfway — the fall "
+                "anybody actually hears is half the octave it was tuned for")
+
 ratio = PITCH_FULL / max(PITCH_SPENT, 0.001)
 print("THE TONE falls from %.2f to %.2f -- a ratio of %.2f, which is %.1f"
       % (PITCH_FULL, PITCH_SPENT, ratio, 12.0 * math.log2(ratio)))

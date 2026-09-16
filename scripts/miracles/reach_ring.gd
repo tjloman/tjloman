@@ -22,10 +22,18 @@ extends Node3D
 ## AND IT SOUNDS, which is the half that actually gets used. The leash
 ## (MiracleReach) runs down whenever the hand is off your ground, and a meter
 ## in the corner of a screen is no use to somebody whose eyes are on a tree
-## they are carrying. So there is a tone: it starts when you cross the edge,
-## it is pitched high while there is plenty of leash left, and it falls as it
-## goes. Down at the bottom of its range you have run out. Nobody has to be
-## taught what that means.
+## they are carrying.
+##
+## BUT IT IS A WARNING, NOT A HUM. It began the moment you crossed the edge and
+## held for as long as you stayed out, which on a long leash is a drone running
+## under the whole of an expedition — and a sound that is always there is a
+## sound nobody hears. It waits for HALF the leash to be gone now, and it stops
+## dead at nothing left. So it is silent while you are comfortable, it speaks
+## up when you are half spent, and it falls an octave over the half you can
+## still do something about. Nobody has to be taught what that means.
+##
+## Its silence at the bottom is not an absence. You have just heard it fall; it
+## going quiet is the last thing it says.
 
 ## How quickly it comes up and goes away, in ring-alpha per second. Up fast
 ## because you may already be winding up; down slow because it is pleasant.
@@ -36,14 +44,18 @@ const AFTER_A_FIZZLE := 2.5
 ## How far off the ground, so it never z-fights the grass on a slope.
 const OFF_THE_GRASS := 0.35
 
-## THE TONE'S RANGE. A full leash sounds at the top, an empty one at the
-## bottom, and the fall between them is what the player is listening to. Just
-## over an octave: wide enough that halfway is unmistakably halfway.
+## HOW MUCH OF THE LEASH MUST BE GONE before it says anything at all. Half.
+## Below this is the part of a trip where the answer to "should I turn back"
+## has stopped being obvious, and above it there is nothing to say.
+const SOUNDS_BELOW := 0.5
+## THE TONE'S RANGE, spread across the audible half rather than the whole
+## leash. Top of its range the moment it speaks up, bottom as it runs out —
+## so the fall the player actually hears is the whole octave and not half of
+## one. Wide enough that halfway down is unmistakably halfway.
 const PITCH_FULL := 1.55
 const PITCH_SPENT := 0.7
-## And how loud, and how fast it fades in and out. It is a warning that runs
-## for as long as the condition does, so it sits under everything rather than
-## over it.
+## And how loud, and how fast it fades in and out. It sits under everything
+## rather than over it — a thing you notice without being interrupted by.
 const TONE_DB := -16.0
 const TONE_FADE := 3.0
 
@@ -118,12 +130,18 @@ func _sound_the_leash(delta: float) -> void:
 		return
 	var out := divine_hand != null and is_instance_valid(divine_hand) \
 		and not MiracleReach.reaches(get_tree(), divine_hand.ground_point)
-	_tone_up = move_toward(_tone_up, 1.0 if out else 0.0, TONE_FADE * delta)
+	var share := MiracleReach.share()
+	# HALF GONE, AND NOT YET NOTHING. See SOUNDS_BELOW: a tone that runs for the
+	# whole of a trip is a drone, and a drone is furniture.
+	var warn := out and share > 0.0 and share <= SOUNDS_BELOW
+	_tone_up = move_toward(_tone_up, 1.0 if warn else 0.0, TONE_FADE * delta)
 	if _tone_up <= 0.001:
 		_tone.volume_db = -80.0
 		return
-	var share := MiracleReach.share()
-	_tone.pitch_scale = lerpf(PITCH_SPENT, PITCH_FULL, share)
+	# The pitch is spread over the audible half, so the fall anybody hears is
+	# the whole of the range rather than the bottom of it.
+	var through := clampf(share / maxf(SOUNDS_BELOW, 0.001), 0.0, 1.0)
+	_tone.pitch_scale = lerpf(PITCH_SPENT, PITCH_FULL, through)
 	_tone.volume_db = TONE_DB - (1.0 - _tone_up) * 40.0
 
 
