@@ -41,9 +41,11 @@ const DOCK_OFF_THE_WATER := 3.0
 ## an earthquake, a volcano, a deluge — so this is a memory, not a fact.
 const REMEMBERS := 60.0
 
-## village instance id -> {"shore": Vector3, "when": float}. A shore of INF means
-## "measured, and there is no harbour here", which is worth remembering exactly
-## as much as a yes is.
+## village instance id -> {"shore": Vector3, "bearing": float, "when": float}.
+## A shore of INF means "measured, and there is no harbour here", which is worth
+## remembering exactly as much as a yes is. The BEARING is which way the water
+## lies from that spot, and it is what lets a jetty be built jutting out over
+## the water instead of lying on the beach pointing north.
 static var _known := {}
 
 
@@ -88,14 +90,29 @@ static func harbour_for(town: Village, world: WorldGen) -> Vector3:
 	if not held.is_empty() and GameState.clock - float(held["when"]) < REMEMBERS:
 		return held["shore"]
 	var found := _look_for_a_shore(town.global_position, world)
-	_known[id] = {"shore": found, "when": GameState.clock}
-	return found
+	_known[id] = {
+		"shore": found.get("at", Vector3.INF),
+		"bearing": float(found.get("bearing", 0.0)),
+		"when": GameState.clock,
+	}
+	return _known[id]["shore"]
+
+
+## WHICH WAY THE WATER LIES from this town's harbour, in radians. Ask
+## `harbour_for` first — this reads what that measured, and answers zero for a
+## town that has no harbour, which is as good an answer as any for a jetty that
+## is never going to be built.
+static func bearing_for(town: Village, world: WorldGen) -> float:
+	harbour_for(town, world)
+	if town == null or not is_instance_valid(town):
+		return 0.0
+	return float(_known.get(town.get_instance_id(), {}).get("bearing", 0.0))
 
 
 ## Rings outward from the town until a dry spot with deep-enough water beside it
 ## turns up. Nearest first, so a harbour is at the end of the lane rather than
 ## across the parish.
-static func _look_for_a_shore(from: Vector3, world: WorldGen) -> Vector3:
+static func _look_for_a_shore(from: Vector3, world: WorldGen) -> Dictionary:
 	var ring := 20.0
 	while ring <= SHORE_WITHIN:
 		var steps := maxi(8, int(ring / 3.0))
@@ -105,9 +122,12 @@ static func _look_for_a_shore(from: Vector3, world: WorldGen) -> Vector3:
 			var probe := from + Vector3(cos(angle), 0.0, sin(angle)) * ring
 			var shore := _dock_spot(probe, world, angle)
 			if shore != Vector3.INF:
-				return shore
+				# The probe was wet and the shore is inshore of it, so the water
+				# lies along `angle` from where the jetty will stand. That is
+				# the whole of what a dock needs to know to point the right way.
+				return {"at": shore, "bearing": angle}
 		ring += STEP * 2.0
-	return Vector3.INF
+	return {}
 
 
 ## IS THIS PROBE A LANDING? It has to be wet, on a body big enough to matter,

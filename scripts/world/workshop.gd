@@ -82,10 +82,22 @@ const TRADES := {
 	# no field to water — which is exactly why it costs thirty timber and two
 	# mills to get to, and why a coastal village is a different kind of town
 	# rather than a village with a nice view.
+	# ONE TO A TOWN. `wants` is a share of the population everywhere else,
+	# because everywhere else a second mill is simply another mill — but a town
+	# has ONE waterfront, and two harbours on it would be two jetties fighting
+	# over the same fifty metres of shore. `most` is the ceiling; see `wanted`.
+	#
+	# And the catch is split. A shift on shore is worth one fish — mending nets
+	# and gutting what comes in — and the BOATS bring the rest, landing their
+	# own hauls when they come home (FishingBoat.CATCH). A harbour with no boats
+	# yet earns about what a barn does, which is a poor return on thirty timber,
+	# and that is the point: the building is the permission, the fleet is the
+	# catch. Two thirds of a fishing town's food floats on the water, where it
+	# can be burnt, beached or carried off by a god.
 	"dock": {
 		"employs": 3, "lumber": 30, "stone": 6,
-		"takes": {}, "makes": {"meat": 4},
-		"wants": 1.0 / 20.0, "needs": "water",
+		"takes": {}, "makes": {"meat": 1},
+		"wants": 1.0 / 20.0, "most": 1, "needs": "water",
 		"label": "Fishing dock", "tint": Color(0.42, 0.5, 0.58),
 	},
 	# A SECOND PLACE TO PRAY, so worship is not one queue at one totem.
@@ -320,7 +332,12 @@ static func posts(town: Village) -> int:
 ## What a village of this size would like to have, in total, of one trade.
 static func wanted(which: String, population: int) -> int:
 	var spec: Dictionary = TRADES[which]
-	return int(ceil(float(population) * float(spec["wants"])))
+	var want := int(ceil(float(population) * float(spec["wants"])))
+	# A trade may name a hard ceiling. Only the harbour does: a town has one
+	# waterfront, however many people are standing on it.
+	if spec.has("most"):
+		want = mini(want, int(spec["most"]))
+	return want
 
 
 func _ready() -> void:
@@ -342,6 +359,14 @@ func _ready() -> void:
 		add_child(custom)
 	else:
 		_build_stand_in(spec)
+	# A JETTY POINTS AT THE WATER. Everything else a village raises may stand
+	# whichever way it likes; a harbour that lies along the beach is not a
+	# harbour. The walkway runs out along this building's +Z, so the whole thing
+	# is turned to put +Z on the bearing Waters measured. See Waters.bearing_for.
+	if trade == "dock" and village != null and is_instance_valid(village):
+		var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+		var out_to_sea := Waters.bearing_for(village, world)
+		rotation.y = atan2(cos(out_to_sea), sin(out_to_sea)) - village.rotation.y
 
 
 ## A plain stand-in until art ships, distinct enough per trade to be told apart
@@ -460,9 +485,11 @@ func work_shift() -> void:
 				village.belief = minf(village.belief + 0.4, 100.0)
 				GameState.add_prayer_power(1.2)
 		"dock":
-			# A SHIFT WORKED IS A BOAT OUT. The catch is already in the store by
-			# the time this runs — `makes` did it — and this is only the part
-			# you can see from the hill. See FishingBoat.
+			# A SHIFT ON SHORE IS WORTH ONE FISH, and sends a boat out. THE BOAT
+			# BANKS ITS OWN CATCH when it comes home (FishingBoat.CATCH), which
+			# is the only way the arithmetic works: this runs once per WORKER,
+			# and a fleet that landed its haul three times because three people
+			# were standing on the jetty was a harbour earning triple.
 			_put_to_sea()
 
 
@@ -590,16 +617,46 @@ func _launch() -> void:
 	if _grounds == Vector3.INF:
 		_grounds = Waters.off_shore(world, global_position, GROUNDS_OUT)
 	var boat := FishingBoat.new()
-	# Moored just off the jetty, strung along it rather than stacked on it.
-	var along := TAU * float(_fleet.size()) / float(maxi(BOATS_MOST, 1))
-	var tie := global_position + Vector3(cos(along), 0.0, sin(along)) * 4.0
-	if world != null:
-		tie.y = world.surface_at(tie.x, tie.z)
+	# Strung ALONG the jetty rather than stacked on it: each new hull ties up a
+	# couple of metres further down the beam. See `_tie_up`.
+	var along := (float(_fleet.size()) - float(BOATS_MOST - 1) * 0.5) * 2.4
+	var tie := _tie_up(world, along)
 	boat.mooring = tie
 	boat.grounds = _grounds if _grounds != Vector3.INF else tie
+	boat.home_store = village.store if village != null else null
 	get_parent().add_child(boat)
 	boat.global_position = tie
 	_fleet.append(boat)
+
+
+## WHERE A BOAT IS TIED UP — on the WATER, off the end of the jetty, and not on
+## the beach beside it. The mooring used to be a ring round the dock's own
+## position, which is a spot chosen for being DRY; half the fleet was moored in
+## somebody's field.
+func _tie_up(world: WorldGen, along: float) -> Vector3:
+	if world == null:
+		return global_position
+	var out_to_sea := -global_transform.basis.z.normalized()
+	var beam := Vector3(out_to_sea.z, 0.0, -out_to_sea.x)
+	for reach: float in [5.0, 7.5, 10.0, 13.0]:
+		var tie := global_position + out_to_sea * reach + beam * along
+		if world.is_underwater(tie.x, tie.z):
+			tie.y = world.water_level_at(tie.x, tie.z)
+			return tie
+	return global_position + out_to_sea * 6.0
+
+
+## HOW MANY OF THIS HARBOUR'S BOATS ARE ACTUALLY ON THE WATER. Not moored, not
+## beached, not in a god's hand, not cinders. This is the town's fishing fleet
+## as far as the granary is concerned.
+func boats_at_sea() -> int:
+	Util.prune(_fleet)
+	var out := 0
+	for b in _fleet:
+		var boat := b as FishingBoat
+		if is_instance_valid(boat) and boat.is_fishing():
+			out += 1
+	return out
 
 
 ## SEND THE FIRST BOAT THAT IS IN. Called once per shift worked, so three people
@@ -608,7 +665,10 @@ func _put_to_sea() -> void:
 	Util.prune(_fleet)
 	for b in _fleet:
 		var boat := b as FishingBoat
-		if is_instance_valid(boat) and not boat.is_at_sea():
+		# A boat that is beached, burning or in somebody's hand refuses the
+		# order itself — see FishingBoat.put_to_sea. All this has to find is one
+		# that is not already out.
+		if is_instance_valid(boat) and boat.is_fishing() and not boat.is_out():
 			boat.put_to_sea(TRIP)
 			return
 

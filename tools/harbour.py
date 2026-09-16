@@ -70,6 +70,9 @@ SHORE_WITHIN = const("SHORE_WITHIN", WATERS, "waters.gd")
 MILLS = const("DOCK_WANTS_MILLS", SHOP, "workshop.gd")
 BOAT_LUMBER = const("BOAT_LUMBER", SHOP, "workshop.gd")
 BOATS_MOST = const("BOATS_MOST", SHOP, "workshop.gd")
+BOAT = (ROOT / "scripts/world/fishing_boat.gd").read_text()
+CATCH = const("CATCH", BOAT, "fishing_boat.gd")
+TRIP = const("TRIP", SHOP, "workshop.gd")
 SHIFT = const("SHIFT", SHOP, "workshop.gd")
 
 TRADES = trades()
@@ -134,33 +137,70 @@ if DOCK["lumber"] <= others[0][0]:
 # not clearly the best food per pair of hands, nobody pays thirty timber and
 # two mills to reach it and the whole building is decoration.
 print()
-print("WHAT A SHIFT IS WORTH, per worker, in food a minute -- NET, which is the")
-print("only honest way to read it: a mill hands back six and swallows four.")
-best_other = 0.0
+print("WHAT A BUILDING IS WORTH, in food a minute, NET -- which is the only")
+print("honest way to read it: a mill hands back six and swallows four.")
 
 
 def net(spec):
     return sum(spec["makes"].values()) - sum(spec["takes"].values())
 
 
+best_other = 0.0
 for name in sorted(TRADES):
     spec = TRADES[name]
     if net(spec) == 0 and not spec["makes"]:
         continue
-    rate = net(spec) * 60.0 / SHIFT
+    # A SHIFT IS WORKED BY A PERSON, so a building earns its net times however
+    # many are at it. Per building and not per worker: a mill with two posts and
+    # a dock with three are not comparable a head.
+    rate = net(spec) * spec["employs"] * 60.0 / SHIFT
     print("   %-8s %5.1f  (+%d -%d a shift, %d posts)"
           % (name, rate, sum(spec["makes"].values()),
              sum(spec["takes"].values()), spec["employs"]))
     if name != "dock":
         best_other = max(best_other, rate)
-dock_rate = net(DOCK) * 60.0 / SHIFT
-print("   Fishing is the only one of them that takes NOTHING: no seed corn, no")
+
+fleet = min(BOATS_MOST, DOCK["employs"])
+dock_bare = net(DOCK) * DOCK["employs"] * 60.0 / SHIFT
+afloat = fleet * CATCH * 60.0 / TRIP
+dock_rate = dock_bare + afloat
+print()
+print("AND THE FLEET on top: %d boats, %.0f fish a trip, a trip every %.0fs --"
+      % (fleet, CATCH, TRIP))
+print("   %.1f a minute. A harbour is %.1f ashore and %.1f afloat, %.1f in all,"
+      % (afloat, dock_bare, afloat, dock_rate))
+print("   against %.1f for the best other building in the game." % best_other)
+print("   Fishing is also the only trade that takes NOTHING: no seed corn, no")
 print("   herd, no field to water. That is what the thirty timber buys.")
-if dock_rate < best_other * 0.8:
-    fail.append("a dock makes %.1f food a minute a worker against the best "
-                "other trade's %.1f, and costs %d timber and %d mills to reach: "
+
+# A FLEET THAT IS NOT WORTH DEFENDING IS SCENERY. If the shore earns most of it
+# anyway, burning somebody's boats is a gesture rather than an act of war.
+if dock_bare > dock_rate * 0.5:
+    fail.append("a harbour earns %.1f a minute with no boats at all against "
+                "%.1f with a full fleet: burning a town's boats would barely "
+                "be felt, and the whole point of them is that it is"
+                % (dock_bare, dock_rate))
+# ...and one that earns nothing until a boat exists is a shed.
+if dock_bare <= 0.0:
+    fail.append("a harbour with no boats yet earns nothing at all, so a town "
+                "that has just spent thirty timber on one has bought a shed")
+# And the whole thing still has to beat what it replaces, or nobody builds it.
+if dock_rate < best_other * 1.5:
+    fail.append("a full harbour makes %.1f a minute against the best other "
+                "building's %.1f, and costs %d timber and %d mills to reach: "
                 "nobody will ever build one"
-                % (dock_rate, best_other, total, MILLS))
+                % (dock_rate, best_other, DOCK["lumber"] + BOAT_LUMBER * fleet,
+                   MILLS))
+
+# ONE TO A TOWN. A waterfront is not a thing a village has several of, and two
+# jetties would be two buildings fighting over the same fifty metres of shore.
+print()
+most = re.search(r'"dock": \{.*?"most": (\d+)', SHOP, re.S)
+print("A TOWN MAY RAISE %s harbour." % (most.group(1) if most else "ANY NUMBER OF"))
+if not most or int(most.group(1)) != 1:
+    fail.append("the dock has no `most: 1` in its TRADES row: a town of sixty "
+                "wants three of them, and they will be built on top of each "
+                "other because there is only one shore")
 
 print()
 print("AND IT WANTS %d MILLS standing first, so a harbour is only ever raised"
