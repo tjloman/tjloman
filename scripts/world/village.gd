@@ -23,6 +23,17 @@ const MAX_INFLUENCE := 65.0
 ## all of at once; fifty is a place, with enough hands that the town has to be
 ## ORGANISED rather than merely fed — which is what the workshops are for.
 const STARTING_SOULS := 50
+## UNITS OF FOOD PER FOUNDING SOUL, so that everybody can eat once before the
+## fields come in. A meal is two units at the hunger a villager goes looking at,
+## so this is one meal each with a margin for the ones who dawdle.
+const FOUNDING_MEALS := 3
+## AND THEY DO NOT ALL GET HUNGRY ON THE SAME FRAME. Every villager began at
+## exactly 30, climbing at a quarter a second, so all fifty wanted a meal at
+## exactly two minutes — one stampede at one granary, and whoever lost the race
+## found it empty. Spread, they trickle in over three minutes and the store is
+## never emptied all at once.
+const DAWN_HUNGER_LEAST := 8.0
+const DAWN_HUNGER_MOST := 45.0
 ## THE AGE OF PEOPLE WHO GO SOMEWHERE. A wagon of settlers came out of the same
 ## ladder a generated village does, so the oldest colonist anybody ever saw was
 ## thirteen — a whole new town of children, who cannot work, cannot breed and
@@ -300,6 +311,20 @@ func _ready() -> void:
 	add_child(store)
 	if is_player_home:
 		store.plant_food += 8  # a founding surplus, so the game starts kind
+	# ENOUGH IN THE GRANARY THAT EVERYONE CAN GET ONE MEAL.
+	#
+	# NOT A CHANGE TO STARVATION. Hunger climbs as it always did, a famine
+	# kills as it always did, and a town that runs its larder dry buries
+	# people. This is the FIRST FIVE MINUTES only: fourteen units of food was
+	# written for a village of twelve and a village is fifty now, so a third of
+	# the founders reached for a granary that had already been emptied by the
+	# people ahead of them, got `false` out of `_plan_eating`, went to work
+	# instead and died of it. They never had a chance to run to the store; the
+	# store was bare before they were hungry.
+	#
+	# One meal each and a little over, which the first harvests overtake inside
+	# a few minutes. After that the town feeds itself or it does not.
+	store.plant_food = maxi(store.plant_food, _founding_count() * FOUNDING_MEALS)
 
 	# The founding field is placed AFTER the store so its clearance check reads
 	# the store's final spot — no field ends up buried under the market floor.
@@ -721,6 +746,7 @@ func _make_villager(start_age: float) -> Villager:
 	var v := Villager.new()
 	v.village = self
 	v.age = start_age
+	v.hunger = randf_range(DAWN_HUNGER_LEAST, DAWN_HUNGER_MOST)
 	return v
 
 
