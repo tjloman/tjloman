@@ -34,7 +34,7 @@ const ONE_SHOTS: Array[String] = [
 ## THE SMALL VOICES. Everything above is a one-shot; these are LOOPS, because
 ## a cricket is not an event. See `_make_loop` and `voice`.
 const VOICES: Array[String] = [
-	"crickets", "bees", "flies", "peepers", "chitter", "rustle",
+	"crickets", "bees", "flies", "peepers", "chitter", "rustle", "tone",
 ]
 
 ## Recorded lines, by name: an Array of streams when there are any, an empty
@@ -603,6 +603,35 @@ func _make_loop(samples: PackedFloat32Array) -> AudioStreamWAV:
 	wav.loop_begin = 0
 	wav.loop_end = out.size()
 	return wav
+
+
+## THE ONE SOUND IN THIS BANK THAT IS NOT A THING IN THE WORLD.
+##
+## Everything else here is a beast, a tool or a weather. This is a readout: the
+## tone that runs while your hand is out past the ground you hold, pitched high
+## while there is plenty of leash left and falling as it goes. See MiracleReach
+## — it is the only warning the player gets, so it has to be legible with the
+## eyes busy elsewhere.
+##
+## A drone rather than a beep, because it is held for as long as the condition
+## is, and a beep held is an alarm. Three partials over a low fundamental, the
+## upper two slightly detuned so it beats gently and does not read as a test
+## card. The PITCH is set by the caller (`pitch_scale` on the player), so what
+## is stored here is one steady note.
+func _make_tone() -> AudioStreamWAV:
+	var dur := 1.0
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var root := 220.0
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		var v := sin(TAU * root * t) * 0.5
+		v += sin(TAU * root * 2.002 * t) * 0.22
+		v += sin(TAU * root * 3.004 * t) * 0.1
+		# A slow tremolo, so a held note stays alive in the ear.
+		samples[i] = v * (0.86 + 0.14 * sin(TAU * 5.5 * t))
+	return _make_loop(samples)
 
 
 ## CRICKETS. A field of them, not one: several stridulators at slightly

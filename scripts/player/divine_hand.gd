@@ -387,6 +387,13 @@ func _physics_process(delta: float) -> void:
 	var mouse_pos := get_viewport().get_mouse_position()
 	_update_hover(mouse_pos)
 
+	# THE LEASH, PAID OUT WHEREVER THE HAND IS. Out past the ground you hold it
+	# runs down at a metre a second for every metre beyond the edge; inside, it
+	# fills back to whole in five. This is the only thing that moves the meter,
+	# and it runs every frame because the meter is about WHERE YOU ARE rather
+	# than about anything you did. See MiracleReach.
+	MiracleReach.pay_out(get_tree(), ground_point, delta)
+
 	# The hand rests on whatever the mouse is over; fall back to the y=0 plane.
 	var target := ground_point + Vector3(0, HOVER_HEIGHT, 0)
 	target.y += sin(Time.get_ticks_msec() / 400.0) * 0.08  # idle bob
@@ -727,8 +734,8 @@ func _on_grab() -> void:
 	# falls through to it rather than doing nothing — and anything already in
 	# your grip stays there. You may carry a tree out of your country; you may
 	# not reach into somebody else's and take one.
-	if under != null and not MiracleReach.reaches(get_tree(), ground_point):
-		GameState.hint(MiracleReach.short_hint(get_tree(), ground_point))
+	if under != null and not MiracleReach.may_act(get_tree(), ground_point):
+		GameState.hint("Your reach has run out here — get back to your own ground.")
 		if miracles != null and is_instance_valid(miracles) \
 				and miracles.reach_ring != null \
 				and is_instance_valid(miracles.reach_ring):
@@ -890,6 +897,19 @@ func _on_release() -> void:
 					if refused == ChildSafety.HELD_FAST:
 						return        # still in your hand, and still in the way
 					if refused == ChildSafety.SET_DOWN:
+						_release_body(held_body, Vector3.ZERO, true)
+						_stow_sling()
+						held_body = null
+						state = HandState.IDLE
+						return
+					# AND A SPENT LEASH WILL NOT THROW. Nothing is taken from
+					# you — what is in your hand goes down where you are
+					# standing, and you may pick it up again once you are home.
+					# Hurling it is the act of authority, and out here with the
+					# leash run out you have none. See MiracleReach.
+					if not MiracleReach.may_act(get_tree(), ground_point):
+						GameState.hint("Too far from your own ground to throw — "
+							+ "set it down, or carry it home.")
 						_release_body(held_body, Vector3.ZERO, true)
 						_stow_sling()
 						held_body = null
@@ -1233,7 +1253,7 @@ func _open_casting() -> void:
 	# `cast_from` is stamped now and used for the whole session: `ground_point`
 	# follows the pointer every frame, so a rune drawn across the screen would
 	# otherwise be judged on wherever the stroke happened to end.
-	if not MiracleReach.reaches(get_tree(), ground_point):
+	if not MiracleReach.may_act(get_tree(), ground_point):
 		GameState.hint(MiracleReach.short_hint(get_tree(), ground_point))
 		SoundBank.play_at("whisper", global_position, -4.0, 0.12, 0.6)
 		if miracles != null and is_instance_valid(miracles) \

@@ -70,6 +70,45 @@ extends RefCounted
 ## settlement, an encampment — extends the reach by adding one more row to
 ## `circles`, and nothing else in the game has to know.
 
+## THE LEASH ----------------------------------------------------------------
+##
+## A hard edge is the wrong shape for this. Strips of no-man's-land run between
+## every pair of towns, and a god who simply cannot act in them is a god
+## fencing with the map rather than with the world — the circles stop being a
+## reach and start being a wall.
+##
+## So the edge is soft, and what makes it soft is a LEASH: an allowance of time
+## outside, spent faster the further out you go. It is exactly Black & White's
+## bargain. A great flock buys you room to work beyond your own ground; twenty
+## souls buy you a moment.
+##
+## THE LEASH IS NOT YOUR PRAYER. It is worth as much as your prayer power CAN
+## be — so shrines, converts and belief all widen it — but the two pools never
+## touch. Spending an afternoon out in the wild costs you nothing you were
+## saving for a storm, and draining the reservoir on a storm does not shorten
+## the leash. They rise and fall independently, and only one of them is a
+## resource the player has to manage.
+##
+## IT REFILLS WHOLE. Five seconds back inside any circle and it is full again,
+## whatever was left of it. That is what makes it a leash rather than a fuel
+## tank: the question is never "can I afford this trip", it is "can I get back
+## before it runs out".
+##
+## AND WHEN IT RUNS OUT, NOTHING IS TAKEN. What you are holding stays in your
+## hand — you may carry it home, and set it down, but you may not hurl it, take
+## anything new, or work a miracle until you are back on your own ground. The
+## punishment for overreaching is that your hand stops meaning anything out
+## there, which is the whole idea being enforced rather than a fine.
+
+## HOW FAST THE LEASH PAYS OUT: one unit a second for every metre beyond the
+## edge. Ten metres out is ten a second, fifty metres out is fifty — so the cost
+## is DISTANCE times TIME, and a long reach is dear in a way a short one is not.
+const PER_METRE := 1.0
+## And how long, inside, to have the whole of it back. A constant rate rather
+## than a constant wait, so it always ends at full.
+const REFILLS_IN := 5.0
+
+
 ## WHAT THE BEAST CARRIES, whelp to giant. A young creature is almost no help
 ## and a full-grown one nearly matches a small town, which is the shape of the
 ## whole relationship.
@@ -87,6 +126,12 @@ const WHILE_ASLEEP := 0.7
 ## stay a HAIR: the moment it is a visible fraction of the smallest circle in
 ## the game, the ring drawn on the grass stops being the rule.
 const GRACE := 0.75
+
+## What is left of the leash, and how far it may be filled. Static because there
+## is one god and one hand; `full()` reads GameState every time rather than
+## caching, so a village converted mid-trip lengthens the leash on the next
+## frame. See THE LEASH above.
+static var _left := -1.0
 
 
 ## EVERY CIRCLE YOU HOLD, as {"at": Vector3 (flat), "r": float, "why": String}.
@@ -189,6 +234,47 @@ static func widest(tree: SceneTree) -> float:
 	for ring in circles(tree):
 		most = maxf(most, float(ring["r"]))
 	return most
+
+
+## HOW LONG THE LEASH IS WHEN IT IS WHOLE — everything your flock could pray
+## for, whether or not they have. It is a measure of your dominion rather than
+## of your savings, which is why it reads the CAP and not the reservoir.
+static func full() -> float:
+	return maxf(GameState.max_prayer_power, 1.0)
+
+
+## WHAT IS LEFT, in the same units. Begins whole.
+static func left() -> float:
+	if _left < 0.0:
+		_left = full()
+	return minf(_left, full())
+
+
+## 0..1, for the ring and the tone.
+static func share() -> float:
+	return clampf(left() / full(), 0.0, 1.0)
+
+
+## MAY THE HAND DO ANYTHING AT ALL, here? Inside your ground, always. Outside
+## it, only while the leash holds.
+static func may_act(tree: SceneTree, pos: Vector3) -> bool:
+	return reaches(tree, pos) or left() > 0.0
+
+
+## ONE FRAME OF BEING WHERE YOU ARE. Called by the hand, every frame, wherever
+## it is — this is the only thing that moves the meter.
+static func pay_out(tree: SceneTree, pos: Vector3, delta: float) -> void:
+	var over := how_short(tree, pos)
+	if over <= 0.0:
+		_left = minf(left() + full() / REFILLS_IN * delta, full())
+		return
+	_left = maxf(left() - over * PER_METRE * delta, 0.0)
+
+
+## Give it all back. For a world teardown and for the debug menu — a new map
+## should not begin with the last one's leash half spent.
+static func slacken() -> void:
+	_left = -1.0
 
 
 static func _flat(v: Vector3) -> Vector3:

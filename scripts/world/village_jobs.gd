@@ -45,6 +45,12 @@ const REST_PRAY := 3.0
 const REST_HOME := 4.0
 const REST_POTTER := 2.0
 
+## HOW WIDE THE CONGREGATION STANDS. A floor, so a handful still make a circle
+## rather than a huddle, and a term that grows with the square root of how many
+## are already there — area with the crowd, so the ring does not run away.
+const PRAY_RING := 5.0
+const PRAY_PER_HEAD := 1.6
+
 
 ## How many hands this job has places for.
 static func room_for(town: Village, job: String) -> int:
@@ -103,8 +109,19 @@ static func idle(who: Villager) -> void:
 			claim(town, "circle")
 			who._held_post = "circle"
 		"pray":
-			who._target = town.totem.global_position \
-				+ Vector3(randf_range(-3, 3), 0, randf_range(-3, 3))
+			# A RING ROUND THE TOTEM, NOT A HEAP ON IT. This was a six-metre box,
+			# so every idle soul in a town of two hundred converged on the same
+			# spot and stood in each other — which is the crowd in the middle of
+			# the city, and it was never a crowd of people strolling.
+			#
+			# A ring sized by how many are already at it: a dozen worshippers
+			# stand close about the post, a hundred make a congregation you can
+			# see the shape of.
+			var faithful := maxi(town.job_counts().get("pray", 0), 1)
+			var round_it := PRAY_RING + sqrt(float(faithful)) * PRAY_PER_HEAD
+			var turn := randf() * TAU
+			who._target = town.totem.global_position + Vector3(
+				cos(turn), 0.0, sin(turn)) * randf_range(round_it * 0.45, round_it)
 			who.state = Villager.State.GO_WORSHIP
 		"home":
 			who._target = who.home.global_position \
@@ -112,10 +129,11 @@ static func idle(who: Villager) -> void:
 			who.state = Villager.State.WANDER
 			who._action_time = randf_range(8.0, 18.0)   # a long sit, not a lap
 		_:
+			# POTTERING STARTS WHERE YOU ARE. It used to pick a point somewhere
+			# in the town's ring and walk straight at it, which is a commute and
+			# not a potter. See Stroll, which is legs and pauses from here.
 			who.state = Villager.State.WANDER
-			who._action_time = randf_range(4.0, 9.0)
-			who._target = town.global_position + Vector3(
-				randf_range(-1, 1), 0, randf_range(-1, 1)) * town.influence_radius * 0.6
+			Stroll.begin(who)
 
 
 ## One of the weighted options.

@@ -18,6 +18,14 @@ extends Node3D
 ##
 ## It also flares when a cast is refused for want of ground, so the answer
 ## arrives even if you were not looking at your feet.
+##
+## AND IT SOUNDS, which is the half that actually gets used. The leash
+## (MiracleReach) runs down whenever the hand is off your ground, and a meter
+## in the corner of a screen is no use to somebody whose eyes are on a tree
+## they are carrying. So there is a tone: it starts when you cross the edge,
+## it is pitched high while there is plenty of leash left, and it falls as it
+## goes. Down at the bottom of its range you have run out. Nobody has to be
+## taught what that means.
 
 ## How quickly it comes up and goes away, in ring-alpha per second. Up fast
 ## because you may already be winding up; down slow because it is pleasant.
@@ -28,12 +36,25 @@ const AFTER_A_FIZZLE := 2.5
 ## How far off the ground, so it never z-fights the grass on a slope.
 const OFF_THE_GRASS := 0.35
 
+## THE TONE'S RANGE. A full leash sounds at the top, an empty one at the
+## bottom, and the fall between them is what the player is listening to. Just
+## over an octave: wide enough that halfway is unmistakably halfway.
+const PITCH_FULL := 1.55
+const PITCH_SPENT := 0.7
+## And how loud, and how fast it fades in and out. It is a warning that runs
+## for as long as the condition does, so it sits under everything rather than
+## over it.
+const TONE_DB := -16.0
+const TONE_FADE := 3.0
+
 var divine_hand: DivineHand = null
 
 var _ring: MeshInstance3D
 var _skin: StandardMaterial3D
 var _shown := 0.0
 var _flare := 0.0
+var _tone: AudioStreamPlayer
+var _tone_up := 0.0
 
 
 func _ready() -> void:
@@ -49,6 +70,16 @@ func _ready() -> void:
 	_ring.visible = false
 	add_child(_ring)
 
+	# NOT AN AudioStreamPlayer3D. This is not a thing in the world making a
+	# noise at a place; it is the state of your own reach, and it belongs in
+	# your ear at a constant volume wherever the camera happens to be.
+	_tone = AudioStreamPlayer.new()
+	_tone.stream = SoundBank.voice("tone")
+	_tone.volume_db = -80.0
+	add_child(_tone)
+	if _tone.stream != null:
+		_tone.play()
+
 
 ## A fade on a piece of interface, run off the frame's own `delta` — which
 ## stops with the tree, so the ring holds its state through a paused temple
@@ -59,6 +90,7 @@ func _process(delta: float) -> void:
 		_ring.visible = false
 		return
 	_flare = maxf(_flare - delta, 0.0)
+	_sound_the_leash(delta)
 	var want := 1.0 if (_holding_power() or _flare > 0.0) else 0.0
 	_shown = move_toward(_shown, want, (OPENS if want > _shown else CLOSES) * delta)
 	if _shown <= 0.001:
@@ -78,6 +110,23 @@ func _process(delta: float) -> void:
 	_skin.emission_energy_multiplier = 1.6 * _shown
 
 
+## THE LEASH, IN THE EAR. Pitched by how much of it is left and audible only
+## while the hand is actually off your ground — silence is the ordinary state,
+## so the tone starting at all is the news.
+func _sound_the_leash(delta: float) -> void:
+	if _tone == null or _tone.stream == null:
+		return
+	var out := divine_hand != null and is_instance_valid(divine_hand) \
+		and not MiracleReach.reaches(get_tree(), divine_hand.ground_point)
+	_tone_up = move_toward(_tone_up, 1.0 if out else 0.0, TONE_FADE * delta)
+	if _tone_up <= 0.001:
+		_tone.volume_db = -80.0
+		return
+	var share := MiracleReach.share()
+	_tone.pitch_scale = lerpf(PITCH_SPENT, PITCH_FULL, share)
+	_tone.volume_db = TONE_DB - (1.0 - _tone_up) * 40.0
+
+
 ## ONE MORE SECOND OF ANSWER. Called when a working guttered out for want of
 ## ground, so the player sees the edge they just missed.
 func flare() -> void:
@@ -92,6 +141,10 @@ func _holding_power() -> bool:
 	# to "may I work here" matters — before a rune is drawn, not after one is
 	# thrown. See MiracleReach.
 	if divine_hand.casting:
+		return true
+	# AND WHENEVER THE LEASH IS RUNNING. Off your own ground the ring is the
+	# thing you are trying to get back inside, so it had better be drawn.
+	if not MiracleReach.reaches(get_tree(), divine_hand.ground_point):
 		return true
 	var held := divine_hand.held_body
 	if held == null or not is_instance_valid(held):

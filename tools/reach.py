@@ -172,12 +172,15 @@ print("WHERE THE RULE IS ENFORCED:")
 for where, text, name, must in [
         ("divine_hand.gd", HAND, "_open_casting", True),
         ("divine_hand.gd", HAND, "_on_grab", True),
+        ("divine_hand.gd", HAND, "_on_release", True),
         ("miracle_manager.gd", BOOK, "cast_runes", True),
         ("miracle_manager.gd", BOOK, "resolve", False),
         ("fireball.gd", BALL, "_go_off", False),
         ("fireball.gd", BALL, "_hearth", False)]:
     body = body_of(text, name)
-    asks = "MiracleReach.reaches" in body
+    # `may_act` is `reaches` with the leash allowed for; a door may use either,
+    # and the landing code must use neither.
+    asks = "MiracleReach.reaches" in body or "MiracleReach.may_act" in body
     want = "asks" if must else "does not ask"
     print("   %-20s %-14s %s" % (where, name, "asks" if asks else "does not ask"))
     if must and not asks:

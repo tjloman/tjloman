@@ -423,9 +423,8 @@ func _physics_process(delta: float) -> void:
 			if _action_time <= 0.0:
 				_rethink()
 		State.WANDER, State.PLAY:
-			_action_time -= delta
-			var speed := WALK_SPEED * (1.4 if state == State.PLAY else 0.6)
-			if _move_toward(_target, speed * _speed_factor(), delta) or _action_time <= 0.0:
+			# Legs and pauses, not a destination — see Stroll.
+			if Stroll.walk(self, delta):
 				_rethink()
 		State.GO_EAT:
 			_process_go_eat(delta)
