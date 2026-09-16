@@ -1797,6 +1797,82 @@ def check_tree_worth(files):
     return out
 
 
+def check_returned_kind(files):
+    """A CALL COMPARED AGAINST A SENTINEL OF THE WRONG KIND.
+
+    The shape that prompted this, in full, because it cost a launch:
+    `_look_for_a_shore` returned a Vector3 and callers asked
+    `!= Vector3.INF`. It was changed to return a Dictionary -- the spot AND the
+    bearing to the water -- and one of the three callers was not changed with
+    it. Godot refuses `Dictionary != Vector3` at COMPILE time, so the failure is
+    not a wrong answer on some later frame; it is every script that depends on
+    the file failing to load, fourteen "Failed to compile depended scripts" and
+    a game that stops at the logo.
+
+    Neither gdparse nor anything else in this file could see it. gdparse is a
+    parser and the line is syntactically perfect; the rest of these checks ask
+    whether a method EXISTS, never what kind of thing it hands back. So this
+    reads declared return types -- which this codebase writes on nearly every
+    function -- and flags a comparison between a call and a literal that can
+    never equal it.
+
+    Deliberately narrow: only containers against non-containers and vectors
+    against containers, both directions, and only where the return type is
+    written down. A `Variant` or an unannotated function is not guessed at.
+    """
+    CONTAINERS = ("Dictionary", "Array")
+    VECTORS = ("Vector2", "Vector2i", "Vector3", "Vector3i", "Vector4")
+    # What a comparison's right-hand side obviously IS, by how it is spelled.
+    def kind_of(rhs):
+        rhs = rhs.strip()
+        if re.match(r"^(Vector[234]i?)\.", rhs) or re.match(r"^Vector[234]i?\(", rhs):
+            return "vector"
+        if rhs in ("{}", "[]") or rhs.startswith("{") or rhs.startswith("["):
+            return "container"
+        if rhs in ("null", "true", "false") or re.match(r'^-?[\d.]+$', rhs) \
+                or rhs.startswith('"'):
+            return "scalar"
+        return ""
+
+    # Every declared return type in the project, by function name. A name
+    # declared twice with different types is dropped rather than guessed at.
+    returns = {}
+    clashed = set()
+    for path in files:
+        for line in open(path, encoding="utf-8").read().split("\n"):
+            m = re.match(r"^(?:static )?func (\w+)\([^)]*\)\s*->\s*([\w\[\]]+):", line)
+            if not m:
+                continue
+            name, kind = m.group(1), m.group(2)
+            base = kind.split("[")[0]
+            if name in returns and returns[name] != base:
+                clashed.add(name)
+            returns[name] = base
+    for name in clashed:
+        returns.pop(name, None)
+
+    out = []
+    call_cmp = re.compile(
+        r"(?:^|[^\w.])(\w+)\([^()]*\)\s*(==|!=)\s*([^:\n]+?)\s*(?::|$|\)|,| and | or )")
+    for path in files:
+        for lineno, line in enumerate(
+                open(path, encoding="utf-8").read().split("\n"), 1):
+            if line.strip().startswith("#"):
+                continue
+            for name, _op, rhs in call_cmp.findall(line):
+                kind = returns.get(name)
+                if kind is None:
+                    continue
+                against = kind_of(rhs)
+                if not against:
+                    continue
+                if kind in CONTAINERS and against in ("vector", "scalar"):
+                    out.append((path, lineno, name, kind, rhs.strip(), line))
+                elif kind in VECTORS and against == "container":
+                    out.append((path, lineno, name, kind, rhs.strip(), line))
+    return out
+
+
 def check_sentinel_passed(files):
     """A "NOWHERE YET" SENTINEL HANDED TO SOMETHING THAT WILL BUILD THERE.
 
@@ -2053,6 +2129,13 @@ def main():
               "infer from — an error this project builds as fatal, in whatever "
               "file eventually indexes it. Name the element type."
               "\n    %s" % (path, lineno, name, line))
+    wrong_kind = check_returned_kind(files)
+    for path, lineno, name, kind, rhs, line in wrong_kind:
+        print("%s:%d: %s() returns %s, and this compares it against %s. Godot "
+              "refuses that at COMPILE time, so the symptom is not a wrong "
+              "answer later — it is every script depending on this file failing "
+              "to load and the game stopping at the logo."
+              "\n    %s" % (path, lineno, name, kind, rhs, line))
     twice = check_twice_declared(files)
     for path, lineno, name, first, line in twice:
         print("%s:%d: '%s' is already defined at line %d. Godot refuses to parse "
@@ -2161,7 +2244,7 @@ def main():
               % (path, lineno, name, name, line))
     total = len(problems) + len(escapes) + len(formats) + len(shadowed) \
         + len(loose_arrays) + len(variants) + len(shadowed_members) \
-        + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice) + len(loose_consts) + len(through) \
+        + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice) + len(wrong_kind) + len(loose_consts) + len(through) \
         + len(class_shadows) + len(confusable) + len(sim_clocks) + len(alive) \
         + len(stand) + len(typed_has) + len(shadowed_own) + len(sentinels) \
         + len(int_div) + len(worth) + len(burnable) + len(kids) + len(bundles) \

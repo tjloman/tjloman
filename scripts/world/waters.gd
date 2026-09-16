@@ -151,7 +151,10 @@ static func _dock_spot(probe: Vector3, world: WorldGen, angle: float) -> Vector3
 ## village, and not remembered. For the world generator, which is choosing where
 ## a town goes and has no village to ask about yet.
 static func coast_at(at: Vector3, world: WorldGen) -> bool:
-	return _look_for_a_shore(at, world) != Vector3.INF
+	# `is_empty` and not `!= Vector3.INF`: the search hands back a spot AND the
+	# bearing to the water now, and comparing that Dictionary to a Vector3 is a
+	# compile error that takes the whole game down at launch.
+	return not _look_for_a_shore(at, world).is_empty()
 
 
 ## OPEN WATER OFF A LANDING, as far out as `reach` and as far out as it can
