@@ -140,6 +140,17 @@ const IN_THE_YARD := 12
 ## dock is not the thing a hungry village needs, and asking for two mills is
 ## asking for a town that has already solved its grain.
 const DOCK_WANTS_MILLS := 2
+## HOW LONG A COMMITMENT TO RAISE A TRADE HOLDS THE PLACE, in seconds.
+##
+## `short_of` counted BUILT workshops, and `build_shop` has room for two — so
+## two villagers could both be told the town wants a harbour, walk to two
+## different spots, and raise two. A town has one waterfront and it had two
+## jetties on it.
+##
+## Stamped rather than counted, so a builder who dies, is eaten or is thrown
+## into a lake does not hold the place for ever. Long enough to cover the walk
+## out and the eighteen seconds of hammering.
+const RAISING_HOLDS := 90.0
 ## What each boat costs on top of the dock, how many a harbour keeps, how long
 ## one stays out per shift worked, and how far off the jetty the grounds are.
 const BOAT_LUMBER := 12
@@ -203,6 +214,9 @@ static func short_of(town: Village) -> String:
 	var souls := town.population()
 	for which: String in TRADES:
 		var spec: Dictionary = TRADES[which]
+		# Somebody is already out raising one of these. See RAISING_HOLDS.
+		if being_raised(town, which):
+			have[which] = int(have.get(which, 0)) + 1
 		if int(have.get(which, 0)) >= wanted(which, souls):
 			continue
 		if not _makes_sense(town, String(spec["needs"])):
@@ -212,6 +226,20 @@ static func short_of(town: Village) -> String:
 			continue
 		return which
 	return ""
+
+
+## IS SOMEBODY OUT RAISING ONE OF THESE RIGHT NOW? See RAISING_HOLDS — this is
+## what stops two people being told the same town needs the same building.
+static func being_raised(town: Village, which: String) -> bool:
+	var when: float = town.raising.get(which, -RAISING_HOLDS * 2.0)
+	return GameState.clock - when < RAISING_HOLDS
+
+
+## I AM GOING TO RAISE ONE. Said by the builder when it sets off, so that the
+## next villager to ask is told the town is already dealing with it.
+static func claim_raising(town: Village, which: String) -> void:
+	if which != "":
+		town.raising[which] = GameState.clock
 
 
 ## The condition beyond mere numbers. A mill wants grain to grind, a barn wants

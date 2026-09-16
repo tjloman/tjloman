@@ -154,7 +154,12 @@ BALL = (ROOT / "scripts/miracles/fireball.gd").read_text()
 
 
 def body_of(text, name):
-    """One function's body, by indentation."""
+    """One function's body, by indentation, WITH THE COMMENTS TAKEN OUT.
+
+    A note about a thing is not the thing. Every check below asks whether a
+    function mentions `MiracleReach.reaches`, and every one of these functions
+    has a comment ABOUT `MiracleReach.reaches` above it.
+    """
     head = "func %s(" % name
     if head not in text:
         return ""
@@ -163,7 +168,9 @@ def body_of(text, name):
     for line in rest.split("\n")[1:]:
         if line and not line.startswith(("\t", " ")):
             break
-        out.append(line)
+        bare = line.split("#")[0].rstrip()
+        if bare:
+            out.append(bare)
     return "\n".join(out)
 
 
@@ -178,18 +185,45 @@ for where, text, name, must in [
         ("fireball.gd", BALL, "_go_off", False),
         ("fireball.gd", BALL, "_hearth", False)]:
     body = body_of(text, name)
-    # `may_act` is `reaches` with the leash allowed for; a door may use either,
-    # and the landing code must use neither.
-    asks = "MiracleReach.reaches" in body or "MiracleReach.may_act" in body
+    # A DOOR MUST ASK `may_act`, AND NOT THE BARE `reaches`.
+    #
+    # They are not interchangeable and reading them as such cost a real bug:
+    # `reaches` is "am I on my own ground", `may_act` is that OR the leash still
+    # holding. `cast_runes` asked the bare question, so drawing a rune five
+    # metres past the ring opened a casting session, took the whole stroke, and
+    # then refused it — the leash spent on something it did not buy.
+    asks = "MiracleReach.may_act" in body
+    bare = "MiracleReach.reaches" in body
     want = "asks" if must else "does not ask"
-    print("   %-20s %-14s %s" % (where, name, "asks" if asks else "does not ask"))
+    print("   %-20s %-14s %s" % (where, name,
+          ("asks may_act" if asks else ("asks bare reaches" if bare
+                                        else "does not ask"))))
     if must and not asks:
-        fail.append("%s.%s does not consult MiracleReach: there is a door into "
-                    "reaching out that skips the rule entirely" % (where, name))
-    if not must and asks:
+        fail.append("%s.%s does not consult MiracleReach.may_act: there is a "
+                    "door into reaching out that skips the rule entirely"
+                    % (where, name))
+    if must and bare:
+        fail.append("%s.%s asks MiracleReach.reaches rather than may_act. That "
+                    "is 'am I on my own ground' and ignores the leash — so the "
+                    "one thing the leash buys, a moment's work just past the "
+                    "ring, is refused anyway" % (where, name))
+    if not must and (asks or bare):
         fail.append("%s.%s gates on the reach. That is the LANDING, not the "
                     "drawing -- it is the mistake that made every long throw "
                     "come back \"beyond your reach by 88 metres\"" % (where, name))
+
+# -- A WORKING IS NOT SET DOWN, IT IS KEPT ----------------------------------
+# Setting a miracle down IS casting it -- an orb resolves wherever it comes to
+# rest -- so "you may not throw it, but you may put it down" was a way of
+# casting with no leash left at all, which is the one thing the leash is for.
+release = body_of(HAND, "_on_release")
+print()
+print("A SPENT LEASH %s a miracle in the hand."
+      % ("keeps" if "_is_a_working" in release else "LETS GO OF"))
+if "_is_a_working" in HAND and "_is_a_working" not in release:
+    fail.append("_on_release does not ask whether what it is letting go of is a "
+                "working. Setting a miracle down casts it, so a spent leash "
+                "that permits setting things down permits casting")
 
 print()
 if fail:

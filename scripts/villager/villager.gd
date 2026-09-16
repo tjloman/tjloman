@@ -1576,6 +1576,7 @@ func _start_job(job: String) -> void:
 				state = State.WANDER
 				_action_time = 2.0
 				return
+			Workshop.claim_raising(village, _shop_kind)   # nobody else raises it
 			state = State.GO_BUILD_SHOP
 			_maybe_mount()
 

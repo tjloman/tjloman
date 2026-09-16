@@ -323,8 +323,13 @@ func cast_runes(runes: Array) -> bool:
 	# off your ground at all, which is where the player meets this rule; this is
 	# here so that nothing else can come through the door and skip it, and it is
 	# judged on `cast_from` — where the hand was planted when the drawing began.
+	# `may_act` AND NOT `reaches`. The leash exists so that a god may work just
+	# outside their own ground for a while — and this backstop asked the bare
+	# question, so drawing a rune five metres past the ring opened a casting
+	# session, took the whole stroke, and then refused it. The leash was being
+	# spent on a thing it did not buy.
 	if divine_hand != null and is_instance_valid(divine_hand) \
-			and not MiracleReach.reaches(get_tree(), divine_hand.cast_from):
+			and not MiracleReach.may_act(get_tree(), divine_hand.cast_from):
 		GameState.hint(MiracleReach.short_hint(get_tree(), divine_hand.cast_from))
 		return false
 	# RUDIMENTS FIRST. You cannot hold a storm before you hold rain and

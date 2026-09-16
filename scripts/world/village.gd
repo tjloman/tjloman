@@ -179,6 +179,10 @@ var is_player_home := true
 ## Rolled at founding and kept, because the hands a village is dealt on day one
 ## are visible in it for the rest of its life. See VillageCharter.
 var charter := ""
+## TRADE -> WHEN SOMEBODY SET OFF TO BUILD ONE. See Workshop.RAISING_HOLDS: a
+## building being raised counts as one the town already has, or two people are
+## told the same thing and the town gets two of them.
+var raising := {}
 ## HOW MANY SOULS THIS TOWN IS FOUNDED WITH, when somebody other than the world
 ## generator is founding it. Zero means the old rule (STARTING_SOULS at home,
 ## two thirds of it for a heathen hamlet); a Caravan sets it to whatever the
@@ -497,6 +501,18 @@ func wants_new_farm() -> bool:
 func spawn_workshop_at(which: String, world_spot: Vector3) -> void:
 	if not world_spot.is_finite():
 		return        # see spawn_farm_at
+	# A DOCK MAY ONLY EVER STAND AT THIS TOWN'S HARBOUR, and this is the last
+	# ditch rather than the rule. The rule is in Workshop.spot_for; this is here
+	# because docks have now been found inland twice, and the way to stop a
+	# thing happening is not to be more careful about the path that leads to it
+	# — it is to refuse it at the door it must come through.
+	if which == "dock":
+		var water := get_tree().get_first_node_in_group("world_gen") as WorldGen
+		var harbour := Waters.harbour_for(self, water)
+		if harbour == Vector3.INF or harbour.distance_to(world_spot) > 2.0:
+			push_warning("%s: refusing a dock at %s — the harbour is at %s"
+				% [village_name, world_spot, harbour])
+			return
 	var spec: Dictionary = Workshop.TRADES.get(which, {})
 	if spec.is_empty() or not store.try_spend_materials(
 			int(spec["lumber"]), int(spec["stone"])):

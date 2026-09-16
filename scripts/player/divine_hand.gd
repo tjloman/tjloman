@@ -902,12 +902,20 @@ func _on_release() -> void:
 						held_body = null
 						state = HandState.IDLE
 						return
-					# AND A SPENT LEASH WILL NOT THROW. Nothing is taken from
-					# you — what is in your hand goes down where you are
-					# standing, and you may pick it up again once you are home.
-					# Hurling it is the act of authority, and out here with the
-					# leash run out you have none. See MiracleReach.
+					# AND A SPENT LEASH WILL NOT THROW.
+					#
+					# A MIRACLE IS NOT SET DOWN, IT IS KEPT. Setting one down is
+					# CASTING it — an orb resolves wherever it comes to rest —
+					# so "you may not throw it, but you may put it down" was a
+					# way of casting a miracle with no leash left at all, which
+					# is the one thing this is for. It stays in your hand until
+					# you are home. Everything else may be set down where you
+					# stand and picked up again later.
 					if not MiracleReach.may_act(get_tree(), ground_point):
+						if _is_a_working(held_body):
+							GameState.hint("Your reach has run out — carry it "
+								+ "back to your own ground.")
+							return       # still in your hand, still unspent
 						GameState.hint("Too far from your own ground to throw — "
 							+ "set it down, or carry it home.")
 						_release_body(held_body, Vector3.ZERO, true)
@@ -929,6 +937,12 @@ func _on_release() -> void:
 			held_body = null
 			state = HandState.IDLE
 			_stow_sling()
+
+
+## IS THIS A WORKING RATHER THAN A THING? A conjured miracle casts itself
+## wherever it is put down, so out past the leash it may not be put down at all.
+func _is_a_working(what: Node3D) -> bool:
+	return what is MiracleOrb or what is Fireball
 
 
 ## IT TOOK IT OUT OF YOUR HAND. Called BY the creature (CreatureOffer), not by

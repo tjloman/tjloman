@@ -110,6 +110,19 @@ static func harbour_for(town: Village, world: WorldGen) -> Vector3:
 	var held: Dictionary = _known.get(id, {})
 	if not held.is_empty() and GameState.clock - float(held["when"]) < REMEMBERS:
 		return held["shore"]
+	# A TOWN THAT HAS A HARBOUR DOES NOT GO LOOKING FOR ONE. Its harbour is
+	# where its jetty is standing, and re-measuring could only ever disagree
+	# with a building that already exists — which is how a dock came to be
+	# turned to face a shore it was not standing on.
+	var built := _the_dock_of(town)
+	if built != null:
+		var seaward: float = built.rotation.y + town.rotation.y
+		_known[id] = {
+			"shore": built.global_position,
+			"bearing": atan2(cos(seaward), sin(seaward)),
+			"when": GameState.clock,
+		}
+		return built.global_position
 	var found := _look_for_a_shore(town.global_position, world)
 	_known[id] = {
 		"shore": found.get("at", Vector3.INF),
@@ -130,6 +143,17 @@ static func bearing_for(town: Village, world: WorldGen) -> float:
 	return float(_known.get(town.get_instance_id(), {}).get("bearing", 0.0))
 
 
+## THE JETTY THIS TOWN ALREADY HAS, or null. A harbour is a fact once it is
+## standing, and everything downstream of that should be reading it rather than
+## working it out again.
+static func _the_dock_of(town: Village) -> Workshop:
+	for w in town.workshops:
+		var shop := w as Workshop
+		if is_instance_valid(shop) and shop.trade == "dock":
+			return shop
+	return null
+
+
 ## Rings outward from the town until a dry spot with deep-enough water beside it
 ## turns up. Nearest first, so a harbour is at the end of the lane rather than
 ## across the parish.
@@ -137,7 +161,12 @@ static func _look_for_a_shore(from: Vector3, world: WorldGen) -> Dictionary:
 	var ring := 20.0
 	while ring <= SHORE_WITHIN:
 		var steps := maxi(8, int(ring / 3.0))
-		var turn := randf() * TAU     # so two towns on one lake do not stack
+		# THE SAME ANSWER EVERY TIME IT IS ASKED. This was `randf()`, so each
+		# re-measure picked a different shore — and the memory expires, so the
+		# builder chose one spot and the building read a bearing for another.
+		# Seeded off the place instead: still different for two towns on one
+		# lake, and never different for the same town twice.
+		var turn := _turn_at(from)
 		for i in steps:
 			var angle := turn + TAU * float(i) / float(steps)
 			var probe := from + Vector3(cos(angle), 0.0, sin(angle)) * ring
@@ -149,6 +178,14 @@ static func _look_for_a_shore(from: Vector3, world: WorldGen) -> Dictionary:
 				return {"at": shore, "bearing": angle}
 		ring += STEP * 2.0
 	return {}
+
+
+## WHERE THIS PLACE STARTS LOOKING, in radians — a number, not a roll. Two
+## towns on one lake still start at different angles because they are in
+## different places; one town starts at the same angle for ever.
+static func _turn_at(from: Vector3) -> float:
+	var cell := Vector2i(int(floor(from.x)), int(floor(from.z)))
+	return fmod(absf(float(hash(cell))), TAU)
 
 
 ## IS THIS PROBE A LANDING, AND WOULD A JETTY ACTUALLY REACH THE WATER FROM IT?

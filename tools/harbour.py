@@ -40,6 +40,25 @@ def const(name, text, where):
     return float(m.group(1))
 
 
+def code(text):
+    """A function body with its COMMENTS TAKEN OUT.
+
+    Every check in here that reads source has the same exposure and one of them
+    tripped over it: this tool looked for `randf()` in the harbour search, and
+    the line explaining that it USED to be `randf()` matched. A note about a
+    thing is not the thing. Three checks in two days have now been written
+    loose enough that they could not tell those apart, and all three had the
+    same shape -- looking for a NAME in a region of text rather than at a
+    statement.
+    """
+    out = []
+    for row in text.split("\n"):
+        bare = row.split("#")[0].rstrip()
+        if bare:
+            out.append(bare)
+    return "\n".join(out)
+
+
 def trades():
     """Every TRADES row, as {name: {lumber, stone, employs, makes, wants}}."""
     block = SHOP[SHOP.index("const TRADES := {"):]
@@ -201,6 +220,43 @@ if not most or int(most.group(1)) != 1:
     fail.append("the dock has no `most: 1` in its TRADES row: a town of sixty "
                 "wants three of them, and they will be built on top of each "
                 "other because there is only one shore")
+
+# -- AND IT CAN ONLY EVER BE BUILT ON THE COAST -----------------------------
+#
+# Docks were found inland twice, and the second time the placement arithmetic
+# was provably right (tools/jetty.py). Being more careful about the path that
+# leads somewhere is not how you stop arriving there; refusing it at the door
+# it must come through is. Two doors, and both must be shut.
+TOWN = (ROOT / "scripts/world/village.gd").read_text()
+print()
+raise_guard = "being_raised(town, which)" in code(SHOP)
+door_guard = ('if which == "dock":' in code(TOWN)
+              and "Waters.harbour_for" in code(TOWN))
+print("ONLY ONE, AND ONLY ON THE COAST:")
+print("   a trade already being raised %s as one the town has."
+      % ("counts" if raise_guard else "DOES NOT COUNT"))
+print("   spawn_workshop_at %s a dock away from the harbour."
+      % ("refuses" if door_guard else "ACCEPTS"))
+if not raise_guard:
+    fail.append("short_of counts only BUILT workshops, and build_shop has room "
+                "for two — so two villagers are both told the town wants a "
+                "harbour, walk to two different spots, and raise two of them")
+if not door_guard:
+    fail.append("Village.spawn_workshop_at will raise a dock at whatever spot "
+                "it is handed. That is the last door a dock comes through and "
+                "it is the one place the rule cannot be got around")
+# And the search must give the same answer twice, or the builder chooses one
+# shore and the building reads a bearing for another.
+WATER = (ROOT / "scripts/world/waters.gd").read_text()
+finder = WATER[WATER.index("func _look_for_a_shore"):]
+finder = code(finder[:finder.index("\n\n\n")])
+print("   the harbour search is %s."
+      % ("the same every time" if "randf()" not in finder else "A FRESH ROLL"))
+if "randf()" in finder:
+    fail.append("the harbour search rolls a new starting angle every time, so "
+                "two measurements of the same town give two different shores — "
+                "the builder places the jetty at one and the building turns to "
+                "face the other")
 
 print()
 print("AND IT WANTS %d MILLS standing first, so a harbour is only ever raised"
