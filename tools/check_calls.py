@@ -1873,6 +1873,42 @@ def check_returned_kind(files):
     return out
 
 
+def check_null_meta_default(files):
+    """`get_meta(name, null)` IS `get_meta(name)`, AND IT ERRORS.
+
+    Godot's Object::get_meta returns the default it was handed only when that
+    default IS NOT NULL:
+
+        if (!metadata.has(p_name)) {
+            if (p_default != Variant()) { return p_default; }
+            else { ERR_FAIL_V_MSG(Variant(), "does not have any 'meta' ..."); }
+        }
+
+    So `get_meta("bulk", null)` is indistinguishable from `get_meta("bulk")`
+    and pushes an error for every object that has not got that key yet. It
+    reads as the most defensive line in the file. It is the least.
+
+    THIS HAS NOW BEEN HIT TWICE HERE. Once by a wolf making a kill without
+    belonging to a pack, fixed at the call site twenty lines away and left
+    standing at this one; and once by a size cache whose entire purpose was to
+    avoid measuring a thing twice, which produced eighty-two errors in one
+    session doing it.
+
+    A non-null default is fine -- `get_meta(x, 0.0)` and `get_meta(x, false)`
+    both work, because neither is NIL. Only `null` is the trap.
+    """
+    bad = re.compile(r"\.get_meta\s*\([^()]*,\s*null\s*\)")
+    out = []
+    for path in files:
+        for lineno, line in enumerate(
+                open(path, encoding="utf-8").read().split("\n"), 1):
+            if line.strip().startswith("#"):
+                continue
+            if bad.search(line):
+                out.append((path, lineno, line))
+    return out
+
+
 def check_sentinel_passed(files):
     """A "NOWHERE YET" SENTINEL HANDED TO SOMETHING THAT WILL BUILD THERE.
 
@@ -2129,6 +2165,13 @@ def main():
               "infer from — an error this project builds as fatal, in whatever "
               "file eventually indexes it. Name the element type."
               "\n    %s" % (path, lineno, name, line))
+    null_meta = check_null_meta_default(files)
+    for path, lineno, line in null_meta:
+        print("%s:%d: get_meta(..., null) is the same as get_meta(...) — Godot "
+              "returns a default only when the default is NOT null, so this "
+              "pushes an error for every object that lacks the key. Guard with "
+              "has_meta(), or give it a default that is not null."
+              "\n    %s" % (path, lineno, line))
     wrong_kind = check_returned_kind(files)
     for path, lineno, name, kind, rhs, line in wrong_kind:
         print("%s:%d: %s() returns %s, and this compares it against %s. Godot "
@@ -2244,7 +2287,7 @@ def main():
               % (path, lineno, name, name, line))
     total = len(problems) + len(escapes) + len(formats) + len(shadowed) \
         + len(loose_arrays) + len(variants) + len(shadowed_members) \
-        + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice) + len(wrong_kind) + len(loose_consts) + len(through) \
+        + len(loop_vars) + len(shadowed_globals) + len(undeclared) + len(late_guards) + len(phantoms) + len(twice) + len(wrong_kind) + len(null_meta) + len(loose_consts) + len(through) \
         + len(class_shadows) + len(confusable) + len(sim_clocks) + len(alive) \
         + len(stand) + len(typed_has) + len(shadowed_own) + len(sentinels) \
         + len(int_div) + len(worth) + len(burnable) + len(kids) + len(bundles) \

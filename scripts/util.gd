@@ -485,9 +485,13 @@ static func _glow_texture() -> ImageTexture:
 static func bulk_of(what: Node3D) -> float:
 	if what == null or not is_instance_valid(what):
 		return 0.0
-	var known: Variant = what.get_meta("bulk", null)
-	if known != null:
-		return float(known)
+	# `has_meta` AND NOT A NULL DEFAULT. Godot's `get_meta(name, default)`
+	# returns the default only when the default IS NOT NULL — passing `null` is
+	# indistinguishable from passing nothing, and it pushes an error for every
+	# object that has not been measured yet. Eighty-two of them in one session,
+	# from a line whose whole purpose was to avoid measuring twice.
+	if what.has_meta("bulk"):
+		return float(what.get_meta("bulk"))
 	var span := 0.0
 	for child in what.get_children():
 		var col := child as CollisionShape3D

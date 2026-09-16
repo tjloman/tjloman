@@ -492,7 +492,11 @@ func _strike_prey() -> void:
 			# more wolves — which is what makes a herd worth defending and a
 			# predator worth driving off. The victim's herd learns of it by its
 			# own bookkeeping; see Herd._tend_agents.
-			var pack = get_meta("herd", null)
+			# `has_meta` first: a null default is not a default (see
+			# Util.bulk_of), so this printed an error for every wolf that made
+			# a kill without belonging to a pack. The same trap was found and
+			# fixed twenty lines down and left standing here.
+			var pack: Variant = get_meta("herd") if has_meta("herd") else null
 			if pack != null and is_instance_valid(pack):
 				(pack as Herd).fed_on(worth)
 			_prey = null
