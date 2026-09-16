@@ -275,6 +275,9 @@ var last_rune_count := 0
 var creature_casts := 0
 ## The showers currently in the sky, oldest first.
 var _clouds: Array[StormCloud] = []
+## THE LAST THING YOU SAID, as the runes you drew. What the turning sigil
+## repeats — see Spellbook.AGAIN.
+var _said: Array = []
 
 
 ## Your reach: 1.0 alone, rising with converted villages and their belief.
@@ -315,6 +318,17 @@ func power() -> float:
 ## they mean; we check you know every rudiment involved, take the prayer, and
 ## put the result in your grip.
 func cast_runes(runes: Array) -> bool:
+	# SAY IT AGAIN. The turning sigil, alone, is whatever you last cast — see
+	# Spellbook.AGAIN. Handled before the drawing is interpreted because the
+	# spellbook is pure and this is the one rune whose meaning is HISTORY.
+	if runes.has(Spellbook.AGAIN):
+		if runes.size() > 1:
+			GameState.hint("The turning sigil is a word on its own.")
+			return false
+		runes = _said_before()
+		if runes.is_empty():
+			GameState.hint("You have said nothing yet to say again.")
+			return false
 	var reading := Spellbook.interpret(runes)
 	if reading.is_empty():
 		GameState.hint("Those runes mean nothing together.")
@@ -351,6 +365,10 @@ func cast_runes(runes: Array) -> bool:
 		return false
 	casts_made += 1
 	last_rune_count = runes.size()
+	# AND IT IS REMEMBERED, for the turning sigil. The RUNES rather than the
+	# reading: the price, the potency and the name all fall back out of them,
+	# and a drawing is the only honest record of what was said.
+	_said = runes.duplicate()
 	# A WONDER COMING INTO YOUR HAND IS AN EVENT, and an event takes the whole
 	# of the creature's attention rather than the half that your merely being
 	# there settles it at. See CreatureHead.startled.
@@ -359,6 +377,12 @@ func cast_runes(runes: Array) -> bool:
 			get_tree().get_first_node_in_group("creature") as Creature,
 			divine_hand.global_position)
 	return _conjure_reading(reading)
+
+
+## WHAT YOU LAST CAST, as runes. Empty before your first working — a god who
+## has said nothing has nothing to say again.
+func _said_before() -> Array:
+	return _said.duplicate()
 
 
 ## What a drawing costs: the sum of what it is made of, eased a little so that

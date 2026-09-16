@@ -48,14 +48,28 @@ const RUNE_OF := {
 	"bend_up": "sky",       # a peak, a wing
 	"bend_down": "earth",   # a valley, the ground dipping
 	"bend_right": "ward",   # a shelter held over something
-	# `bend_left` — the fourth direction — is deliberately UNSPOKEN. It is a
-	# real, reliable sigil with no meaning attached yet, kept empty on purpose
-	# rather than filled with something the grammar does not need. Drawing it
-	# says so, instead of pretending the stroke was a mistake.
+	"bend_left": "again",   # a turn back the way you came
 }
 
-## The sigil that is a proper shape but has nothing to say yet. Kept apart from
-## a botched stroke so the readout can tell the player which of the two it was.
+## THE TURNING SIGIL — the fourth direction, and the only rune that is not a
+## thing in the world.
+##
+## It was deliberately UNSPOKEN: a real, reliable shape with nothing bound to
+## it, kept empty rather than filled with something the grammar did not need.
+## What the grammar needed turns out not to be a noun at all.
+##
+## SAY IT AGAIN. It is the back arrow — draw it alone and whatever you last
+## cast is conjured into your hand a second time, at the potency you drew it
+## and for the price you paid. Black & White's R key, and the reason that key
+## existed: the hand is busy, the thing you want is the thing you just did, and
+## redrawing five strokes to get it is five strokes of not watching.
+##
+## It costs what the working costs. This is a shortcut through the DRAWING,
+## never through the price, and it is not a rune anybody has to be taught — a
+## god who can cast a thing at all can say it again.
+const AGAIN := "again"
+## The shape it is drawn as. Kept as its own name because the recogniser talks
+## in gestures and the spellbook talks in runes.
 const UNSPOKEN := "bend_left"
 
 ## What one rune means on its own. Everything else is built from these, and an
@@ -208,7 +222,7 @@ const RUNE_TIERS: Array[Array] = [
 const RUNE_LABEL := {
 	"water": "water", "force": "force", "earth": "earth", "fire": "fire",
 	"life": "life", "air": "air", "calm": "calm", "fury": "fury",
-	"sky": "sky", "ward": "ward",
+	"sky": "sky", "ward": "ward", "again": "again",
 }
 
 
@@ -231,6 +245,12 @@ static func key_for(runes: Array) -> String:
 ## plus "runes" and "label" for the readout. An empty draw returns {}.
 static func interpret(runes: Array) -> Dictionary:
 	if runes.is_empty():
+		return {}
+	# THE TURNING SIGIL IS A WORD ON ITS OWN. MiracleManager intercepts a lone
+	# one before this is ever called; anything it is mixed with is a sentence
+	# with "again" in the middle of it, which means nothing. Refused here
+	# rather than quietly dropped, or `again + water` would silently be rain.
+	if runes.has(AGAIN):
 		return {}
 	var key := key_for(runes)
 	# 1. A combination the world has a name for.
@@ -279,6 +299,11 @@ static func describe(runes: Array) -> String:
 	var drawn := []
 	for rune: String in runes:
 		drawn.append(RUNE_LABEL.get(rune, rune))
+	# THE TURNING SIGIL HAS NO READING OF ITS OWN — its meaning is whatever you
+	# last said, which the spellbook does not know and must not pretend to. It
+	# says what it DOES instead, so the slate is never blank under it.
+	if runes.size() == 1 and runes[0] == AGAIN:
+		return "again  ▸  the last working, once more"
 	var reading := interpret(runes)
 	var name: String = reading.get("label", "")
 	if name == "":

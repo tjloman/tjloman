@@ -1400,11 +1400,9 @@ func _end_stroke() -> void:
 		_close_casting(false)
 		GameState.hint("Struck out.")
 		return
-	if gesture == Spellbook.UNSPOKEN:
-		# A good shape with nothing behind it yet. Say so plainly rather than
-		# calling it a botch — the player drew it correctly.
-		GameState.hint("That sigil has no working bound to it yet.")
-		return
+	# The turning sigil has a working behind it now — see Spellbook.AGAIN. It
+	# falls through and lands on the slate like any other rune; the manager
+	# reads it as "whatever I last cast" when the session closes.
 	var rune := Spellbook.rune_for(gesture) if gesture != "none" else ""
 	if rune == "":
 		# A botched stroke must never throw away the runes before it.

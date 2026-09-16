@@ -440,7 +440,7 @@ func _build_miracle_panel() -> void:
 	# round you draw it does not matter any more, only which way it bends.
 	ref.text = ("S ~ water    | force    / fire    O life    Z fury\n"
 		+ "spiral: air    reverse spiral: calm\n"
-		+ "^ sky   V earth   > ward   < unspoken   (sharp or round alike)\n"
+		+ "^ sky   V earth   > ward   < AGAIN: cast the last thing again\n"
 		+ "— straight across strikes it all out  ·  water+force = thunderstorm")
 	ref.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ref.add_theme_font_size_override("font_size", 13)
