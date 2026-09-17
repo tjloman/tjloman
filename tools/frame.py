@@ -324,7 +324,10 @@ if not turned or not shuts:
                 "then charged the whole gap to the next frame")
 
 # AND THE COUNT IS REPORTED ALONGSIDE THE COST.
-bills = "row[2]" in code(METER) and "Ledger.rows()" in code(METER)
+# The COUNT and the PER-CALL cost both, because the total alone cannot tell a
+# population problem from a code problem and those want opposite fixes.
+bills = "row[2]" in code(METER) and "Ledger.rows()" in code(METER) \
+    and any("float(row[1]) / float(" in r for r in body_of(METER, "_readout"))
 # NOT THE NAME `counted` — the COMPARISON. A meter that reads the total and
 # prints it is not a meter that can tell you its rows are absorbing the solver;
 # it has to say so when the bill passes what the engine charged.
@@ -335,9 +338,9 @@ print("THE METER PRINTS the bill: %s, the unaccounted gap: %s, orphans: %s"
       % ("yes" if bills else "NO", "yes" if gap else "NO",
          "yes" if grows else "NO"))
 if not bills:
-    fail.append("the meter does not print how many of each class ran, so a "
-                "population that is growing looks exactly like code that got "
-                "slower")
+    fail.append("the meter does not print how many of each class ran AND what "
+                "one call costs, so a population that is growing looks exactly "
+                "like code that got slower — and they want opposite fixes")
 if not gap:
     fail.append("the meter does not compare the bill against what the engine "
                 "charged, so it cannot tell you when its own rows are absorbing "

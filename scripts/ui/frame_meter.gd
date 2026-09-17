@@ -203,11 +203,18 @@ func _readout() -> String:
 	# ran — the second number matters as much as the first, because a game that
 	# starts at twenty frames and decays to ten is a game where something is
 	# GROWING, and a count climbing while its cost climbs with it says which.
-	rows.append("WHERE THE SCRIPT WENT        ms    x")
+	# AND WHAT ONE OF THEM COSTS. The total and the count together are two
+	# facts and the interesting one is their quotient: a row whose COUNT is
+	# climbing is a population problem and a row whose EACH is climbing is a
+	# code problem, and they want opposite fixes. Working that out by hand off a
+	# photograph of a phone is exactly the sort of arithmetic nobody does.
+	rows.append("WHERE THE SCRIPT WENT        ms     x    each")
 	for row: Array in Ledger.rows():
 		if float(row[1]) < 0.05:
 			continue
-		rows.append("   %-22s %6.1f %5d" % [row[0], row[1], row[2]])
+		var ran := maxi(int(row[2]), 1)
+		rows.append("   %-22s %6.1f %5d  %6.3f"
+			% [row[0], row[1], row[2], float(row[1]) / float(ran)])
 	# WHAT THE BILL COMES TO, against what Godot says the scripts cost. A row is
 	# an UPPER BOUND — see Ledger — and when the total passes the engine's own
 	# figure the rows are absorbing the solver and each other, so it says so
