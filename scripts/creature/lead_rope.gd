@@ -65,6 +65,14 @@ const LINKS := 6
 var creature: Creature = null
 ## What the far end is tied to, or null while it is loose in your hand.
 var tied_to: Node3D = null
+## WHAT YOU LAST TOLD IT, kept after the rope is put down.
+##
+## "If you dismiss the leash and creature, the creature remembers what you
+## ordered it to do." A lead that forgets the moment you let go of it is a lead
+## you have to hold for ever, and the whole point of tying one off is to walk
+## away — so the order outlives the rope, and picking the rope up again picks up
+## where you left off rather than starting from nothing.
+var last_order := Vector3.INF
 ## Where the hand end is. Written by DivineHand every frame it is carried; a
 ## dropped rope keeps the last one, which is where it lies on the ground.
 var hand_at := Vector3.INF
@@ -132,6 +140,7 @@ func _tug(anchor: Vector3) -> void:
 		creature.express("stubborn", 1.5)
 		return
 	_told_at = anchor
+	last_order = anchor
 	creature.leash_to(anchor)
 
 
@@ -152,6 +161,13 @@ func tie(what: Node3D) -> void:
 	tied_to = what
 	_told_at = Vector3.INF
 	_next_tug = 0.0
+
+
+## IS IT TIED TO SOMETHING? What the casting gate asks — see DivineHand: a rope
+## loose in your hand is a hand that is full, and a hand that is full cannot
+## draw. Tie it off and both of yours are free again.
+func is_tied() -> bool:
+	return tied_to != null and is_instance_valid(tied_to)
 
 
 ## DRAWN AS A SAGGING LINE. Straight when it is taut, bellied when there is rope

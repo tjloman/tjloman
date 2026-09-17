@@ -108,6 +108,10 @@ var _stone_rows: VBoxContainer
 
 
 func _ready() -> void:
+	# FINDABLE. The hand has to reach the HUD to close an open info panel on a
+	# double tap, and it has no handle on it — main wires the HUD, not the other
+	# way round. A group is the one way in that costs nothing to look up.
+	add_to_group("hud")
 	# AWAKE WHILE THE WORLD IS HELD. The opening screen pauses the tree, and a
 	# paused node is offered no input — so without this the buttons that open
 	# this very menu would be shouting at something asleep.
@@ -204,6 +208,33 @@ func _drag_the_stone(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion and _stone_dragging:
 		_stone_scroll.scroll_vertical -= int((event as InputEventMouseMotion).relative.y)
 		_stone_scroll.accept_event()
+
+
+## SHUT IT — the ONE way an info panel closes, and the reason it is one way.
+##
+## THE TRIANGLE STAYED ON THE SCREEN. Hiding the panel hid the panel and did
+## nothing else: the tail is a Control that paints in `_draw`, and a Control
+## only repaints when something asks it to. Nothing asked. So the moment the
+## timer ran out the panel vanished, `_follow_stone` — the one thing that ever
+## calls `queue_redraw` — stopped being called, and the last triangle it had
+## drawn stayed painted over the world for the rest of the session, sliding
+## around as the camera moved because it was pinned to nothing at all.
+##
+## Two other places closed the panel the same way and would have left the same
+## mark. That is what makes this a function rather than a line: a thing with
+## two halves must not have three places that close one of them.
+func shut_the_stone() -> void:
+	_stone_time = 0.0
+	_stone_panel.visible = false
+	_stone_mark = Vector2.INF
+	_stone_tail.queue_redraw()
+
+
+## IS THERE AN INFO PANEL UP? What the double tap asks before it decides that
+## it means "close this" rather than anything else.
+func stone_is_open() -> bool:
+	return _stone_panel != null and is_instance_valid(_stone_panel) \
+		and _stone_panel.visible
 
 
 ## THE POINTER. A speech-bubble tail from the panel down to the writing it came
@@ -361,7 +392,7 @@ func _tick_stone(delta: float) -> void:
 			_stone_time = STONE_LEAVE         # walked off: it goes, shortly
 	_stone_time -= delta
 	if _stone_time <= 0.0:
-		_stone_panel.visible = false
+		shut_the_stone()
 		return
 	_follow_stone()
 
@@ -384,9 +415,7 @@ func _follow_stone() -> void:
 		return
 	if cam.is_position_behind(_stone_on):
 		# Turned away from it entirely: nothing to point at, so nothing to say.
-		_stone_panel.visible = false
-		_stone_mark = Vector2.INF
-		_stone_tail.queue_redraw()
+		shut_the_stone()
 		return
 	_stone_mark = cam.unproject_position(_stone_on)
 	var screen := _stone_tail.size

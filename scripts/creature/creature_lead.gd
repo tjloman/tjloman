@@ -94,12 +94,20 @@ static func walk(who: Creature, delta: float) -> void:
 			who.leash_target = Vector3.INF
 			who.take_up(prize)
 			return
+	# IT IS AWAKE ON THE ROPE, AND THAT IS THE POINT OF THE ROPE.
+	#
+	# The look-round used to happen only once it had ARRIVED and was standing
+	# about — so a creature led the length of a village saw none of it, and the
+	# one tool a player has for showing their beast the world taught it nothing
+	# on the way. Being walked past a thing is how an animal learns what a thing
+	# is. So it observes on its own clock whether it is walking or waiting, and
+	# everything CreatureWatching does — moods, what it makes of what it sees,
+	# what it decides it wants to try — goes on happening while you lead it.
+	who._action_time -= delta
+	if who._action_time <= 0.0:
+		who._action_time = LOOK_EVERY
+		CreatureWatching.observe(who)
 	if who.global_position.distance_to(who.leash_target) > ARRIVED:
 		who._move_toward(who.leash_target, who._run_speed() * 0.9, delta)
 		return
 	who._apply_gravity_only(delta)
-	who._action_time -= delta
-	if who._action_time <= 0.0:
-		who._action_time = LOOK_EVERY
-		# Waiting where it was told, but still watching the world go by.
-		CreatureWatching.observe(who)

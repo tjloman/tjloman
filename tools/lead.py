@@ -172,9 +172,116 @@ if sweep and not after_ray:
                 "must only be a fallback, or pointing AT a thing stops meaning "
                 "what it says")
 
+# -- THE ROPE IS A HAND FULL -------------------------------------------------
+HUD = (ROOT / "scripts/ui/hud.gd").read_text()
+LEADC = (ROOT / "scripts/creature/creature_lead.gd").read_text()
+
+casting = body_of(HAND, "_open_casting")
+barred = False
+for i, row in enumerate(casting):
+    if "has_lead()" in row and "is_tied()" in row:
+        barred = any(r.strip() == "return" for r in casting[i:i + 6])
+print()
+print("A LOOSE ROPE IN YOUR HAND %s casting."
+      % ("bars" if barred else "DOES NOT BAR"))
+if not barred:
+    fail.append("a god may draw runes with the lead loose in one hand — which "
+                "is a hand that is full, and the tie-it-off move exists "
+                "precisely to get it back")
+
+# AND ONLY THE BUTTON PUTS IT DOWN. Anything else and a tool you hold for
+# minutes at a time can be dropped by accident, which is how you stop trusting
+# it.
+drops = []
+for path in sorted((ROOT / "scripts").rglob("*.gd")):
+    for n, row in enumerate(code(path.read_text()).split("\n")):
+        # The DEFINITION is not a place it is put down; it is where it is
+        # defined. Looking for the NAME rather than the CALL is the mistake this
+        # codebase keeps making, and it made it again here.
+        if "let_go_of_lead()" in row and not row.lstrip().startswith("func "):
+            drops.append("%s:%d" % (path.name, n + 1))
+print("IT IS PUT DOWN in %d place(s): %s" % (len(drops), ", ".join(drops)))
+if len(drops) != 1:
+    fail.append("the lead is put down in %d places — it must come off only the "
+                "way it went on, or it can be dropped by accident in the middle "
+                "of shepherding" % len(drops))
+
+# AND THE ORDER OUTLIVES THE ROPE.
+remembers = re.search(r"^var last_order", ROPE, re.M) is not None \
+    and any("last_order = " in r for r in body_of(ROPE, "_tug"))
+print("THE ORDER %s being put down."
+      % ("outlives" if remembers else "IS FORGOTTEN ON"))
+if not remembers:
+    fail.append("the rope does not remember what it last told the creature, so "
+                "putting it down unposts a beast you deliberately posted")
+
+# -- IT IS AWAKE ON THE ROPE -------------------------------------------------
+walking = body_of(LEADC, "walk")
+watches = next((i for i, r in enumerate(walking) if "CreatureWatching.observe" in r),
+               None)
+moves = next((i for i, r in enumerate(walking) if "_move_toward(" in r), None)
+print()
+print("WHILE BEING LED it %s."
+      % ("watches the world go by" if watches is not None and moves is not None
+         and watches < moves else "SEES NOTHING UNTIL IT ARRIVES"))
+if watches is None:
+    fail.append("a creature on the lead never observes anything, so the one "
+                "tool for showing it the world teaches it nothing")
+elif moves is not None and watches > moves:
+    fail.append("a creature on the lead only observes once it has ARRIVED — so "
+                "being walked the length of a village teaches it nothing, which "
+                "is most of what leading one is for")
+
+# -- AND THE PANEL CLOSES, AND TAKES ITS POINTER WITH IT ---------------------
+shut = body_of(HUD, "shut_the_stone")
+redraws = any("queue_redraw()" in r for r in shut)
+hides = any("visible = false" in r for r in shut)
+# HIDING IT WHILE BUILDING IT IS NOT CLOSING IT. A panel is born hidden and
+# there is no pointer drawn yet to leave behind; what matters is every hide that
+# happens while the thing is on screen.
+def _inside(text, line_no):
+    """The function a given line sits in."""
+    here = "(top level)"
+    for n, row in enumerate(text.split("\n")):
+        found = re.match(r"^(?:static\s+)?func (\w+)\(", row)
+        if found:
+            here = found.group(1)
+        if n + 1 >= line_no:
+            return here
+    return here
+
+
+closers = 0
+for _n, _row in enumerate(HUD.split("\n")):
+    if "_stone_panel.visible = false" not in _row:
+        continue
+    _where = _inside(HUD, _n + 1)
+    if _where != "shut_the_stone" and not _where.startswith("_build"):
+        closers += 1
+print()
+print("CLOSING THE PANEL %s its pointer."
+      % ("redraws away" if redraws and hides else "LEAVES"))
+if not (redraws and hides):
+    fail.append("shutting the info panel does not ask its pointer to repaint — "
+                "a Control only repaints when told, so the last triangle it drew "
+                "stays over the world for the rest of the session")
+# ANY of them, not "more than one". A single runtime hide outside the closer is
+# the whole bug: that is precisely what `_tick_stone` used to do, and it left
+# the triangle painted over the world every single time the panel timed out.
+if closers > 0:
+    fail.append("%d place(s) hide the info panel at runtime without going "
+                "through the one closer, and every one of them leaves the "
+                "pointer painted over the world" % closers)
+
+tapped = body_of(HAND, "_tapped_twice")
+closes = any("shut_the_stone()" in r for r in tapped)
+print("A DOUBLE TAP %s an open panel." % ("closes" if closes else "DOES NOT CLOSE"))
+if not closes:
+    fail.append("nothing closes an info panel but walking away from it")
+
 print()
 if fail:
     for line in fail:
         print("BROKEN: " + line)
     sys.exit(1)
-print("OK: one rope, one door, paced tugs, and trust decides.")
+print("OK: one rope, one door, paced tugs, trust decides, and what opens shuts.")

@@ -216,6 +216,8 @@ var _carried_at := 0.0
 var _sling: Sling = null
 ## Seconds the tying hold has been down. See `_tick_tying`.
 var _tying := 0.0
+## How many taps in a row the last press made. See Taps.
+var _taps := Taps.new()
 
 # The current unbroken pointer stroke while HOLDING: screen positions and the
 # time each was seen. Reset on every press (so a fresh poke can't inherit the
@@ -715,6 +717,13 @@ func _on_pointer_button(event: InputEventMouseButton) -> void:
 		return
 	_pointer_down = event.pressed
 	if event.pressed:
+		# HOW MANY TIMES IN A ROW — read first and acted on last, so everything
+		# a single press already does goes on happening and the double is only
+		# ever a SECOND meaning laid over it. See Taps.
+		var run := _taps.pressed(event.position,
+			Time.get_ticks_msec() / 1000.0)
+		if run >= 2 and _tapped_twice():
+			return
 		# Every fresh press begins a new stroke: a poke can never inherit the
 		# momentum of the drag before it.
 		_reset_stroke(event.position)
@@ -1252,6 +1261,41 @@ func _apply_in_flight(body: Node3D, dv: Vector3) -> void:
 		body.call("in_flight_push", dv)
 
 
+## WHAT A SECOND TAP MEANS. Returns true when it claimed the press, in which
+## case the single press's own work is skipped for this one.
+##
+## Read in the order a player would expect to be answered: the panel in front of
+## you first, then the creature you are holding by a rope, and if neither, the
+## tap was just a tap and the ordinary press does its ordinary job.
+func _tapped_twice() -> bool:
+	# AN OPEN PANEL CLOSES. The one thing a double tap always does, because a
+	# thing that opens in front of the world has to be dismissable without
+	# walking away from it — which was the only way to be rid of it before.
+	var hud := get_tree().get_first_node_in_group("hud") as HUD
+	if hud != null and is_instance_valid(hud) and hud.stone_is_open():
+		hud.shut_the_stone()
+		return true
+	# WITH THE ROPE IN HAND, IT POINTS. Not an order — the creature goes on
+	# doing what it was doing — but its attention goes where you tapped, which
+	# is how you show a beast a thing rather than send it to one. See
+	# CreatureHead.startled, which is the same door being shown a thrown rock.
+	if has_lead() and lead.creature != null and is_instance_valid(lead.creature):
+		var what := hover_target if is_instance_valid(hover_target) else null
+		var at := what.global_position if what != null else ground_point
+		# ONLY IF IT COULD ACTUALLY SEE IT. `startled` refuses anything past
+		# CreatureHead.STARTLE_WITHIN, so saying "your creature looks where you
+		# pointed" for a spot across the valley would be the game telling the
+		# player something that did not happen.
+		if at.distance_to(lead.creature.global_position) > CreatureHead.STARTLE_WITHIN:
+			GameState.hint("That is too far off for your creature to make out.")
+			return true
+		CreatureHead.startled(lead.creature, at)
+		lead.creature.attention = minf(lead.creature.attention + 20.0, 100.0)
+		GameState.hint("Your creature looks where you pointed.")
+		return true
+	return false
+
+
 ## A second finger landed: the camera takes over. Abort any in-progress
 ## land-drag or gesture (a held object stays held — pinching while
 ## carrying is fine).
@@ -1266,6 +1310,9 @@ func cancel_touch_interaction() -> void:
 	if state != HandState.HOLDING:
 		_stow_sling()
 	_charging = false
+	# The camera claimed the gesture, so the tap after it starts clean rather
+	# than completing a double with whatever happened before the pinch.
+	_taps.cancel()
 
 
 ## Places a conjured object (e.g. a fireball) straight into the hand's grip.
@@ -1397,6 +1444,18 @@ func charge_fraction() -> float:
 func _open_casting() -> void:
 	if is_instance_valid(held_body):
 		return                       # not while your hand is full
+	# NOR WHILE YOU ARE HOLDING THE ROPE.
+	#
+	# A lead loose in your hand IS your hand being full — it is the one thing
+	# you are doing — and a god drawing runes one-handed while a creature hauls
+	# on the other is a picture of somebody not really leading anything. Tie it
+	# off and both hands are free again, which is what tying off is FOR; or let
+	# the rope go and the creature keeps its last order (see LeadRope.is_tied
+	# and last_order).
+	if has_lead() and not lead.is_tied():
+		GameState.hint("You have the lead in your hand. Tie it off, "
+			+ "or drop it, before you work.")
+		return
 	# YOU MAY ONLY WORK ON GROUND YOU HOLD — refused HERE, before a stroke is
 	# drawn, rather than after one. Finding out that a rune was wasted only once
 	# it is finished is the worst possible moment to learn the rule, and it also

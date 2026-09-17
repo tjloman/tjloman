@@ -506,9 +506,20 @@ func _unhandled_input(event: InputEvent) -> void:
 func _take_the_lead() -> void:
 	if not is_instance_valid(divine_hand):
 		return
+	# THE ONLY WAY IT COMES OFF IS THE WAY IT WENT ON. Not a tap on the ground,
+	# not walking away, not casting something: the same button. A tool you can
+	# put down by accident is a tool you stop trusting, and this one is meant to
+	# be held for minutes at a time while you shepherd.
 	if divine_hand.has_lead():
+		var was := divine_hand.lead
 		divine_hand.let_go_of_lead()
-		GameState.announce("You let go of the lead.")
+		# AND IT REMEMBERS. The rope is put down; the order is not. See
+		# LeadRope.last_order — a creature posted somewhere stays posted.
+		if was != null and is_instance_valid(was) and was.last_order.is_finite():
+			GameState.announce("You put the lead down. Your creature holds to "
+				+ "what you last told it.")
+		else:
+			GameState.announce("You put the lead down.")
 		return
 	var rope := _rope_on(creature)
 	if rope == null:
