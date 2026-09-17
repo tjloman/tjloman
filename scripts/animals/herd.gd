@@ -523,7 +523,13 @@ var _ground_from := Vector2.ZERO
 var _write_cursor := 0
 ## HOW MANY ARE ALIVE, or -1 for "nobody has asked since the book changed". See
 ## `alive`, which is the hottest question in this file by a distance.
-var _living := -1
+##
+## NOT `_living`, which was the first name and which this file ALREADY USES for
+## a static function — "the Animal standing in this row, if any". Godot rejects
+## a variable and a function sharing a name, at PARSE time, and takes every
+## script that depends on this one down with it: seventy errors, a game that
+## would not boot, and gdparse, gdlint and check_calls all green beforehand.
+var _alive_count := -1
 ## WHICH ROWS HOLD A REAL BEAST. A candidate list, not a truth: `_promote` is
 ## the only thing that ever puts an agent in a row so nothing is ever missing,
 ## and the several things that take one out may leave an index behind, which
@@ -1519,17 +1525,17 @@ static func _living(m: Dictionary) -> Animal:
 ## marked stale and worked out again on the next question. Deaths are rare and
 ## questions are constant, which is the whole trade.
 func alive() -> int:
-	if _living < 0:
-		_living = 0
+	if _alive_count < 0:
+		_alive_count = 0
 		for m in _members:
 			if not m["dead"]:
-				_living += 1
-	return _living
+				_alive_count += 1
+	return _alive_count
 
 
 ## THE BOOK CHANGED. Said by every hand that kills, adds or replaces a row.
 func _recount() -> void:
-	_living = -1
+	_alive_count = -1
 
 
 ## THE SEASON TURNS. The herd counts what the land will feed it, how frightened

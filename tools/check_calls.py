@@ -1890,6 +1890,40 @@ def check_returned_kind(files):
     return out
 
 
+def check_var_named_like_func(files):
+    """A MEMBER VARIABLE WITH THE SAME NAME AS A METHOD OF THE SAME CLASS.
+
+    Godot rejects it at PARSE time -- `Function "_living" has the same name as a
+    previously declared variable` -- and then takes down every script that
+    depends on the file: seventy errors from one line, a game that will not
+    boot, and no way to tell from the flood which of them is the cause. It is
+    the LAST line of the log, because it is the file the rest were waiting on.
+
+    Caching a count as `_living` in a file that already had a static `_living(m)`
+    meaning "the beast standing in this row" is exactly how it happens: the two
+    names read differently in the head and identically to the parser. gdparse
+    takes the file alone and sees no conflict; gdlint has no rule for it;
+    everything was green on a tree that would not start.
+    """
+    out = []
+    for path in files:
+        with open(path, encoding="utf-8") as fh:
+            src = fh.read()
+        # Comments cut, so a `## func foo()` in a doc block is not a function.
+        src = "\n".join(r.split("#")[0].rstrip() for r in src.split("\n"))
+        names = {}
+        for m in re.finditer(r"^(?:static\s+)?var\s+(\w+)", src, re.M):
+            names.setdefault(m.group(1), m.start())
+        for m in re.finditer(r"^(?:static\s+)?func\s+(\w+)\s*\(", src, re.M):
+            if m.group(1) not in names:
+                continue
+            line = src[:m.start()].count("\n") + 1
+            was = src[:names[m.group(1)]].count("\n") + 1
+            out.append((path, line, m.group(1), was,
+                        src[m.start():src.index("\n", m.start())].strip()))
+    return out
+
+
 def check_null_meta_default(files):
     """`get_meta(name, null)` IS `get_meta(name)`, AND IT ERRORS.
 
@@ -2189,6 +2223,14 @@ def main():
               "pushes an error for every object that lacks the key. Guard with "
               "has_meta(), or give it a default that is not null."
               "\n    %s" % (path, lineno, line))
+    same_name = check_var_named_like_func(files)
+    for path, lineno, name, was, line in same_name:
+        print("%s:%d: a function named '%s' and a variable of the same name "
+              "(line %d) in one class. Godot refuses that at PARSE time and "
+              "takes every script that depends on this file with it — the "
+              "symptom is seventy errors and a game that will not boot, and "
+              "this is the only one of them that matters."
+              "\n    %s" % (path, lineno, name, was, line))
     wrong_kind = check_returned_kind(files)
     for path, lineno, name, kind, rhs, line in wrong_kind:
         print("%s:%d: %s() returns %s, and this compares it against %s. Godot "
