@@ -279,6 +279,42 @@ if not switched or not all("visible" in r for r in switched):
                 "player pays for ever"
                 % (switched[0] if switched else "nothing"))
 
+# -- AND THE ENGINE'S OWN WORK IS BILLED TO THE ENGINE -----------------------
+#
+# A clock is shut by the next one opening, so whatever ran LAST in a physics
+# step keeps its clock through the engine's solve — collision, the heightmaps,
+# every CharacterBody3D's move — and is billed for all of it. That is how
+# `Animal 116.3ms` came back under a physics total of 84.9ms: a part larger than
+# the whole, because it was not Animal, it was Animal plus the solver.
+last_in_step = re.search(r"process_physics_priority = (\w+)", code(METER))
+solver_row = any("ENGINE_ROW" in r for r in body_of(METER, "_physics_process"))
+priority = number(METER, "ENGINE_LAST")
+print()
+print("THE ENGINE'S OWN WORK is billed %s."
+      % ("to itself" if last_in_step and solver_row
+         else "TO WHICHEVER CLASS RAN LAST"))
+if not solver_row:
+    fail.append("nothing opens a clock for the engine's own physics work, so "
+                "the solver is charged to whichever class happened to run last "
+                "and the biggest row on the bill is an artefact")
+if not last_in_step or not priority or priority <= 0:
+    fail.append("the meter does not put itself last in the physics step, so the "
+                "clock it opens for the engine shuts somebody else's early and "
+                "bills THEM for the rest of the step instead")
+
+# AND NOTHING ELSE MAY CLAIM THAT SLOT. Two nodes fighting to be last is one of
+# them silently not being it.
+others = []
+for path in sorted((ROOT / "scripts").rglob("*.gd")):
+    if path.name == "frame_meter.gd":
+        continue
+    if "process_physics_priority" in code(path.read_text()):
+        others.append(path.name)
+if others:
+    fail.append("%s also sets a physics priority — two nodes claiming the last "
+                "slot means one of them is not last, and the bill quietly goes "
+                "back to blaming whoever is" % ", ".join(others))
+
 # AND THE PAGE IS TURNED, which is also what shuts the last clock of the frame.
 turned = "Ledger.turn_the_page()" in code(METER)
 shuts = any("shut()" in r for r in body_of(LEDGER, "turn_the_page"))

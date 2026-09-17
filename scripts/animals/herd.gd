@@ -2087,7 +2087,20 @@ func drive_toward(where: Vector3, step: float) -> void:
 	to.y = 0.0
 	if to.length() < 0.5:
 		return
-	_home += to.normalized() * minf(step, to.length())
+	var moved := _home + to.normalized() * minf(step, to.length())
+	# NOT INTO THE WATER. `_pick_pasture` has always refused to graze a herd
+	# into a lake; this — the other way a herd is ever aimed — refused nothing,
+	# so a creature that waded in while driving cattle walked their home out
+	# after it and the herd followed its home. Beasts drowned in a line behind a
+	# creature that was having a nice time, which is exactly what was reported.
+	#
+	# The step is REFUSED rather than clamped to the shore, because a drive is
+	# made of many small steps: refusing the wet ones walks them to the
+	# waterline and leaves them there, which is what driving cattle at a lake
+	# ought to do.
+	if world != null and world.is_underwater(moved.x, moved.z):
+		return
+	_home = moved
 	_target = _home
 	_graze_left = 0.0
 	set_mood("move")

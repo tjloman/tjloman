@@ -352,6 +352,28 @@ for book in (40, 160, 400):
         fail.append("a book of %d costs MORE bounded than unbounded" % book)
 print("   ...and none of it at all once they are in for the night (shown = 0).")
 
+# -- AND A DRIVE STOPS AT THE WATERLINE -------------------------------------
+#
+# A herd is aimed in exactly two places. `_pick_pasture` has always refused to
+# graze one into a lake. `drive_toward` — the creature pushing cattle along —
+# refused nothing, so a creature that waded in while driving walked the herd's
+# HOME out after it, and the herd followed its home. Beasts drowned in a line
+# behind a creature that was having a lovely time.
+HERD = (ROOT / "scripts/animals/herd.gd").read_text()
+grazing = any("is_underwater(" in r for r in body_of(HERD, "_pick_pasture"))
+driving = any("is_underwater(" in r for r in body_of(HERD, "drive_toward"))
+print()
+print("A HERD IS AIMED IN TWO PLACES:")
+print("   %-16s %s" % ("grazing", "keeps out of the water" if grazing else "DOES NOT"))
+print("   %-16s %s" % ("being driven", "keeps out of the water" if driving else "DOES NOT"))
+if not grazing:
+    fail.append("_pick_pasture no longer checks for water, so a herd grazes "
+                "into a lake of its own accord")
+if not driving:
+    fail.append("drive_toward puts a herd's home wherever it is pushed, water "
+                "included — so a creature wading into a lake takes the cattle "
+                "in after it and they drown in a line behind it")
+
 print()
 if fail:
     for line in fail:

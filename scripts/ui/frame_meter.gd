@@ -35,6 +35,14 @@ const WORST_HOLD := 3.0
 ## walking into a town visibly moves it.
 const BLEND := 0.1
 
+## The physics priority that puts this node after everything else in the step.
+## Nothing in this game sets one, so anything above zero would do; this is
+## unmistakable rather than merely sufficient.
+const ENGINE_LAST := 1000
+## What the engine's own work is called on the bill. Parenthesised like
+## "(everything else)", because it is not a class anybody wrote.
+const ENGINE_ROW := &"(the solver)"
+
 
 ## WHAT THE FRAME IS MADE OF, most recently measured. Public so a smoke test can
 ## assert on the same numbers the player is looking at.
@@ -71,6 +79,19 @@ var _tocked := 0
 ## off the screen too. tools/panels.py now refuses both.
 func _ready() -> void:
 	name = "FrameMeter"
+	# LAST IN EVERY PHYSICS STEP, ON PURPOSE.
+	#
+	# A ledger clock is shut by the next one opening, so whatever ran LAST in a
+	# step keeps its clock through the engine's own solve — collision, the
+	# heightmaps, every CharacterBody3D's move — and is billed for all of it.
+	# That is how `Animal 116.3ms` came back under a physics total of 84.9: it
+	# was not Animal, it was Animal plus the solver.
+	#
+	# Godot runs `_physics_process` in priority order, higher last, so this node
+	# closes the last class's clock and opens one named for the engine. What the
+	# scripts cost and what the ENGINE costs are two different questions and the
+	# bill could not tell them apart.
+	process_physics_priority = ENGINE_LAST
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT,
@@ -101,6 +122,10 @@ func _ready() -> void:
 ## COUNTED, NOT TIMED. Every physics tick between two drawn frames is one the
 ## whole simulation paid for, and their number is the thing that runs away.
 func _physics_process(_delta: float) -> void:
+	# FIRST LINE, like every other clock in the game — everything above an open
+	# is billed to whoever ran before, and the rule does not get an exception
+	# for the file that reports on it.
+	Ledger.open(ENGINE_ROW)
 	_ticks += 1
 
 
