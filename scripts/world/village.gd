@@ -877,6 +877,7 @@ func holds_teaching_post() -> bool:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"Village")
 	# THE EVENING CIRCLE. Counted here rather than by each dancer, because what
 	# the nest gathers depends on how many are round the fire TOGETHER — eight
 	# people dancing is worth more than eight people praying.

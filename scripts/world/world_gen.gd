@@ -223,6 +223,7 @@ func reseed(to: int) -> void:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"WorldGen")
 	# LOADING GOES ON WHILE THE WORLD IS HELD. The opening screen pauses the
 	# tree so nothing ages or starves while the player is choosing — and raising
 	# the land is the one job that must NOT stop for that, because it is most of

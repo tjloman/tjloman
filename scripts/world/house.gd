@@ -102,6 +102,7 @@ func capacity() -> int:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"House")
 	_tick_fire(delta)
 	if under_construction:
 		return

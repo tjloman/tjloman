@@ -206,6 +206,7 @@ func _build_body(body: Vector3, leg_h: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	Ledger.open(&"Animal")
 	# ALIGHT, OR IN THE AIR — the band above fear, where there is nothing
 	# sensible left to do. `false` is "not a person": the same waveform pitched
 	# down and roughened. See Agitation.

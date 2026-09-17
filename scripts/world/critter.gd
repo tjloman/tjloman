@@ -114,6 +114,7 @@ func has_voice() -> bool:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"Critter")
 	_flip += delta * _fps
 	if _frames.size() > 1 and _flip >= 1.0:
 		_flip = 0.0

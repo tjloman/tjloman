@@ -690,6 +690,7 @@ func _build_multimesh() -> void:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"Herd")
 	# The herd itself thinks on the same distance stride everything else does:
 	# a herd three hundred metres off does not need its formation rewritten
 	# sixty times a second, or indeed five.

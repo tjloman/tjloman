@@ -50,6 +50,9 @@ var _worst_left := 0.0
 ## Physics ticks counted since the last drawn frame, and the running average.
 var _ticks := 0
 var _steps_seen := 0.0
+## The wall clock at the last drawn frame. See `_process` — `delta` is world
+## time and this meter has to report real time.
+var _tocked := 0
 
 
 ## A PANEL CONTAINER AND NOT A CONTROL, and the difference is the whole of why
@@ -109,11 +112,27 @@ func _process(delta: float) -> void:
 	_ticks = 0
 	var now := Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
 	var fixed := Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
-	var whole := delta * 1000.0
+	# THE WALL CLOCK, AND NOT `delta`.
+	#
+	# `delta` has already been through Engine.time_scale, and this game runs the
+	# world at 0.75 for as long as a rune is being drawn (DivineHand._tick_focus)
+	# — so a perfectly steady frame arrives here a quarter shorter the moment
+	# anybody casts, and the meter reports a device that just got faster. Worse,
+	# it made the script time exceed the frame it was supposedly part of, which
+	# is how a reading of "script 155ms, frame 101ms, draw 0" came back off a
+	# phone: the draw figure was not zero, it was the subtraction going negative
+	# and being clamped. Quality._process learned this same lesson separately.
+	var tick := Time.get_ticks_usec()
+	var whole := float(tick - _tocked) / 1000.0 if _tocked > 0 else delta * 1000.0
+	_tocked = tick
 	frame_ms = lerpf(frame_ms, whole, BLEND)
 	process_ms = lerpf(process_ms, now, BLEND)
 	physics_ms = lerpf(physics_ms, fixed, BLEND)
 	steps = _steps_seen
+	# THE LEDGER IS ON ONLY WHILE SOMEBODY IS READING IT, and its page turns
+	# here — once a frame, in the one place that is already once a frame.
+	Ledger.on = visible
+	Ledger.turn_the_page()
 	_worst_left -= delta
 	if whole > _worst or _worst_left <= 0.0:
 		_worst = whole
@@ -149,10 +168,23 @@ func _readout() -> String:
 		% [int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
 			_thousands(int(Performance.get_monitor(
 				Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)))])
-	rows.append("%d nodes, %d bodies" % [
+	rows.append("%d nodes, %d bodies, %d ORPHANS" % [
 		int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
-		int(Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS))])
+		int(Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS)),
+		int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT))])
 	rows.append(_what_is_here())
+	rows.append("")
+	# THE BILL. What each numerous class cost this frame and how many of them
+	# ran — the second number matters as much as the first, because a game that
+	# starts at twenty frames and decays to ten is a game where something is
+	# GROWING, and a count climbing while its cost climbs with it says which.
+	rows.append("WHERE THE SCRIPT WENT        ms    x")
+	for row: Array in Ledger.rows():
+		if float(row[1]) < 0.05:
+			continue
+		rows.append("   %-22s %6.1f %5d" % [row[0], row[1], row[2]])
+	rows.append("   %-22s %6.1f" % ["(everything else)",
+		maxf(process_ms + physics_ms - Ledger.counted(), 0.0)])
 	rows.append("")
 	rows.append("tier %s (%s)   3D at %d%%   physics %d Hz" % [
 		Quality.Tier.keys()[Quality.effective_tier()], Quality.heat_word(),

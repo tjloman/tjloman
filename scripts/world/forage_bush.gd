@@ -47,6 +47,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"ForageBush")
 	if berries >= MAX_BERRIES:
 		return
 	# Berries ripen over time — faster in the rain (the land's slow larder,

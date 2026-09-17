@@ -148,6 +148,94 @@ if not ticked:
                 "steps-a-frame figure — the number it was built for — is zero "
                 "for ever and reads as a healthy device")
 
+# -- THE BILL, AND WHETHER ANYTHING IS GROWING -------------------------------
+#
+# The phone came back with ninety-one milliseconds in `_process` and none in the
+# draw, which rules out the GPU and leaves forty classes. And it started near
+# twenty frames and decayed to ten over one sitting, which is a different fact
+# again: a game that gets slower the longer it is played is a game where
+# something is GROWING. So the meter has to say what each numerous class cost
+# AND HOW MANY OF THEM RAN, because a count climbing alongside its cost is the
+# whole diagnosis.
+LEDGER = (ROOT / "scripts/ledger.gd").read_text()
+clocked = []
+for path in sorted((ROOT / "scripts").rglob("*.gd")):
+    text = code(path.read_text())
+    for name in re.findall(r'Ledger\.open\(&"(\w+)"', text):
+        clocked.append(name)
+print()
+print("CLOCKED BY NAME: %s" % (", ".join(sorted(clocked)) if clocked else "NOBODY"))
+if len(clocked) < 8:
+    fail.append("only %d classes clock themselves — the ledger cannot point at "
+                "anything it was not told to measure, and a bill that lists two "
+                "lines always blames one of them" % len(clocked))
+if len(set(clocked)) != len(clocked):
+    fail.append("two classes report into the ledger under the same name, so "
+                "their costs are added together and neither can be read")
+
+# A CLOCK IS OPENED AT THE TOP OF THE METHOD AND NOWHERE ELSE. Opened lower
+# down, everything above it is charged to whoever ran before — which is a class
+# being billed for another class's work, and it reads as a finding.
+for path in sorted((ROOT / "scripts").rglob("*.gd")):
+    rows_here = code(path.read_text()).split("\n")
+    for n, row in enumerate(rows_here):
+        if "Ledger.open(" not in row:
+            continue
+        above = rows_here[n - 1] if n else ""
+        if not re.match(r"func _(physics_)?process\(", above.strip()):
+            fail.append("%s:%d opens a ledger clock somewhere other than the "
+                        "first line of a _process — everything above it is "
+                        "billed to whichever class ran before"
+                        % (path.name, n + 1))
+
+# AND IT IS ONLY ON WHILE SOMEBODY IS READING IT. A profiler left running is
+# overhead every player pays for ever, to answer a question nobody is asking.
+switched = [r.strip() for r in code(METER).split("\n") if "Ledger.on" in r]
+if not switched or not all("visible" in r for r in switched):
+    fail.append("the ledger is switched on by %s rather than by whether the "
+                "meter is open — a profiler nobody is reading is overhead every "
+                "player pays for ever"
+                % (switched[0] if switched else "nothing"))
+
+# AND THE PAGE IS TURNED, which is also what shuts the last clock of the frame.
+turned = "Ledger.turn_the_page()" in code(METER)
+shuts = any("shut()" in r for r in body_of(LEDGER, "turn_the_page"))
+if not turned or not shuts:
+    fail.append("the ledger's page is never turned, or turning it does not shut "
+                "the clock left open by the last class of the frame — which is "
+                "then charged the whole gap to the next frame")
+
+# AND THE COUNT IS REPORTED ALONGSIDE THE COST.
+bills = "row[2]" in code(METER) and "Ledger.rows()" in code(METER)
+gap = "Ledger.counted()" in code(METER)
+grows = "OBJECT_ORPHAN_NODE_COUNT" in code(METER)
+print("THE METER PRINTS the bill: %s, the unaccounted gap: %s, orphans: %s"
+      % ("yes" if bills else "NO", "yes" if gap else "NO",
+         "yes" if grows else "NO"))
+if not bills:
+    fail.append("the meter does not print how many of each class ran, so a "
+                "population that is growing looks exactly like code that got "
+                "slower")
+if not gap:
+    fail.append("the meter does not print what the ledger FAILED to account "
+                "for — a bill that only shows what it was told to show "
+                "confirms whatever the person who wrote it already believed")
+if not grows:
+    fail.append("the meter does not report orphaned nodes, which is the one "
+                "counter that says outright whether something is being leaked")
+
+# AND THE FRAME IS MEASURED ON THE WALL CLOCK. `delta` has been through
+# Engine.time_scale, which this game runs at 0.75 while a rune is drawn — so a
+# steady frame reads a quarter faster the moment anybody casts, and the script
+# time exceeds the frame it is part of.
+real = any("get_ticks_usec()" in r for r in body_of(METER, "_process"))
+print("THE FRAME IS TIMED on %s." % ("the wall clock" if real else "`delta` — WORLD TIME"))
+if not real:
+    fail.append("the meter times the frame with `delta`, which has been through "
+                "Engine.time_scale — so it reports a faster device the moment a "
+                "rune is drawn, and the script time comes out larger than the "
+                "frame it is part of")
+
 # AND IT OPENS ON A PHONE. F7 is not a key a phone has, and a phone is the only
 # machine whose frame time anybody needs to look at.
 by_key = "toggle_frames" in code(MAIN) and "toggle_frames" in code(HUD)

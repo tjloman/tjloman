@@ -65,6 +65,7 @@ func _feed_the_ground() -> void:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"Poop")
 	_age += delta
 	if _age >= LIFE_SECONDS:
 		queue_free()

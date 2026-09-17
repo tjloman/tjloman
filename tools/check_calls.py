@@ -49,6 +49,13 @@ BUILTIN = {
 decl_re = re.compile(r"^class_name\s+(\w+)", re.M)
 func_re = re.compile(r"^(?:static\s+)?func\s+(\w+)\s*\(", re.M)
 var_re = re.compile(r"^var\s+(\w+)", re.M)
+# ...AND THE STATIC ONES, which this file's own comment claimed were "reachable
+# through the class name and always were" and which it then never collected.
+# `^var` does not match `static var`, so the first time anything in the game
+# read another class's static var through its class name — `Ledger.on` — it was
+# reported as a member that does not exist. The claim was true; the regex was
+# not.
+static_var_re = re.compile(r"^static\s+var\s+(\w+)", re.M)
 const_re = re.compile(r"^const\s+(\w+)", re.M)
 signal_re = re.compile(r"^signal\s+(\w+)", re.M)
 enum_re = re.compile(r"^enum\s+(\w+)", re.M)
@@ -228,7 +235,8 @@ def collect(root):
             if not m:
                 continue
             members = set()
-            for rx in (func_re, var_re, const_re, signal_re, enum_re):
+            for rx in (func_re, static_var_re, var_re, const_re,
+                       signal_re, enum_re):
                 members |= set(rx.findall(src))
             base = extends_re.search(src)
             classes[m.group(1)] = (members, base.group(1) if base else None)
@@ -238,6 +246,7 @@ def collect(root):
             for fname in static_func_re.findall(src):
                 STATICS.add((m.group(1), fname))
             OWN_VARS[m.group(1)] = set(var_re.findall(src))
+            STATIC_VARS[m.group(1)] = set(static_var_re.findall(src))
             here = dict(typed_var_re.findall(src))
             here.update(dict(typed_decl_re.findall(src)))
             MEMBER_TYPES[m.group(1)] = here
@@ -248,6 +257,9 @@ def collect(root):
 SIGNATURES = {}
 # (class, method) pairs declared `static func`. Filled by collect().
 STATICS = set()
+# class -> its STATIC vars. Reached through the class name on purpose, which is
+# the whole difference between these and OWN_VARS below.
+STATIC_VARS = {}
 # Every func a class declares, static or not. Filled by collect().
 OWN_FUNCS = {}
 # Every INSTANCE var a class declares (static vars and consts excluded — those
@@ -1272,6 +1284,11 @@ def check_static_calls(files, singletons):
                 if cls in singletons or cls not in OWN_VARS:
                     continue
                 if field not in OWN_VARS[cls]:
+                    continue
+                # A STATIC VAR IS REACHED THROUGH THE CLASS NAME BY DESIGN —
+                # that is what makes it static. Only instance fields are the
+                # mistake this is looking for.
+                if field in STATIC_VARS.get(cls, set()):
                     continue
                 if re.search(r"\b%s\.%s\s*\(" % (cls, field), code):
                     continue        # already reported above as a call

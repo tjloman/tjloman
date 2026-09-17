@@ -198,6 +198,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"WildTree")
 	if _felled:
 		return
 	if _held:

@@ -109,6 +109,7 @@ func _build_soil(world: WorldGen) -> void:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"Farm")
 	if burning:
 		_burn(delta)
 		return

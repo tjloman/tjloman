@@ -742,6 +742,7 @@ func _nearest_well() -> Vector3:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"Workshop")
 	_tick_fire(delta)
 	if village == null or not is_instance_valid(village):
 		return
