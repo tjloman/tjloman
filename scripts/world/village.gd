@@ -545,12 +545,31 @@ func spawn_workshop_at(which: String, world_spot: Vector3) -> void:
 	# because docks have now been found inland twice, and the way to stop a
 	# thing happening is not to be more careful about the path that leads to it
 	# — it is to refuse it at the door it must come through.
+	# A DOCK MUST BE OVER WATER, AND THE GROUND IS WHAT SAYS SO.
+	#
+	# This asked whether the spot matched what `harbour_for` had said the
+	# harbour was, and passed whenever the two agreed. Two functions agreeing is
+	# not evidence: a stale memory, a finder that was wrong, or a pond a rain
+	# miracle made and that has since drained puts the SAME wrong answer on both
+	# sides, and the door opens on a jetty in a meadow. It has now happened
+	# three times and twice I called it fixed.
+	#
+	# So the deck is walked, here, against the world as it is at this instant.
+	# See Waters.can_carry_a_jetty — a jetty is a thing that has to be over
+	# water, and that is a question with an answer of its own.
 	if which == "dock":
 		var water := get_tree().get_first_node_in_group("world_gen") as WorldGen
 		var harbour := Waters.harbour_for(self, water)
 		if harbour == Vector3.INF or harbour.distance_to(world_spot) > 2.0:
 			push_warning("%s: refusing a dock at %s — the harbour is at %s"
 				% [village_name, world_spot, harbour])
+			return
+		var seaward := Waters.bearing_for(self, water)
+		if not Waters.can_carry_a_jetty(world_spot, seaward, water):
+			push_warning("%s: refusing a dock at %s — its deck is dry for %.1fm "
+				% [village_name, world_spot,
+					Waters.dry_deck(world_spot, seaward, water)]
+				+ "and a jetty in a meadow is not a harbour")
 			return
 	# AND ONE BARN, for the same reason and by the same last ditch. `wanted`
 	# already caps it at one and `being_raised` already stops two builders being

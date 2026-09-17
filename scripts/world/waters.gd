@@ -236,6 +236,41 @@ static func _waterline(wet: Vector3, out: Vector3, world: WorldGen) -> Vector3:
 	return wet
 
 
+## WOULD A JETTY STANDING HERE REACH THE WATER? Asked of the WORLD, by anybody,
+## about any spot — which is the point of it being public.
+##
+## THE DOCK HAS BEEN BUILT ON GRASS THREE TIMES. Twice I put a guard on the door
+## it comes through, and twice the guard asked the wrong question: it compared
+## the spot being built on against what `harbour_for` said the harbour was, and
+## agreed. Two functions agreeing is not evidence. If the finder is wrong, or
+## its memory is stale, or the pond a rain miracle made has since drained, both
+## sides of that comparison are wrong together and the door opens.
+##
+## So the door asks the ground instead. A jetty is a thing that has to be over
+## water, and whether it is over water is a question with an answer that does
+## not depend on anybody's bookkeeping.
+static func can_carry_a_jetty(root: Vector3, bearing: float, world: WorldGen) -> bool:
+	if world == null:
+		return false
+	return _deck_is_over_water(
+		root, Vector3(cos(bearing), 0.0, sin(bearing)), world)
+
+
+## HOW FAR THE DRY PART OF A DECK RUNS before the water has to start. For the
+## refusal's message, so a warning says how badly it missed rather than that it
+## missed.
+static func dry_deck(root: Vector3, bearing: float, world: WorldGen) -> float:
+	if world == null:
+		return INF
+	var out := Vector3(cos(bearing), 0.0, sin(bearing))
+	var along := JETTY_WET_FROM
+	while along <= JETTY_TO:
+		if not world.is_underwater(root.x + out.x * along, root.z + out.z * along):
+			return along
+		along += DECK_STEP
+	return 0.0
+
+
 ## WALK THE DECK. Every plank from JETTY_WET_FROM out to the end must be over
 ## water — this is the whole difference between a harbour and a shed by a lake,
 ## and it is a check rather than a calculation because the shape of a shoreline

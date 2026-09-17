@@ -213,9 +213,61 @@ for name, shore in SHORES.items():
         fail.append("%d of %d boats have no mooring on water on %s"
                     % (len(ties) - afloat, len(ties), name))
 
+# -- AND THE DOOR ASKS THE GROUND ------------------------------------------
+#
+# Everything above proves the FINDER is right. It has been right for a while,
+# and the dock has still been built on grass three times — because the last
+# check before a jetty goes up compared the spot against what `harbour_for`
+# said, and passed whenever the two agreed. Two functions agreeing is not
+# evidence: a stale memory, or a pond a rain miracle made and that has since
+# drained, puts the same wrong answer on both sides.
+TOWN = (ROOT / "scripts/world/village.gd").read_text()
+
+
+def code(text):
+    return "\n".join(r.split("#")[0].rstrip() for r in text.split("\n")
+                      if r.split("#")[0].strip())
+
+
+def body_of(text, name):
+    src = code(text)
+    head = "func %s(" % name
+    if head not in src:
+        return []
+    out = []
+    for row in src[src.index(head):].split("\n")[1:]:
+        if row and not row.startswith(("\t", " ")):
+            break
+        out.append(row)
+    return out
+
+
+door = body_of(TOWN, "spawn_workshop_at")
+asks_ground = any("can_carry_a_jetty(" in r for r in door)
+print()
+print("THE LAST CHECK BEFORE A JETTY GOES UP asks %s."
+      % ("the ground" if asks_ground else "ANOTHER FUNCTION, AND NOTHING ELSE"))
+if not asks_ground:
+    fail.append("Village.spawn_workshop_at does not walk the deck against the "
+                "world before raising a dock — it compares the spot against "
+                "what the finder said, which agrees with itself when the finder "
+                "is wrong, and that is how a jetty gets built in a meadow")
+
+# AND THE WALK IS THE SAME ONE. A second implementation of "is the deck wet"
+# is a second opinion, and the two would drift.
+shared = any("_deck_is_over_water(" in r
+             for r in body_of(WATERS, "can_carry_a_jetty"))
+print("   ...with %s walk the finder uses."
+      % ("the same" if shared else "A SECOND, SEPARATE"))
+if not shared:
+    fail.append("can_carry_a_jetty does not use the finder's own deck walk, so "
+                "the door and the search hold two opinions about what counts as "
+                "over water, and they will drift")
+
 print()
 if fail:
     for line in fail:
         print("BROKEN: " + line)
     sys.exit(1)
-print("OK: the root is ashore, the deck is over water, and the boats float.")
+print("OK: the root is ashore, the deck is over water, the boats float, and the "
+      "door asks the ground.")
