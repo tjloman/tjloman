@@ -194,7 +194,18 @@ if in_process:
 # it, so "up to the first }" reads four lines and stops.
 barn_row = re.search(r'\t"barn": \{.*?\n\t\},', SHOP, re.S)
 capped = barn_row is not None and '"most": 1' in barn_row.group(0)
-at_door = any("barn" in r for r in body_of(TOWN, "spawn_workshop_at"))
+# THE CEILING IS ENFORCED IN Workshop.may_stand NOW, off each trade's own
+# `most`, and BOTH ways a workshop goes up ask it — a villager raising one, and
+# a village dealing its trades back out of a save. Only the first was ever
+# guarded, which is how a dock restored from a map ended up in a meadow; the
+# barn would have followed it the first time a save carried two.
+# THE STATEMENT, not the word `most` — which survives being set to zero, and
+# `var most := 0` is exactly how a ceiling stops being a ceiling while still
+# reading like one.
+_rule = body_of(SHOP, "may_stand")
+at_door = any(re.search(r'TRADES\.get\(which.*\)\.get\("most"', r) for r in _rule) \
+    and any(">= most" in r or "> most" in r for r in _rule) \
+    and any("may_stand(" in r for r in body_of(TOWN, "spawn_workshop_at"))
 print()
 print("BARNS PER TOWN: %s, and the second is %s at the door."
       % ("1" if capped else "AS MANY AS IT LIKES",
@@ -203,7 +214,8 @@ if not capped:
     fail.append("the barn has no ceiling in TRADES, so a town raises one per "
                 "twenty-five souls and each one doubles the room")
 if not at_door:
-    fail.append("Village.spawn_workshop_at does not refuse a second barn — the "
+    fail.append("Workshop.may_stand does not enforce a trade's `most`, or the "
+                "door does not ask it — the "
                 "dock was found standing twice through a path its own rules "
                 "did not watch, and this is the same door")
 

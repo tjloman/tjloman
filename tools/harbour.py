@@ -40,6 +40,20 @@ def const(name, text, where):
     return float(m.group(1))
 
 
+def body_of(text, name):
+    """The rows of one function, comments already gone."""
+    src = code(text)
+    head = "func %s(" % name
+    if head not in src:
+        return []
+    out = []
+    for row in src[src.index(head):].split("\n")[1:]:
+        if row and not row.startswith(("\t", " ")):
+            break
+        out.append(row)
+    return out
+
+
 def code(text):
     """A function body with its COMMENTS TAKEN OUT.
 
@@ -230,20 +244,28 @@ if not most or int(most.group(1)) != 1:
 TOWN = (ROOT / "scripts/world/village.gd").read_text()
 print()
 raise_guard = "being_raised(town, which)" in code(SHOP)
-door_guard = ('if which == "dock":' in code(TOWN)
-              and "Waters.harbour_for" in code(TOWN))
+# THE RULE LIVES IN Workshop.may_stand NOW, and it had to move: there are TWO
+# ways a workshop goes up — a villager raising one, and a village dealing its
+# trades back out of a save — and only the villager's was ever guarded. A dock
+# restored from a map was laid out in the building ring, on grass. See
+# tools/jetty.py, which checks that every `Workshop.create` asks.
+door_guard = ("Waters.harbour_for" in "\n".join(body_of(SHOP, "may_stand"))
+              and all("may_stand(" in "\n".join(body_of(TOWN, f))
+                      for f in ("spawn_workshop_at",)))
 print("ONLY ONE, AND ONLY ON THE COAST:")
 print("   a trade already being raised %s as one the town has."
       % ("counts" if raise_guard else "DOES NOT COUNT"))
-print("   spawn_workshop_at %s a dock away from the harbour."
+print("   Workshop.may_stand %s a dock away from the harbour, and the"
       % ("refuses" if door_guard else "ACCEPTS"))
+print("   villager's door asks it.")
 if not raise_guard:
     fail.append("short_of counts only BUILT workshops, and build_shop has room "
                 "for two — so two villagers are both told the town wants a "
                 "harbour, walk to two different spots, and raise two of them")
 if not door_guard:
-    fail.append("Village.spawn_workshop_at will raise a dock at whatever spot "
-                "it is handed. That is the last door a dock comes through and "
+    fail.append("the dock rule is not in Workshop.may_stand, or a way of "
+                "raising one does not ask it. That is the last door a dock "
+                "comes through and "
                 "it is the one place the rule cannot be got around")
 # And the search must give the same answer twice, or the builder chooses one
 # shore and the building reads a bearing for another.

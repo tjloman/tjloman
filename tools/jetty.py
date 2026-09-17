@@ -242,16 +242,15 @@ def body_of(text, name):
     return out
 
 
-door = body_of(TOWN, "spawn_workshop_at")
-asks_ground = any("can_carry_a_jetty(" in r for r in door)
+asks_ground = any("can_carry_a_jetty(" in r for r in body_of(SHOP, "may_stand"))
 print()
-print("THE LAST CHECK BEFORE A JETTY GOES UP asks %s."
+print("THE RULE FOR WHERE A JETTY MAY STAND asks %s."
       % ("the ground" if asks_ground else "ANOTHER FUNCTION, AND NOTHING ELSE"))
 if not asks_ground:
-    fail.append("Village.spawn_workshop_at does not walk the deck against the "
-                "world before raising a dock — it compares the spot against "
-                "what the finder said, which agrees with itself when the finder "
-                "is wrong, and that is how a jetty gets built in a meadow")
+    fail.append("Workshop.may_stand does not walk the deck against the world — "
+                "it compares the spot against what the finder said, which "
+                "agrees with itself when the finder is wrong, and that is how a "
+                "jetty gets built in a meadow")
 
 # AND THE WALK IS THE SAME ONE. A second implementation of "is the deck wet"
 # is a second opinion, and the two would drift.
@@ -263,6 +262,33 @@ if not shared:
     fail.append("can_carry_a_jetty does not use the finder's own deck walk, so "
                 "the door and the search hold two opinions about what counts as "
                 "over water, and they will drift")
+
+# AND EVERY WAY IN ASKS IT. This is the one that matters, and the one that was
+# missed for three fixes running: a villager raises a workshop through
+# `spawn_workshop_at`, and a village restored from a save or a map deals its
+# trades back out directly. Only the first was ever guarded, which is exactly
+# why destroying the bad dock and letting the town rebuild it put it on water.
+ways = []
+for path in sorted((ROOT / "scripts").rglob("*.gd")):
+    rows_here = code(path.read_text()).split("\n")
+    for n, row in enumerate(rows_here):
+        if "Workshop.create(" not in row:
+            continue
+        near = "\n".join(rows_here[max(0, n - 25):n + 3])
+        ways.append((path.name, n + 1, "may_stand(" in near))
+print()
+print("WAYS A WORKSHOP GETS RAISED: %d" % len(ways))
+for name, line, guarded in ways:
+    print("   %-22s line %-6d %s"
+          % (name, line, "asks may_stand" if guarded else "ASKS NOTHING"))
+    if not guarded:
+        fail.append("%s:%d raises a workshop without asking Workshop.may_stand "
+                    "— a second way in, unguarded, which is how a dock ends up "
+                    "in a meadow while the guarded way puts it on the water"
+                    % (name, line))
+if len(ways) < 2:
+    fail.append("only %d way(s) to raise a workshop were found; the reader has "
+                "stopped matching how they are written" % len(ways))
 
 print()
 if fail:

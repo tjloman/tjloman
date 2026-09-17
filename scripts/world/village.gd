@@ -557,29 +557,13 @@ func spawn_workshop_at(which: String, world_spot: Vector3) -> void:
 	# So the deck is walked, here, against the world as it is at this instant.
 	# See Waters.can_carry_a_jetty — a jetty is a thing that has to be over
 	# water, and that is a question with an answer of its own.
-	if which == "dock":
-		var water := get_tree().get_first_node_in_group("world_gen") as WorldGen
-		var harbour := Waters.harbour_for(self, water)
-		if harbour == Vector3.INF or harbour.distance_to(world_spot) > 2.0:
-			push_warning("%s: refusing a dock at %s — the harbour is at %s"
-				% [village_name, world_spot, harbour])
-			return
-		var seaward := Waters.bearing_for(self, water)
-		if not Waters.can_carry_a_jetty(world_spot, seaward, water):
-			push_warning("%s: refusing a dock at %s — its deck is dry for %.1fm "
-				% [village_name, world_spot,
-					Waters.dry_deck(world_spot, seaward, water)]
-				+ "and a jetty in a meadow is not a harbour")
-			return
-	# AND ONE BARN, for the same reason and by the same last ditch. `wanted`
-	# already caps it at one and `being_raised` already stops two builders being
-	# sent — and the dock was found standing twice anyway, through a path
-	# neither of those watched. A ceiling that matters is a ceiling refused at
-	# the door it has to come through.
-	if which == "barn":
-		for w in workshops:
-			if is_instance_valid(w) and (w as Workshop).trade == "barn":
-				return
+	var water := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if not Workshop.may_stand(which, self, world_spot, water):
+		if which == "dock":
+			push_warning("%s: refusing a dock at %s — its deck is dry for %.1fm"
+				% [village_name, world_spot, Waters.dry_deck(
+					world_spot, Waters.bearing_for(self, water), water)])
+		return
 	var spec: Dictionary = Workshop.TRADES.get(which, {})
 	if spec.is_empty() or not store.try_spend_materials(
 			int(spec["lumber"]), int(spec["stone"])):
@@ -1957,8 +1941,19 @@ func _rebuild(data: Dictionary) -> void:
 		if not Workshop.TRADES.has(which):
 			continue          # a trade this build no longer has
 		for i in int(trades[which]):
-			var shop_spot := find_build_spot(world, ROOM_ROUND_A_SHOP)
+			# `spot_for` AND NOT `find_build_spot`. This asked for a spot in the
+			# building ring for every trade alike, so a dock restored from a
+			# save or a map was laid out in the town square like a shrine — on
+			# grass, with no harbour ever asked about. That is the dock that
+			# keeps turning up in a meadow: destroy it and the villagers rebuild
+			# it on the water, because THEIR door was guarded and this one was
+			# not. See Workshop.may_stand, which both now ask.
+			var shop_spot := Workshop.spot_for(which, self, world)
 			if shop_spot == Vector3.INF:
+				break
+			if not Workshop.may_stand(which, self, shop_spot, world):
+				push_warning("%s: its save wants a %s and there is nowhere it "
+					% [village_name, which] + "may stand — leaving it out")
 				break
 			var shop := Workshop.create(which, self)
 			shop.position = to_local(shop_spot)

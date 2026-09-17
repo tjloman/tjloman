@@ -310,6 +310,50 @@ static func spot_for(which: String, town: Village, world: WorldGen) -> Vector3:
 	return town.find_build_spot(world, Village.ROOM_ROUND_A_SHOP)
 
 
+## MAY THIS TRADE STAND HERE AT ALL — the one door, for every way a building
+## gets raised.
+##
+## THERE ARE TWO WAYS, and only one of them was ever guarded. A villager walks
+## out and raises one through `Village.spawn_workshop_at`, which is where the
+## dock rules were written. A village RESTORED from a save or a map file places
+## its trades directly, by count, using the plain ring-round-the-totem finder —
+## and so a dock that came back from a save was laid out in the town square like
+## a shrine, on grass, with no harbour asked about at all.
+##
+## That is why destroying the bad one and letting the villagers rebuild it put
+## it on the water: the rebuild went through the guarded door and the founding
+## never did. Three fixes went onto that door while the other way in stood open.
+##
+## So the rules live here, and both callers ask. `world` may be null, in which
+## case only the rules that do not need the ground are applied.
+static func may_stand(which: String, town: Village, at: Vector3,
+		world: WorldGen) -> bool:
+	if town == null or not is_instance_valid(town) or not at.is_finite():
+		return false
+	# ONE TO A TOWN, for the trades that say so. `wanted` caps this by
+	# population and `being_raised` stops two builders being sent, and neither
+	# of them is looking when a save deals its buildings back out.
+	var most := int(TRADES.get(which, {}).get("most", 0))
+	if most > 0:
+		var standing := 0
+		for w in town.workshops:
+			if is_instance_valid(w) and (w as Workshop).trade == which:
+				standing += 1
+		if standing >= most:
+			return false
+	if which != "dock":
+		return true
+	# AND A JETTY HAS TO BE OVER WATER. Asked of the GROUND — see
+	# Waters.can_carry_a_jetty, and the note on this door in
+	# Village.spawn_workshop_at for why asking another function is not enough.
+	if world == null:
+		return false
+	var harbour := Waters.harbour_for(town, world)
+	if harbour == Vector3.INF or harbour.distance_to(at) > 2.0:
+		return false
+	return Waters.can_carry_a_jetty(at, Waters.bearing_for(town, world), world)
+
+
 ## A trade with room at it, counting who is already posted where.
 static func with_room(town: Village, from: Vector3) -> Workshop:
 	Util.prune(town.workshops)
