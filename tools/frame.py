@@ -207,7 +207,7 @@ counting = body_of(HERD, "alive")
 # The walk is allowed, ONCE, behind the staleness guard — that is what makes it
 # a cache. What is not allowed is a walk on the common path. Measured by indent:
 # the `for` has to sit deeper than the `if _living < 0:` that admits it.
-guard = next((i for i, r in enumerate(counting) if "_living < 0" in r), None)
+guard = next((i for i, r in enumerate(counting) if "_alive_count < 0" in r), None)
 walks = False
 for i, r in enumerate(counting):
     if not (r.strip().startswith("for ") and "_members" in r):
@@ -216,7 +216,7 @@ for i, r in enumerate(counting):
     if guard is None or i < guard \
             or deep <= len(counting[guard]) - len(counting[guard].lstrip("\t")):
         walks = True
-cached = any("_living" in r for r in counting)
+cached = any("_alive_count" in r for r in counting)
 print()
 print("Herd.alive() %s." % ("is remembered, and walks only when stale"
                             if cached and not walks else "WALKS THE BOOK"))
