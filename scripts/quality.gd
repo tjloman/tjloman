@@ -59,6 +59,37 @@ const FRAME_BLEND := 0.02
 ## What a full hand costs the far half of the world, in simulation strides.
 const HANDS_RELIEF := 1
 
+## THE FIXED CLOCK, AND THE HOLE A SLOW DEVICE FALLS DOWN IT -----------------
+##
+## Godot runs physics on a clock of its own. Every drawn frame it works out how
+## many ticks it owes since the last one and runs them all, up to
+## `max_physics_steps_per_frame`. At the engine defaults — sixty ticks a second
+## and a ceiling of eight — a phone drawing at 133ms owes eight ticks by the
+## time the frame ends and runs every one of them: every villager, every
+## animal, every rigid body, simulated EIGHT TIMES for one picture.
+##
+## Which makes the frame longer. Which owes more ticks. A device that falls
+## behind this clock does not degrade gently, it falls down a hole, and from
+## inside the hole it looks like the whole game is slow rather than like one
+## number being pinned at its ceiling. See FrameMeter, which prints the steps a
+## frame and says PINNED when they are.
+##
+## THIRTY TICKS ON A HANDHELD. Nothing in this game needs sixty: villagers walk,
+## beasts graze, and the one thing that genuinely wants to feel instant — the
+## hand — was taken off the physics tick long ago precisely so it would not wait
+## for one. Half the ticks is half of every `_physics_process` in the world.
+##
+## AND A CEILING OF THREE. Past three the device stops trying to keep up with
+## real time and the world runs a little slow instead, which is the right way
+## round: a smooth twenty-five frames of slightly slow time beats seven and a
+## half frames of the correct time. It only ever bites below about ten frames a
+## second — three ticks at thirty a second covers a hundred milliseconds — so a
+## device that is merely mid-range never meets it at all.
+const PHYSICS_HZ_HANDHELD := 30
+const PHYSICS_HZ_DESK := 60
+const STEPS_MOST_HANDHELD := 3
+const STEPS_MOST_DESK := 8
+
 var tier := Tier.MEDIUM
 ## Plain int rather than the enum's own type, so every comparison, subtraction
 ## and array index below is unambiguously legal.
@@ -76,12 +107,29 @@ var _announced := {}
 
 
 func _ready() -> void:
+	_set_the_clock()
 	var saved := _load_override()
 	if saved >= 0:
 		tier = saved as Tier
 	else:
 		tier = _detect_tier()
 	print("Quality: %s (GPU: %s)" % [Tier.keys()[tier], _adapter_name()])
+
+
+## SET THE FIXED CLOCK for the machine this is. See the note by
+## PHYSICS_HZ_HANDHELD: on a phone this is the difference between a slow frame
+## and a frame that makes itself slower.
+##
+## Asked of the MACHINE and not of the graphics tier. A tier is a guess about a
+## GPU, and this is a question about how much simulation a frame can afford —
+## a flagship phone still has no use for sixty ticks of villagers, and a desk
+## machine never falls behind either number.
+func _set_the_clock() -> void:
+	var handheld := OS.has_feature("mobile")
+	Engine.physics_ticks_per_second = \
+		PHYSICS_HZ_HANDHELD if handheld else PHYSICS_HZ_DESK
+	Engine.max_physics_steps_per_frame = \
+		STEPS_MOST_HANDHELD if handheld else STEPS_MOST_DESK
 
 
 ## Watch the frames go by. Three floats a frame; nothing here is measured with

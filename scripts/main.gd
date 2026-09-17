@@ -371,6 +371,7 @@ func _setup_input() -> void:
 		"skip_tutorial": [KEY_F4],
 		"toggle_profiles": [KEY_F5],
 		"toggle_temple": [KEY_F6],
+		"toggle_frames": [KEY_F7],
 	}
 	for action: String in actions:
 		if InputMap.has_action(action):

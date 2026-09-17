@@ -78,6 +78,10 @@ var _roster_button: Button
 ## there is no C on a thumb — Praise and Scold only appear once you are already
 ## locked on, so until now a phone could not get locked on at all.
 var _creature_button: Button
+## The frame breakdown, and the button that opens it on a machine with no
+## keyboard. See `_build_frame_meter`.
+var _frames: FrameMeter
+var _frames_button: Button
 var _roster_refresh := 0.0
 ## The casting session's own readout: a ring that fills as you press to open
 ## it, and a bar that drains once you stop drawing. Without these the session
@@ -115,6 +119,7 @@ func _ready() -> void:
 	_build_creature_panel()
 	_build_praise_scold()
 	_build_creature_button()
+	_build_frame_meter()
 	_build_hover_label()
 	_build_message_label()
 	_build_help_panel()
@@ -573,6 +578,30 @@ func _build_praise_scold() -> void:
 
 ## Under the villages button, in the same plain style, because it is the same
 ## kind of thing: somewhere to go.
+## THE FRAME METER, AND A BUTTON TO OPEN IT WITH.
+##
+## The button is the point. F7 works on a desk and there is no F7 on a phone,
+## and a phone is the only machine whose frame time anybody needs to look at —
+## so the one readout built for measuring a handheld device could not be opened
+## on one. See FrameMeter for what it says and why.
+func _build_frame_meter() -> void:
+	_frames = FrameMeter.new()
+	add_child(_frames)
+	_frames_button = Button.new()
+	_frames_button.text = "Frames [F7]"
+	_frames_button.position = Vector2(16, 122)
+	_frames_button.custom_minimum_size = Vector2(160, 34)
+	_frames_button.focus_mode = Control.FOCUS_NONE
+	_frames_button.add_theme_font_size_override("font_size", 15)
+	_frames_button.pressed.connect(_toggle_frames)
+	add_child(_frames_button)
+
+
+func _toggle_frames() -> void:
+	if _frames != null and is_instance_valid(_frames):
+		_frames.visible = not _frames.visible
+
+
 func _build_creature_button() -> void:
 	_creature_button = Button.new()
 	_creature_button.text = "Creature [C]"
@@ -1118,6 +1147,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_help_panel.visible = not _help_panel.visible
 	elif event.is_action_pressed("toggle_villages"):
 		_toggle_roster()
+	elif event.is_action_pressed("toggle_frames"):
+		_toggle_frames()
 
 
 func _on_announcement(text: String) -> void:
