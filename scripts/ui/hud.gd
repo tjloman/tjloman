@@ -69,6 +69,8 @@ var _miracle_panel: PanelContainer
 var _miracle_show := 0.0   # seconds the miracle panel stays up
 var _cast_label: Label
 var _creature_panel: PanelContainer
+## The one way to take the lead off from the screen. See `_build_unlead_button`.
+var _unlead_button: Button
 var _creature_label: Label
 var _praise_scold: HBoxContainer
 var _roster_panel: PanelContainer
@@ -520,9 +522,52 @@ func _build_creature_panel() -> void:
 	# autowrap was only ever the backstop, and `_field` now covers that case
 	# itself by breaking a word too long to fit.
 	_creature_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-	_creature_panel.add_child(_creature_label)
+	# THE PANEL HOLDS TWO THINGS NOW, so it holds a box. The readout, and the
+	# one button that takes the lead off — see `_build_unlead_button` for why it
+	# lives here rather than beside the others.
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", 8)
+	stack.add_child(_creature_label)
+	_creature_panel.add_child(stack)
 	add_child(_creature_panel)
 	_make_click_through(_creature_panel)
+	_build_unlead_button(stack)
+
+
+## TAKE THE LEAD OFF, FROM THE SCREEN THAT IS ABOUT THE CREATURE.
+##
+## There was no way to do it but a key, and a key is the one thing a phone has
+## none of — and the on-screen Lead button toggles the rope in your HAND, which
+## is a different sentence from taking it off the beast. A player who had lost
+## track of the rope had no way back: the lead stays up, and a hand holding the
+## lead does not read the stone, does not grab and does not cast, so the whole
+## game narrows to one tool with no way out of it.
+##
+## It goes on the creature panel because that is the screen that is about the
+## creature, and because it is the screen you are already looking at when you
+## have lost track of what yours is doing.
+##
+## Added AFTER `_make_click_through`, which walks the panel turning the mouse
+## off: a button that cannot be clicked is not a way out of anything.
+func _build_unlead_button(stack: VBoxContainer) -> void:
+	_unlead_button = Button.new()
+	_unlead_button.text = "Take off the lead"
+	_unlead_button.visible = false
+	_unlead_button.focus_mode = Control.FOCUS_NONE
+	_unlead_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	_unlead_button.add_theme_font_size_override("font_size", 15)
+	_unlead_button.pressed.connect(_on_unlead_pressed)
+	stack.add_child(_unlead_button)
+
+
+## THE SAME DOOR THE KEY AND THE OTHER BUTTON USE. Three ways in with three
+## copies of what the lead means is how a phone ends up doing the old thing —
+## see Main._take_the_lead, which is the whole of it.
+func _on_unlead_pressed() -> void:
+	var ev := InputEventAction.new()
+	ev.action = "leash_creature"
+	ev.pressed = true
+	Input.parse_input_event(ev)
 
 
 ## One "Label:   value" row, wrapped to `wrap` characters with every line after
@@ -1001,6 +1046,11 @@ func _update_creature_panel() -> void:
 		and (camera_rig.follow_target == creature
 			or (camera_rig.framed and CreatureNest.holding(creature) != null))
 	_creature_panel.visible = locked
+	# ONLY WHEN THERE IS A LEAD TO TAKE OFF. A button that does nothing most of
+	# the time teaches people it does nothing.
+	if _unlead_button != null and is_instance_valid(_unlead_button):
+		_unlead_button.visible = is_instance_valid(divine_hand) \
+			and divine_hand.has_lead()
 	_praise_scold.visible = locked
 	if not locked:
 		return

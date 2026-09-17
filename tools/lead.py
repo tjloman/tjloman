@@ -76,6 +76,31 @@ if not one_door:
                 "does — it keeps its own copy of what the lead means, and a "
                 "phone is the machine where that copy is the one that runs")
 
+# -- AND THERE IS ALWAYS A WAY OFF IT ----------------------------------------
+#
+# A lead that is up narrows the whole game to one tool: a hand holding it does
+# not read the stone, does not grab and does not cast. So the way out cannot be
+# a key, because a phone has none — and it cannot be only the Lead button
+# either, which toggles the rope in your HAND rather than taking it off the
+# beast. It goes on the screen that is about the creature.
+HUD2 = (ROOT / "scripts/ui/hud.gd").read_text()
+on_screen = "_unlead_button" in code(HUD2) \
+    and any("leash_creature" in r for r in body_of(HUD2, "_on_unlead_pressed"))
+clickable = any("MOUSE_FILTER_STOP" in r for r in body_of(HUD2, "_build_unlead_button"))
+print()
+print("THE LEAD COMES OFF from the creature screen: %s%s"
+      % ("yes" if on_screen else "NO",
+         "" if clickable else ", BUT THE BUTTON CANNOT BE CLICKED"))
+if not on_screen:
+    fail.append("there is no way to take the lead off but a key and the Lead "
+                "button — and a lead that is up stops the hand reading, "
+                "grabbing and casting, so a player who loses track of the rope "
+                "has no way back")
+if not clickable:
+    fail.append("the unlead button is inside a panel that is made click-through "
+                "after it is built, so the one way out of the lead cannot be "
+                "pressed")
+
 # -- ONE ROPE ----------------------------------------------------------------
 reuses = any("_rope_on(" in r for r in takes)
 print("PICKING IT UP TWICE %s."
@@ -234,6 +259,30 @@ if sweep and not after_ray:
     fail.append("the forgiving sweep runs even when the ray hit something — it "
                 "must only be a fallback, or pointing AT a thing stops meaning "
                 "what it says")
+
+# -- A ROPE YOU PUT DOWN IS PUT DOWN -----------------------------------------
+#
+# Letting go took the rope out of the HAND and left the node in the world, and
+# `_from` falls back to `hand_at` — the last place your hand was — so a dropped
+# rope went on drawing itself and went on hauling the creature to a spot the
+# player had already walked away from. From their side that is a lead that
+# cannot be put down: the button says you did, and the rope is still pulling.
+#
+# And it took the nest with it, because a hand holding the lead does not read
+# the stone — so a lead that could not be put down meant the stone could not be
+# read either, until the game was restarted.
+ticking = body_of(ROPE, "_process")
+lets_go = False
+for i, row in enumerate(ticking):
+    if "in_hand" in row and "is_tied()" in row:
+        lets_go = any("queue_free()" in r for r in ticking[i:i + 4])
+print()
+print("A ROPE PUT DOWN AND TIED TO NOTHING %s."
+      % ("goes" if lets_go else "GOES ON PULLING FROM WHERE YOUR HAND WAS"))
+if not lets_go:
+    fail.append("a rope that is neither held nor tied stays in the world and "
+                "goes on tugging toward the last place the hand was — the lead "
+                "cannot be put down, and while it is up the nest cannot be read")
 
 # -- THE ROPE IS A HAND FULL -------------------------------------------------
 HUD = (ROOT / "scripts/ui/hud.gd").read_text()

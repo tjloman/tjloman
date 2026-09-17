@@ -276,6 +276,24 @@ for path in sorted((ROOT / "scripts").rglob("*.gd")):
             continue
         near = "\n".join(rows_here[max(0, n - 25):n + 3])
         ways.append((path.name, n + 1, "may_stand(" in near))
+# AND A RESTORE BRINGS A TOWN UP TO ITS SAVED COUNT rather than adding that
+# many on top of what is already there. A village is GENERATED with its own
+# workshops and then has its save laid over it, so a save saying "one barn"
+# meets a town that already has one — and the ceiling then refused it and
+# warned, four times a load, about barns that were standing right there. With
+# the duplicates gone, a refusal means a building the town genuinely cannot
+# have back, which is worth saying.
+restore = body_of(TOWN, "_rebuild")
+tops_up = any("how_many(" in r for r in restore)
+print()
+print("A SAVE RESTORE raises %s."
+      % ("what is missing" if tops_up else "ITS WHOLE SAVED COUNT AGAIN"))
+if not tops_up:
+    fail.append("the save restore raises its full saved count on top of "
+                "whatever the town was generated with, so every duplicate is "
+                "refused by the ceiling and warned about — a log full of "
+                "buildings that are standing right there")
+
 print()
 print("WAYS A WORKSHOP GETS RAISED: %d" % len(ways))
 for name, line, guarded in ways:

@@ -334,13 +334,8 @@ static func may_stand(which: String, town: Village, at: Vector3,
 	# population and `being_raised` stops two builders being sent, and neither
 	# of them is looking when a save deals its buildings back out.
 	var most := int(TRADES.get(which, {}).get("most", 0))
-	if most > 0:
-		var standing := 0
-		for w in town.workshops:
-			if is_instance_valid(w) and (w as Workshop).trade == which:
-				standing += 1
-		if standing >= most:
-			return false
+	if most > 0 and how_many(town, which) >= most:
+		return false
 	if which != "dock":
 		return true
 	# AND A JETTY HAS TO BE OVER WATER. Asked of the GROUND — see
@@ -352,6 +347,16 @@ static func may_stand(which: String, town: Village, at: Vector3,
 	if harbour == Vector3.INF or harbour.distance_to(at) > 2.0:
 		return false
 	return Waters.can_carry_a_jetty(at, Waters.bearing_for(town, world), world)
+
+
+## HOW MANY OF THIS TRADE THE TOWN ALREADY HAS. One counter, so the ceiling and
+## the save restore cannot come to different conclusions about what is standing.
+static func how_many(town: Village, which: String) -> int:
+	var n := 0
+	for w in town.workshops:
+		if is_instance_valid(w) and (w as Workshop).trade == which:
+			n += 1
+	return n
 
 
 ## A trade with room at it, counting who is already posted where.

@@ -515,11 +515,17 @@ func _take_the_lead() -> void:
 		divine_hand.let_go_of_lead()
 		# AND IT REMEMBERS. The rope is put down; the order is not. See
 		# LeadRope.last_order — a creature posted somewhere stays posted.
+		# AND IT REACTS. Taking the rope off a creature is a thing that happens
+		# TO it, and a beast that showed nothing would read as not having
+		# noticed — which is the opposite of the point, because what happens
+		# next is that it goes back to thinking for itself.
+		creature.express("happy", 2.0)
+		creature.attention = minf(creature.attention + 15.0, 100.0)
 		if was != null and is_instance_valid(was) and was.last_order.is_finite():
-			GameState.announce("You put the lead down. Your creature holds to "
+			GameState.announce("You take the lead off. Your creature holds to "
 				+ "what you last told it.")
 		else:
-			GameState.announce("You put the lead down.")
+			GameState.announce("You take the lead off. It is its own again.")
 		return
 	var rope := _rope_on(creature)
 	if rope == null:

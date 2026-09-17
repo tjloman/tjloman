@@ -1940,7 +1940,17 @@ func _rebuild(data: Dictionary) -> void:
 	for which: String in trades:
 		if not Workshop.TRADES.has(which):
 			continue          # a trade this build no longer has
-		for i in int(trades[which]):
+		# WHAT IS MISSING, NOT WHAT IS WANTED.
+		#
+		# This raised `trades[which]` of them unconditionally — and a village is
+		# GENERATED with its own workshops and then has its save laid over it,
+		# so a save saying "one barn" meets a town that already has one. The
+		# second was refused by the ceiling, correctly, and then warned about:
+		# "there is nowhere it may stand", four times a load, for towns whose
+		# barns were standing right there. A restore brings a town UP TO its
+		# saved count; it does not add that many on top of whatever is there.
+		var short_by := int(trades[which]) - Workshop.how_many(self, which)
+		for i in maxi(short_by, 0):
 			# `spot_for` AND NOT `find_build_spot`. This asked for a spot in the
 			# building ring for every trade alike, so a dock restored from a
 			# save or a map was laid out in the town square like a shrine — on
@@ -1952,6 +1962,10 @@ func _rebuild(data: Dictionary) -> void:
 			if shop_spot == Vector3.INF:
 				break
 			if not Workshop.may_stand(which, self, shop_spot, world):
+				# NOW THIS MEANS SOMETHING. With the duplicates gone, a refusal
+				# here is a building the town genuinely had and genuinely
+				# cannot have back — a harbour whose shoreline has changed
+				# under it, most likely — and that is worth saying out loud.
 				push_warning("%s: its save wants a %s and there is nowhere it "
 					% [village_name, which] + "may stand — leaving it out")
 				break

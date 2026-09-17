@@ -141,6 +141,25 @@ func _process(delta: float) -> void:
 	if creature == null or not is_instance_valid(creature):
 		queue_free()
 		return
+	# PUT DOWN AND TIED TO NOTHING IS A ROPE ON THE GROUND, AND IT GOES.
+	#
+	# Letting go took the rope out of the HAND and left the node in the world,
+	# and `_from` falls back to `hand_at` — the last place your hand was — so a
+	# dropped rope went on drawing itself and went on hauling the creature to
+	# a spot you had already walked away from, for ever. From the player's side
+	# that is a lead you cannot put down: the button says you did, and the rope
+	# is still there, still pulling.
+	#
+	# And it took the nest with it. A hand holding the lead does not read the
+	# stone (it does not grab anything), so a lead that could not be put down
+	# meant the nest could not be read either — until the game was restarted
+	# and the node died with the scene. Two symptoms, one line.
+	#
+	# A TIED rope is different and stays: that is the posted creature, and
+	# walking away from it is the whole point of tying off.
+	if not in_hand and not is_tied():
+		queue_free()
+		return
 	var anchor := _from()
 	if not anchor.is_finite():
 		return
