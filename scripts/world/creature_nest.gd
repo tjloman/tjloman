@@ -44,6 +44,11 @@ const BED_LONG := CreatureBody.FULL_HEIGHT * 1.1
 const BED_DEEP := BED_LONG * 0.5
 const BED_MID := -(BED_DEEP * 0.5 + 5.0)
 const WALL_HIGH := 4.2
+## How much deeper every other bay of the back wall stands. Enough that no two
+## faces are ever coplanar, little enough that nobody sees it. See
+## `_build_back_wall` — this is the whole of the fix for a wall that tore into
+## stripes at a distance.
+const WALL_STAGGER := 0.03
 const WALL_AT := BED_MID - BED_DEEP * 0.5 - 0.8
 const POOL_R := BED_DEEP * 0.18
 ## How wide one cell of the draped floor is. Three metres gives a forty-two
@@ -332,7 +337,21 @@ func _build_back_wall() -> void:
 	for i in bays:
 		var x := -BED_LONG * 0.5 + wide * (float(i) + 0.5)
 		var base := _ground_local(x, WALL_AT)
-		add_child(Util.box(Vector3(wide * 1.02, WALL_HIGH, 0.7),
+		# THE BAYS MEET, THEY DO NOT OVERLAP.
+		#
+		# This was `wide * 1.02`, so every bay reached two per cent into its
+		# neighbour — and the part that overlapped was the FRONT face, the one
+		# you look at, with both slabs' faces at the same depth. Two coplanar
+		# surfaces at the same depth is z-fighting, and a depth buffer gets
+		# worse at it the further away you are, so the wall tore itself into
+		# stripes across the valley.
+		#
+		# Exact widths instead, and the join is hidden by giving alternate bays
+		# a shade more DEPTH: a couple of centimetres forward is invisible on a
+		# rough stone wall and it means no two faces in the thing are ever in
+		# the same plane, which is a guarantee rather than a tolerance.
+		var thick := 0.7 + float(i % 2) * WALL_STAGGER
+		add_child(Util.box(Vector3(wide, WALL_HIGH, thick),
 			Color(0.5, 0.47, 0.43), Vector3(x, base + WALL_HIGH * 0.5, WALL_AT)))
 
 

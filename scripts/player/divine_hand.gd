@@ -34,6 +34,13 @@ const BEAM_ENERGY := 3.2
 const BEAM_EASE := 1.4       # how fast it comes up at dusk and goes at dawn
 
 const RAY_LENGTH := 500.0
+## HOW FAR OFF A THING THE HAND MAY BE and still be reaching for it, in metres
+## at a close camera — widened as you zoom out, because a pixel is worth more
+## ground from further away. See `_nearly_under`.
+const FORGIVING_PICK := 1.1
+## And how many results that sweep will look at. A crowd standing on one another
+## is still a bounded question.
+const PICK_MOST := 12
 const HIT_MASK := 1 | 2 | 4 | 8  # ground | units | props | trees
 ## HAND VELOCITY TO PROJECTILE VELOCITY, and the ceiling on it.
 ##
@@ -105,6 +112,10 @@ const OPEN_HOLD := 0.45      # seconds of firm press to open casting, on touch
 ## And how long a press on a nest wall must be held before the stone is read.
 ## Longer than opening a casting: reading is a thing you settle in front of.
 const READ_HOLD := 0.7
+## HOW LONG A HOLD TIES THE ROPE OFF. Shorter than the stone's read, because
+## tying is a thing you do repeatedly while shepherding and a long hold in the
+## middle of that is the tool fighting you.
+const TIE_HOLD := 0.45
 
 ## HOW A STROKE IS CAPTURED. A pointer reports every frame it moves; a rune
 ## does not change every frame. MIN_STEP drops points a finger has not really
@@ -162,6 +173,10 @@ var casting := false
 ## The last thing this hand threw (not placed) — the creature watches
 ## for it, and may catch it out of the air.
 var last_thrown: Node3D = null
+## THE LEAD, while it is in your hand. See LeadRope — holding it puts the hand
+## in lead mode: it does not grab, a tap on earth is "go there", and a hold on
+## anything ties the rope off round it.
+var lead: LeadRope = null
 
 var drag_anchor := Vector3.ZERO
 var gesture_points := PackedVector2Array()
@@ -199,6 +214,8 @@ var _held_at := Vector3.INF
 var _held_vel := Vector3.ZERO
 var _carried_at := 0.0
 var _sling: Sling = null
+## Seconds the tying hold has been down. See `_tick_tying`.
+var _tying := 0.0
 
 # The current unbroken pointer stroke while HOLDING: screen positions and the
 # time each was seen. Reset on every press (so a fresh poke can't inherit the
@@ -417,6 +434,7 @@ func _physics_process(delta: float) -> void:
 	if _pos_times.is_empty() \
 			or Time.get_ticks_msec() / 1000.0 - _pos_times[_pos_times.size() - 1] > QUIET_SAMPLE:
 		_sample_hand()
+	_carry_lead()
 
 	# Aftertouch: keep bending a freshly thrown projectile for a short window.
 	if _steer_time > 0.0:
@@ -450,6 +468,36 @@ func _physics_process(delta: float) -> void:
 
 
 ## ONE HAND SAMPLE, stamped with the real clock.
+## THE ROPE IS IN YOUR HAND, so its near end is wherever your hand is. Written
+## every frame rather than pushed on a timer: the LINE has to be live even
+## though what it SAYS to the creature is not. See LeadRope.TUG_EVERY.
+func _carry_lead() -> void:
+	if lead == null or not is_instance_valid(lead):
+		lead = null
+		return
+	if lead.in_hand:
+		lead.hand_at = global_position + Vector3(0.0, -0.4, 0.0)
+
+
+## TAKE UP THE LEAD, or put it down. The one entry point, so the button and the
+## key cannot come to different conclusions.
+func hold_lead(rope: LeadRope) -> void:
+	lead = rope
+	if rope != null:
+		rope.in_hand = true
+		rope.hand_at = global_position
+
+
+func let_go_of_lead() -> void:
+	if lead != null and is_instance_valid(lead):
+		lead.in_hand = false
+	lead = null
+
+
+func has_lead() -> bool:
+	return lead != null and is_instance_valid(lead) and lead.in_hand
+
+
 func _sample_hand() -> void:
 	_pos_history.append(global_position)
 	_pos_times.append(Time.get_ticks_msec() / 1000.0)
@@ -551,7 +599,59 @@ func _update_hover(mouse_pos: Vector2) -> void:
 				and not (collider as Node3D).is_in_group("ground"):
 			hover_target = collider
 
+	# AND IF THE RAY FOUND ONLY GROUND, LOOK AROUND IT.
+	#
+	# A villager is a capsule about half a metre across and a fingertip is
+	# eleven millimetres of glass. The pick was one infinitely thin ray, so
+	# taking hold of a person on a phone meant hitting a target the width of a
+	# pencil line while the camera drifted — which is the whole of "grabbing
+	# animals and grain is still somewhat finicky", and it is worse for the
+	# things you most want to grab, because people and sheep are thin and
+	# houses are not.
+	#
+	# The exact ray still wins wherever it lands on something. This only runs
+	# when it found nothing but earth, so pointing AT a thing is unchanged and
+	# pointing NEAR one now works.
+	if hover_target == null:
+		hover_target = _nearly_under(ground_point)
+
 	hover_info_changed.emit(_describe(hover_target))
+
+
+## THE NEAREST THING WORTH TAKING HOLD OF, within a forgiving radius of where
+## the hand is. Asked only when the ray hit nothing but ground — see
+## `_update_hover`.
+##
+## Bounded by construction: one shape query against the props-and-units layers,
+## and a walk over however few results come back. It does not look at the whole
+## world and it does not care how many villagers the town has.
+func _nearly_under(at: Vector3) -> Node3D:
+	var reach := FORGIVING_PICK * clampf(camera_rig.zoom_distance / 30.0, 1.0, 2.5)
+	var ball := SphereShape3D.new()
+	ball.radius = reach
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = ball
+	query.transform = Transform3D(Basis.IDENTITY, at)
+	query.collision_mask = HIT_MASK
+	if is_instance_valid(held_body):
+		query.exclude = [held_body.get_rid()]
+	var best: Node3D = null
+	var closest := INF
+	for found in get_world_3d().direct_space_state.intersect_shape(query, PICK_MOST):
+		var node := found.get("collider") as Node3D
+		if node == null or not is_instance_valid(node) or node.is_in_group("ground"):
+			continue
+		# ONLY THINGS A HAND HAS BUSINESS WITH. A forgiving pick that snapped to
+		# scenery would make the ground harder to point at, not easier.
+		if not (node.is_in_group(Affords.PICKABLE)
+				or node.is_in_group(Affords.QUARRIED)
+				or node is FoodStore):
+			continue
+		var gap := node.global_position.distance_to(at)
+		if gap < closest:
+			closest = gap
+			best = node
+	return best
 
 
 func _describe(target: Node3D) -> String:
@@ -639,6 +739,15 @@ func _on_pointer_button(event: InputEventMouseButton) -> void:
 		if _on_disk != "":
 			_reading = false
 			_charging = false
+			return
+		# THE LEAD OWNS THE HAND WHILE IT IS IN IT. No grabbing, no land drag,
+		# no casting summons: a hand with a rope in it is doing one thing. A
+		# hold ties the far end round whatever is under it; a tap on bare earth
+		# sends the creature there. See `_tick_press_charge` and `_on_release`.
+		if has_lead():
+			_reading = false
+			_charging = false
+			_tying = 0.0
 			return
 		_reading = hover_target is CreatureNest and state == HandState.IDLE
 		_charging = _touch_only() and state == HandState.IDLE \
@@ -860,6 +969,16 @@ func _gather_kindred() -> void:
 
 
 func _on_release() -> void:
+	# A TAP WITH THE ROPE IN YOUR HAND IS STILL "GO THERE". Only a tap: a hold
+	# was a tie and has already done its work, and a drag was the camera.
+	if has_lead():
+		if _tying >= 0.0 and _tying < TIE_HOLD and not _stroke_is_throw():
+			lead.tie(null)
+			lead.hand_at = ground_point
+			if lead.creature != null and is_instance_valid(lead.creature):
+				lead.creature.leash_to(ground_point)
+		_tying = 0.0
+		return
 	match state:
 		HandState.DRAG_LAND:
 			state = HandState.IDLE
@@ -1187,6 +1306,9 @@ func _touch_only() -> bool:
 
 ## Charging the opening press. Touch only; a mouse has a button for this.
 func _tick_press_charge(delta: float) -> void:
+	if has_lead():
+		_tick_tying(delta)
+		return
 	if _on_disk != "":
 		_tick_disk(delta)
 		return
@@ -1216,6 +1338,30 @@ func _tick_press_charge(delta: float) -> void:
 	if _press_time >= OPEN_HOLD:
 		_charging = false
 		_open_casting()
+
+
+## TYING THE ROPE OFF. Hold on anything and the far end goes round it; what a
+## tied rope buys is SLACK, and the creature may do as it likes inside it.
+##
+## Holding over BARE EARTH unties instead, which is how you get the rope back
+## into your own hand without having to find something to untie it from.
+func _tick_tying(delta: float) -> void:
+	if not _pointer_down:
+		_tying = 0.0
+		return
+	_tying += delta
+	var onto := hover_target if is_instance_valid(hover_target) else null
+	if _tying < TIE_HOLD:
+		hover_info_changed.emit("Tying the lead... %d%%"
+			% int(clampf(_tying / TIE_HOLD, 0.0, 1.0) * 100.0))
+		return
+	_tying = -999.0            # once per hold, not once per frame
+	lead.tie(onto)
+	if onto == null:
+		GameState.announce("The lead is loose in your hand again.")
+	else:
+		GameState.announce("You tie the lead round %s. Your creature has %dm "
+			% [_describe(onto), int(LeadRope.ROPE_LENGTH)] + "of rope.")
 
 
 ## HOLDING THE SUN. Unlike the casting summons this is NOT touch-only: a mouse

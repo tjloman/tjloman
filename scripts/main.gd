@@ -461,19 +461,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("scold_creature"):
 		_touch_creature(false)
 	elif event.is_action_pressed("leash_creature") and is_instance_valid(creature):
-		# G LEADS the creature: it goes where your hand is pointing and waits
-		# there. Press G again (or with the hand off the land) to release it.
-		if creature.is_leashed():
-			creature.release_leash()
-			GameState.announce("You release your creature. It returns to its own mind.")
-		elif _lead_at() != null:
-			# POINTING AT A THING means FETCH IT. One gesture, two sentences,
-			# and which one you said is decided by what was under your hand —
-			# see CreatureLead.
-			creature.leash_to_thing(_lead_at())
-		else:
-			creature.leash_to(divine_hand.ground_point)
-			GameState.announce("You lead your creature there. (G again to release.)")
+		_take_the_lead()
 	elif event.is_action_pressed("find_creature") and is_instance_valid(creature):
 		# C CYCLES THE THREE WAYS OF LOOKING AT HIM, in the order you want them.
 		#
@@ -501,6 +489,54 @@ func _unhandled_input(event: InputEvent) -> void:
 			# so a towering full-grown creature isn't shot from inside its ankle.
 			var s := creature.scale.y
 			camera_rig.zoom_distance = clampf(camera_rig.zoom_distance, s * 2.5, s * 6.0)
+
+
+## THE LEAD GOES INTO YOUR HAND, and that is the whole of the change.
+##
+## It used to be a sentence: press the key and the creature was told, once, to
+## go somewhere — and then the telling was over and there was nothing in the
+## world to show for it. The most important tool in the game was a command line
+## with a button on it. You could not pull against it, could not see it, and
+## could not say "not there, HERE" except by saying the whole sentence again.
+##
+## So this hands you one end of a rope. What happens next is the rope's: see
+## LeadRope, and DivineHand, which goes into lead mode while it is carrying it.
+## Press again to let go — the rope stays tied wherever you left it, which is
+## how you post a creature somewhere and walk away.
+func _take_the_lead() -> void:
+	if not is_instance_valid(divine_hand):
+		return
+	if divine_hand.has_lead():
+		divine_hand.let_go_of_lead()
+		GameState.announce("You let go of the lead.")
+		return
+	var rope := _rope_on(creature)
+	if rope == null:
+		rope = LeadRope.new()
+		rope.creature = creature
+		add_child(rope)
+	divine_hand.hold_lead(rope)
+	# POINTING AT A THING STILL MEANS FETCH IT. The old one-gesture sentence is
+	# worth keeping — it is how "get that sheep" is said — so taking up the lead
+	# while the hand is over something ties it there in the same motion.
+	var onto := _lead_at()
+	if onto != null:
+		rope.tie(onto)
+		creature.leash_to_thing(onto)
+		GameState.announce("The lead is in your hand, tied to %s." % onto.name)
+	else:
+		GameState.announce("The lead is in your hand. Walk, and it follows. "
+			+ "Hold on anything to tie it off; tap the ground to send it there.")
+
+
+## THE ROPE THIS CREATURE ALREADY HAS, if any — a beast has one lead, and
+## picking it up twice must not leave two of them lying about.
+func _rope_on(who: Creature) -> LeadRope:
+	for r in get_tree().get_nodes_in_group("lead_rope"):
+		var rope := r as LeadRope
+		if is_instance_valid(rope) and rope.creature == who:
+			return rope
+	return null
 
 
 ## Training only counts when the hand is actually AT the creature — you

@@ -55,6 +55,7 @@ func _process(_delta: float) -> void:
 	# Panning away releases the follow — keep the button honest.
 	if _follow_button.button_pressed and camera_rig.follow_target == null:
 		_follow_button.set_pressed_no_signal(false)
+	_process_lead_label()
 
 
 func _on_follow_toggled(pressed: bool) -> void:
@@ -64,23 +65,20 @@ func _on_follow_toggled(pressed: bool) -> void:
 		camera_rig.follow_target = null
 
 
-## Send the creature to wherever the hand is pointing — or call it off, if it
-## is already under orders.
+## THE SAME DOOR THE KEY USES, and it has to be: the button and the key were
+## two copies of the lead's behaviour, and a rewrite of one of them would have
+## left the other doing the old thing on the machine where it matters most.
+##
+## Main._take_the_lead is the whole of it now — this fires the action and lets
+## that decide, exactly as the Creature button does.
 func _on_leash_pressed() -> void:
-	if not is_instance_valid(creature):
+	var ev := InputEventAction.new()
+	ev.action = "leash_creature"
+	ev.pressed = true
+	Input.parse_input_event(ev)
+
+
+func _process_lead_label() -> void:
+	if not is_instance_valid(divine_hand):
 		return
-	if creature.is_leashed():
-		creature.release_leash()
-		_leash_button.text = "Lead"
-		GameState.announce("You release your creature.")
-	else:
-		# POINTING AT A THING means FETCH IT — the same one gesture as on a
-		# keyboard, and the same two sentences. See CreatureLead.
-		var under := divine_hand.hover_target
-		if under != null and is_instance_valid(under) and under != creature \
-				and under.is_in_group(Affords.PICKABLE):
-			creature.leash_to_thing(under)
-		else:
-			creature.leash_to(divine_hand.ground_point)
-			GameState.announce("Your creature is going where you pointed.")
-		_leash_button.text = "Release"
+	_leash_button.text = "Drop lead" if divine_hand.has_lead() else "Lead"
