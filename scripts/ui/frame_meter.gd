@@ -1,5 +1,5 @@
 class_name FrameMeter
-extends Control
+extends PanelContainer
 ## WHERE THE FRAME ACTUALLY WENT. ON THE DEVICE, IN NUMBERS, WHILE IT IS SLOW.
 ##
 ## A phone reported 133ms a frame — seven and a half pictures a second — and
@@ -52,30 +52,47 @@ var _ticks := 0
 var _steps_seen := 0.0
 
 
+## A PANEL CONTAINER AND NOT A CONTROL, and the difference is the whole of why
+## this readout ran off the right-hand edge of the screen.
+##
+## A PLAIN Control LAYS NOTHING OUT. It has no minimum size of its own however
+## much is inside it, so anchoring one with PRESET_MODE_MINSIZE pins a rect of
+## ZERO WIDTH at the corner — and a panel added inside that rect is not
+## positioned by it at all. It sits at the corner and grows whichever way it
+## likes, which from the RIGHT edge is off the screen.
+##
+## A Container computes its minimum size from its children, so the preset has
+## something real to pin and `grow_horizontal` has something real to grow. See
+## HUD._build_roster, which is the same three lines done correctly, and the
+## note there recording that this exact omission once put the workshop drawer
+## off the screen too. tools/panels.py now refuses both.
 func _ready() -> void:
 	name = "FrameMeter"
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT,
 		Control.PRESET_MODE_MINSIZE, 16)
+	# INWARD FROM THE CORNER, both ways, said out loud. The default grows END,
+	# which from a TOP edge points down the screen and from a RIGHT edge points
+	# off it — so one of these two is load-bearing and the other only looks it,
+	# and writing only the load-bearing one is how the next person learns the
+	# wrong rule.
 	grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	var back := PanelContainer.new()
-	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	grow_vertical = Control.GROW_DIRECTION_END
 	var skin := StyleBoxFlat.new()
 	skin.bg_color = Color(0.05, 0.06, 0.08, 0.72)
 	skin.content_margin_left = 10.0
 	skin.content_margin_right = 10.0
 	skin.content_margin_top = 8.0
 	skin.content_margin_bottom = 8.0
-	back.add_theme_stylebox_override("panel", skin)
-	add_child(back)
+	add_theme_stylebox_override("panel", skin)
 	_label = Label.new()
 	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# A FIXED-WIDTH READOUT. Numbers that move about while you are reading them
 	# off a phone in one hand are numbers you read wrong.
 	_label.add_theme_font_size_override("font_size", 13)
 	_label.add_theme_constant_override("line_spacing", 2)
-	back.add_child(_label)
+	add_child(_label)
 
 
 ## COUNTED, NOT TIMED. Every physics tick between two drawn frames is one the
