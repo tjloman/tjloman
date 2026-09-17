@@ -36,6 +36,27 @@ extends RefCounted
 ## singletons, is Villager. A number you get by subtraction is still a number,
 ## and Creature is one node, which is the one case where a name buys least.
 ##
+## WHAT A ROW IS, EXACTLY: AN UPPER BOUND, NOT A COST.
+##
+## A clock is shut by the next one opening, so a class is charged from its own
+## `open` to the next — and everything that runs in between goes on its bill,
+## whether it belongs to it or not. Two things run in between. The first is any
+## UNCLOCKED class interleaved with it, which is why Villager had to be clocked
+## the moment Animal was: two hundred and sixty villagers and twenty-four beasts
+## share a physics tick, and every villager between two beasts was billed to the
+## beast. The second cannot be closed from in here at all — between the last
+## node of one physics step and the first node of the next, the ENGINE runs its
+## solver, and that goes to whichever node happened to be last.
+##
+## Which is how a reading came back saying Animal cost 141.7ms out of a physics
+## total of 33.2ms. A part cannot exceed the whole; what it was reporting was
+## Animal plus Villager plus eight runs of the solver.
+##
+## SO THE METER PRINTS `counted` AGAINST GODOT'S OWN FIGURE, and the moment the
+## first is larger than the second the rows are absorbing something and say so.
+## A profiler that cannot tell you it is wrong is worse than none, because it is
+## also a claim.
+##
 ## AND THE UNACCOUNTED IS PRINTED TOO. The sum of what is measured is always
 ## less than Godot's own `TIME_PROCESS`, and the gap is the rest of the game:
 ## the classes nobody thought to clock, the engine's own per-node dispatch, and

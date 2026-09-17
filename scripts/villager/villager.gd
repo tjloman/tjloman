@@ -5,8 +5,7 @@ extends CharacterBody3D
 ##
 ## JOBS ARE CHOSEN, NOT ASSIGNED: each adult scores the village's problems
 ## (hunger, lumber, stone, homelessness, empty pens) and takes the most
-## urgent work. Morality gates the extremes: only the good may tame beasts,
-## and only the fallen will butcher the dead.
+## urgent work. Morality gates the extremes: only the good may tame beasts, and only the fallen will butcher the dead.
 
 enum State {
 	WANDER, GO_EAT, EATING, GO_SLEEP, SLEEPING,
@@ -310,6 +309,7 @@ func _rethink() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	Ledger.open(&"Villager")
 	# ALIGHT, OR IN THE AIR — before the LOD below, because a scream arriving
 	# every fourth frame would not be a scream. See Agitation.
 	_agitation.judder(self, _visuals, burning,

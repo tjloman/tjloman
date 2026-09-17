@@ -183,8 +183,19 @@ func _readout() -> String:
 		if float(row[1]) < 0.05:
 			continue
 		rows.append("   %-22s %6.1f %5d" % [row[0], row[1], row[2]])
-	rows.append("   %-22s %6.1f" % ["(everything else)",
-		maxf(process_ms + physics_ms - Ledger.counted(), 0.0)])
+	# WHAT THE BILL COMES TO, against what Godot says the scripts cost. A row is
+	# an UPPER BOUND — see Ledger — and when the total passes the engine's own
+	# figure the rows are absorbing the solver and each other, so it says so
+	# rather than letting the biggest row be read as a culprit.
+	var billed := Ledger.counted()
+	if billed > scripted * 1.05:
+		rows.append("   %-22s %6.1f  of %.1f  <-- OVER-BILLED"
+			% ["(counted)", billed, scripted])
+		rows.append("   rows include the solver and each other; read them as")
+		rows.append("   an order, not as milliseconds.")
+	else:
+		rows.append("   %-22s %6.1f" % ["(everything else)",
+			maxf(scripted - billed, 0.0)])
 	rows.append("")
 	rows.append("tier %s (%s)   3D at %d%%   physics %d Hz" % [
 		Quality.Tier.keys()[Quality.effective_tier()], Quality.heat_word(),

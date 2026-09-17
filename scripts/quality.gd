@@ -74,21 +74,30 @@ const HANDS_RELIEF := 1
 ## number being pinned at its ceiling. See FrameMeter, which prints the steps a
 ## frame and says PINNED when they are.
 ##
-## THIRTY TICKS ON A HANDHELD. Nothing in this game needs sixty: villagers walk,
-## beasts graze, and the one thing that genuinely wants to feel instant — the
-## hand — was taken off the physics tick long ago precisely so it would not wait
-## for one. Half the ticks is half of every `_physics_process` in the world.
+## THIRTY TICKS, AND A CEILING OF TWO, ON EVERY MACHINE THERE IS.
 ##
-## AND A CEILING OF THREE. Past three the device stops trying to keep up with
-## real time and the world runs a little slow instead, which is the right way
-## round: a smooth twenty-five frames of slightly slow time beats seven and a
-## half frames of the correct time. It only ever bites below about ten frames a
-## second — three ticks at thirty a second covers a hundred milliseconds — so a
-## device that is merely mid-range never meets it at all.
-const PHYSICS_HZ_HANDHELD := 30
-const PHYSICS_HZ_DESK := 60
-const STEPS_MOST_HANDHELD := 3
-const STEPS_MOST_DESK := 8
+## This was a handheld rule first, on the argument that "a desk machine never
+## falls behind either number". That argument was wrong, and a screenshot
+## settled it: a desktop far beefier than any phone, sitting at 151ms a frame
+## with `x8.0 steps/frame PINNED` — the engine ceiling, met exactly, on the
+## machine that was supposed to be immune. The hole is not a property of slow
+## hardware. It is a property of a fixed clock with a high ceiling meeting a
+## world with four hundred bodies in it, and a fast machine reaches it with a
+## bigger world rather than not reaching it.
+##
+## Nothing in this game needs sixty ticks: villagers walk, beasts graze, and the
+## one thing that genuinely wants to feel instant — the hand — was taken off the
+## physics tick long ago precisely so it would not wait for one. Half the ticks
+## is half of every `_physics_process` in the world AND half of the engine's own
+## solver, which is the larger half and does not show up in any script timing.
+##
+## AND A CEILING OF TWO. Past two the machine stops trying to keep up with real
+## time and the world runs a little slow instead, which is the right way round:
+## a smooth twenty frames of slightly slow time beats six and a half frames of
+## the correct time. Two ticks at thirty a second covers sixty-six milliseconds,
+## so nothing above about fifteen frames a second ever meets it.
+const PHYSICS_HZ := 30
+const STEPS_MOST := 2
 
 var tier := Tier.MEDIUM
 ## Plain int rather than the enum's own type, so every comparison, subtraction
@@ -116,20 +125,13 @@ func _ready() -> void:
 	print("Quality: %s (GPU: %s)" % [Tier.keys()[tier], _adapter_name()])
 
 
-## SET THE FIXED CLOCK for the machine this is. See the note by
-## PHYSICS_HZ_HANDHELD: on a phone this is the difference between a slow frame
-## and a frame that makes itself slower.
-##
-## Asked of the MACHINE and not of the graphics tier. A tier is a guess about a
-## GPU, and this is a question about how much simulation a frame can afford —
-## a flagship phone still has no use for sixty ticks of villagers, and a desk
-## machine never falls behind either number.
+## SET THE FIXED CLOCK. See the note by PHYSICS_HZ: this is the difference
+## between a slow frame and a frame that makes itself slower, and it is asked of
+## NEITHER the machine nor the graphics tier, because it turned out to be a
+## question about neither.
 func _set_the_clock() -> void:
-	var handheld := OS.has_feature("mobile")
-	Engine.physics_ticks_per_second = \
-		PHYSICS_HZ_HANDHELD if handheld else PHYSICS_HZ_DESK
-	Engine.max_physics_steps_per_frame = \
-		STEPS_MOST_HANDHELD if handheld else STEPS_MOST_DESK
+	Engine.physics_ticks_per_second = PHYSICS_HZ
+	Engine.max_physics_steps_per_frame = STEPS_MOST
 
 
 ## Watch the frames go by. Three floats a frame; nothing here is measured with

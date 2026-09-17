@@ -521,6 +521,9 @@ var _ground_cursor := 0
 ## be sized by how far it has walked since.
 var _ground_from := Vector2.ZERO
 var _write_cursor := 0
+## HOW MANY ARE ALIVE, or -1 for "nobody has asked since the book changed". See
+## `alive`, which is the hottest question in this file by a distance.
+var _living := -1
 ## WHICH ROWS HOLD A REAL BEAST. A candidate list, not a truth: `_promote` is
 ## the only thing that ever puts an agent in a row so nothing is ever missing,
 ## and the several things that take one out may leave an index behind, which
@@ -628,6 +631,7 @@ func _build_members() -> void:
 			"agent": null,
 			"dead": false,
 		})
+		_recount()
 
 
 func _build_multimesh() -> void:
@@ -842,6 +846,7 @@ func _join_into(host: Herd) -> void:
 		# reading zero for anything still holding this herd, which is what the
 		# rest of the file already checks for.
 		_members = []
+		_recount()
 		head = 0
 		if _mm != null:
 			_mm.instance_count = 0
@@ -874,6 +879,7 @@ func merge_from(other: Herd) -> void:
 			m["offset"] = Vector2(cos(ang) * rad, sin(ang) * rad)
 			m["ground"] = global_position.y
 		_members.append(m)
+		_recount()
 	# THE BETTER GROUND OF THE TWO. Both numbers mean "what this species got out
 	# of country like this", and taking the larger is what stops a rescue from
 	# being punished: two remnants that join should not immediately be over a
@@ -1234,6 +1240,7 @@ func _tend_the_promoted(focus: Vector3, beast: Vector3) -> void:
 			# whatever it was that took it.
 			m["agent"] = null
 			m["dead"] = true
+			_recount()
 			lost_one()
 			_agents_afoot -= 1
 			continue
@@ -1491,12 +1498,38 @@ static func _living(m: Dictionary) -> Animal:
 
 ## How many head are still standing, promoted or not — what the herd would tell
 ## you if you asked how big it was.
+## HOW MANY OF THEM ARE STILL ALIVE — and it is REMEMBERED, not counted.
+##
+## This walked every row in the book, and it is called twenty-nine times in this
+## file alone and from seven others: the look-round, the season, the tag, the
+## hover text, the drove, the watch, the creature's herding, and — the one that
+## was found in play — `bolt_from`, which every herd in the world runs eleven
+## times a second for as long as a fireball is in the air.
+##
+## Forty-seven herds of a hundred and sixty head is seven and a half thousand
+## rows walked, per call, per herd. Throwing a fire into a country with a
+## hundred animals in it did that eleven times a second and the frame fell over,
+## which is exactly the symptom that was reported from play. The file's own
+## header has promised since it was written that every per-frame cost in here is
+## bounded by a constant; this was the largest thing making that untrue.
+##
+## Kept as a STALE FLAG rather than a running total. Every hand that kills a row
+## would otherwise have to remember to decrement, and one that forgets leaves a
+## herd whose count drifts for the rest of the session — so the count is simply
+## marked stale and worked out again on the next question. Deaths are rare and
+## questions are constant, which is the whole trade.
 func alive() -> int:
-	var n := 0
-	for m in _members:
-		if not m["dead"]:
-			n += 1
-	return n
+	if _living < 0:
+		_living = 0
+		for m in _members:
+			if not m["dead"]:
+				_living += 1
+	return _living
+
+
+## THE BOOK CHANGED. Said by every hand that kills, adds or replaces a row.
+func _recount() -> void:
+	_living = -1
 
 
 ## THE SEASON TURNS. The herd counts what the land will feed it, how frightened
@@ -1734,6 +1767,7 @@ func _shed_strays() -> void:
 	band.founded_by(taken.size(), SETTLE)
 	band.settled_with(taken, global_position)
 	_members = kept
+	_recount()
 	head = _members.size()
 	_spread = maxf(SPACING * sqrt(float(alive())), SPREAD_LEAST)
 	_afoot_here = 0
@@ -1803,6 +1837,7 @@ func _remeasure() -> void:
 func settled_with(rows: Array[Dictionary], from: Vector3) -> void:
 	var shift := from - global_position
 	_members = []
+	_recount()
 	_afoot_here = 0
 	for m in rows:
 		m["offset"] += Vector2(shift.x, shift.z)
@@ -1815,6 +1850,7 @@ func settled_with(rows: Array[Dictionary], from: Vector3) -> void:
 			agent.set_meta("herd", self)
 			_afoot_here += 1
 		_members.append(m)
+		_recount()
 	head = _members.size()
 	_spread = maxf(SPACING * sqrt(float(alive())), SPREAD_LEAST)
 	_home = global_position
@@ -1877,6 +1913,7 @@ func _grow(many: int) -> void:
 			"agent": null,
 			"dead": false,
 		})
+		_recount()
 	head = _members.size()
 	_spread = maxf(SPACING * sqrt(float(alive())), SPREAD_LEAST)
 	_retag()   # a calf is a head more
@@ -1895,6 +1932,7 @@ func _cull(many: int) -> void:
 		if m["dead"] or m["agent"] != null:
 			continue
 		m["dead"] = true
+		_recount()
 		taken += 1
 
 
@@ -1930,6 +1968,7 @@ func release(beast: Animal) -> void:
 		if m["agent"] == beast:
 			m["agent"] = null
 			m["dead"] = true
+			_recount()
 			_agents_afoot = maxi(_agents_afoot - 1, 0)
 			break
 	if beast.has_meta("herd"):
@@ -1957,6 +1996,7 @@ func give_one(at: Vector3) -> Animal:
 		if m["dead"] or m["agent"] != null:
 			continue
 		m["dead"] = true
+		_recount()
 		lost_one()
 		_spread = maxf(SPACING * sqrt(float(alive())), SPREAD_LEAST)
 		var won := Animal.create(species)
@@ -2096,6 +2136,7 @@ func scorched(at: Vector3, reach: float, kill := 0.0) -> int:
 			continue
 		if d < kill:
 			m["dead"] = true
+			_recount()
 			lost_one()
 		elif not _already_alight(i):
 			_burning.append({"i": i, "left": BURN_SECONDS})
@@ -2231,6 +2272,7 @@ func _tick_burning(delta: float) -> void:
 			still.append(row)
 			continue
 		_members[i]["dead"] = true
+		_recount()
 		lost_one()
 	_burning = still
 	if not _burning.is_empty():
@@ -2261,6 +2303,7 @@ func take_one() -> bool:
 	for m in _members:
 		if not m["dead"] and m["agent"] == null:
 			m["dead"] = true
+			_recount()
 			lost_one()
 			return true
 	return false

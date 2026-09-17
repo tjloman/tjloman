@@ -60,11 +60,9 @@ def number(text, name):
 
 fail = []
 
-hz = number(QUALITY, "PHYSICS_HZ_HANDHELD")
-most = number(QUALITY, "STEPS_MOST_HANDHELD")
-desk_hz = number(QUALITY, "PHYSICS_HZ_DESK")
-desk_most = number(QUALITY, "STEPS_MOST_DESK")
-if None in (hz, most, desk_hz, desk_most):
+hz = number(QUALITY, "PHYSICS_HZ")
+most = number(QUALITY, "STEPS_MOST")
+if None in (hz, most):
     print("BROKEN: the fixed clock is not set anywhere in Quality")
     sys.exit(1)
 
@@ -76,39 +74,48 @@ def steps(frame_ms, rate, ceiling):
 
 # -- THE HOLE, MEASURED ------------------------------------------------------
 print("HOW MANY TIMES THE WHOLE WORLD IS SIMULATED FOR ONE PICTURE:")
-print("   %-12s %-22s %-22s" % ("frame", "60 Hz, ceiling 8", "%d Hz, ceiling %d"
-                                % (hz, most)))
-for ms in (16.7, 33.3, 50.0, 66.7, 100.0, 133.1, 200.0):
+print("   %-12s %-22s %-22s" % ("frame", "60 Hz, ceiling 8 (was)",
+                                "%d Hz, ceiling %d (now)" % (hz, most)))
+for ms in (16.7, 33.3, 50.0, 66.7, 100.0, 151.0, 200.0):
     was = steps(ms, 60, 8)
     now = steps(ms, hz, most)
     print("   %-12s %-22s %-22s%s"
           % ("%.1f ms" % ms,
              "x%d%s" % (was, "  PINNED" if was >= 8 else ""),
              "x%d%s" % (now, "  pinned" if now >= most else ""),
-             "   <- the phone" if abs(ms - 133.1) < 0.1 else ""))
-if most >= 8:
-    fail.append("the step ceiling on a handheld is still %d, so a phone that "
-                "falls behind simulates the world eight times for one picture "
-                "and every extra millisecond buys it more work" % most)
+             "   <- the desktop" if abs(ms - 151.0) < 0.1 else ""))
+if most > 3:
+    fail.append("the step ceiling is %d, so a machine that falls behind "
+                "simulates the world %d times for one picture and every extra "
+                "millisecond buys it more work — a DESKTOP was found pinned at "
+                "the engine default of eight" % (most, most))
 if hz >= 60:
-    fail.append("a handheld still runs %d physics ticks a second — nothing in "
+    fail.append("the world still runs %d physics ticks a second — nothing in "
                 "this game needs sixty, and the hand was taken off the physics "
                 "tick long ago precisely so it would not wait for one" % hz)
+# ONE CLOCK, NOT ONE PER MACHINE. The handheld-only version was written on the
+# argument that a desk machine never falls behind, and a desktop screenshot at
+# 151ms with the steps pinned at eight disproved it.
+if any("has_feature" in r for r in body_of(QUALITY, "_set_the_clock")):
+    fail.append("the fixed clock is still set per machine — the hole is not a "
+                "property of slow hardware, it is a fixed clock with a high "
+                "ceiling meeting a world with four hundred bodies in it, and a "
+                "fast machine reaches it with a bigger world")
 
 # WHAT IT IS WORTH, as a share of the physics work in a pinned frame. The split
 # between the fixed work and the per-step work is exactly what nobody knows yet
 # -- which is why the meter ships alongside this -- so it is shown for a range
 # of splits rather than asserted at one.
 print()
-print("WHAT THAT IS WORTH at the phone's 133.1ms, by how much of it is physics.")
+print("WHAT THAT IS WORTH at the desktop's 151.0ms, by how much is per-step.")
 print("(The split is the thing nobody knows yet. That is what the meter is for.)")
 print("   %-16s %-14s %-14s %s" % ("physics share", "one step", "new frame", "fps"))
 best = 0.0
 for share in (0.3, 0.5, 0.7):
-    fixed = 133.1 * (1.0 - share)
-    per_step = 133.1 * share / 8.0
+    fixed = 151.0 * (1.0 - share)
+    per_step = 151.0 * share / 8.0
     # Settle the loop: the frame decides the steps which decide the frame.
-    frame = 133.1
+    frame = 151.0
     for _ in range(40):
         frame = fixed + steps(frame, hz, most) * per_step
     best = max(best, 1000.0 / frame)
@@ -116,9 +123,8 @@ for share in (0.3, 0.5, 0.7):
           % ("%d%%" % (share * 100), "%.1f ms" % per_step,
              "%.0f ms" % frame, 1000.0 / frame))
 print()
-print("   ...so the clock alone is worth roughly %.1fx. Reaching 25 fps from"
-      % (best / 7.5))
-print("   7.5 needs 3.3x, so this is a piece of it and not the whole.")
+print("   ...so the clock alone is worth roughly %.1fx from 6.6 fps."
+      % (best / 6.6))
 
 # -- THE INSTRUMENT ----------------------------------------------------------
 print()
@@ -188,6 +194,69 @@ for path in sorted((ROOT / "scripts").rglob("*.gd")):
                         "billed to whichever class ran before"
                         % (path.name, n + 1))
 
+# -- THE HOT QUESTION MUST NOT BE A WALK ------------------------------------
+#
+# `Herd.alive()` walked every row in the book. It is asked twenty-nine times in
+# that file alone and from seven others, and one of those is `bolt_from`, which
+# EVERY herd in the world runs eleven times a second for as long as a fireball
+# is in the air. Forty-seven herds of a hundred and sixty is seven and a half
+# thousand rows per call. "I see it when I throw down a fireball with 100+
+# animals around" is that sentence, said from the other end.
+HERD = (ROOT / "scripts/animals/herd.gd").read_text()
+counting = body_of(HERD, "alive")
+# The walk is allowed, ONCE, behind the staleness guard — that is what makes it
+# a cache. What is not allowed is a walk on the common path. Measured by indent:
+# the `for` has to sit deeper than the `if _living < 0:` that admits it.
+guard = next((i for i, r in enumerate(counting) if "_living < 0" in r), None)
+walks = False
+for i, r in enumerate(counting):
+    if not (r.strip().startswith("for ") and "_members" in r):
+        continue
+    deep = len(r) - len(r.lstrip("\t"))
+    if guard is None or i < guard \
+            or deep <= len(counting[guard]) - len(counting[guard].lstrip("\t")):
+        walks = True
+cached = any("_living" in r for r in counting)
+print()
+print("Herd.alive() %s." % ("is remembered, and walks only when stale"
+                            if cached and not walks else "WALKS THE BOOK"))
+if walks:
+    fail.append("Herd.alive() walks every row every time it is asked, and it is "
+                "asked from `bolt_from` — which every herd in the world runs "
+                "eleven times a second while a fireball is in the air")
+if not cached:
+    fail.append("Herd.alive() keeps no remembered count at all")
+
+# AND EVERY HAND THAT CHANGES THE BOOK SAYS SO. A cache nobody invalidates is
+# not a cache, it is a number that was true once — a herd whose count drifts for
+# the rest of the session, reported as fact by the tag over its head.
+mutations = 0
+told = 0
+rows_herd = code(HERD).split("\n")
+for n, row in enumerate(rows_herd):
+    if not re.search(r'\["dead"\]\s*=\s*true|_members\s*=[^=]|_members\.append|_members\.clear', row):
+        continue
+    mutations += 1
+    if any("_recount()" in r for r in rows_herd[n:n + 12]):
+        told += 1
+print("   %d of %d hands that change the book say so." % (told, mutations))
+if told < mutations:
+    fail.append("%d place(s) in Herd change the book without marking the count "
+                "stale — a cache nobody invalidates is a number that was true "
+                "once, and the tag over the herd goes on reporting it"
+                % (mutations - told))
+
+# AND THE NUMEROUS CLASSES ON THE PHYSICS TICK ARE ALL CLOCKED. An unclocked one
+# interleaved with a clocked one is billed to its neighbour: Animal came back at
+# 141.7ms out of a physics total of 33.2, which was Animal plus the two hundred
+# and sixty villagers between one beast and the next.
+for who, path in (("Animal", "scripts/animals/animal.gd"),
+                  ("Villager", "scripts/villager/villager.gd")):
+    if 'Ledger.open(&"%s")' % who not in code((ROOT / path).read_text()):
+        fail.append("%s runs on the physics tick in its hundreds and is not "
+                    "clocked, so whichever clocked class it is interleaved with "
+                    "is billed for it" % who)
+
 # AND IT IS ONLY ON WHILE SOMEBODY IS READING IT. A profiler left running is
 # overhead every player pays for ever, to answer a question nobody is asking.
 switched = [r.strip() for r in code(METER).split("\n") if "Ledger.on" in r]
@@ -207,7 +276,11 @@ if not turned or not shuts:
 
 # AND THE COUNT IS REPORTED ALONGSIDE THE COST.
 bills = "row[2]" in code(METER) and "Ledger.rows()" in code(METER)
-gap = "Ledger.counted()" in code(METER)
+# NOT THE NAME `counted` — the COMPARISON. A meter that reads the total and
+# prints it is not a meter that can tell you its rows are absorbing the solver;
+# it has to say so when the bill passes what the engine charged.
+gap = any("Ledger.counted()" in r for r in body_of(METER, "_readout")) \
+    and any(re.search(r"billed > scripted", r) for r in body_of(METER, "_readout"))
 grows = "OBJECT_ORPHAN_NODE_COUNT" in code(METER)
 print("THE METER PRINTS the bill: %s, the unaccounted gap: %s, orphans: %s"
       % ("yes" if bills else "NO", "yes" if gap else "NO",
@@ -217,9 +290,10 @@ if not bills:
                 "population that is growing looks exactly like code that got "
                 "slower")
 if not gap:
-    fail.append("the meter does not print what the ledger FAILED to account "
-                "for — a bill that only shows what it was told to show "
-                "confirms whatever the person who wrote it already believed")
+    fail.append("the meter does not compare the bill against what the engine "
+                "charged, so it cannot tell you when its own rows are absorbing "
+                "the solver and each other — which is how `Animal 141.7ms` was "
+                "printed under a physics total of 33.2")
 if not grows:
     fail.append("the meter does not report orphaned nodes, which is the one "
                 "counter that says outright whether something is being leaked")
