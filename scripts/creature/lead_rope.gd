@@ -36,6 +36,25 @@ extends Node3D
 ## rather than every frame: a beast re-ordered sixty times a second is a beast
 ## that never finishes a stride, and one re-ordered every ten seconds is not on
 ## a lead at all, it is being telegrammed. At this it reads as being led.
+## THE TWO PULLS. A rope has two things it can do and they are not the same
+## thing at two speeds — they are different sentences.
+##
+## A STRONG TUG is the player asserting: a double tap, or tying the rope off.
+## It happens THE INSTANT it is asked, never on the next beat, because the whole
+## of what makes a lead feel like a lead is that a deliberate pull is answered
+## now. It turns the beast, takes its whole attention, and interrupts whatever
+## it was doing.
+##
+## A WEAK TUG is the rope having MOVED: you walked, or you let out slack. That
+## is not an order and must not be answered like one. It re-aims the creature
+## and changes nothing else — what it is carrying stays carried, what it was
+## doing goes on — and it gets a glance rather than the beast's whole mind.
+##
+## Every tug used to be the strong one, on a timer. A haul every second and a
+## half is not a lead, it is a hand on the scruff of the neck, and it made the
+## creature drop whatever it was carrying every time the timer came round.
+enum Pull { WEAK, STRONG }
+
 const TUG_EVERY := 1.4
 ## ...and how far the hand must have moved for a tug to be worth sending. Below
 ## this the creature is already going where you want and being told again only
@@ -47,12 +66,22 @@ const TUG_IF_MOVED := 2.5
 ## taut and the beast is obliged to follow.
 const ROPE_LENGTH := 22.0
 
-## WHAT TRUST BUYS. Below REFUSES_UNDER a tug is ignored outright as often as
-## not; at HEEDS_ABOVE every one lands. Between them it is a chance, so a
-## half-trusted creature is not broken, it is unreliable — which is a thing a
-## player can feel and do something about.
-const REFUSES_UNDER := 25.0
-const HEEDS_ABOVE := 90.0
+## WHAT TRUST BUYS, and it buys different things for the two pulls.
+##
+## A YANK GETS THROUGH TO ALMOST ANYTHING. You have hold of the rope and you
+## have pulled it; a creature that ignored that would not read as wilful, it
+## would read as broken. So a strong tug asks little and lands nearly always.
+##
+## THE AMBIENT FOLLOW IS WHERE TRUST LIVES. Whether a beast comes along because
+## the rope moved — without being told, without being hauled — is exactly the
+## question "does it trust you", and at low trust the answer is mostly no. Which
+## gives the rope a shape over a whole game: early on you lead by yanking, and
+## as it comes to trust you it simply follows, and you notice you stopped
+## yanking. That is the tool teaching the player what the bond is for.
+const STRONG_REFUSES := 5.0
+const STRONG_HEEDS := 60.0
+const WEAK_REFUSES := 35.0
+const WEAK_HEEDS := 95.0
 
 ## How thick the rope draws, and how far it sags at full slack.
 const CORD_THICK := 0.09
@@ -78,6 +107,11 @@ var last_order := Vector3.INF
 var hand_at := Vector3.INF
 ## True while the player is carrying it.
 var in_hand := false
+## HOW LONG THE ROPE IS RIGHT NOW. A var and not the constant, because the
+## player is going to set it — pinch the rope at its middle and pull — and
+## LENGTHENING IT IS A WEAK TUG: the slack changes, the creature notices, and
+## nothing is ordered. See `set_length`.
+var length := ROPE_LENGTH
 
 var _links: Array[MeshInstance3D] = []
 var _next_tug := 0.0
@@ -114,7 +148,7 @@ func _process(delta: float) -> void:
 	_next_tug -= delta
 	if _next_tug <= 0.0:
 		_next_tug = TUG_EVERY
-		_tug(anchor)
+		_tug(anchor, Pull.WEAK)
 
 
 ## THE ROPE PULLS. What that means depends on which end is fixed.
@@ -127,40 +161,71 @@ func _process(delta: float) -> void:
 ## Tied to something it means STAY NEAR THAT: nothing is said at all while the
 ## creature is inside the rope's length, which is the slack, and that is the
 ## point of tying it off rather than holding it.
-func _tug(anchor: Vector3) -> void:
+func _tug(anchor: Vector3, pull: Pull) -> void:
 	var gap := creature.global_position.distance_to(anchor)
-	if tied_to != null and gap <= ROPE_LENGTH:
-		return                      # inside its slack: let it be
-	if _told_at.is_finite() and _told_at.distance_to(anchor) < TUG_IF_MOVED \
-			and gap <= ROPE_LENGTH:
-		return                      # already going where you want it
-	if not heeds():
+	if pull == Pull.WEAK:
+		# A WEAK TUG IS ONLY EVER THE ROPE MOVING, so it says nothing at all
+		# while there is nothing new to say. A strong one is the player
+		# asserting and is never talked out of it.
+		if tied_to != null and gap <= length:
+			return                  # inside its slack: let it be
+		if _told_at.is_finite() and _told_at.distance_to(anchor) < TUG_IF_MOVED \
+				and gap <= length:
+			return                  # already going where you want it
+	if not heeds(pull):
 		# It felt the rope and did not come. Said out loud, because a creature
 		# that ignores you silently is indistinguishable from a bug.
 		creature.express("stubborn", 1.5)
 		return
 	_told_at = anchor
 	last_order = anchor
-	creature.leash_to(anchor)
+	if pull == Pull.STRONG:
+		CreatureLead.to_spot(creature, anchor)
+	else:
+		CreatureLead.nudge_to(creature, anchor)
 
 
-## DOES IT COME WHEN THE ROPE MOVES? Below REFUSES_UNDER it mostly does not;
-## above HEEDS_ABOVE it always does; between, it is a chance that rises with
-## what it thinks of you. An exiled creature refuses everything, which
-## CreatureLead already says and this must not contradict.
-func heeds() -> bool:
+## PULL IT NOW. The door for everything the player does ON PURPOSE — a double
+## tap, tying the rope off — and the whole of why it is a separate door is that
+## it does not wait for the beat. A deliberate pull answered a second and a half
+## later is a deliberate pull the player has already decided did not work.
+func haul(toward: Vector3) -> void:
+	if creature == null or not is_instance_valid(creature):
+		return
+	_next_tug = TUG_EVERY           # the ambient beat restarts from here
+	_tug(toward, Pull.STRONG)
+
+
+## DOES IT ANSWER THIS PULL? A chance that rises with what it thinks of you,
+## on a different band for each of the two pulls — see the note by
+## STRONG_REFUSES. An exiled creature refuses everything, which CreatureLead
+## already says and this must not contradict.
+func heeds(pull: Pull) -> bool:
 	if creature == null or not is_instance_valid(creature) or creature.exiled:
 		return false
-	var mind := clampf((creature.trust - REFUSES_UNDER)
-		/ maxf(HEEDS_ABOVE - REFUSES_UNDER, 0.001), 0.0, 1.0)
+	var floor_at := STRONG_REFUSES if pull == Pull.STRONG else WEAK_REFUSES
+	var sure_at := STRONG_HEEDS if pull == Pull.STRONG else WEAK_HEEDS
+	var mind := clampf((creature.trust - floor_at)
+		/ maxf(sure_at - floor_at, 0.001), 0.0, 1.0)
 	return randf() <= mind
 
 
 ## TIE THE FAR END ROUND THIS. Null unties it and leaves the rope in the hand.
+##
+## A STRONG TUG, because tying off is the player asserting: the anchor has moved
+## and the creature should find that out now rather than on the next beat.
 func tie(what: Node3D) -> void:
 	tied_to = what
 	_told_at = Vector3.INF
-	_next_tug = 0.0
+	haul(_from())
+
+
+## LET OUT OR TAKE IN ROPE. A WEAK tug — the slack changed and the beast may
+## notice, but nobody ordered it anywhere. This is the door the pinch gesture
+## will come through when it is built.
+func set_length(metres: float) -> void:
+	length = maxf(metres, 1.0)
+	_tug(_from(), Pull.WEAK)
 
 
 ## IS IT TIED TO SOMETHING? What the casting gate asks — see DivineHand: a rope
@@ -175,7 +240,7 @@ func is_tied() -> bool:
 ## will ever look at.
 func _draw_between(a: Vector3, b: Vector3) -> void:
 	var span := a.distance_to(b)
-	var slack := clampf(1.0 - span / maxf(ROPE_LENGTH, 0.001), 0.0, 1.0)
+	var slack := clampf(1.0 - span / maxf(length, 0.001), 0.0, 1.0)
 	for i in _links.size():
 		var t0 := float(i) / float(_links.size())
 		var t1 := float(i + 1) / float(_links.size())

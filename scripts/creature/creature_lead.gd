@@ -32,6 +32,12 @@ const ARRIVED := 3.0
 ## How often it looks up from waiting.
 const LOOK_EVERY := 3.0
 
+## WHAT A PULL IS WORTH IN ATTENTION. A hauled rope has the beast's whole mind;
+## a rope that merely moved gets a glance. See `to_spot` and `nudge_to`, which
+## are the strong door and the weak one.
+const STRONG_HEED := 25.0
+const GLANCE := 8.0
+
 
 ## ORDER IT TO A SPOT (the hand's ground point). It drops what it is doing.
 static func to_spot(who: Creature, pos: Vector3) -> void:
@@ -44,21 +50,48 @@ static func to_spot(who: Creature, pos: Vector3) -> void:
 	# A ROPE IS STILL A ROPE. Pointing past it sends the creature as near as it
 	# can get rather than having it strain at the end for the rest of the day.
 	who.leash_target = CreatureStake.nearest_within(who.get_tree(), pos)
-	who.release_carried()
 	who.state = Creature.State.LEASHED
 	who.express("curious")
-	who.attention = minf(who.attention + 25.0, 100.0)
+	who.attention = minf(who.attention + STRONG_HEED, 100.0)
 
 
 ## TIE IT TO A THING. It goes and fetches it.
 static func to_thing(who: Creature, what: Node3D) -> void:
 	if what == null or not is_instance_valid(what):
 		return
+	# HANDS FREE, because this one ends in picking something up — which is the
+	# ONLY reason a lead ever makes a creature set down what it is carrying.
+	# `to_spot` used to do it for every order, which meant the periodic tug of a
+	# held rope made the beast drop its load every second and a half, for ever:
+	# a creature on the lead could not carry anything across a village, which is
+	# most of what you would want to lead one for.
+	who.release_carried()
 	to_spot(who, what.global_position)
 	if who.is_leashed():
 		who.leash_thing = what
 		GameState.announce("Your creature is sent after %s."
 			% CreatureLook.carriable_word(what))
+
+
+## NUDGE IT — THE WEAK DOOR.
+##
+## The difference between the two is the whole of how a lead feels. `to_spot` is
+## a HAUL: the beast turns, drops what it was doing and comes, and the player
+## meant it. This is the rope merely having MOVED — you walked, or you let out
+## some slack — and a rope moving is not an order. It re-aims the creature and
+## changes nothing else: what it is carrying stays carried, what it was
+## expressing goes on being expressed, and it gets a glance rather than its
+## whole attention.
+##
+## Without this every tug was a haul, and a haul every second and a half is not
+## a lead. It is a hand on the scruff of the neck.
+static func nudge_to(who: Creature, pos: Vector3) -> void:
+	if who.exiled:
+		return
+	who.leash_target = CreatureStake.nearest_within(who.get_tree(), pos)
+	if who.state != Creature.State.LEASHED:
+		who.state = Creature.State.LEASHED
+	who.attention = minf(who.attention + GLANCE, 100.0)
 
 
 static func release(who: Creature) -> void:

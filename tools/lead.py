@@ -105,14 +105,65 @@ if not moved:
     fail.append("the rope tugs whether or not the hand has gone anywhere, so "
                 "standing still re-orders the creature for ever")
 
+# -- TWO PULLS, NOT ONE SPEED ------------------------------------------------
+#
+# A rope has two things it can do and they are different sentences. A STRONG
+# tug is the player asserting — a double tap, tying off — and it must land the
+# instant it is asked, because a deliberate pull answered a second and a half
+# later is one the player has already decided did not work. A WEAK tug is the
+# rope having MOVED, which is not an order and must not be answered like one.
+hauling = body_of(ROPE, "haul")
+now = any("Pull.STRONG" in r for r in hauling) \
+    and any("_next_tug" in r for r in hauling)
+beat = any("Pull.WEAK" in r for r in body_of(ROPE, "_process"))
+print()
+print("A DELIBERATE PULL is answered %s."
+      % ("on the spot" if now else "ON THE NEXT BEAT — WHICH IS THE COMPLAINT"))
+print("THE AMBIENT ONE is %s."
+      % ("weak, on the beat" if beat else "THE SAME HAUL, ON A TIMER"))
+if not now:
+    fail.append("there is no immediate pull — everything waits for the tug "
+                "interval, so the answer to a double tap is up to %.1fs late and "
+                "the rope feels dead in the hand" % (number(ROPE, "TUG_EVERY") or 0))
+if not beat:
+    fail.append("the periodic tug is not the weak one, so walking about hauls "
+                "the creature every beat — a hand on the scruff of the neck "
+                "rather than a lead")
+
+# AND A WEAK TUG MUST NOT MAKE IT DROP WHAT IT IS CARRYING.
+LEADC2 = (ROOT / "scripts/creature/creature_lead.gd").read_text()
+drops_in_spot = any("release_carried()" in r for r in body_of(LEADC2, "to_spot"))
+drops_in_nudge = any("release_carried()" in r for r in body_of(LEADC2, "nudge_to"))
+drops_to_fetch = any("release_carried()" in r for r in body_of(LEADC2, "to_thing"))
+print("BEING LED %s what it is carrying."
+      % ("keeps" if not drops_in_spot and not drops_in_nudge else "MAKES IT DROP"))
+if drops_in_nudge or drops_in_spot:
+    fail.append("a tug makes the creature set down what it is carrying — on a "
+                "timer that is every %.1f seconds, so a creature on the lead can "
+                "never carry anything across a village, which is most of what "
+                "leading one is for" % (number(ROPE, "TUG_EVERY") or 0))
+if not drops_to_fetch:
+    fail.append("being sent to FETCH something does not free the creature's "
+                "hands first, so it arrives at the thing still holding the last "
+                "one")
+
 # -- AND TRUST IS WHAT MAKES IT WORK -----------------------------------------
 heeding = body_of(ROPE, "heeds")
 reads_trust = any("trust" in r for r in heeding)
 refuses_exile = any("exiled" in r for r in heeding)
-under = number(ROPE, "REFUSES_UNDER")
-above = number(ROPE, "HEEDS_ABOVE")
-print("IT COMES WHEN THE ROPE MOVES: %s."
-      % ("as much as it trusts you" if reads_trust else "ALWAYS, WHATEVER IT THINKS"))
+under = number(ROPE, "WEAK_REFUSES")
+above = number(ROPE, "WEAK_HEEDS")
+s_under = number(ROPE, "STRONG_REFUSES")
+s_above = number(ROPE, "STRONG_HEEDS")
+graded = any("pull ==" in r for r in heeding)
+print()
+print("IT ANSWERS: %s."
+      % ("on a different band for each pull" if graded and reads_trust
+         else "THE SAME WAY WHATEVER YOU DID"))
+if not graded:
+    fail.append("both pulls are judged on one trust band, so yanking the rope "
+                "is worth no more than walking — and a yank that is ignored "
+                "reads as broken rather than as wilful")
 if not reads_trust:
     fail.append("the rope does not read the creature's trust, so the bond you "
                 "have spent the whole game building buys nothing at the one "
@@ -121,15 +172,27 @@ if not refuses_exile:
     fail.append("the rope does not check `exiled` — CreatureLead refuses a "
                 "creature that has walked away from you, and a rope that hauls "
                 "it back anyway contradicts that to the player's face")
-if under is not None and above is not None:
-    print("   %-10s %-12s %s" % ("trust", "comes", ""))
-    for t in (0.0, 25.0, 55.0, 80.0, 100.0):
-        odds = max(0.0, min(1.0, (t - under) / max(above - under, 0.001)))
-        print("   %-10.0f %-12s %s" % (t, "%d%%" % (odds * 100.0),
-                                       "<- a new creature" if t == 55.0 else ""))
-    if above <= under:
-        fail.append("the trust band is inverted or empty, so the chance of "
-                    "being obeyed is not a chance at all")
+if None not in (under, above, s_under, s_above):
+    print("   %-8s %-12s %-12s" % ("trust", "a yank", "the rope moving"))
+    for t in (0.0, 20.0, 55.0, 80.0, 100.0):
+        weak = max(0.0, min(1.0, (t - under) / max(above - under, 0.001)))
+        strong = max(0.0, min(1.0, (t - s_under) / max(s_above - s_under, 0.001)))
+        print("   %-8.0f %-12s %-12s %s"
+              % (t, "%d%%" % (strong * 100.0), "%d%%" % (weak * 100.0),
+                 "<- a new creature" if t == 55.0 else ""))
+    if above <= under or s_above <= s_under:
+        fail.append("a trust band is inverted or empty, so the chance of being "
+                    "obeyed is not a chance at all")
+    # A YANK MUST BEAT THE AMBIENT FOLLOW AT EVERY TRUST THERE IS, or the two
+    # pulls are not two things.
+    for t in (10.0, 30.0, 55.0, 75.0):
+        weak = max(0.0, min(1.0, (t - under) / max(above - under, 0.001)))
+        strong = max(0.0, min(1.0, (t - s_under) / max(s_above - s_under, 0.001)))
+        if strong <= weak:
+            fail.append("at trust %.0f a deliberate yank is no more likely to "
+                        "land than the rope merely moving, so the strong pull "
+                        "buys the player nothing" % t)
+            break
 
 # -- A HAND WITH A ROPE IN IT IS DOING ONE THING -----------------------------
 press = body_of(HAND, "_on_pointer_button")
@@ -278,6 +341,17 @@ closes = any("shut_the_stone()" in r for r in tapped)
 print("A DOUBLE TAP %s an open panel." % ("closes" if closes else "DOES NOT CLOSE"))
 if not closes:
     fail.append("nothing closes an info panel but walking away from it")
+
+# AND WITH THE ROPE IN HAND IT IS THE STRONG TUG. The user's words: "Strong Tug,
+# which is the multi-tapping and attaching". A double tap that only turned the
+# creature's head would be a look, not a pull.
+yanks = any("haul(" in r for r in tapped)
+print("   ...and with the rope in hand it %s."
+      % ("hauls" if yanks else "ONLY TURNS ITS HEAD"))
+if not yanks:
+    fail.append("a double tap with the lead in hand does not pull the rope — "
+                "the multi-tap IS the strong tug, and without the haul it is a "
+                "glance the creature may do nothing about")
 
 print()
 if fail:

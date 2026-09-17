@@ -984,8 +984,10 @@ func _on_release() -> void:
 		if _tying >= 0.0 and _tying < TIE_HOLD and not _stroke_is_throw():
 			lead.tie(null)
 			lead.hand_at = ground_point
-			if lead.creature != null and is_instance_valid(lead.creature):
-				lead.creature.leash_to(ground_point)
+			# POINTING AT THE GROUND IS DELIBERATE, so it hauls rather than
+			# nudges — `tie(null)` has already put the rope back in your hand
+			# and pulled once; this aims that pull where you actually tapped.
+			lead.haul(ground_point)
 		_tying = 0.0
 		return
 	match state:
@@ -1290,7 +1292,11 @@ func _tapped_twice() -> bool:
 			GameState.hint("That is too far off for your creature to make out.")
 			return true
 		CreatureHead.startled(lead.creature, at)
-		lead.creature.attention = minf(lead.creature.attention + 20.0, 100.0)
+		# AND THE ROPE PULLS, NOW. The double tap IS the strong tug — it is the
+		# player asserting, and a deliberate pull answered a second and a half
+		# later is one the player has already decided did not work. See
+		# LeadRope.haul, which does not wait for the ambient beat.
+		lead.haul(at)
 		GameState.hint("Your creature looks where you pointed.")
 		return true
 	return false
