@@ -1545,6 +1545,19 @@ func _recount() -> void:
 ## ground can carry, so a tended herd settles at its ceiling instead of running
 ## off to infinity, and a thin herd on good ground comes back fast.
 func _reckon() -> void:
+	# AND THE COUNT IS REPAIRED, once a season, whether anything said so or not.
+	#
+	# `alive()` is remembered and fourteen hands mark it stale when they change
+	# the book. Fourteen is a number that only shrinks with confidence: the
+	# fifteenth is written next month by somebody who has not read this file,
+	# and a cache nobody invalidates is not wrong loudly — it is a herd whose
+	# tag, breeding, capacity and drove all quietly agree on a number that was
+	# true once. So the season throws it away and counts again. One walk per
+	# herd per forty seconds against a question asked twenty-nine times a frame
+	# is a rounding error, and it makes a missed hand self-healing instead of
+	# permanent. See `_afoot_here`, which is repaired the same way and for the
+	# same reason.
+	_recount()
 	_fear = maxf(_fear - FEAR_FADE, 0.0)
 	_larder *= 1.0 - LARDER_FADE
 	var n := alive()

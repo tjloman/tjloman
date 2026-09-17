@@ -246,6 +246,19 @@ if told < mutations:
                 "once, and the tag over the herd goes on reporting it"
                 % (mutations - told))
 
+# AND A MISSED HAND HEALS. Fourteen places mark the count stale, and fourteen is
+# a number that only shrinks with confidence — the fifteenth is written by
+# somebody who has not read that file. A cache nobody invalidates is not wrong
+# loudly; it is a herd whose tag, breeding, capacity and drove all quietly agree
+# on a number that was true once. The season throws it away regardless.
+healed = any("_recount()" in r for r in body_of(HERD, "_reckon"))
+print("   a missed mark %s." % ("heals within a season" if healed
+                                else "IS PERMANENT"))
+if not healed:
+    fail.append("nothing recounts the herd from scratch on its own clock, so "
+                "the first hand that changes the book without saying so leaves "
+                "that herd's count wrong for the rest of the session")
+
 # AND THE NUMEROUS CLASSES ON THE PHYSICS TICK ARE ALL CLOCKED. An unclocked one
 # interleaved with a clocked one is billed to its neighbour: Animal came back at
 # 141.7ms out of a physics total of 33.2, which was Animal plus the two hundred
