@@ -135,6 +135,33 @@ static func turn_to_think(who: Node) -> bool:
 				_head += 1
 			i += 1
 			continue
+		# NOT ASKING THIS FRAME IS NOT WAITING THIS FRAME.
+		#
+		# THE JAM THIS EXISTS FOR, and it stopped a town of two hundred and
+		# sixty-three from thinking at all: "0 thinking a frame, 65 in the line".
+		#
+		# A place is held by asking — which `_waiting[id] = now` above makes
+		# true — but the walk below counted every unlapsed entry against the
+		# budget whether it had spoken this frame or not. And most of a town
+		# does not speak every frame: Util.sim_stride puts anybody past 260m on
+		# a clock of ten, times up to four for heat, so a villager in the next
+		# valley asks once in forty frames. Refuse one of those and it sits in
+		# the line, silent, for thirty-nine frames — not lapsed, because
+		# GONE_QUIET is a hundred and twenty and has to be, and not asking.
+		#
+		# Collect `budget` of them at the front and the walk never reaches
+		# anybody who IS asking. Not slows: STOPS. Four were served on the first
+		# frame and nobody was served again, while the queue filled to the whole
+		# town and every one of them stood about with a plan run out — which is
+		# also the "villagers stopped taking care of themselves" that was
+		# reported from play and never explained.
+		#
+		# So silence costs nothing and asking costs a place. The order among
+		# this frame's askers is still the order they joined, so the longest
+		# wait is still served first and nobody is stranded by tree order.
+		if int(_waiting[other]) != now:
+			i += 1
+			continue
 		if other == id:
 			_waiting.erase(id)
 			if i == _head:

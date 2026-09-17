@@ -129,6 +129,12 @@ def run(many, budget, gone_quiet, seed=1):
                     head[0] += 1
                 i += 1
                 continue
+            # NOT ASKING THIS FRAME IS NOT WAITING THIS FRAME — see the note
+            # in Spool.turn_to_think. This line is the fix, and the case that
+            # needed it is `strided` below.
+            if spoke.get(other) != f and other != who:
+                i += 1
+                continue
             if other == who:
                 queued.discard(who)
                 if i == head[0]:
@@ -202,6 +208,69 @@ def run(many, budget, gone_quiet, seed=1):
                 left=len([w for w in wants if silent_until[w] < 1e29]))
 
 
+def strided(budget, gone_quiet, near=12, far=251, stride=30, frames=600):
+    """THE TOWN IN THE SCREENSHOT, which the run above does not describe.
+
+    `run` models a town where everybody asks every frame and a SHARE of them
+    occasionally goes quiet. The real one is the other way round: Elsmere is
+    1271m from the camera, so Util.sim_stride puts nearly all of it on a clock
+    of ten — times up to four for heat — and the majority of the town asks once
+    in thirty frames, always, as its normal condition.
+
+    Refuse one of those and it holds a place in silence for twenty-nine frames.
+    It does not lapse: GONE_QUIET is a hundred and twenty and has to be, because
+    forty frames is an honest gap between two asks. Collect `budget` of them at
+    the front and the walk never reaches anybody who IS asking.
+
+    Returns (frames that served nobody, served, asked, left in the line).
+    """
+    line, head, queued, spoke = [], [0], set(), {}
+    starved = served = asked = 0
+
+    def ask(who, f, spent):
+        if who not in queued:
+            line.append(who)
+            queued.add(who)
+        spoke[who] = f
+        if spent >= budget:
+            return False
+        live, i = 0, head[0]
+        while i < len(line) and live < budget:
+            other = line[i]
+            if other not in queued or f - spoke.get(other, -10 ** 9) > gone_quiet:
+                queued.discard(other)
+                if i == head[0]:
+                    head[0] += 1
+                i += 1
+                continue
+            if spoke.get(other) != f and other != who:
+                i += 1
+                continue
+            if other == who:
+                queued.discard(who)
+                if i == head[0]:
+                    head[0] += 1
+                return True
+            live += 1
+            i += 1
+        return False
+
+    for f in range(1, frames + 1):
+        spent = 0
+        askers = list(range(near))
+        askers += [near + k for k in range(far) if (f + k) % stride == 0]
+        got = 0
+        for who in askers:
+            asked += 1
+            if ask(who, f, spent):
+                spent += 1
+                got += 1
+        served += got
+        if got == 0 and askers:
+            starved += 1
+    return starved, served, asked, len(queued)
+
+
 def main():
     tiers = budget_per_tier()
     quiet = gone_quiet_frames()
@@ -233,6 +302,35 @@ def main():
           " people forever. A town wanting more thinking than the\n  frame can"
           " buy is SLOW, which is the trade; one where somebody is never"
           "\n  served at all is broken." % STORMS_A_MINUTE)
+    # -- AND THE TOWN THAT IS MOSTLY OVER THE HILL --------------------------
+    print("\nA TOWN ON A COARSE CLOCK — 12 souls near the camera asking every"
+          "\nframe, 251 in the next valley asking once in thirty, which is what"
+          "\nUtil.sim_stride does at 1271m. The case above does not describe"
+          "\nthis one, and this is the one that stopped a town thinking.")
+    print("\n%-8s %-8s %-22s %-22s %s"
+          % ("TIER", "BUDGET", "FRAMES SERVING NOBODY", "SERVED / ASKED", "LEFT"))
+    jammed = False
+    for tier, label in enumerate(["LOW", "MEDIUM", "HIGH"]):
+        starved, served, asked, left = strided(tiers[tier], quiet)
+        jammed = jammed or starved > 0
+        print("%-8s %-8d %-22s %-22s %d"
+              % (label, tiers[tier],
+                 "%d of 600%s" % (starved, "   JAMMED" if starved else ""),
+                 "%d / %d" % (served, asked), left))
+    print("\nFRAMES SERVING NOBODY must be zero. A frame where people are"
+          "\n  asking and none is served is not a slow queue, it is a stopped"
+          "\n  one — the whole town stands about with its plans run out, and"
+          "\n  the readout says `0 thinking a frame, 65 in the line`.")
+
+    # A JAM IS FATAL WITHOUT BEING ASKED. Everything above this is a tuning
+    # question — how long a wait is too long — and lives behind `--check` so a
+    # bare run stays a report. A queue that serves nobody while people are
+    # asking is not a tuning question, so it fails the build either way. The
+    # suite runs these tools bare; this one had a finding it could not report.
+    if jammed:
+        print("\nBROKEN: the spool serves nobody on frames where people are "
+              "asking — the town stops thinking.")
+        return 1
     if "--check" in sys.argv:
         return 1 if bad else 0
     return 0
