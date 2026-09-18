@@ -28,9 +28,21 @@ extends PanelContainer
 ## How often the readout is rewritten. Sixty times a second would put string
 ## formatting and a Label rewrite inside the very frame it is measuring.
 const EVERY := 0.4
-## How long the worst frame is remembered, so a hitch can be read off a phone
-## that is being held rather than watched.
-const WORST_HOLD := 3.0
+## HOW LONG A WORST IS REMEMBERED, and it is now every meter's worst rather
+## than only the frame's.
+##
+## Every number on this readout is an INSTANT, and an instant is the one thing a
+## person playing the game is not looking at: the frame that mattered has been
+## and gone by the time they look up, and all they get is the calm number that
+## followed it. "I'm not always immediately on top of every frame."
+##
+## So each line carries its own high-water mark, and the mark falls back to the
+## present after this long. Both ends of that matter. A mark held FOR EVER is
+## the loading hitch and nothing else — every reading in the session loses to
+## the first frame, and the column stops meaning anything. A mark held for a
+## second is the number you already missed. Twenty seconds is long enough to
+## look up from the game and short enough that what it says is still about now.
+const PEAK_HOLD := 20.0
 ## The smoothing on the headline figure. Long enough to read, short enough that
 ## walking into a town visibly moves it.
 const BLEND := 0.1
@@ -51,10 +63,9 @@ const ENGINE_ROW := &"(the solver)"
 ## can give to a screenshot of it is a guess, and this codebase has a rule about
 ## guessing.
 ##
-## So the meter names it. Anything drawn wider than GIANT that is not one of the
-## things MEANT to be enormous gets a line with what it is and where it stands —
-## and in a sane world the line is not there at all, which is what makes it
-## worth reading when it is.
+## So the meter names it: the biggest drawn thing in the world, with what it is,
+## how wide it is and where it stands.
+##
 ## IT IS PRINTED EVERY TIME, not only when it looks wrong. A line that appears
 ## only when some threshold decides there is a problem can only ever confirm
 ## what the threshold already believed — and the thing that is too big may well
@@ -79,7 +90,9 @@ var steps := 0.0
 var _label: Label
 var _next := 0.0
 var _worst := 0.0
-var _worst_left := 0.0
+## Every meter's high-water mark, and how long each has left to hold it.
+var _peaks := {}
+var _peak_left := {}
 ## Physics ticks counted since the last drawn frame, and the running average.
 var _ticks := 0
 var _steps_seen := 0.0
@@ -194,10 +207,26 @@ func _process(delta: float) -> void:
 	# here — once a frame, in the one place that is already once a frame.
 	Ledger.on = visible
 	Ledger.turn_the_page()
-	_worst_left -= delta
-	if whole > _worst or _worst_left <= 0.0:
-		_worst = whole
-		_worst_left = WORST_HOLD
+	# EVERY FRAME, AND NOT EVERY REDRAW. The readout is rewritten two and a half
+	# times a second; a worst sampled there would miss most of the frames it
+	# exists to catch, and the spike a player looks up because of is exactly the
+	# one that happens between two redraws.
+	#
+	# AND WHILE THE METER IS SHUT, which is the whole point: something stutters,
+	# you press F7, and the last twenty seconds are already on the screen. The
+	# bill's own rows are the exception and cannot be — the ledger is off while
+	# nobody is reading it, which is what makes it free.
+	_age_peaks(delta)
+	_worst = _peak(&"frame", whole)
+	_peak(&"script", now + fixed)
+	_peak(&"_process", now)
+	_peak(&"_physics", fixed)
+	_peak(&"draw", maxf(whole - now - fixed, 0.0))
+	_peak(&"calls", Performance.get_monitor(
+		Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
+	_peak(&"queue", float(Spool.waiting()))
+	for row: Array in Ledger.rows():
+		_peak(StringName("row " + String(row[0])), float(row[1]))
 	if not visible:
 		return
 	_next -= delta
@@ -205,6 +234,41 @@ func _process(delta: float) -> void:
 		return
 	_next = EVERY
 	_label.text = _readout()
+
+
+## EVERY MARK GETS OLDER, whether or not anything asked after it this frame.
+##
+## Ageing only the ones that were asked about would freeze the mark on a row
+## that has stopped appearing — Poop's row exists only while there is muck in
+## the world — and the stale number would be waiting the next time one turned
+## up. A worst that is older than its own window is not a worst, it is a rumour.
+func _age_peaks(delta: float) -> void:
+	for what: StringName in _peak_left:
+		_peak_left[what] = float(_peak_left[what]) - delta
+
+
+## RAISE A MARK, or take the present if the old one has run out its hold.
+func _peak(what: StringName, value: float) -> float:
+	var held: float = float(_peaks.get(what, 0.0))
+	if value >= held or float(_peak_left.get(what, 0.0)) <= 0.0:
+		held = value
+		_peak_left[what] = PEAK_HOLD
+	_peaks[what] = held
+	return held
+
+
+## WHAT A MARK IS, without touching it — for the readout, which runs on its own
+## slower clock and must not be the thing that decides when a worst expires.
+func _seen(what: StringName) -> float:
+	return float(_peaks.get(what, 0.0))
+
+
+## ONE LINE OF THE READOUT with its own worst, in a column of its own so the
+## four of them can be read down rather than hunted for.
+## The pad is the width of the widest of the four (the physics line, with its
+## steps), so the column is a column rather than four numbers at four places.
+func _with_peak(text: String, worst: float) -> String:
+	return "%-38s peak %5.1f" % [text, worst]
 
 
 ## THE BIGGEST DRAWN THING IN THE WORLD, whatever it is.
@@ -246,8 +310,8 @@ func _the_biggest_thing() -> String:
 			at = box.get_center()
 	if named == "":
 		return ""
-	return "biggest drawn: %s %.0fm at %.0f, %.0f%s" % [named, worst, at.x, at.z,
-		"   (%d over %dm)" % [huge, int(GIANT)] if huge > 1 else ""]
+	return "big: %s %.0fm @ %.0f,%.0f%s" % [named.left(22), worst, at.x, at.z,
+		"  (%d over %dm)" % [huge, int(GIANT)] if huge > 1 else ""]
 
 
 ## THE READOUT. Ordered so the first three lines answer the only question that
@@ -260,16 +324,19 @@ func _readout() -> String:
 	rows.append("%.1f ms   %.1f fps   (worst %.0f)"
 		% [frame_ms, 1000.0 / maxf(frame_ms, 0.001), _worst])
 	rows.append("")
-	rows.append("script  %6.1f ms  %3d%%   %s"
-		% [scripted, int(_share(scripted)), _bar(_share(scripted))])
-	rows.append("   _process   %6.1f" % process_ms)
-	rows.append("   _physics   %6.1f  x%.1f steps/frame%s"
-		% [physics_ms, steps, "  <-- PINNED" if _spiralling() else ""])
-	rows.append("draw    %6.1f ms  %3d%%   %s"
-		% [elsewhere, int(_share(elsewhere)), _bar(_share(elsewhere))])
+	rows.append(_with_peak("script  %6.1f ms  %3d%%   %s"
+		% [scripted, int(_share(scripted)), _bar(_share(scripted))], _seen(&"script")))
+	rows.append(_with_peak("   _process   %6.1f" % process_ms, _seen(&"_process")))
+	rows.append(_with_peak("   _physics   %6.1f  x%.1f steps/frame%s"
+		% [physics_ms, steps, "  <-- PINNED" if _spiralling() else ""],
+		_seen(&"_physics")))
+	rows.append(_with_peak("draw    %6.1f ms  %3d%%   %s"
+		% [elsewhere, int(_share(elsewhere)), _bar(_share(elsewhere))],
+		_seen(&"draw")))
 	rows.append("")
-	rows.append("%d draw calls, %s primitives"
+	rows.append("%d draw calls (peak %d), %s primitives"
 		% [int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+			int(_seen(&"calls")),
 			_thousands(int(Performance.get_monitor(
 				Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)))])
 	rows.append("%d nodes, %d bodies, %d ORPHANS" % [
@@ -290,32 +357,33 @@ func _readout() -> String:
 	# climbing is a population problem and a row whose EACH is climbing is a
 	# code problem, and they want opposite fixes. Working that out by hand off a
 	# photograph of a phone is exactly the sort of arithmetic nobody does.
-	rows.append("WHERE THE SCRIPT WENT        ms     x    each")
+	rows.append("WHERE THE SCRIPT WENT      ms     x   each   peak")
 	for row: Array in Ledger.rows():
 		if float(row[1]) < 0.05:
 			continue
 		var ran := maxi(int(row[2]), 1)
-		rows.append("   %-22s %6.1f %5d  %6.3f"
-			% [row[0], row[1], row[2], float(row[1]) / float(ran)])
+		rows.append("   %-18s %6.1f %5d %6.3f %6.1f"
+			% [row[0], row[1], row[2], float(row[1]) / float(ran),
+				_seen(StringName("row " + String(row[0])))])
 	# WHAT THE BILL COMES TO, against what Godot says the scripts cost. A row is
 	# an UPPER BOUND — see Ledger — and when the total passes the engine's own
 	# figure the rows are absorbing the solver and each other, so it says so
 	# rather than letting the biggest row be read as a culprit.
 	var billed := Ledger.counted()
 	if billed > scripted * 1.05:
-		rows.append("   %-22s %6.1f  of %.1f  <-- OVER-BILLED"
+		rows.append("   %-18s %6.1f  of %.1f  <-- OVER-BILLED"
 			% ["(counted)", billed, scripted])
 		rows.append("   rows include the solver and each other; read them as")
 		rows.append("   an order, not as milliseconds.")
 	else:
-		rows.append("   %-22s %6.1f" % ["(everything else)",
+		rows.append("   %-18s %6.1f" % ["(everything else)",
 			maxf(scripted - billed, 0.0)])
 	rows.append("")
 	rows.append("tier %s (%s)   3D at %d%%   physics %d Hz" % [
 		Quality.Tier.keys()[Quality.effective_tier()], Quality.heat_word(),
 		int(Quality.render_scale() * 100.0), Engine.physics_ticks_per_second])
-	rows.append("%d thinking a frame, %d in the line"
-		% [Spool.served(), Spool.waiting()])
+	rows.append("%d thinking a frame, %d in the line (worst %d)"
+		% [Spool.served(), Spool.waiting(), int(_seen(&"queue"))])
 	return "\n".join(rows)
 
 

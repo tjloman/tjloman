@@ -346,6 +346,70 @@ if idle_others:
                 "slot means one of them is not last, and the page turns in the "
                 "middle of a frame again" % ", ".join(idle_others))
 
+# -- AND EVERY METER REMEMBERS ITS WORST -------------------------------------
+#
+# "I'm not always immediately on top of every frame." Every number on this
+# readout is an instant, and an instant is the one thing a person playing the
+# game is not looking at: the frame that mattered has been and gone by the time
+# they look up, and what they get is the calm number that followed it.
+ticking = body_of(METER, "_process")
+reading = body_of(METER, "_readout")
+marked = any("_with_peak(" in r for r in reading) \
+    and any("_seen(" in r for r in reading)
+print()
+print("EVERY METER %s."
+      % ("carries its worst" if marked else "SHOWS ONLY THIS INSTANT"))
+if not marked:
+    fail.append("the readout prints only what is true this instant, so the "
+                "spike a player looked up because of is already gone by the "
+                "time they are looking at the numbers")
+
+# AND IT IS SAMPLED EVERY FRAME, NOT EVERY REDRAW. The readout is rewritten two
+# and a half times a second. A worst taken there misses most of the frames it
+# exists to catch — and the spike that makes somebody look up is exactly the one
+# that happened between two redraws. This is the statement that would rot
+# silently, because the numbers still look plausible when it is wrong.
+took = next((i for i, r in enumerate(ticking) if "_peak(" in r), None)
+stopped = next((i for i, r in enumerate(ticking)
+                if "if not visible" in r or "_next" in r), None)
+early = took is not None and stopped is not None and took < stopped
+print("   ...sampled %s."
+      % ("every frame, and while the meter is shut" if early
+         else "ONLY WHEN THE READOUT IS REWRITTEN"))
+if took is None:
+    fail.append("nothing samples a high-water mark in the frame tick at all")
+elif not early:
+    fail.append("the worsts are sampled after the meter has decided whether to "
+                "redraw, so four frames in five are never looked at — and the "
+                "meter reports a calm world through a hitch it did not sample")
+
+# AND A MARK LETS GO. Held for ever, every reading in the session loses to the
+# loading hitch and the column stops meaning anything; held for a second, it is
+# the number you already missed.
+ages = body_of(METER, "_age_peaks")
+raises = body_of(METER, "_peak")
+window = number(METER, "PEAK_HOLD")
+falls = any("PEAK_HOLD" in r for r in raises) \
+    and any("<= 0.0" in r for r in raises) \
+    and any("for " in r for r in ages)
+print("   ...and a mark lets go after %s."
+      % ("%.0fs" % window if falls and window else "NEVER, WHICH IS THE LOADING HITCH"))
+if not falls:
+    fail.append("a worst is never given up, so every number on the readout is "
+                "the loading hitch for the rest of the session and the column "
+                "says nothing about the game being played")
+if window is not None and (window < 5.0 or window > 120.0):
+    fail.append("the worsts are held for %.0fs, which is either too short to "
+                "look up from the game or so long it is no longer about now"
+                % window)
+# EVERY mark ages, not only the ones asked after this frame — a row that stops
+# appearing (Poop's exists only while there is muck) would otherwise freeze its
+# number and have it waiting the next time one turned up.
+if not any("_peak_left" in r for r in ages):
+    fail.append("only the meters asked after this frame get older, so a row "
+                "that stops appearing freezes its worst and shows a stale one "
+                "the next time it comes back")
+
 # AND THE PAGE IS TURNED, which is also what shuts the last clock of the frame.
 turned = "Ledger.turn_the_page()" in code(METER)
 shuts = any("shut()" in r for r in body_of(LEDGER, "turn_the_page"))
