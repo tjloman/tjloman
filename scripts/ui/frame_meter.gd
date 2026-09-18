@@ -294,10 +294,15 @@ func _the_biggest_thing() -> String:
 				break
 		if skip:
 			continue
-		# TYPED OUT LOUD. `get_transformed_aabb` comes back untyped, and `:=` on
-		# a value with no type is a PARSE ERROR — not a warning, not a runtime
-		# surprise: the game does not boot at all.
-		var box: AABB = vi.get_transformed_aabb()
+		# THE WORLD-SPACE BOX, THE ONLY WAY GODOT 4 HAS OF SAYING IT.
+		#
+		# `get_transformed_aabb()` is a Godot 3 method and does not exist here.
+		# It failed twice, differently: `var box := ...` would not COMPILE (no
+		# type to infer), and typing it by hand only moved the failure to the
+		# first frame the meter was opened, where the call itself does not
+		# exist. Transform times local box is the idiom this codebase already
+		# uses — see ModelBank._true_box.
+		var box: AABB = vi.global_transform * vi.get_aabb()
 		var across: float = box.size[box.get_longest_axis_index()]
 		# A NON-FINITE VERTEX makes an infinite box, and Godot draws that as a
 		# smear across the whole world. It is the likeliest way a thing gets to

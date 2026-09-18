@@ -598,20 +598,52 @@ def check_untyped_array_results(files):
 VARIANT_RETURNS = ("pop_back", "pop_front", "pop_at", "front", "back",
                    "pick_random", "get")
 
-# AND ENGINE METHODS THAT COME BACK WITH NO USABLE TYPE AT ALL.
+# METHODS THAT DO NOT EXIST IN GODOT 4, and what to write instead.
 #
-# Same build error, other direction — and the reason this is a LIST rather than
-# a rule is worth saying out loud: there is no Godot binary here to ask, so the
-# only thing that knows which engine calls defeat inference is the game failing
-# to boot. Every name below is one that did, and the list grows by one each
-# time the engine surprises us. That is not a good mechanism; it is the only
-# honest one available, and a list that says where it came from is better than
-# a rule that pretends to know more than it does.
+# THIS LIST IS WHERE THE LAST MISTAKE IS KEPT, and it is worth saying what the
+# mistake was, because the first attempt to catch it was itself wrong.
 #
-#   get_transformed_aabb — `var box := vi.get_transformed_aabb()` in the frame
-#   meter stopped the whole project compiling: the HUD, the hand, the creature,
-#   the world and the nav field all failed to load behind it.
-UNTYPED_RETURNS = ("get_transformed_aabb",)
+# `var box := vi.get_transformed_aabb()` would not compile — nothing to infer a
+# type from — so it was caught as an INFERENCE problem and fixed by writing the
+# type out. That built. It then crashed on the first frame the meter was
+# opened, because the function does not exist in Godot 4 at all: the inference
+# error was a SYMPTOM, and a check written against the symptom passes the
+# moment somebody types the annotation. The check has to be against the cause,
+# which is that the name is gone.
+#
+# There is no Godot binary here to ask what exists, so this is a list and not a
+# rule, and it grows by one every time the engine catches us out. A list that
+# says where it came from is better than a rule that pretends to know more than
+# it does.
+GONE_IN_4 = {
+    "get_transformed_aabb": "global_transform * get_aabb()",
+    "instance": "instantiate()",
+    "empty": "is_empty()",
+    "get_stylebox": "get_theme_stylebox()",
+}
+
+
+def check_godot3_calls(files):
+    """Find calls to engine methods that Godot 4 does not have.
+
+    gdparse parses and gdlint styles; neither knows what the engine offers, so
+    a Godot 3 method name sails through both and dies on the first frame that
+    line actually runs — which for a debugging overlay is the first time
+    somebody opens it, long after the change shipped.
+
+    Only flagged as a CALL (`.name(`), so a mention in a comment or a string is
+    left alone: this file's own list would otherwise report itself.
+    """
+    problems = []
+    call = re.compile(r"\.(%s)\s*\(" % "|".join(GONE_IN_4))
+    for path in files:
+        with open(path, encoding="utf-8") as fh:
+            for lineno, line in enumerate(fh, 1):
+                bare = line.split("#")[0]
+                m = call.search(bare)
+                if m:
+                    problems.append((path, lineno, m.group(1), line.strip()))
+    return problems
 
 
 def check_stringname_ternary(files):
@@ -656,7 +688,7 @@ def check_inferred_variant(files):
     problems = []
     inferred = re.compile(
         r"^\s*var\s+\w+\s*:=\s*[\w\.\[\]\"']+\.(%s)\([^()]*\)\s*(?:#.*)?$"
-        % "|".join(VARIANT_RETURNS + UNTYPED_RETURNS))
+        % "|".join(VARIANT_RETURNS))
     for path in files:
         with open(path, encoding="utf-8") as fh:
             for lineno, line in enumerate(fh, 1):
@@ -2206,10 +2238,16 @@ def main():
               "a loop instead.\n    %s" % (path, lineno, call, name, line))
     variants = check_inferred_variant(files)
     for path, lineno, call, line in variants:
-        print("%s:%d: %s() comes back with no usable type, so ':=' has nothing "
-              "to infer from — this project builds that as an ERROR and it stops "
+        print("%s:%d: %s() is declared as returning Variant, so ':=' infers a "
+              "Variant here — this project builds that as an ERROR and it stops "
               "every dependent script loading. Declare the type, or wrap the "
               "call.\n    %s" % (path, lineno, call, line))
+    gone = check_godot3_calls(files)
+    for path, lineno, name, line in gone:
+        print("%s:%d: %s() does not exist in Godot 4 — write %s instead. This is "
+              "not a warning: it is a crash on the first frame that line runs, "
+              "and neither gdparse nor gdlint can see it.\n    %s"
+              % (path, lineno, name, GONE_IN_4[name], line))
     ternaries = check_stringname_ternary(files)
     for path, lineno, line in ternaries:
         print("%s:%d: one arm of this ternary is a StringName (`.name`) and the "
@@ -2394,7 +2432,7 @@ def main():
         + len(class_shadows) + len(confusable) + len(sim_clocks) + len(alive) \
         + len(stand) + len(typed_has) + len(shadowed_own) + len(sentinels) \
         + len(int_div) + len(worth) + len(burnable) + len(kids) + len(bundles) \
-        + len(late_is) + len(ternaries)
+        + len(late_is) + len(ternaries) + len(gone)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0
