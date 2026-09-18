@@ -56,6 +56,9 @@ const STONE_WIDE_MOST := 640.0
 const KEY_SHARE := 0.32
 
 var village: Village
+## The orchestrator, for the one thing this screen asks it to do: take the lead
+## off. Untyped because Main has no class name, and this is the only call.
+var main: Node
 var divine_hand: DivineHand
 var creature: Creature
 var camera_rig: CameraRig
@@ -560,14 +563,18 @@ func _build_unlead_button(stack: VBoxContainer) -> void:
 	stack.add_child(_unlead_button)
 
 
-## THE SAME DOOR THE KEY AND THE OTHER BUTTON USE. Three ways in with three
-## copies of what the lead means is how a phone ends up doing the old thing —
-## see Main._take_the_lead, which is the whole of it.
+## THIS BUTTON IS NOT THE LEAD BUTTON, and it used to fire the same action —
+## which was right while a tied rope was still in your hand and is wrong now
+## that it is not. Pressing Lead on a posted creature TAKES THE ROPE UP; this
+## screen is where you say take it OFF, and the two have to be different
+## sentences or there is no way to be rid of a rope you tied round a tree on the
+## far side of the valley without first going to find it.
+##
+## Still one copy of what it means, and still not this file's: see
+## Main.take_the_lead_off.
 func _on_unlead_pressed() -> void:
-	var ev := InputEventAction.new()
-	ev.action = "leash_creature"
-	ev.pressed = true
-	Input.parse_input_event(ev)
+	if main != null and is_instance_valid(main) and main.has_method("take_the_lead_off"):
+		main.take_the_lead_off()
 
 
 ## One "Label:   value" row, wrapped to `wrap` characters with every line after
@@ -1048,9 +1055,14 @@ func _update_creature_panel() -> void:
 	_creature_panel.visible = locked
 	# ONLY WHEN THERE IS A LEAD TO TAKE OFF. A button that does nothing most of
 	# the time teaches people it does nothing.
+	#
+	# AND THAT IS ANY ROPE, not only one in your hand. This used to ask
+	# `has_lead`, which is false the moment the rope is tied off — so the one
+	# way out vanished in exactly the case it exists for, which is the rope you
+	# have lost track of. A lost rope is a tied one.
 	if _unlead_button != null and is_instance_valid(_unlead_button):
-		_unlead_button.visible = is_instance_valid(divine_hand) \
-			and divine_hand.has_lead()
+		_unlead_button.visible = is_instance_valid(creature) \
+			and (LeadRope.on(creature, get_tree()) != null or creature.is_leashed())
 	_praise_scold.visible = locked
 	if not locked:
 		return

@@ -78,7 +78,18 @@ func _on_leash_pressed() -> void:
 	Input.parse_input_event(ev)
 
 
+## WHAT THE BUTTON WILL DO IF YOU PRESS IT — three states, because there are
+## three. A tied rope is not in your hand (see LeadRope.tie), and labelling that
+## "Lead" as though there were no rope at all would hide the one thing the
+## player wants to know: that the rope is out there, and that this is the way
+## back to holding it.
 func _process_lead_label() -> void:
 	if not is_instance_valid(divine_hand):
 		return
-	_leash_button.text = "Drop lead" if divine_hand.has_lead() else "Lead"
+	if divine_hand.has_lead():
+		_leash_button.text = "Drop lead"
+	elif is_instance_valid(creature) \
+			and LeadRope.on(creature, get_tree()) != null:
+		_leash_button.text = "Take up"
+	else:
+		_leash_button.text = "Lead"

@@ -176,6 +176,10 @@ var last_thrown: Node3D = null
 ## THE LEAD, while it is in your hand. See LeadRope — holding it puts the hand
 ## in lead mode: it does not grab, a tap on earth is "go there", and a hold on
 ## anything ties the rope off round it.
+##
+## AND TYING IT OFF ENDS THAT. A tied rope is not in your hand: it works away on
+## its own, the hand is a hand again, and the landscape belongs to the camera.
+## Everything that asks reads `has_lead`, which is this AND `in_hand`.
 var lead: LeadRope = null
 
 var drag_anchor := Vector3.ZERO
@@ -479,6 +483,13 @@ func _carry_lead() -> void:
 		return
 	if lead.in_hand:
 		lead.hand_at = global_position + Vector3(0.0, -0.4, 0.0)
+	else:
+		# IT WAS TIED OFF WHILE YOU WERE HOLDING IT (see LeadRope.tie), which
+		# is the end of the holding. Letting the reference go is what makes the
+		# hand empty everywhere at once rather than in the one place that
+		# remembered to ask — and the rope is not lost by it: it is in the
+		# world, tied to the thing, and LeadRope.on finds it again.
+		lead = null
 
 
 ## TAKE UP THE LEAD, or put it down. The one entry point, so the button and the
@@ -486,8 +497,12 @@ func _carry_lead() -> void:
 func hold_lead(rope: LeadRope) -> void:
 	lead = rope
 	if rope != null:
-		rope.in_hand = true
-		rope.hand_at = global_position
+		# AND TAKING IT UP TAKES IT OFF THE POST. A rope cannot be tied to a
+		# tree and in your hand at the same time: that is the state in which a
+		# tap on bare earth meant "untie it and haul the creature over here",
+		# which is not what a tap on the landscape should ever mean while the
+		# beast is tied up somewhere. See LeadRope.take_up.
+		rope.take_up(global_position)
 
 
 func let_go_of_lead() -> void:
@@ -617,7 +632,7 @@ func _update_hover(mouse_pos: Vector2) -> void:
 	if hover_target == null:
 		hover_target = _nearly_under(ground_point)
 
-	hover_info_changed.emit(_describe(hover_target))
+	hover_info_changed.emit(describe(hover_target))
 
 
 ## THE NEAREST THING WORTH TAKING HOLD OF, within a forgiving radius of where
@@ -656,7 +671,11 @@ func _nearly_under(at: Vector3) -> Node3D:
 	return best
 
 
-func _describe(target: Node3D) -> String:
+## WHAT TO CALL THE THING UNDER THE HAND. Public because it is not only the
+## hover line that has to say it: the announcement when you tie the rope off
+## comes from Main, and a message reading "tied to @CharacterBody3D@114918" is
+## one the player is entitled to call a bug.
+func describe(target: Node3D) -> String:
 	if target == null:
 		return ""
 	if target.has_method("hover_text"):
@@ -974,7 +993,7 @@ func _gather_kindred() -> void:
 	else:
 		took = (mine as ResourceItem).absorb(best as ResourceItem)
 	if took:
-		hover_info_changed.emit(_describe(mine))
+		hover_info_changed.emit(describe(mine))
 
 
 func _on_release() -> void:
@@ -1368,12 +1387,12 @@ func _tick_press_charge(delta: float) -> void:
 	if _reading:
 		if not _pointer_down or not is_instance_valid(hover_target):
 			_reading = false
-			hover_info_changed.emit(_describe(hover_target))
+			hover_info_changed.emit(describe(hover_target))
 			return
 		_press_time += delta
 		if _press_time >= READ_HOLD:
 			_reading = false
-			hover_info_changed.emit(_describe(hover_target))
+			hover_info_changed.emit(describe(hover_target))
 			GameState.stone_read.emit(hover_target)
 			return
 		# THE HOLD, FILLING. There was no feedback of any kind: you pressed the
@@ -1404,17 +1423,22 @@ func _tick_tying(delta: float) -> void:
 		return
 	_tying += delta
 	var onto := hover_target if is_instance_valid(hover_target) else null
+	var rope := lead
 	if _tying < TIE_HOLD:
 		hover_info_changed.emit("Tying the lead... %d%%"
 			% int(clampf(_tying / TIE_HOLD, 0.0, 1.0) * 100.0))
 		return
 	_tying = -999.0            # once per hold, not once per frame
-	lead.tie(onto)
+	# AND THE ROPE GOES OUT OF YOUR HAND WITH IT — see LeadRope.tie, which is
+	# why `lead` is read into `rope` above: `_carry_lead` lets go of a rope that
+	# has been tied off, and the message wants to know how long it is.
+	rope.tie(onto)
 	if onto == null:
 		GameState.announce("The lead is loose in your hand again.")
 	else:
-		GameState.announce("You tie the lead round %s. Your creature has %dm "
-			% [_describe(onto), int(LeadRope.ROPE_LENGTH)] + "of rope.")
+		GameState.announce("You tie the lead round %s. It has %dm of rope, "
+			% [describe(onto), int(rope.length)]
+			+ "and your hands are free — press Lead to take it back up.")
 
 
 ## HOLDING THE SUN. Unlike the casting summons this is NOT touch-only: a mouse

@@ -120,6 +120,9 @@ func _ready() -> void:
 	hud.divine_hand = divine_hand
 	hud.creature = creature
 	hud.camera_rig = camera_rig
+	# THE ONE DOOR OUT OF THE LEAD is on the creature's screen and it is this
+	# file's to open — see `take_the_lead_off`.
+	hud.main = self
 	add_child(hud)
 
 	# WHAT YOU ARE DRAWING, drawn. Above the HUD so the glyphs sit over the
@@ -501,33 +504,36 @@ func _unhandled_input(event: InputEvent) -> void:
 ##
 ## So this hands you one end of a rope. What happens next is the rope's: see
 ## LeadRope, and DivineHand, which goes into lead mode while it is carrying it.
-## Press again to let go — the rope stays tied wherever you left it, which is
-## how you post a creature somewhere and walk away.
+##
+## THE BUTTON IS A HAND, NOT A SWITCH. It picks the rope up and it puts it
+## down, and which of those it does depends only on whether you are holding it:
+##
+##   holding it   -> put it down, and the rope goes. What you last told the
+##                   creature stands (see LeadRope.last_order).
+##   tied off     -> take it back up, off whatever it was round. This is the
+##                   ONLY way back into your hand, deliberately — a tap on the
+##                   landscape used to do it, and that made the ground
+##                   unusable for looking around while a creature was posted.
+##   no rope      -> a new one, in your hand.
+##
+## Taking the lead OFF the beast altogether is a different sentence and lives on
+## the creature's own screen. See `take_the_lead_off`.
 func _take_the_lead() -> void:
 	if not is_instance_valid(divine_hand):
 		return
-	# THE ONLY WAY IT COMES OFF IS THE WAY IT WENT ON. Not a tap on the ground,
-	# not walking away, not casting something: the same button. A tool you can
-	# put down by accident is a tool you stop trusting, and this one is meant to
-	# be held for minutes at a time while you shepherd.
+	# THE ONLY WAY IT COMES OUT OF YOUR HAND IS THE WAY IT WENT IN. Not a tap on
+	# the ground, not walking away, not casting something: the same button. A
+	# tool you can put down by accident is a tool you stop trusting, and this
+	# one is meant to be held for minutes at a time while you shepherd.
 	if divine_hand.has_lead():
-		var was := divine_hand.lead
-		divine_hand.let_go_of_lead()
-		# AND IT REMEMBERS. The rope is put down; the order is not. See
-		# LeadRope.last_order — a creature posted somewhere stays posted.
-		# AND IT REACTS. Taking the rope off a creature is a thing that happens
-		# TO it, and a beast that showed nothing would read as not having
-		# noticed — which is the opposite of the point, because what happens
-		# next is that it goes back to thinking for itself.
-		creature.express("happy", 2.0)
-		creature.attention = minf(creature.attention + 15.0, 100.0)
-		if was != null and is_instance_valid(was) and was.last_order.is_finite():
-			GameState.announce("You take the lead off. Your creature holds to "
-				+ "what you last told it.")
-		else:
-			GameState.announce("You take the lead off. It is its own again.")
+		# AND IT REMEMBERS. The rope is put down; the order is not.
+		_put_the_lead_down(false)
 		return
 	var rope := _rope_on(creature)
+	# IT WAS TIED SOMEWHERE AND NOW IT IS YOURS AGAIN — see LeadRope.take_up,
+	# which is what `hold_lead` does with it. Nothing is hauled: picking a rope
+	# up is not an order.
+	var taking_back := rope != null
 	if rope == null:
 		rope = LeadRope.new()
 		rope.creature = creature
@@ -540,20 +546,75 @@ func _take_the_lead() -> void:
 	if onto != null:
 		rope.tie(onto)
 		creature.leash_to_thing(onto)
-		GameState.announce("The lead is in your hand, tied to %s." % onto.name)
+		# ...and a tie is a put-down, so say so. Your hands are free, the
+		# camera is yours, and the rope is working away without you.
+		GameState.announce("The lead goes round %s. Your hands are free — "
+			% divine_hand.describe(onto)
+			+ "press Lead again to take it back up.")
+	elif taking_back:
+		GameState.announce("You take the lead back up. Walk, and it follows.")
 	else:
 		GameState.announce("The lead is in your hand. Walk, and it follows. "
 			+ "Hold on anything to tie it off; tap the ground to send it there.")
 
 
+## THE ONE PLACE THE ROPE LEAVES THE WORLD, whichever door asked for it.
+##
+## `free_it` is the difference between the two sentences and it is the whole
+## difference: putting the rope DOWN leaves the creature holding to what you
+## last told it, and taking the lead OFF sets it loose to think for itself. A
+## beast still bound to a rope that no longer exists is the game lying to the
+## player, so the creature-screen button unbinds it and the Lead button does
+## not.
+func _put_the_lead_down(free_it: bool) -> void:
+	var rope := _rope_on(creature)
+	# ASK IT WHAT IT LAST SAID BEFORE IT GOES, not after: what the creature is
+	# told at the end of this depends on it, and a freed rope is no use to ask.
+	var posted := rope != null and is_instance_valid(rope) \
+		and rope.last_order.is_finite()
+	if divine_hand.has_lead():
+		divine_hand.let_go_of_lead()
+	if rope != null and is_instance_valid(rope):
+		rope.queue_free()
+	if free_it:
+		creature.release_leash()
+	# IT REACTS. Taking the rope off a creature is a thing that happens TO it,
+	# and a beast that showed nothing would read as not having noticed — which
+	# is the opposite of the point, because what happens next is that it goes
+	# back to thinking for itself.
+	creature.express("happy", 2.0)
+	creature.attention = minf(creature.attention + 15.0, 100.0)
+	if free_it:
+		GameState.announce("You take the lead off. It is its own again.")
+	elif posted:
+		GameState.announce("You put the lead down. Your creature holds to "
+			+ "what you last told it.")
+	else:
+		GameState.announce("You put the lead down.")
+
+
+## TAKE THE LEAD OFF THE BEAST ALTOGETHER — held, tied, or knotted round a tree
+## on the far side of the valley. This is what the button on the creature's own
+## screen means, and it is not the same sentence as the Lead button: that one
+## picks the rope up and puts it down, this one is the way OUT.
+##
+## It has to exist because the rope you have lost track of is a TIED one, and a
+## tied rope is not in your hand — so the toggle would take it up rather than
+## take it off, and there would be no way to be rid of it without first going
+## to find it.
+func take_the_lead_off() -> void:
+	if not is_instance_valid(creature) or not is_instance_valid(divine_hand):
+		return
+	if _rope_on(creature) == null and not creature.is_leashed():
+		return
+	_put_the_lead_down(true)
+
+
 ## THE ROPE THIS CREATURE ALREADY HAS, if any — a beast has one lead, and
-## picking it up twice must not leave two of them lying about.
+## picking it up twice must not leave two of them lying about. One question,
+## asked in one place: see LeadRope.on.
 func _rope_on(who: Creature) -> LeadRope:
-	for r in get_tree().get_nodes_in_group("lead_rope"):
-		var rope := r as LeadRope
-		if is_instance_valid(rope) and rope.creature == who:
-			return rope
-	return null
+	return LeadRope.on(who, get_tree())
 
 
 ## Training only counts when the hand is actually AT the creature — you

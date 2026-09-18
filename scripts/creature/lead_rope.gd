@@ -25,6 +25,18 @@ extends Node3D
 ## AND A TAP ON BARE EARTH IS STILL "GO THERE", because sometimes you do just
 ## want to point.
 ##
+## AND A TIED ROPE IS OUT OF YOUR HANDS. Tying the far end round something is
+## the end of the holding: the rope stays where you put it and works away on its
+## own, and the world goes back to being the world — drag to look about, tap to
+## do whatever a tap does.
+##
+## It has to be this way round because THE LANDSCAPE IS ALSO THE CAMERA. While
+## the rope owns every touch there is no looking around at all, and a tap on the
+## ground means "untie and come here" — so posting the creature by a tree and
+## then looking at anything else was impossible, and the rope kept picking
+## itself back up by surprise. Press Lead to take it up again; that is the only
+## way back into your hand, and it is the one gesture nobody makes by accident.
+##
 ## TRUST IS THE WHOLE OF WHETHER IT WORKS. A creature that does not trust you
 ## drags, ignores a tug it does not fancy, and slips the rope altogether if you
 ## have treated it badly enough. One that trusts you completely comes the
@@ -236,7 +248,42 @@ func heeds(pull: Pull) -> bool:
 func tie(what: Node3D) -> void:
 	tied_to = what
 	_told_at = Vector3.INF
+	# AND TYING IT OFF PUTS IT DOWN. See the note at the head of this file: the
+	# hand is only in lead mode while the rope is IN it, so this one line is
+	# what hands the landscape back to the camera the moment the creature is
+	# posted. Untying — `tie(null)` — is the same sentence backwards and puts
+	# the end back in your hand, which is what a tap on bare earth means.
+	in_hand = what == null
 	haul(_from())
+
+
+## TAKE IT BACK UP. The far end comes off whatever it was round and the rope is
+## in your hand again, at `at`.
+##
+## Nothing is hauled. Picking a rope up is not an order — it is you getting hold
+## of it — and the creature finds out where your hand is on the next beat like
+## it always does. A pick-up that yanked would make the Lead button unusable for
+## the one thing it is now for: getting a posted creature back under your hand
+## without disturbing what it is doing.
+func take_up(at: Vector3) -> void:
+	tied_to = null
+	in_hand = true
+	hand_at = at
+	_told_at = Vector3.INF
+
+
+## THE ROPE THIS CREATURE HAS, if any — in your hand or tied off somewhere on
+## the far side of the valley. A beast has ONE lead, and everything that asks
+## about it asks here: the key, both buttons and the hand cannot come to
+## different conclusions about a thing there is only one of.
+static func on(who: Creature, tree: SceneTree) -> LeadRope:
+	if who == null or tree == null:
+		return null
+	for r in tree.get_nodes_in_group("lead_rope"):
+		var rope := r as LeadRope
+		if rope != null and is_instance_valid(rope) and rope.creature == who:
+			return rope
+	return null
 
 
 ## LET OUT OR TAKE IN ROPE. A WEAK tug — the slack changed and the beast may

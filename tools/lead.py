@@ -85,8 +85,18 @@ if not one_door:
 # beast. It goes on the screen that is about the creature.
 HUD2 = (ROOT / "scripts/ui/hud.gd").read_text()
 on_screen = "_unlead_button" in code(HUD2) \
-    and any("leash_creature" in r for r in body_of(HUD2, "_on_unlead_pressed"))
+    and any("take_the_lead_off(" in r for r in body_of(HUD2, "_on_unlead_pressed"))
 clickable = any("MOUSE_FILTER_STOP" in r for r in body_of(HUD2, "_build_unlead_button"))
+# AND IT IS OFFERED WHENEVER THERE IS A ROPE, not only while one is in your
+# hand. The case this button exists for is the rope you have LOST TRACK OF —
+# and a rope you have lost track of is a rope that is tied to something, which
+# is exactly the state `has_lead` is false in. Gating the one way out on the
+# hand takes it away in the only case that needed it.
+panel = "\n".join(body_of(HUD2, "_update_creature_panel"))
+offered = ""
+if "_unlead_button.visible" in panel:
+    offered = panel[panel.index("_unlead_button.visible"):][:200]
+asks_for_a_rope = "LeadRope.on(" in offered and "has_lead()" not in offered
 print()
 print("THE LEAD COMES OFF from the creature screen: %s%s"
       % ("yes" if on_screen else "NO",
@@ -100,6 +110,14 @@ if not clickable:
     fail.append("the unlead button is inside a panel that is made click-through "
                 "after it is built, so the one way out of the lead cannot be "
                 "pressed")
+print("   ...and it is offered %s."
+      % ("whenever the creature has a rope at all" if asks_for_a_rope
+         else "ONLY WHILE THE ROPE IS IN YOUR HAND"))
+if not asks_for_a_rope:
+    fail.append("the way off the lead is only shown while the rope is in your "
+                "hand — but the case it exists for is the rope you have lost "
+                "track of, and a lost rope is a TIED one, which is the one "
+                "state the hand is empty in")
 
 # -- ONE ROPE ----------------------------------------------------------------
 reuses = any("_rope_on(" in r for r in takes)
@@ -401,6 +419,57 @@ if not yanks:
     fail.append("a double tap with the lead in hand does not pull the rope — "
                 "the multi-tap IS the strong tug, and without the haul it is a "
                 "glance the creature may do nothing about")
+
+# -- A TIED ROPE IS OUT OF YOUR HANDS ----------------------------------------
+#
+# THE LANDSCAPE IS ALSO THE CAMERA. While the rope owns every touch you cannot
+# look round the world at all, and a tap on the ground means "untie and come
+# here" — so tying the creature to a tree and then looking at anything else was
+# impossible. The player's words: "once the leash is TIED to something on the
+# landscape, I want to be able to drag the camera around like normal. I don't
+# want touching the landscape to mean picking up the leash again."
+#
+# So tying it off PUTS IT DOWN, and what makes that true is not the name of a
+# function. It is that `tie` decides `in_hand` from whether it was given
+# anything to tie to, and that `has_lead` — the gate every input path in the
+# hand asks before it does anything — reads `in_hand`. Either half alone is
+# worth nothing, so both are checked.
+tying = body_of(ROPE, "tie")
+puts_down = any(re.search(r"\bin_hand\s*=", r) and "what" in r for r in tying)
+reads_hand = any("in_hand" in r for r in body_of(HAND, "has_lead"))
+print()
+print("TYING THE ROPE OFF %s."
+      % ("puts it down, and the landscape is the camera's again" if puts_down
+         else "KEEPS HOLD OF THE LANDSCAPE"))
+if not puts_down:
+    fail.append("tying the rope off does not take it out of your hand, so the "
+                "hand goes on owning every touch: the camera cannot be dragged "
+                "and a tap on the ground unties the rope and hauls the creature "
+                "to it, for as long as the beast is posted anywhere")
+if not reads_hand:
+    fail.append("`has_lead` does not read `in_hand`, so whether the rope is in "
+                "your hand has nothing to do with whether the hand behaves as "
+                "though it is")
+
+# AND TAKING IT UP TAKES IT OFF THE POST. Tied AND held is the same bug from
+# the other side: it is the state in which a tap on bare earth meant "untie and
+# haul", which is not what a tap on the landscape should ever mean while the
+# creature is tied up somewhere.
+taking = body_of(ROPE, "take_up")
+comes_off = any("tied_to = null" in r for r in taking) \
+    and any(re.search(r"\bin_hand\s*=\s*true", r) for r in taking)
+picks_up = any("take_up(" in r for r in body_of(HAND, "hold_lead"))
+print("TAKING IT BACK UP %s."
+      % ("takes it off the post" if comes_off and picks_up
+         else "LEAVES IT TIED AND IN YOUR HAND AT ONCE"))
+if not comes_off:
+    fail.append("there is no door that takes the far end off whatever it is "
+                "round and puts it back in your hand, so the only way to hold "
+                "a tied rope again is the one that also hauls the creature")
+if not picks_up:
+    fail.append("taking up the lead does not untie it, so a rope can be tied to "
+                "a tree and in your hand at the same time — which is the state "
+                "where a tap on the landscape unties it by surprise")
 
 print()
 if fail:
