@@ -24,11 +24,26 @@ was there before them and must survive intact.
 
   A SHEAF IS NOT A JOINT. Grain and meat stay apart.
 
-  AND NOTHING IS LAUNDERED. Human flesh used to be kept out of an honest pile
-  by refusing the merge. It TAINTS it now, which is more permissive and exactly
-  as honest: every villager who would have refused the joint refuses the whole
-  stack, and the player is told the moment it happens. If that ever becomes a
-  quiet merge instead, a god can feed a village its own people by accident.
+  AND NOTHING OF A PERSON IS EVER STOCK. This one is not about carrying at all
+  and it is the reason the file is longer than it looks.
+
+  Human meat is not a worse kind of meat. It is a different thing with a
+  different life: it never joins a pile, it never goes to a store, it is never
+  carried home, and it is eaten where it lies by people who have run out of
+  other options or out of decency, down on their hands and knees, the way an
+  animal feeds. Every one of those is a separate statement and every one of
+  them can be undone by a single innocent-looking line somewhere else.
+
+  It was shipped the other way for one commit — let the flesh into the pile and
+  let it TAINT what it went into, on the grounds that nothing was laundered by
+  it. Nothing was. It was still wrong: a pile it can be mixed into is a pile
+  that gets carried, banked and served at a hearth, and the eating of it stops
+  being the separate wretched thing it is.
+
+  And the door that mattered was never the merge. A butcher turned a corpse
+  into two abstract units of `meat` and walked them to the granary, where they
+  became ordinary stock and were handed out to the whole village. That shipped,
+  and no rule about bundles touched it.
 """
 import pathlib
 import re
@@ -175,27 +190,87 @@ if not apart:
 # because the new form is the PERMISSIVE one: the old one could only fail
 # closed, and this one can fail open.
 blocked = refuses(taking, "is_human_meat")
-taints = any(re.search(r"is_human_meat\s*=\s*true", r) for r in taking)
-tells = any("hint(" in r or "announce(" in r for r in taking)
 print("A JOINT OF SOMEBODY %s."
-      % ("taints the whole pile, out loud" if taints and tells
-         else "IS LAUNDERED INTO IT"))
-if not taints:
-    if blocked:
-        fail.append("human flesh is kept out by refusing the merge — which is "
-                    "honest, but it also refuses every innocent merge, and "
-                    "this file exists because that refusal was the problem")
-    else:
-        fail.append("human flesh goes quietly into a pile of mutton: the whole "
-                    "stack is then eaten by people who would have refused it, "
-                    "and the god who did it never finds out")
-if taints and not tells:
-    fail.append("a pile is tainted without the player being told, so the first "
-                "they know of it is a village that will not eat")
+      % ("stays out of an honest pile" if blocked else "GOES IN WITH THE MUTTON"))
+if not blocked:
+    fail.append("human flesh can be merged into a pile of mutton — and a pile "
+                "it can be mixed into is a pile that gets carried, banked and "
+                "served at a hearth, whether or not the mixing itself is "
+                "honest about what went in")
+
+# AND THE BUTCHER LEAVES IT WHERE IT LAY.
+#
+# This is the door that actually mattered, and no rule about bundles touched
+# it: `_begin_haul("meat", 2, "butcher")` turned a corpse into two abstract
+# units of stock and walked them to the granary.
+VILL = (ROOT / "scripts/villager/villager.gd").read_text()
+cutting = []
+src = code(VILL)
+if "State.BUTCHERING:" in src:
+    cutting = src[src.index("State.BUTCHERING:"):].split("\n")[:16]
+hauls_it = any("_begin_haul" in r for r in cutting)
+drops_it = any("joints_of_a_person" in r for r in cutting)
+print("A BUTCHERED BODY %s."
+      % ("leaves joints on the grass" if drops_it and not hauls_it
+         else "IS WALKED TO THE GRANARY AS STOCK"))
+if hauls_it or not drops_it:
+    fail.append("butchering a corpse banks abstract meat in the store, where "
+                "it becomes ordinary stock and is served to the whole village "
+                "— which is the laundering, at a larger scale than any bundle "
+                "and through a door no bundle rule watches")
+
+# AND ONE DOOR MAKES IT, so that everything true of human meat is true in one
+# place and nothing else is ever flagged this way by accident.
+FOODC = code(FOOD)
+doors = [r for r in FOODC.split("\n") if re.search(r"is_human_meat\s*=\s*true", r)]
+print("IT IS MADE in %d place(s)." % len(doors))
+if len(doors) != 1:
+    fail.append("human meat is flagged in %d places — there is no one door, so "
+                "the next thing that makes some will have its own opinion about "
+                "what that means" % len(doors))
+
+# AND THE STORE REFUSES IT AT THE DOOR, both ways in: a joint left on the
+# platform, and a bundle held over it to be topped up.
+intake = code(STORE)
+at_the_door = "is_human_meat" in intake.split("func top_up")[0]
+print("THE STOREHOUSE %s."
+      % ("will not take it" if at_the_door else "BANKS IT LIKE ANY OTHER MEAT"))
+if not at_the_door:
+    fail.append("a joint of somebody left on the storehouse platform is banked "
+                "as meat_food, which is what a village hands out at a hearth to "
+                "anybody who is hungry")
+
+# AND THEY EAT IT ON THE GROUND. No rig has a clip for this, so the body is put
+# there the way sleep does it — dropped and pitched forward — and, crucially,
+# STOOD BACK UP afterwards. A pose that puts a body on the ground and never
+# lifts it has shipped in this codebase before.
+LOOK = (ROOT / "scripts/villager/villager_look.gd").read_text()
+down = body_of(LOOK, "gone_to_carrion")
+up = body_of(LOOK, "stand_up")
+kneels = any("_pitch_body(" in r for r in down) and any("sit_down(true)" in r for r in down)
+rises = any("_pitch_body(0.0)" in r for r in up) and any("sit_down(false)" in r for r in up)
+# The FIRST `State.EATING:` is the state machine's. The later ones are the
+# status line and the word over their head, and looking at those instead is how
+# a check comes to report on a match arm that does nothing.
+stands = any("stand_up(" in r
+             for r in code(VILL).split("State.EATING:")[1].split("\n")[:6])
+print("A PERSON EATING A PERSON %s%s."
+      % ("goes down on all fours" if kneels else "EATS STANDING UP, LIKE DINNER",
+         "" if rises and stands else ", AND NEVER GETS UP AGAIN"))
+if not kneels:
+    fail.append("eating a person looks exactly like eating a meal — the one "
+                "meal in the game that is not a meal")
+if kneels and not (rises and stands):
+    fail.append("nothing stands the eater back up, so a villager who ate on "
+                "their knees spends the rest of their life face down in the "
+                "grass — this file has shipped that bug once already, for sleep")
 
 # -- AND THE STORE OBEYS THE SAME CAP ----------------------------------------
 topping = body_of(STORE, "top_up")
 capped = any("MOST_IN_A_BUNDLE" in r for r in topping)
+if not any("is_human_meat" in r for r in topping):
+    fail.append("a bundle held over a store is topped up without asking what is "
+                "in it, so a joint of somebody grows into a stack of stock")
 print("DRAWING STOCK OUT of a store %s."
       % ("stops at a handful" if capped else "GROWS THE BUNDLE FOR EVER"))
 if not capped:

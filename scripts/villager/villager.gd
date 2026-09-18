@@ -430,6 +430,7 @@ func _physics_process(delta: float) -> void:
 			_process_go_eat(delta)
 		State.EATING:
 			if _wait(delta):
+				VillagerLook.stand_up(self)
 				_eat_meal()
 				happiness = minf(happiness + 8.0, 100.0)
 				_rethink()
@@ -682,20 +683,21 @@ func _physics_process(delta: float) -> void:
 			_process_go_target(_target_corpse, delta, State.BUTCHERING, 2.5)
 		State.BUTCHERING:
 			if _wait(delta):
-				var butchered := false
+				# WHERE, not whether: what comes off a body stays where the body
+				# was. It is never hauled and never banked. See FoodItem.
+				var cut_at := Vector3.INF
 				if is_instance_valid(_target_corpse):
 					var corpse_name := _target_corpse.villager_name
+					cut_at = _target_corpse.global_position
 					_target_corpse.queue_free()
 					morality = maxf(morality - 20.0, -100.0)
-					butchered = true
 					if village.is_player_home:
 						GameState.announce("%s butchered the remains of %s. The gods avert their eyes."
 							% [villager_name, corpse_name])
 				_target_corpse = null
-				if butchered:
-					_begin_haul("meat", 2, "butcher")
-				else:
-					_rethink()
+				if cut_at.is_finite():
+					FoodItem.joints_of_a_person(2, cut_at, get_parent())
+				_rethink()
 		State.GO_CHOP:
 			_process_go_target(_target_tree, delta, State.CHOPPING, 4.0)
 		State.CHOPPING:
@@ -1652,10 +1654,7 @@ func _process_go_eat(delta: float) -> void:
 		_target = _target_food.global_position
 		if _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
 			if _target_food.is_human_meat:
-				morality = maxf(morality - 25.0, -100.0)
-				if village.is_player_home:
-					GameState.announce("%s has eaten human flesh. Something in them dims."
-						% villager_name)
+				VillagerLook.gone_to_carrion(self)
 			# Keep the food (it may be a bundle) — EATING takes only as much
 			# as this belly needs, leaving the rest for the next hungry mouth.
 			_dismount()

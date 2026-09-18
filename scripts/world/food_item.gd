@@ -76,22 +76,28 @@ func _ready() -> void:
 ## different in the hand, they are wanted for different things, and a village
 ## with a granary full of mutton is a different game.
 ##
-## AND NOTHING IS LAUNDERED. `is_human_meat` decides whether an ordinary
-## villager will touch a thing at all (see Villager._will_eat_human_flesh) and
-## what the creature thinks it just did (Creature._deed_type), so a bundle that
-## quietly took one joint of human flesh into eleven of mutton would be eaten by
-## people who would have refused it and the god who did it would never know.
+## AND A JOINT OF SOMEBODY NEVER JOINS AN HONEST PILE.
 ##
-## Refusing the merge is one way to be honest about that and it is the worse
-## one, because it also refuses every innocent merge. The flesh TAINTS the pile
-## instead: every villager who would have refused the joint now refuses the
-## whole stack, the hover line reads "of unspeakable origin", and the player is
-## told out loud the moment it happens. Nobody is deceived, which was the whole
-## point of the old rule.
+## It was tried the other way for exactly one commit: let the flesh in, and let
+## it TAINT the pile — every villager who would have refused the joint refuses
+## the whole stack, the hover line says so, the player is told. Nothing is
+## laundered by that, and it is still wrong, because the question was never
+## whether the mixing could be made honest.
+##
+## HUMAN MEAT IS NOT A WORSE KIND OF MEAT. It is a different thing with a
+## different life, and the life is the point: it never goes to a store, it is
+## never carried home, and it is eaten where it lies by people who have run out
+## of other options or out of decency. A pile it could be mixed into is a pile
+## that would be carried, banked and served at a hearth, and all three of those
+## are exactly what must never happen to it. Keeping it out of the pile is not a
+## squeamish rule about bookkeeping; it is what makes the eating of it the
+## separate, wretched thing it is.
 func absorb(other: FoodItem) -> bool:
 	if other == null or not is_instance_valid(other) or other == self:
 		return false
 	if other.food_type != food_type:
+		return false
+	if other.is_human_meat != is_human_meat:
 		return false
 	# AS MUCH AS WILL FIT, and the rest stays on the ground. The flat refusal is
 	# what stopped two piles ever becoming one.
@@ -101,10 +107,6 @@ func absorb(other: FoodItem) -> bool:
 	var took := mini(other.count, room)
 	if took <= 0:
 		return false
-	if other.is_human_meat and not is_human_meat:
-		is_human_meat = true
-		GameState.hint("Somebody has gone into that pile. "
-			+ "Nobody in the village will touch it now.")
 	if food_type == FoodType.MEAT and other.meat_name != meat_name:
 		meat_name = MYSTERY
 	count += took
@@ -115,6 +117,26 @@ func absorb(other: FoodItem) -> bool:
 	else:
 		other.refresh_bundle()
 	return true
+
+
+## WHAT COMES OFF A BODY. The one place human meat is made, so that everything
+## true of it is true in one place: it is physical, it lies where it was cut,
+## and no other kind of meat is ever flagged this way by accident.
+##
+## It is deliberately NOT a haul. A butcher used to turn a corpse into two
+## abstract units of "meat" and walk them to the granary, where they became
+## ordinary stock and were served to the whole village — which is the laundering
+## the merge rule was written to prevent, happening by a different door and at a
+## larger scale. A body leaves joints on the grass now, and they stay there.
+static func joints_of_a_person(many: int, at: Vector3, into: Node) -> FoodItem:
+	var item := FoodItem.new()
+	item.food_type = FoodType.MEAT
+	item.is_human_meat = true
+	item.meat_name = "flesh"
+	item.count = maxi(many, 1)
+	into.add_child(item)
+	item.global_position = at
+	return item
 
 
 ## Re-fit the visual to the current count — called when a bundle grows (held

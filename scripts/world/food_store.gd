@@ -124,6 +124,22 @@ func _process(delta: float) -> void:
 		if rb.has_meta("no_deposit_until") \
 				and GameState.clock < float(rb.get_meta("no_deposit_until")):
 			continue  # freshly withdrawn: give the hand time to carry it off
+		# NOTHING OF A PERSON IS EVER STOCK.
+		#
+		# It cannot be banked, so it cannot be served, so it can only ever be
+		# eaten where it lies by somebody who has run out of other options —
+		# which is the whole of what makes eating it different from eating. A
+		# store that took it would turn it into meat_food, and meat_food is
+		# what a village hands out at a hearth to anybody who is hungry.
+		#
+		# Said out loud once per joint, because a player who has carried it all
+		# the way here is owed the reason it is being refused.
+		if rb is FoodItem and (rb as FoodItem).is_human_meat:
+			if not rb.has_meta("refused_at_the_door"):
+				rb.set_meta("refused_at_the_door", true)
+				GameState.announce("The storehouse will not take that. "
+					+ "It goes in nobody's larder.")
+			continue
 		# HOW FAST IT ARRIVED, read before the body is freed. This is the whole
 		# difference between a gift carried in and a shot from the halfway line
 		# — see VillageWonder.given.
@@ -231,7 +247,7 @@ func top_up(item: Node) -> bool:
 		# what would fit, so a bundle held over a full granary grew without
 		# limit — which made the bundle cap a rule that only applied to the
 		# piles on the grass.
-		if f.count >= FoodItem.MOST_IN_A_BUNDLE:
+		if f.count >= FoodItem.MOST_IN_A_BUNDLE or f.is_human_meat:
 			return false
 		if f.food_type == FoodItem.FoodType.PLANT and plant_food > 0:
 			plant_food -= 1

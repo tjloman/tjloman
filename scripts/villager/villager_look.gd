@@ -34,6 +34,12 @@ const DITHER := 0.35
 const SPEAK_ODDS := 0.06
 const SPEAK_REST := 5.0
 
+## HOW FAR FORWARD A BODY GOES OVER A CORPSE, and what the meal costs whoever
+## eats it. See `gone_to_carrion` — the pitch is the same trick sleep uses,
+## because there is no rig with a clip for this either.
+const CARRION_PITCH := 74.0
+const CARRION_COST := 25.0
+
 static var _spoke_at := -99.0
 
 
@@ -72,6 +78,10 @@ static func _pass_the_time(who: Villager) -> void:
 
 
 static func pose(who: Villager) -> String:
+	# ON ALL FOURS, and this outranks everything including the sit, because it
+	# is the one meal in the game that is not a meal. See `gone_to_carrion`.
+	if who.state == Villager.State.EATING and eating_a_person(who):
+		return "feed"
 	# SITTING OUTRANKS THE STATE IT IS IN, because AT_SCHOOL covers a class on
 	# its feet and a class on the ground alike, and only the school knows which.
 	if who._seated:
@@ -105,6 +115,41 @@ static func pose(who: Villager) -> String:
 	if Spool.stalled_for(who) >= DITHER:
 		return "stretch"
 	return "idle"
+
+
+## IS THIS ONE DOWN OVER A BODY? Asked of what they are actually eating rather
+## than of a flag, so there is nothing to keep in step and nothing to leave set.
+static func eating_a_person(who: Villager) -> bool:
+	var meal := who._target_food
+	return meal != null and is_instance_valid(meal) and meal.is_human_meat
+
+
+## DOWN ON HANDS AND KNEES, no manners at all, the way an animal feeds.
+##
+## A person eating a person does not do it at a hearth and does not do it
+## standing up. There is no rig with a clip for this, so it is done the way
+## everything else without one is done in this file — the body drops to the
+## ground and pitches forward over the meat, and the animator is asked for
+## "feed" anyway, against the day a model arrives that has it.
+##
+## The morality and the announcement live here too rather than in the eating
+## code, because they are the same event: this is what eating a person IS.
+static func gone_to_carrion(who: Villager) -> void:
+	who.morality = maxf(who.morality - CARRION_COST, -100.0)
+	who.sit_down(true)
+	who._pitch_body(CARRION_PITCH)
+	if who.village != null and who.village.is_player_home:
+		GameState.announce("%s is down over a body, eating. Something in them "
+			% who.villager_name + "dims.")
+
+
+## AND BACK UP AFTERWARDS. Every pose in this game that puts a body on the
+## ground has to be undone by somebody — a villager who ate on their knees and
+## was never stood up stays face down in the grass through the rest of their
+## life, which is a bug this file has shipped once already for sleep.
+static func stand_up(who: Villager) -> void:
+	who.sit_down(false)
+	who._pitch_body(0.0)
 
 
 ## ARE BOTH THIS BODY AND WHERE IT IS GOING INSIDE THE TOWN?
