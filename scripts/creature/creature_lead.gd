@@ -38,6 +38,84 @@ const LOOK_EVERY := 3.0
 const STRONG_HEED := 25.0
 const GLANCE := 8.0
 
+## TIED UP AND MADE TO WATCH — the disciplinary measure and the teaching aid,
+## and they are the same act.
+##
+## A creature on a tied rope cannot walk off. So when you let go of the lead and
+## then work a miracle, or hurl a tree, or set somebody down gently in front of
+## it, that is not a thing the beast MAY happen to notice — it is a thing it is
+## being SHOWN. Its head goes round, its attention is pinned, and it can do
+## nothing about any of it.
+##
+## This is what tying the rope off is FOR, and it is the answer to the oldest
+## complaint about teaching by example in this game: that the one creature you
+## most need to show something to is the one that keeps wandering off to look at
+## a sheep. Holding the lead is steering. Tying it is teaching.
+##
+## What it buys is the HOW and not the WHY. Being made to watch a thing done
+## teaches technique twice as fast and gets past the point where a creature has
+## stopped taking its cues from you at all — but what it comes to WANT is still
+## settled by what it thinks of you, because you cannot make anything admire you
+## by tying it to a post. See CreatureMind.witness_god_deed.
+const HELD_HEED := 2.0
+## And it notices you from further off while it is tied, because there is
+## nothing else to notice.
+const HELD_REACH := 1.6
+## How long its head is held on what you just did. Longer than the head's own
+## HOLD_LOOK: it is not choosing to look.
+const HELD_LOOK := 3.2
+
+
+## IS IT TIED UP? Not "is it on a lead" — a rope in your hand is a rope it can
+## be led by, and it may still put its back to you. This is the far end being
+## round SOMETHING, which is the state it cannot leave.
+static func tied_up(who: Creature) -> bool:
+	if who == null or not is_instance_valid(who) or not who.is_inside_tree():
+		return false
+	var rope := LeadRope.on(who, who.get_tree())
+	return rope != null and rope.is_tied()
+
+
+## HOW MUCH HARDER A LESSON LANDS RIGHT NOW: one while it is loose, and
+## HELD_HEED while it is tied up in front of what you are doing.
+static func heed(who: Creature) -> float:
+	return HELD_HEED if tied_up(who) else 1.0
+
+
+## AND HOW MUCH FURTHER IT SEES YOU, for the same reason.
+static func reach_gain(who: Creature) -> float:
+	return HELD_REACH if tied_up(who) else 1.0
+
+
+## COULD IT SEE THAT? Its ordinary sight, widened by what it has been attending
+## to and by its own size — a big creature's eye is higher up — and widened
+## again while it is tied.
+##
+## Lifted out of Creature.witness_god, which is where the numbers were: the file
+## lives permanently on its line limit, and this is the lead's rule now.
+static func in_sight(who: Creature, where: Vector3) -> bool:
+	if who == null or not is_instance_valid(who):
+		return false
+	var reach := (24.0 + who.attention * 0.3 + who.scale.x * 1.5) * reach_gain(who)
+	return who.global_position.distance_to(where) <= reach
+
+
+## AND IT LOOKS AT IT. A creature that cannot walk away from what you are doing
+## should not be able to look away from it either: the head goes to the spot and
+## is held there, rather than drifting back to your hand or a passing sheep the
+## moment the head next picks a subject.
+##
+## Loose, this is nothing at all. A free creature notices what it notices, and
+## that is the whole difference between showing something to a beast and merely
+## doing it near one.
+static func made_to_watch(who: Creature, where: Vector3) -> void:
+	if not tied_up(who):
+		return
+	if where.distance_to(who.global_position) > CreatureHead.STARTLE_WITHIN:
+		return
+	CreatureHead.startled(who, where)
+	who.head.look_here(where, HELD_LOOK)
+
 
 ## ORDER IT TO A SPOT (the hand's ground point). It drops what it is doing.
 static func to_spot(who: Creature, pos: Vector3) -> void:

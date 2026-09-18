@@ -315,6 +315,37 @@ if others:
                 "slot means one of them is not last, and the bill quietly goes "
                 "back to blaming whoever is" % ", ".join(others))
 
+# AND THE SAME IS TRUE OF THE IDLE FRAME, which is where the page is turned.
+#
+# `turn_the_page` shuts whatever clock is open, and it is called from the
+# meter's own `_process`. So if the meter is not LAST among the idle processors
+# too, the page turns in the MIDDLE of the frame: everything that runs after it
+# opens rows on the next page, and whichever of those ran last keeps its clock
+# through the whole render and on into the following frame.
+#
+# That is how one muck pile came back at 14.2ms for ONE call, top of the bill,
+# in a frame whose entire idle script time was 23ms. Poop._process sets a scale
+# and a height. It was being charged for the renderer.
+last_in_frame = re.search(r"(?<!physics_)process_priority = (\w+)", code(METER))
+print("THE IDLE FRAME'S LAST WORD is %s."
+      % ("the meter" if last_in_frame else "WHOEVER HAPPENS TO BE LAST IN THE TREE"))
+if not last_in_frame:
+    fail.append("the meter does not put itself last in the idle frame, so it "
+                "turns the ledger's page half way through one — and the class "
+                "that opened last before the turn is billed for the render and "
+                "for the gap to the next frame, which is a made-up number at "
+                "the top of the bill")
+idle_others = []
+for path in sorted((ROOT / "scripts").rglob("*.gd")):
+    if path.name == "frame_meter.gd":
+        continue
+    if re.search(r"(?<!physics_)process_priority", code(path.read_text())):
+        idle_others.append(path.name)
+if idle_others:
+    fail.append("%s also sets an idle priority — two nodes claiming the last "
+                "slot means one of them is not last, and the page turns in the "
+                "middle of a frame again" % ", ".join(idle_others))
+
 # AND THE PAGE IS TURNED, which is also what shuts the last clock of the frame.
 turned = "Ledger.turn_the_page()" in code(METER)
 shuts = any("shut()" in r for r in body_of(LEDGER, "turn_the_page"))

@@ -18,6 +18,20 @@ const HARVEST_YIELD := 34
 const HALF_X := 3.5
 const HALF_Z := 2.5
 const BURN_SECONDS := 60.0   # a field ablaze is ash in a minute
+## THE COLOUR OF TURNED EARTH, and how much of it a field shows over the ground
+## it was cut from.
+##
+## It used to be a flat brown, the same brown in a meadow, on a beach, in snow
+## and on the red dirt of a savanna — which is what read as SPLOTCHY. A field is
+## not a brown rectangle dropped on the world. It is that world turned over, so
+## it takes the ground's own colour (WorldGen.ground_color, the same call the
+## terrain mesh itself is coloured by) and tills it.
+const EARTH := Color(0.33, 0.24, 0.15)
+const TILLED := 0.68
+## And it stops tilling toward its rim, so the edge fades into the meadow
+## instead of ending on a straight line. A field has a headland; a decal does
+## not, and that hard edge was most of the splotch.
+const RIM_TILL := 0.42
 
 ## WHAT IT TAKES TO WRECK A FIELD BY FORCE, against a villager's hundred. Less
 ## than a building because it is soil and stalks rather than stone — but a
@@ -90,7 +104,24 @@ func _build_soil(world: WorldGen) -> void:
 			var z0 := lerpf(-HALF_Z, HALF_Z, float(r) / rows)
 			var z1 := lerpf(-HALF_Z, HALF_Z, float(r + 1) / rows)
 			var furrow := 0.04 if c % 2 == 0 else 0.0
-			var soil := Color(0.36 - furrow, 0.26 - furrow, 0.16)
+			# WHAT THE GROUND HERE IS, before anybody dug it — asked of the
+			# same function the terrain mesh is coloured by, so a field in a
+			# meadow, on sand and on burnt ground are three different fields.
+			# Slope is passed as flat: nobody tills a cliff, and asking costs
+			# three more height samples per quad.
+			var mx := (x0 + x1) * 0.5
+			var mz := (z0 + z1) * 0.5
+			var here := Color(0.4, 0.58, 0.32)
+			if world != null:
+				here = world.ground_color(global_position.x + mx,
+					global_position.z + mz,
+					global_position.y + _local_ground(world, mx, mz), 0.0)
+			# How far out this quad is, 0 in the middle of the field and 1 at
+			# the rim — which is how much of the turning it shows.
+			var edge := maxf(absf(float(c) + 0.5 - cols * 0.5) / (cols * 0.5),
+				absf(float(r) + 0.5 - rows * 0.5) / (rows * 0.5))
+			var till := lerpf(TILLED, RIM_TILL, smoothstep(0.5, 1.0, edge))
+			var soil := here.lerp(EARTH, till).darkened(furrow)
 			var p00 := Vector3(x0, _local_ground(world, x0, z0) + 0.06, z0)
 			var p10 := Vector3(x1, _local_ground(world, x1, z0) + 0.06, z0)
 			var p11 := Vector3(x1, _local_ground(world, x1, z1) + 0.06, z1)

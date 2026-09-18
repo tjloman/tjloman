@@ -627,8 +627,12 @@ func resolve(miracle: String, pos: Vector3, momentum := Vector3.ZERO,
 		"healing_shower": _cast_healing_shower(pos, potency)
 		_: return
 	_apply_karma(miracle, pos)
-	CreatureHead.startled(
-		get_tree().get_first_node_in_group("creature") as Creature, pos)
+	var watcher := get_tree().get_first_node_in_group("creature") as Creature
+	CreatureHead.startled(watcher, pos)
+	# AND A TIED ONE IS MADE TO WATCH IT. This is what tying the lead off is
+	# for: the beast is where you put it, and the working happens in front of
+	# it whether it had any intention of attending or not.
+	CreatureLead.made_to_watch(watcher, pos)
 	for v in get_tree().get_nodes_in_group("village"):
 		(v as Village).witness_miracle(miracle, pos)
 
@@ -638,10 +642,14 @@ func _apply_karma(miracle: String, pos: Vector3) -> void:
 		return
 	GameState.shift_alignment(KARMA[miracle]["player"])
 	var creature := get_tree().get_first_node_in_group("creature") as Creature
-	if creature != null and creature.global_position.distance_to(pos) < CREATURE_SIGHT_RANGE:
+	if creature != null and creature.global_position.distance_to(pos) \
+			< CREATURE_SIGHT_RANGE * CreatureLead.reach_gain(creature):
 		creature.witness(KARMA[miracle]["creature"])
-		# Watching the power work teaches it, a little, how to work it itself.
-		creature.mind.witness_miracle(miracle)
+		# Watching the power work teaches it, a little, how to work it itself —
+		# and a creature tied up in front of the working watches it properly
+		# rather than glancing up from whatever it would rather be doing.
+		creature.mind.witness_miracle(miracle,
+			CreatureMind.MIRACLE_STEP * CreatureLead.heed(creature))
 
 
 func _cast_food(pos: Vector3) -> void:

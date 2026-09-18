@@ -40,6 +40,10 @@ const RELISH := 0.45
 ## Your praise and scolding are the loudest teacher in its world — they move a
 ## belief far harder than merely doing the thing does.
 const TEACH_LR := 0.75
+## HOW LITTLE IT CAN THINK OF YOU AND STILL COPY YOU. Below this it is not
+## taking its cues from you at all — and the one thing that gets past it is
+## being made to watch, which is what tying the rope off is for.
+const FAITH_FLOOR := 0.15
 
 ## HOW GOOD IT HAS GOT AT A THING, nought to nine — and the only one of the
 ## three kinds of learning in this file that comes from DOING.
@@ -516,8 +520,10 @@ func skill_level(verb: String) -> int:
 
 
 ## Watching the god cast a miracle teaches it, a little, how the power feels.
-func witness_miracle(miracle: String) -> void:
-	familiarity[miracle] = minf(float(familiarity.get(miracle, 0.0)) + MIRACLE_STEP, 1.0)
+## `step` is how hard it was watching. A creature tied up in front of the
+## working sees it properly; one that happened to be in the field glanced at it.
+func witness_miracle(miracle: String, step := MIRACLE_STEP) -> void:
+	familiarity[miracle] = minf(float(familiarity.get(miracle, 0.0)) + step, 1.0)
 
 
 ## A creature can only do what it has SEEN DONE. Dancing, praying, standing
@@ -543,16 +549,23 @@ func knows(verb: String) -> bool:
 ## plant trees; hurl shepherds into the sea and it learns that too. This is the
 ## widest channel you have into what your creature becomes, and it is entirely
 ## made of what you actually do.
-func witness_god_deed(verb: String, type: String, trust: float) -> void:
+## `heed` is HOW HARD IT IS WATCHING — one when it is free to look elsewhere,
+## and more when it has been tied up in front of you and cannot (see
+## CreatureLead.HELD_HEED). Note what it does and does not touch: being made to
+## watch teaches the HOW twice as fast and gets past the point where a creature
+## has stopped taking its cues from you at all, and it does nothing whatever to
+## what the creature WANTS. You cannot make a thing admire you by tying it to a
+## post, and a model that let you would be a worse game as well as a lie.
+func witness_god_deed(verb: String, type: String, trust: float, heed := 1.0) -> void:
 	var faith := clampf(trust / 100.0, 0.0, 1.0)
-	if faith < 0.15:
+	if faith < FAITH_FLOOR / maxf(heed, 0.001):
 		return          # it is no longer taking its cues from you
 	teach(verb, type, MIMIC_REWARD * faith, MIMIC_LR * faith)
 	# AND THE TECHNIQUE, not merely the appetite. `teach` writes what it WANTS;
 	# this writes what it CAN. A player who spends an afternoon hurling things
 	# where their creature can see is teaching it to throw, and eventually to
 	# juggle — see CreatureThrowing for the ladder that knack unlocks.
-	watch_technique(verb, faith)
+	watch_technique(verb, minf(faith * heed, 1.0))
 	witness_practice("mimic", PRACTICE_STEP * 0.5)
 	# Copying is itself a habit: the more it watches a god worth watching, the
 	# more it thinks to look in the first place.

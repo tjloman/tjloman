@@ -532,11 +532,15 @@ func _go_off() -> void:
 		var creature := get_tree().get_first_node_in_group("creature") as Creature
 		if creature != null and is_instance_valid(creature) \
 				and creature.global_position.distance_to(pos) \
-					< MiracleManager.CREATURE_SIGHT_RANGE:
+					< MiracleManager.CREATURE_SIGHT_RANGE \
+						* CreatureLead.reach_gain(creature):
 			creature.witness(float(due["creature"]))
-			creature.mind.witness_miracle(kind)
-	CreatureHead.startled(
-		get_tree().get_first_node_in_group("creature") as Creature, pos)
+			creature.mind.witness_miracle(kind,
+				CreatureMind.MIRACLE_STEP * CreatureLead.heed(creature))
+	var watcher := get_tree().get_first_node_in_group("creature") as Creature
+	CreatureHead.startled(watcher, pos)
+	# And a tied creature is made to watch it land. See CreatureLead.
+	CreatureLead.made_to_watch(watcher, pos)
 
 	# The blast is the sermon: terror converts where the fire LANDS.
 	for v in get_tree().get_nodes_in_group("village"):

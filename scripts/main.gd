@@ -548,9 +548,9 @@ func _take_the_lead() -> void:
 		creature.leash_to_thing(onto)
 		# ...and a tie is a put-down, so say so. Your hands are free, the
 		# camera is yours, and the rope is working away without you.
-		GameState.announce("The lead goes round %s. Your hands are free — "
+		GameState.announce("The lead goes round %s. Your hands are free, and it "
 			% divine_hand.describe(onto)
-			+ "press Lead again to take it back up.")
+			+ "must watch whatever you do next. Press Lead to take it back up.")
 	elif taking_back:
 		GameState.announce("You take the lead back up. Walk, and it follows.")
 	else:

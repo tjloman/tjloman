@@ -109,6 +109,17 @@ func aim(who: Creature, delta: float) -> void:
 	_speak(who, delta)
 
 
+## MADE TO LOOK. Not a preference and not a subject it chose: the head goes to
+## this spot now and stays on it for `seconds`, which is what a creature tied up
+## in front of its god is doing whether it likes it or not. Without the hold
+## `_pick` has it back on your hand or a passing sheep within HOLD_LOOK, and the
+## whole of being SHOWN something is that you do not get to look away.
+func look_here(where: Vector3, seconds := HOLD_LOOK) -> void:
+	subject = null
+	at = where
+	_choose_in = maxf(_choose_in, seconds)
+
+
 ## Has what it was looking at gone, died, or wandered out of range?
 func _still_worth_it(who: Creature) -> bool:
 	if subject == null:

@@ -43,6 +43,31 @@ const ENGINE_LAST := 1000
 ## "(everything else)", because it is not a class anybody wrote.
 const ENGINE_ROW := &"(the solver)"
 
+## WHAT IS THAT BAND ACROSS THE SKY.
+##
+## Something has been drawing a pale salmon ribbon over the landscape, and from
+## a photograph there is no way to tell a stretched animal from a rope drawn to
+## a dead anchor from a road doing exactly what it was told. Every answer anyone
+## can give to a screenshot of it is a guess, and this codebase has a rule about
+## guessing.
+##
+## So the meter names it. Anything drawn wider than GIANT that is not one of the
+## things MEANT to be enormous gets a line with what it is and where it stands —
+## and in a sane world the line is not there at all, which is what makes it
+## worth reading when it is.
+## IT IS PRINTED EVERY TIME, not only when it looks wrong. A line that appears
+## only when some threshold decides there is a problem can only ever confirm
+## what the threshold already believed — and the thing that is too big may well
+## be a chunk of the ground, which is exactly what a skip list would hide. So
+## the meter names the biggest drawn thing in the world, always, and how many
+## are over GIANT. In a sane world that reads "Chunk/@MeshInstance3D 96m" and
+## means nothing; when it reads "pig 812m" the hunt is over.
+const GIANT := 120.0
+## The only things skipped: the sky and the lights in it, which are meant to be
+## the size of the world, and every MultiMesh, whose bounds are the whole field
+## it scatters over rather than one blade of it.
+const VAST: Array[String] = ["Sky", "Sun", "Moon", "Horizon", "Star"]
+
 
 ## WHAT THE FRAME IS MADE OF, most recently measured. Public so a smoke test can
 ## assert on the same numbers the player is looking at.
@@ -92,6 +117,17 @@ func _ready() -> void:
 	# scripts cost and what the ENGINE costs are two different questions and the
 	# bill could not tell them apart.
 	process_physics_priority = ENGINE_LAST
+	# AND LAST IN THE IDLE FRAME TOO, for a different reason that produces the
+	# same lie. The ledger's page is turned in this file's own `_process`, and
+	# turning it shuts whatever clock is open — so a meter that runs half way
+	# down the tree turns the page half way through the frame. Everything after
+	# it opens rows on the NEXT page, and whichever of those ran last keeps its
+	# clock through the entire render and on into the following frame.
+	#
+	# That is how one muck pile came back at 14.2ms for a single call, top of
+	# the bill, in a frame whose whole idle script time was 23ms. Poop._process
+	# sets a scale and a height; it was being charged for the renderer.
+	process_priority = ENGINE_LAST
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT,
@@ -171,6 +207,49 @@ func _process(delta: float) -> void:
 	_label.text = _readout()
 
 
+## THE BIGGEST DRAWN THING IN THE WORLD, whatever it is.
+##
+## Walks every drawn node once every EVERY seconds, and only while the meter is
+## open, which is the only reason a walk of six thousand nodes in GDScript is an
+## acceptable thing to do at all. It is a debugging instrument and it is priced
+## like one.
+func _the_biggest_thing() -> String:
+	var worst := 0.0
+	var named := ""
+	var at := Vector3.ZERO
+	var huge := 0
+	for n in get_tree().root.find_children("*", "GeometryInstance3D", true, false):
+		var vi := n as VisualInstance3D
+		if vi == null or vi is MultiMeshInstance3D or not vi.is_visible_in_tree():
+			continue
+		var kin := vi.get_parent()
+		var skip := false
+		for word: String in VAST:
+			if vi.name.contains(word) or (kin != null and kin.name.contains(word)):
+				skip = true
+				break
+		if skip:
+			continue
+		var box := vi.get_transformed_aabb()
+		var across: float = box.size[box.get_longest_axis_index()]
+		# A NON-FINITE VERTEX makes an infinite box, and Godot draws that as a
+		# smear across the whole world. It is the likeliest way a thing gets to
+		# be a mile wide, and it must not be silently sorted to the bottom.
+		if not is_finite(across):
+			return "BIGGEST: %s/%s has a NON-FINITE box" \
+				% [kin.name if kin != null else "?", vi.name]
+		if across > GIANT:
+			huge += 1
+		if across > worst:
+			worst = across
+			named = "%s/%s" % [kin.name if kin != null else "?", vi.name]
+			at = box.get_center()
+	if named == "":
+		return ""
+	return "biggest drawn: %s %.0fm at %.0f, %.0f%s" % [named, worst, at.x, at.z,
+		"   (%d over %dm)" % [huge, int(GIANT)] if huge > 1 else ""]
+
+
 ## THE READOUT. Ordered so the first three lines answer the only question that
 ## matters — which half of the machine is spending the frame — and everything
 ## below them is there to explain whichever one it turns out to be.
@@ -198,6 +277,9 @@ func _readout() -> String:
 		int(Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS)),
 		int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT))])
 	rows.append(_what_is_here())
+	var biggest := _the_biggest_thing()
+	if biggest != "":
+		rows.append(biggest)
 	rows.append("")
 	# THE BILL. What each numerous class cost this frame and how many of them
 	# ran — the second number matters as much as the first, because a game that

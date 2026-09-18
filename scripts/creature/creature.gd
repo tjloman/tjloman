@@ -2168,13 +2168,13 @@ func earn_trust(amount: float, cause := "") -> void:
 func witness_god(verb: String, type: String, valence := 0.0) -> void:
 	if divine_hand == null or not is_instance_valid(divine_hand):
 		return
-	# Out of sight, out of mind: it copies what it WATCHES, not what you do
-	# across the map. Attention widens how far that reaches.
-	var reach := 24.0 + attention * 0.3 + scale.x * 1.5
-	if divine_hand.global_position.distance_to(global_position) > reach:
+	# Out of sight, out of mind — and a creature TIED UP in front of you can do
+	# nothing but watch, which is what tying the lead off is for. CreatureLead.
+	if not CreatureLead.in_sight(self, divine_hand.global_position):
 		return
-	mind.witness_god_deed(verb, type, trust)
-	attention = minf(attention + 4.0, 100.0)
+	var held := CreatureLead.heed(self)
+	mind.witness_god_deed(verb, type, trust, held)
+	attention = minf(attention + 4.0 * held, 100.0)
 	# It also reads your character off your conduct, faintly — this is the same
 	# slow channel that watching your miracles uses.
 	if valence != 0.0:

@@ -471,6 +471,106 @@ if not picks_up:
                 "a tree and in your hand at the same time — which is the state "
                 "where a tap on the landscape unties it by surprise")
 
+# -- AND YOUR HAND EMPTIES WHEN YOU TAKE IT UP -------------------------------
+#
+# A hand with the lead in it does not grab, and the release path returns early
+# for the lead — so taking up the rope while carrying something left that thing
+# glued to the hand with NO way to let go of it: the sling's rope and aim arc
+# drawn over it for the rest of the session, and `hands_busy` stuck true, which
+# costs the far half of the world a simulation stride for as long as it lasts.
+taking_up = body_of(HAND, "hold_lead")
+frees = any("_release_body(" in r for r in taking_up) \
+    and any("held_body = null" in r for r in taking_up) \
+    and any("_stow_sling()" in r for r in taking_up)
+print()
+print("TAKING UP THE LEAD %s."
+      % ("sets down what the hand was holding" if frees
+         else "LEAVES IT GLUED TO A HAND THAT CANNOT LET GO"))
+if not frees:
+    fail.append("taking up the lead does not set down what the hand was "
+                "carrying — and the release path returns early while the lead "
+                "is up, so that thing can never be let go of, its sling stays "
+                "drawn over the world, and hands_busy never clears")
+
+# -- AND TYING IT OFF IS THE TEACHING AID ------------------------------------
+#
+# The player's words: "Letting go of it, and casting miracles or throwing things
+# is like pulling the creature aside so it is FORCED to see what it is you want
+# it to see. This is the disciplinary measure and teaching aid rolled into one."
+#
+# So a tied creature does not merely fail to wander off — it is SHOWN things.
+# Its head goes round and is held there, and the lesson goes in harder. The
+# whole mechanic rests on four statements, and any one of them missing leaves
+# the other three doing nothing worth having.
+LEADC3 = (ROOT / "scripts/creature/creature_lead.gd").read_text()
+HEADC = (ROOT / "scripts/creature/creature_head.gd").read_text()
+MIND = (ROOT / "scripts/creature/creature_mind.gd").read_text()
+
+shown = body_of(LEADC3, "made_to_watch")
+only_tied = False
+for i, row in enumerate(shown):
+    if "tied_up(" in row:
+        only_tied = any(r.strip() == "return" for r in shown[i:i + 3])
+aims = any("look_here(" in r for r in shown)
+print()
+print("A TIED CREATURE %s what you do in front of it."
+      % ("is made to watch" if only_tied and aims else "MAY LOOK OR MAY NOT"))
+if not aims:
+    fail.append("nothing turns the tied creature's head to what you just did, "
+                "so tying it off buys the player nothing they could see")
+if not only_tied:
+    fail.append("being made to watch is not gated on being TIED, so either a "
+                "loose creature is pinned to your every move or the gate is "
+                "somewhere it cannot be read")
+
+# AND THE HEAD IS HELD. Without the hold `_pick` has it back on your hand or a
+# passing sheep within HOLD_LOOK, and being shown a thing is exactly the part
+# where you do not get to look away.
+held = any("_choose_in" in r for r in body_of(HEADC, "look_here"))
+print("   ...and its head %s." % ("is held there" if held else "DRIFTS STRAIGHT BACK"))
+if not held:
+    fail.append("the head can be pointed at what you did but not HELD there, "
+                "so it picks a new subject within HOLD_LOOK and the creature "
+                "looks away from the thing it is tied in front of")
+
+# AND EVERY DEED GOES THROUGH IT: what your hands do, and what your miracles do.
+by_hand = any("made_to_watch(" in r for r in body_of(HAND, "_show_creature"))
+MIRACLES = (ROOT / "scripts/miracles/miracle_manager.gd").read_text()
+# `resolve` is where a miracle actually happens — the one door every working
+# goes through, whether it was drawn, thrown as an orb, or cast by the creature.
+by_miracle = any("made_to_watch(" in r for r in body_of(MIRACLES, "resolve"))
+print("   ...for your hands: %s, for your miracles: %s."
+      % ("yes" if by_hand else "NO", "yes" if by_miracle else "NO"))
+if not by_hand:
+    fail.append("a thrown or gently set-down thing does not reach the tied "
+                "creature, so half of what you can show it is not shown")
+if not by_miracle:
+    fail.append("a miracle worked in front of a tied creature does not make it "
+                "watch, which is the example the mechanic exists for")
+
+# AND WHAT IT BUYS IS THE HOW, NOT THE WHY. This is the design claim, and it is
+# worth a check because it is the one that would be quietly convenient to break:
+# a `heed` on the reward would let a player MANUFACTURE a creature's devotion by
+# tying it to a post, and nothing else in this codebase works that way.
+learning = body_of(MIND, "witness_god_deed")
+wants = next((r for r in learning if "teach(" in r), "")
+can = next((r for r in learning if "watch_technique(" in r), "")
+floor = next((r for r in learning if "FAITH_FLOOR" in r or "faith <" in r), "")
+honest = "heed" not in wants and "heed" in can and "heed" in floor
+print("BEING MADE TO WATCH teaches %s."
+      % ("the how, and never the why" if honest else "WHATEVER IS CONVENIENT"))
+if "heed" not in can:
+    fail.append("being made to watch does not teach technique any faster, so "
+                "the whole mechanic is a head turning and nothing else")
+if "heed" in wants:
+    fail.append("being made to watch moves what the creature WANTS — so a "
+                "player can manufacture devotion by tying a beast to a post, "
+                "which is not how anything else in this game works")
+if "heed" not in floor:
+    fail.append("the trust floor is not passable by being made to watch, so "
+                "tying up the one creature that has stopped listening to you "
+                "teaches it nothing — which is the case the mechanic is for")
+
 print()
 if fail:
     for line in fail:

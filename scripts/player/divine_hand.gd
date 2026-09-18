@@ -495,6 +495,18 @@ func _carry_lead() -> void:
 ## TAKE UP THE LEAD, or put it down. The one entry point, so the button and the
 ## key cannot come to different conclusions.
 func hold_lead(rope: LeadRope) -> void:
+	# AND YOUR HAND EMPTIES FIRST. You cannot hold a sheep and a rope: a hand
+	# with the lead in it does not grab, and the release path returns early for
+	# the lead — so taking up the rope while carrying something left that thing
+	# GLUED to the hand with no way on earth to let go of it, the sling's rope
+	# and aim arc drawn over it for the rest of the session, and `hands_busy`
+	# stuck true, which costs the far half of the world a simulation stride.
+	# Set down, gently, wherever it was: nothing is thrown by accident.
+	if is_instance_valid(held_body):
+		_release_body(held_body, Vector3.ZERO, true)
+		held_body = null
+		state = HandState.IDLE
+	_stow_sling()
 	lead = rope
 	if rope != null:
 		# AND TAKING IT UP TAKES IT OFF THE POST. A rope cannot be tied to a
@@ -1244,6 +1256,10 @@ func _show_creature(verb: String, subject: Node3D, valence: float) -> void:
 	# catching the thing. See CreatureHead.startled.
 	if verb == "throw":
 		CreatureHead.startled(creature, subject.global_position)
+	# AND A TIED CREATURE IS SHOWN IT, whichever of the two it was. It cannot
+	# walk off, so its head goes round and is held there — see
+	# CreatureLead.made_to_watch, which does nothing at all to a loose one.
+	CreatureLead.made_to_watch(creature, subject.global_position)
 
 
 
@@ -1436,9 +1452,9 @@ func _tick_tying(delta: float) -> void:
 	if onto == null:
 		GameState.announce("The lead is loose in your hand again.")
 	else:
-		GameState.announce("You tie the lead round %s. It has %dm of rope, "
+		GameState.announce("You tie the lead round %s. %dm of rope, your hands "
 			% [describe(onto), int(rope.length)]
-			+ "and your hands are free — press Lead to take it back up.")
+			+ "are free — and it must watch whatever you do next.")
 
 
 ## HOLDING THE SUN. Unlike the casting summons this is NOT touch-only: a mouse
