@@ -57,10 +57,10 @@ static func _a_body(who: Villager) -> Corpse:
 ## Choose a meal. False when there is nothing anywhere, which is what a famine
 ## actually is.
 static func plan(who: Villager) -> bool:
-	who._target_bush = null
-	who._feeding_on = null
-	who._target_food = _ground_food(who)
-	if who._target_food != null:
+	who.target_bush = null
+	who.feeding_on = null
+	who.target_food = _ground_food(who)
+	if who.target_food != null:
 		who.state = Villager.State.GO_EAT
 		return true
 	# BEFORE THE GRANARY, for somebody who would rather. A villager this far
@@ -71,7 +71,7 @@ static func plan(who: Villager) -> bool:
 		return _go_to(who, body)
 	for type: FoodItem.FoodType in who.village.allowed_food_types():
 		if who.village.store.has(type):
-			who._target_food = null
+			who.target_food = null
 			who.state = Villager.State.GO_EAT
 			who._target = who.village.store.global_position
 			return true
@@ -80,15 +80,15 @@ static func plan(who: Villager) -> bool:
 	if body != null:
 		return _go_to(who, body)
 	# The granary is bare: go foraging in the wild like anyone's ancestors.
-	who._target_bush = who._nearest_forage_bush()
-	if who._target_bush != null:
+	who.target_bush = who._nearest_forage_bush()
+	if who.target_bush != null:
 		who.state = Villager.State.GO_EAT
 		return true
 	return false
 
 
 static func _go_to(who: Villager, body: Corpse) -> bool:
-	who._feeding_on = body
+	who.feeding_on = body
 	who.state = Villager.State.GO_EAT
 	who._target = body.global_position
 	return true
@@ -97,39 +97,39 @@ static func _go_to(who: Villager, body: Corpse) -> bool:
 ## Walk to whatever was chosen, and start on it when it is underfoot.
 static func go(who: Villager, delta: float) -> void:
 	var pace := Villager.WALK_SPEED * who._speed_factor()
-	if who._target_bush != null:
-		if not is_instance_valid(who._target_bush) or not who._target_bush.has_berries():
-			who._target_bush = null
+	if who.target_bush != null:
+		if not is_instance_valid(who.target_bush) or not who.target_bush.has_berries():
+			who.target_bush = null
 			who._rethink()
 			return
-		if who._move_toward(who._target_bush.global_position, pace, delta):
-			if who._target_bush.take_berry():
+		if who._move_toward(who.target_bush.global_position, pace, delta):
+			if who.target_bush.take_berry():
 				who._dismount()
 				who.state = Villager.State.EATING
 				who._action_time = 2.0
-			who._target_bush = null
+			who.target_bush = null
 		return
-	if who._feeding_on != null:
-		if not is_instance_valid(who._feeding_on) \
-				or who._feeding_on.is_queued_for_deletion():
-			who._feeding_on = null
+	if who.feeding_on != null:
+		if not is_instance_valid(who.feeding_on) \
+				or who.feeding_on.is_queued_for_deletion():
+			who.feeding_on = null
 			who._rethink()
 			return
-		who._target = who._feeding_on.global_position
+		who._target = who.feeding_on.global_position
 		if who._move_toward(who._target, pace, delta):
 			who._dismount()
 			VillagerLook.gone_to_carrion(who)
 			who.state = Villager.State.EATING
 			who._action_time = 2.0
 		return
-	if who._target_food != null:
-		if not is_instance_valid(who._target_food) or who._target_food.is_queued_for_deletion():
-			who._target_food = null
+	if who.target_food != null:
+		if not is_instance_valid(who.target_food) or who.target_food.is_queued_for_deletion():
+			who.target_food = null
 			who._rethink()
 			return
-		who._target = who._target_food.global_position
+		who._target = who.target_food.global_position
 		if who._move_toward(who._target, pace, delta):
-			if who._target_food.is_human_meat:
+			if who.target_food.is_human_meat:
 				VillagerLook.gone_to_carrion(who)
 			# Keep the food (it may be a bundle) — EATING takes only as much
 			# as this belly needs, leaving the rest for the next hungry mouth.
@@ -155,23 +155,23 @@ static func go(who: Villager, delta: float) -> void:
 ## AND A BODY IS NOT CONSUMED AT ALL. Nothing is taken off it, nothing is used
 ## up, and it lies there afterwards exactly as it lay before — see `_a_body`.
 static func meal(who: Villager) -> void:
-	if who._feeding_on != null:
+	if who.feeding_on != null:
 		who.hunger = BODY_FILLS
-		who._feeding_on = null
+		who.feeding_on = null
 		return
-	if who._target_food != null and is_instance_valid(who._target_food) \
-			and not who._target_food.is_queued_for_deletion():
+	if who.target_food != null and is_instance_valid(who.target_food) \
+			and not who.target_food.is_queued_for_deletion():
 		var need := clampi(int(ceil(who.hunger / FoodItem.NUTRITION)), 1,
-			maxi(who._target_food.count, 1))
+			maxi(who.target_food.count, 1))
 		who.hunger = maxf(who.hunger - need * FoodItem.NUTRITION, 0.0)
-		who._target_food.count -= need
-		if who._target_food.count <= 0:
-			who._target_food.queue_free()
+		who.target_food.count -= need
+		if who.target_food.count <= 0:
+			who.target_food.queue_free()
 		else:
-			who._target_food.refresh_bundle()
+			who.target_food.refresh_bundle()
 	else:
 		who.hunger = maxf(who.hunger - FoodItem.NUTRITION, 0.0)
-	who._target_food = null
+	who.target_food = null
 
 
 static func _ground_food(who: Villager) -> FoodItem:

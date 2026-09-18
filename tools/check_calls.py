@@ -623,6 +623,46 @@ GONE_IN_4 = {
 }
 
 
+def check_unused_private_vars(files):
+    """`var _x` that nothing in its own class ever touches.
+
+    Godot warns UNUSED_PRIVATE_CLASS_VARIABLE, and the warning is worth acting
+    on rather than silencing, because there are only two ways to get one. Either
+    the field is dead and should go, or it has been LIFTED OUT — the code that
+    used it now lives in another file, which is how this codebase keeps Villager
+    and Creature under their line caps — and the underscore has quietly become a
+    lie about whose business the field is.
+
+    Three of them shipped together the day the eating moved into
+    VillagerFeeding. Which of the two answers is right is a real question and
+    this file does not pretend to know: what a villager is EATING is part of
+    their situation and is public now, and the node handle that Militia hangs a
+    weapon on is machinery, and stays private behind the `@warning_ignore` that
+    says so out loud. A declaration carrying that annotation is somebody having
+    already answered, so it is left alone.
+
+    Comments are stripped before counting, because a name that survives only in
+    a sentence about it is not a use.
+    """
+    problems = []
+    decl = re.compile(r"^var\s+(_\w+)\s*[:=]")
+    for path in files:
+        with open(path, encoding="utf-8") as fh:
+            lines = fh.readlines()
+        bare = "\n".join(r.split("#")[0] for r in lines)
+        for lineno, line in enumerate(lines, 1):
+            m = decl.match(line)
+            if not m:
+                continue
+            above = lines[lineno - 2] if lineno >= 2 else ""
+            if "unused_private_class_variable" in above:
+                continue            # already answered, out loud, on the line above
+            name = m.group(1)
+            if len(re.findall(r"\b%s\b" % name, bare)) <= 1:
+                problems.append((path, lineno, name, line.strip()))
+    return problems
+
+
 def check_godot3_calls(files):
     """Find calls to engine methods that Godot 4 does not have.
 
@@ -2242,6 +2282,14 @@ def main():
               "Variant here — this project builds that as an ERROR and it stops "
               "every dependent script loading. Declare the type, or wrap the "
               "call.\n    %s" % (path, lineno, call, line))
+    orphan_vars = check_unused_private_vars(files)
+    for path, lineno, name, line in orphan_vars:
+        print("%s:%d: '%s' is declared private and nothing in its own class "
+              "touches it — Godot warns UNUSED_PRIVATE_CLASS_VARIABLE. Either "
+              "it is dead; or it is part of what this thing IS and should be "
+              "public, like what a villager is eating; or it is machinery "
+              "another file drives, and wants the @warning_ignore that says so."
+              "\n    %s" % (path, lineno, name, line))
     gone = check_godot3_calls(files)
     for path, lineno, name, line in gone:
         print("%s:%d: %s() does not exist in Godot 4 — write %s instead. This is "
@@ -2432,7 +2480,7 @@ def main():
         + len(class_shadows) + len(confusable) + len(sim_clocks) + len(alive) \
         + len(stand) + len(typed_has) + len(shadowed_own) + len(sentinels) \
         + len(int_div) + len(worth) + len(burnable) + len(kids) + len(bundles) \
-        + len(late_is) + len(ternaries) + len(gone)
+        + len(late_is) + len(ternaries) + len(gone) + len(orphan_vars)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

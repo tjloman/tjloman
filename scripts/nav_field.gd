@@ -60,6 +60,25 @@ const ROUTE_REACH := 400.0      # no route is planned further than this
 ## shallower than Villager.DROWN_DEPTH (1.1) so it turns for shore while the
 ## water is still only unpleasant, and a wide sweep because the way out of a
 ## lake can be behind you.
+## HOW FAR A BODY MAY WALK ON ONE ANSWER, as a share of the probe.
+##
+## THIS IS THE MOST EXPENSIVE QUESTION IN THE GAME AND IT WAS ASKED THE MOST
+## OFTEN. A clear step is three terrain reads; a shore sweep is fourteen of
+## them; a sweep that fails ends in `_least_bad`, which is sixteen more at four
+## reads apiece. Every read is a walk of the scars plus five noise samples, and
+## every body near water paid the whole bill on every physics tick — a sheep
+## standing at a lake edge was spending several hundred noise samples a frame to
+## be told the same thing thirty times a second.
+##
+## The probe reaches `probe` metres ahead, so its answer stays true until the
+## body has used up a good part of that. Half leaves the same margin the probe
+## was given to begin with. Between probes the body keeps the TURN it was given
+## rather than the heading, so it goes on following the same shoreline while its
+## goal drifts — and the memory is thrown away the moment it wants to go
+## somewhere meaningfully different, because a remembered turn is only an answer
+## to the question it was asked.
+const REPROBE := 0.5
+const REMEMBERS_WHILE := 0.93   # cos(~21 degrees) of the heading it was asked about
 const OUT_OF_DEPTH := 0.6
 const DRY_SWEEP := 16
 const DRY_PROBE := 5.0
@@ -173,6 +192,16 @@ func water_route(mover: Node, pos: Vector3, desired: Vector3, world: WorldGen,
 		probe := 1.7, drop := SHEER) -> Vector3:
 	if world == null or desired == Vector3.ZERO:
 		return desired
+	# THE ANSWER IT WAS GIVEN A MOMENT AGO, if it is still an answer to this
+	# question: same ground, near enough, and the same way it wanted to go. See
+	# REPROBE — this is what takes the shoreline off the per-frame bill.
+	var asked: Vector3 = mover.get_meta("route_at", Vector3.INF) if mover != null \
+		else Vector3.INF
+	if asked.is_finite() and pos.distance_to(asked) < probe * REPROBE:
+		var wanted: Vector3 = mover.get_meta("route_want", Vector3.ZERO)
+		if wanted.dot(desired) >= REMEMBERS_WHILE:
+			var turn := float(mover.get_meta("route_turn", 0.0))
+			return desired if turn == 0.0 else desired.rotated(Vector3.UP, turn)
 	# THE CLEAR CASE FIRST, AND IT COSTS NOTHING ELSE.
 	#
 	# The drowning check used to sit above this line, which meant every mover in
@@ -185,23 +214,31 @@ func water_route(mover: Node, pos: Vector3, desired: Vector3, world: WorldGen,
 	# this body is not in trouble, and if it IS somehow standing in water while
 	# the way ahead is dry, then walking ahead is already walking out. So the
 	# question only gets asked once something is actually wrong.
-	if not _bad_step(world, pos, desired, probe, drop):
+	# THE GROUND UNDERFOOT, ONCE. It was read twice inside every `_bad_step` and
+	# there are up to fourteen of those in a sweep — twenty-eight reads of the
+	# one point the body is standing on, which it cannot have moved off between
+	# them.
+	var here := world.height_at(pos.x, pos.z)
+	if not _bad_step(world, pos, desired, probe, drop, here):
 		if mover != null:
 			mover.set_meta("shore_side", 0)  # open water ahead cleared — drop the commit
+			_remember(mover, pos, desired, 0.0)
 		return desired
 	# WET FEET FIRST. See `_least_bad` — if it is already standing in water deep
 	# enough to kill it, there is no safe heading and the question is not which
 	# way is safe but which way is OUT.
 	if _depth_at(world, pos.x, pos.z) > OUT_OF_DEPTH:
-		return _least_bad(world, pos, desired)
+		return _out_of_here(mover, pos, desired, _least_bad(world, pos, desired, here))
 	var side := int(mover.get_meta("shore_side", 0)) if mover != null else 0
 	# Try ever-wider turns; the side committed to last frame is tried first
 	# (small to large), so the shoreline is followed in one consistent sense.
 	for deg: float in _shore_sweep(side):
-		var d := desired.rotated(Vector3.UP, deg_to_rad(deg))
-		if not _bad_step(world, pos, d, probe, drop):
+		var swing := deg_to_rad(deg)
+		var d := desired.rotated(Vector3.UP, swing)
+		if not _bad_step(world, pos, d, probe, drop, here):
 			if mover != null:
 				mover.set_meta("shore_side", 1 if deg > 0.0 else -1)
+				_remember(mover, pos, desired, swing)
 			return d
 	# NOTHING WAS CLEAN — SO TAKE THE LEAST BAD ONE. This returned ZERO, and
 	# every caller reads ZERO as "hold still".
@@ -217,7 +254,7 @@ func water_route(mover: Node, pos: Vector3, desired: Vector3, world: WorldGen,
 	#
 	# Wading is survivable and a scramble down a bank is survivable. Standing
 	# still with an empty belly is not.
-	return _least_bad(world, pos, desired)
+	return _out_of_here(mover, pos, desired, _least_bad(world, pos, desired, here))
 
 
 ## IS THE GROUND THAT WAY WORTH STEPPING ONTO?
@@ -231,17 +268,39 @@ func water_route(mover: Node, pos: Vector3, desired: Vector3, world: WorldGen,
 ## So a step is bad if it is wet OR if it falls away. A drop is not fatal in
 ## itself and this is not a fear of heights: it is only ever consulted by
 ## something that is choosing a HEADING, and there is always another heading.
+## `here` is the ground at `pos`, which the caller has already read: it is the
+## same point for every heading in a sweep and cost a terrain read apiece.
 func _bad_step(world: WorldGen, pos: Vector3, dir: Vector3, probe: float,
-		drop: float) -> bool:
+		drop: float, here: float) -> bool:
 	var x := pos.x + dir.x * probe
 	var z := pos.z + dir.z * probe
 	if world.is_underwater(x, z):
 		return true
+	var there := world.height_at(x, z)
 	# And what is beyond it, so a shelf one stride wide does not read as ground.
-	if world.is_underwater(pos.x + dir.x * probe * 2.0, pos.z + dir.z * probe * 2.0) \
-			and world.height_at(pos.x, pos.z) - world.height_at(x, z) > drop * 0.5:
+	if here - there > drop * 0.5 \
+			and world.is_underwater(pos.x + dir.x * probe * 2.0,
+				pos.z + dir.z * probe * 2.0):
 		return true
-	return world.height_at(pos.x, pos.z) - world.height_at(x, z) > drop
+	return here - there > drop
+
+
+## KEEP THE ANSWER. `turn` is the correction applied to what the body WANTED,
+## which is the part worth keeping: the heading goes stale as the goal moves,
+## and the turn does not.
+func _remember(mover: Node, pos: Vector3, wanted: Vector3, turn: float) -> void:
+	mover.set_meta("route_at", pos)
+	mover.set_meta("route_want", wanted)
+	mover.set_meta("route_turn", turn)
+
+
+## The same, for a heading that came out of `_least_bad` rather than the sweep —
+## the turn is whatever angle it ended up being.
+func _out_of_here(mover: Node, pos: Vector3, wanted: Vector3,
+		out: Vector3) -> Vector3:
+	if mover != null and out != Vector3.ZERO:
+		_remember(mover, pos, wanted, wanted.signed_angle_to(out, Vector3.UP))
+	return out
 
 
 ## HOW DEEP THE WATER IS OVER THE GROUND HERE — the sea, or a pond standing in a
@@ -272,7 +331,8 @@ func _depth_at(world: WorldGen, x: float, z: float) -> float:
 ## without a search: minimising depth over the sweep is walking out, and it
 ## never returns ZERO — there is always a best heading, even when every one of
 ## them is still wet.
-func _least_bad(world: WorldGen, pos: Vector3, desired: Vector3) -> Vector3:
+func _least_bad(world: WorldGen, pos: Vector3, desired: Vector3,
+		here: float) -> Vector3:
 	var want := desired.normalized()
 	var best := Vector3.ZERO
 	var best_score := -INF
@@ -284,7 +344,7 @@ func _least_bad(world: WorldGen, pos: Vector3, desired: Vector3) -> Vector3:
 		var deep := _depth_at(world, x, z)
 		# Shallower wins, then flatter, and among equals it keeps going the way
 		# it wanted — so wading a ford does not turn into pacing on the spot.
-		var fall := maxf(world.height_at(pos.x, pos.z) - world.height_at(x, z), 0.0)
+		var fall := maxf(here - world.height_at(x, z), 0.0)
 		var score := -deep - fall * 0.25 + d.dot(want) * 0.05
 		if score > best_score:
 			best_score = score

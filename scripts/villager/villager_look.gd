@@ -120,9 +120,9 @@ static func pose(who: Villager) -> String:
 ## IS THIS ONE DOWN OVER A BODY? Asked of what they are actually eating rather
 ## than of a flag, so there is nothing to keep in step and nothing to leave set.
 static func eating_a_person(who: Villager) -> bool:
-	if who._feeding_on != null and is_instance_valid(who._feeding_on):
+	if who.feeding_on != null and is_instance_valid(who.feeding_on):
 		return true
-	var meal := who._target_food
+	var meal := who.target_food
 	return meal != null and is_instance_valid(meal) and meal.is_human_meat
 
 

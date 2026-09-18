@@ -87,6 +87,11 @@ const DESERT_DRY := 0.0
 const TUNDRA_COLD := -0.52
 const RAINFOREST_WET := 0.30
 
+## HOW MANY TIMES THE LAND HAS BEEN ASKED WHAT IT IS, this frame. Read and
+## reset by the frame meter; counted in `seeded_height_at`, which is where the
+## cost actually is.
+static var reads := 0
+
 ## How much world stays LIVE around the focus — collision, water, trees, herds,
 ## villagers. Set from the graphics tier at boot: a budget phone keeps a tight
 ## 5x5 so it doesn't drown in nodes the instant the world loads, a capable
@@ -94,6 +99,9 @@ const RAINFOREST_WET := 0.30
 ##
 ## This is no longer how far you can SEE; it is how far the world is a place.
 ## See `sight_radius` just below, which is the one sized against the camera.
+##
+## (The counter above it is unrelated and is only here because a static
+## declaration has to come before the ordinary ones.)
 var load_radius := 2
 var unload_radius := 3
 
@@ -291,6 +299,16 @@ func height_at(x: float, z: float) -> float:
 ## where the sea is: ground that was ALWAYS below the waterline is seabed, and
 ## a hole dug below it by a fireball is a hole. See `sea_reaches`.
 func seeded_height_at(x: float, z: float) -> float:
+	# THE MOST EXPENSIVE QUESTION IN THE GAME, ASKED THE MOST OFTEN, and until
+	# now nothing could say how often. Five noise samples and a walk of the
+	# scars, per ask, from routing, drowning, placement, meshing, grazing and
+	# the shore sweep — which alone can ask it a hundred times for one beast in
+	# one frame. Every argument about where a frame went ended in a guess.
+	#
+	# Counted only while somebody is reading the meter, which is the same
+	# bargain every clocked class in this game already makes.
+	if Ledger.on:
+		reads += 1
 	var biome := biome_at(x, z)
 	var amp := 11.0
 	match biome:

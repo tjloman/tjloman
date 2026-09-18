@@ -173,11 +173,24 @@ var state := State.WANDER
 ## anybody finished anything. See `_choose`.
 var calling := ""
 var calling_left := 0
+## WHAT THIS ONE IS EATING, WHERE THEY ARE GOING TO EAT IT, AND OFF WHOM.
+##
+## All three public, because the eating was lifted into VillagerFeeding when
+## this file ran out of lines, and how it LOOKS into VillagerLook — so the body
+## owns the fields and two other files do the thinking with them. Godot warns
+## about a private member that nobody in its own class touches and it is right
+## to: an underscore here would be a claim that this is nobody else's business,
+## which is the opposite of true.
+##
+## The corpse is a different sentence from the other two. A butcher takes a
+## body away; this leaves it exactly where it lies for whoever comes next.
+var target_food: FoodItem = null
+var target_bush: ForageBush = null
+var feeding_on: Corpse = null
 var _target := Vector3.ZERO
 var _action_time := 0.0
 ## A decision has been asked for and not yet granted. See `_rethink`.
 var _decision_due := false
-var _target_food: FoodItem = null
 var _target_animal: Animal = null
 ## The wild herd they are going to cut a head out of, when there is no loose
 ## beast to gentle. Held apart from _target_animal because the animal does not
@@ -188,10 +201,6 @@ var _target_herd: Herd = null
 ## places with its neighbours forever.
 var _school_seat := 0
 var _target_corpse: Corpse = null
-## AND THE ONE THEY ARE EATING, which is a different sentence: a butcher
-## takes a body away, and this one leaves it exactly where it lies for
-## whoever comes next. See VillagerFeeding.
-var _feeding_on: Corpse = null
 var _target_tree: WildTree = null
 var _target_deposit: RockDeposit = null
 var _build_site: House = null
@@ -218,7 +227,6 @@ var _sim_last := 0
 ## How much ground one throttled step must cover to match real time. See the
 ## note in _physics_process — this is what keeps distant villages fed.
 var _sim_scale := 1.0
-var _target_bush: ForageBush = null
 var _shop_spot := Vector3.INF
 var _shop_kind := ""
 var _shift_left := 0.0

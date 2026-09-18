@@ -90,6 +90,8 @@ var steps := 0.0
 var _label: Label
 var _next := 0.0
 var _worst := 0.0
+## Terrain samples taken in the last frame. See WorldGen.reads.
+var _land := 0
 ## Every meter's high-water mark, and how long each has left to hold it.
 var _peaks := {}
 var _peak_left := {}
@@ -225,6 +227,11 @@ func _process(delta: float) -> void:
 	_peak(&"calls", Performance.get_monitor(
 		Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
 	_peak(&"queue", float(Spool.waiting()))
+	# HOW HARD THE LAND WAS ASKED. Read and reset here because this is the one
+	# place in the game that runs exactly once a frame — see WorldGen.reads.
+	_land = WorldGen.reads
+	_peak(&"land", float(_land))
+	WorldGen.reads = 0
 	for row: Array in Ledger.rows():
 		_peak(StringName("row " + String(row[0])), float(row[1]))
 	if not visible:
@@ -342,6 +349,8 @@ func _readout() -> String:
 		% [elsewhere, int(_share(elsewhere)), _bar(_share(elsewhere))],
 		_seen(&"draw")))
 	rows.append("")
+	rows.append("%s land reads (peak %s)"
+		% [_thousands(_land), _thousands(int(_seen(&"land")))])
 	rows.append("%d draw calls (peak %d), %s primitives"
 		% [int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
 			int(_seen(&"calls")),

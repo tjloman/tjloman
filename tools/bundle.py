@@ -289,7 +289,7 @@ FEED = (ROOT / "scripts/villager/villager_feeding.gd").read_text()
 eating = body_of(FEED, "meal")
 on_a_body = []
 for i, row in enumerate(eating):
-    if "_feeding_on" in row and "if" in row:
+    if "feeding_on" in row and "if" in row:
         on_a_body = eating[i:i + 5]
         break
 uses_it_up = any("queue_free" in r for r in on_a_body)
@@ -324,8 +324,8 @@ if claimed:
 # straight having his dinner.
 seen = body_of((ROOT / "scripts/villager/villager_look.gd").read_text(),
                "eating_a_person")
-print("AND IT SHOWS: %s." % ("yes" if any("_feeding_on" in r for r in seen) else "NO"))
-if not any("_feeding_on" in r for r in seen):
+print("AND IT SHOWS: %s." % ("yes" if any("feeding_on" in r for r in seen) else "NO"))
+if not any("feeding_on" in r for r in seen):
     fail.append("the pose asks only about a carried joint, so somebody down "
                 "over a corpse eats it standing up like dinner")
 
