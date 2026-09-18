@@ -65,6 +65,11 @@ var world: WorldGen
 var cell := Vector2i.ZERO
 ## Set before the chunk enters the tree. See the class note above.
 var terrain_only := false
+## REAL TRUNKS ON A CHUNK THAT IS OTHERWISE ONLY SCENERY. See `plant_the_wood`:
+## the wood ring reaches one cell further than the ring that is a place, on a
+## tier that can carry it, so this is `terrain_only` with the billboards traded
+## for the trees they stand for and nothing else changed.
+var wooded := false
 
 ## Held so the land can be RE-cut when a miracle moves the earth under it.
 var _ground: MeshInstance3D = null
@@ -144,16 +149,68 @@ func flesh_out() -> void:
 	# It costs (cells+1)^2 height samples on one frame — the same build every
 	# near chunk pays, and rate-limited the same way, because WorldGen._make_whole
 	# counts a flesh-out against CHUNKS_PER_FRAME.
+	# THE WOOD MAY ALREADY BE HERE, standing, with a bite taken out of it. The
+	# wood ring plants real trees a cell further out than this, so a chunk can
+	# arrive at the near ring with its trunks up — and some of them burned down
+	# or felled by a hand that reached out there. Scattering them again would
+	# stand the felled ones back up. See `plant_the_wood`.
+	var had_wood := wooded
+	wooded = false
 	if _cells != world.chunk_cells:
 		rebuild_terrain()   # re-cuts fine, and lays the collider and water with it
-		_scatter()
+		_scatter(not had_wood)
 		retally_boards()
 		return
 	if _ground != null and is_instance_valid(_ground):
 		_ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	_build_collider()
 	_build_water()
-	_scatter()
+	_scatter(not had_wood)
+	retally_boards()
+
+
+## TRUNKS INSTEAD OF QUADS, on a chunk that is still only scenery.
+##
+## Everything else about it stays exactly as it was — no collision, no water,
+## nothing scattered, nothing alive — because the seam this closes is a visual
+## one and nothing else out here is worth simulating. The trees are planted from
+## the stand the billboards were drawn from, so not one of them moves.
+##
+## Returns true when it actually planted something, so the streamer can charge
+## it against the frame's building budget like any other chunk work.
+func plant_the_wood() -> bool:
+	if wooded or not terrain_only:
+		return false
+	# WHAT SURVIVED, not what the seed said — the same rule the boards follow.
+	# A wood you logged from inside the near ring must not stand back up when
+	# you step out of it and the trunks come back.
+	if not _stand_known:
+		_stand_kept = _tree_stand(world.chunk_rng(cell))
+		_stand_known = true
+	wooded = true
+	if _stand_kept.is_empty():
+		return false
+	for old in _boards:
+		if is_instance_valid(old):
+			old.queue_free()
+	_boards.clear()
+	_plant_stand(_stand_kept)
+	return true
+
+
+## AND QUADS AGAIN. The reverse, for a chunk the player has walked away from —
+## which reads the trees as they now stand before freeing them, so an axe or a
+## fireball that reached out here is remembered by the billboards.
+func board_the_wood() -> void:
+	if not wooded:
+		return
+	wooded = false
+	_stand_kept = _standing_stand()
+	_stand_known = true
+	for node in _standing:
+		if is_instance_valid(node):
+			node.queue_free()
+	_standing.clear()
 	retally_boards()
 
 
@@ -442,6 +499,15 @@ func _skirt_quad(st: SurfaceTool, tint: PackedColorArray,
 ## survived you — otherwise a wood you logged would stand back up the moment you
 ## turned around.
 func retally_boards() -> void:
+	# A WOODED CHUNK ALREADY HAS ITS TREES, and boards over the top of them
+	# would be the wood drawn twice. Everything that can change the wood out
+	# there comes through this one door — a fell (WildTree), a burn, the ground
+	# moving under it (`rebuild_terrain`), the coarsening — so the guard is here
+	# rather than at four call sites, three of which nobody would think of.
+	# `board_the_wood` is the only way out of the state and clears the flag
+	# before it asks.
+	if wooded:
+		return
 	for old in _boards:
 		if is_instance_valid(old):
 			old.queue_free()
@@ -602,7 +668,11 @@ func _build_water() -> void:
 
 ## Scatter --------------------------------------------------------------------
 
-func _scatter() -> void:
+## `plant_wood` is false for a chunk that already has its trees standing — the
+## wood ring got there first. The stand is still DRAWN either way, because the
+## far ring replays this same stream to decide where its billboards go and the
+## two falling out of step would walk the trees across the ground.
+func _scatter(plant_wood := true) -> void:
 	var rng := world.chunk_rng(cell)
 	var biome := world.biome_at(
 		position.x + WorldGen.CHUNK_SIZE * 0.5, position.z + WorldGen.CHUNK_SIZE * 0.5)
@@ -612,7 +682,9 @@ func _scatter() -> void:
 	# bearing: the far ring replays this same stream to decide where the
 	# billboards go, and if the two ever fall out of step the trees move as you
 	# walk up to them.
-	_plant_stand(_tree_stand(rng))
+	var stand := _tree_stand(rng)
+	if plant_wood:
+		_plant_stand(stand)
 	match biome:
 		"forest":
 			_scatter_deposits(rng, rng.randi_range(1, 4))

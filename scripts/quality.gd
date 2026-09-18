@@ -448,6 +448,24 @@ func unload_radius() -> int:
 	return [3, 4, 4][effective_tier()]
 
 
+## HOW MANY RINGS OF REAL WOOD STAND BEYOND THE RING THAT IS A PLACE.
+##
+## Past `load_radius` a chunk carries nothing but its billboards: one painted
+## quad a tree, two triangles, no node. The quads stand exactly where the trunks
+## would (both are placed off the analytic ground, off the same seeded stand),
+## so nothing MOVES when one becomes the other — but a quad is a quad, and the
+## line where the wood turns real is the most visible seam left in the world.
+##
+## One ring further out on the tier that can hold it. What that buys is the seam
+## pushed from about 150 metres to about 190; what it costs is the trunks
+## themselves — thirty-two chunks' worth of WildTree nodes, each one a body in
+## every `get_nodes_in_group("trees")` scan in the game, which is precisely what
+## the billboards exist to avoid. A desktop can afford that. A phone cannot, and
+## keeps the seam.
+func wood_beyond() -> int:
+	return [0, 0, 1][effective_tier()]
+
+
 ## HOW FAR THE LAND ITSELF IS HELD, in chunks — much wider than `load_radius`,
 ## because these two rings answer different questions. Inside `load_radius` a
 ## chunk is a place: collision to walk on, water to drown in, trees, herds,

@@ -104,6 +104,13 @@ static var reads := 0
 ## declaration has to come before the ordinary ones.)
 var load_radius := 2
 var unload_radius := 3
+## HOW FAR REAL TREES STAND — `load_radius` plus whatever the tier will carry.
+##
+## Never past `unload_radius`, and that bound is load-bearing rather than
+## tidiness: a chunk beyond the unload ring is stripped of everything living on
+## it, so a wood ring that reached further would plant trunks on a cell one
+## frame and strip them the next, for ever.
+var wood_radius := 2
 
 ## HOW FAR THE LAND ITSELF REACHES, in chunks — see Quality.sight_radius. Past
 ## `unload_radius` and out to here, a chunk is built as bare ground and nothing
@@ -180,6 +187,7 @@ func _ready() -> void:
 	load_radius = Quality.load_radius()
 	unload_radius = Quality.unload_radius()
 	sight_radius = maxi(Quality.sight_radius(), unload_radius)
+	wood_radius = mini(load_radius + Quality.wood_beyond(), unload_radius)
 	chunk_cells = Quality.chunk_cells()
 	reseed(world_seed)
 
@@ -880,6 +888,19 @@ func _fill_near(center: Vector2i, kept: Dictionary) -> bool:
 		made += 1
 		if _frame_spent(made):
 			return true
+	# AND THEN THE WOOD, one ring further out where the tier allows it. After
+	# the places, always: a cell you are about to walk into is worth more than
+	# a skyline, and this is a skyline.
+	for ring in range(load_radius + 1, wood_radius + 1):
+		for cell: Vector2i in _ring_cells(center, ring):
+			var cached = _chunks.get(cell)
+			if cached == null or not is_instance_valid(cached):
+				continue
+			if not (cached as Chunk).plant_the_wood():
+				continue
+			made += 1
+			if _frame_spent(made):
+				return true
 	return false
 
 
@@ -1004,6 +1025,11 @@ func _shed(center: Vector2i, kept: Dictionary) -> void:
 			_chunks.erase(cell)
 			continue
 		var chunk := cached as Chunk
+		# THE WOOD GOES BACK TO BILLBOARDS FIRST, one ring before everything
+		# else goes. A chunk that was never a place still has its trunks to
+		# put away.
+		if out > wood_radius:
+			chunk.board_the_wood()
 		if out > unload_radius:
 			chunk.strip_down()
 		# A chunk left cut for walking on that nobody can walk to. This sweep
