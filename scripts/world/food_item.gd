@@ -9,10 +9,18 @@ enum FoodType { PLANT, MEAT }
 
 const NUTRITION := 40.0
 
-## MOST THAT WILL EVER GO IN ONE HAND. A bundle is a convenience, not a cart:
-## past this the hand stops drawing things in and the pile on the ground is
-## still a pile you have to make a second trip for.
-const MOST_IN_A_BUNDLE := 24
+## MOST THAT WILL EVER GO IN ONE HAND.
+##
+## It was twenty-four, on the principle that a bundle is a convenience and not a
+## cart. That was the wrong principle for the thing people actually do with it:
+## a culled herd leaves more meat on the grass than twenty-four, and the player
+## who hunted it is then making trips — which is not a decision, it is carrying.
+## A hunt goes home in one lift now.
+const MOST_IN_A_BUNDLE := 64
+## WHAT A PILE IS CALLED once there is more than one animal in it. Nobody wants
+## to know which joint came off which beast, and the game should not make them
+## keep three piles apart to avoid finding out.
+const MYSTERY := "mystery meat"
 
 var food_type := FoodType.PLANT
 var meat_name := "mutton"
@@ -54,28 +62,58 @@ func _ready() -> void:
 	refresh_bundle()  # a bigger bundle looks bigger
 
 
-## TAKE THAT ONE INTO THIS ONE. True when it happened.
+## TAKE THAT ONE INTO THIS ONE. True when any of it moved.
 ##
-## WHAT MAY MERGE WITH WHAT IS NOT A DETAIL. `is_human_meat` decides whether an
-## ordinary villager will touch a thing at all (see Villager._will_eat_human_
-## flesh) and what the creature thinks it just did (Creature._deed_type), so a
-## bundle that quietly took one joint of human flesh into eleven of mutton
-## would launder it — the whole stack would then be eaten by people who would
-## have refused it, and the god who did it would never know. Kind, name and
-## provenance all have to match, and the name is why a fish never joins a
-## joint even though both are meat.
+## ONE JOINT IS AS GOOD AS ANOTHER. Mutton, bison and venison used to be three
+## piles that could not be made into one, so a hunt that killed three kinds of
+## animal was three trips home — and once a pile was full it could take nothing
+## at all, so two half-piles stayed two piles for ever. Neither of those was a
+## decision anybody was making; they were bookkeeping. Any meat goes in with any
+## other meat now, and what comes out is MYSTERY MEAT, which is the honest name
+## for a pile nobody can tell apart any more.
+##
+## A SHEAF IS STILL NOT A JOINT. Grain and meat stay separate: they look
+## different in the hand, they are wanted for different things, and a village
+## with a granary full of mutton is a different game.
+##
+## AND NOTHING IS LAUNDERED. `is_human_meat` decides whether an ordinary
+## villager will touch a thing at all (see Villager._will_eat_human_flesh) and
+## what the creature thinks it just did (Creature._deed_type), so a bundle that
+## quietly took one joint of human flesh into eleven of mutton would be eaten by
+## people who would have refused it and the god who did it would never know.
+##
+## Refusing the merge is one way to be honest about that and it is the worse
+## one, because it also refuses every innocent merge. The flesh TAINTS the pile
+## instead: every villager who would have refused the joint now refuses the
+## whole stack, the hover line reads "of unspeakable origin", and the player is
+## told out loud the moment it happens. Nobody is deceived, which was the whole
+## point of the old rule.
 func absorb(other: FoodItem) -> bool:
 	if other == null or not is_instance_valid(other) or other == self:
 		return false
-	if other.food_type != food_type or other.is_human_meat != is_human_meat:
+	if other.food_type != food_type:
 		return false
+	# AS MUCH AS WILL FIT, and the rest stays on the ground. The flat refusal is
+	# what stopped two piles ever becoming one.
+	var room := MOST_IN_A_BUNDLE - count
+	if room <= 0:
+		return false
+	var took := mini(other.count, room)
+	if took <= 0:
+		return false
+	if other.is_human_meat and not is_human_meat:
+		is_human_meat = true
+		GameState.hint("Somebody has gone into that pile. "
+			+ "Nobody in the village will touch it now.")
 	if food_type == FoodType.MEAT and other.meat_name != meat_name:
-		return false
-	if count + other.count > MOST_IN_A_BUNDLE:
-		return false
-	count += other.count
+		meat_name = MYSTERY
+	count += took
+	other.count -= took
 	refresh_bundle()
-	other.queue_free()
+	if other.count <= 0:
+		other.queue_free()
+	else:
+		other.refresh_bundle()
 	return true
 
 
@@ -156,4 +194,6 @@ func hover_text() -> String:
 		return "Sheaf of grain" + tail
 	if is_human_meat:
 		return "Meat (of unspeakable origin)" + tail
+	if meat_name == MYSTERY:
+		return "Mystery meat" + tail
 	return "Meat (%s)%s" % [meat_name, tail]

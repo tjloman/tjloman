@@ -71,13 +71,36 @@ func refresh_bundle() -> void:
 ## mix, for the same reason a fish never joins a joint: a storehouse banks them
 ## into different piles and a bundle that was half of each could only ever be
 ## banked as a lie.
+## AS MUCH AS WILL FIT, exactly as a bundle of meat does — see FoodItem.absorb
+## for why a flat refusal was the wrong answer: a stack with room for eight
+## refused a stack of nine, so two half-stacks stayed two stacks for ever.
+##
+## THE CAP ITSELF IS NOT RAISED HERE, and that is deliberate. Stone is what the
+## creature's lifting strength is written in — CreatureBody ties one to twenty-
+## four to what a beast can shoulder — so the number means something beyond how
+## many trips a player makes, and moving it moves that.
+##
+## And a stack is still one KIND. There is no mystery ore: stone and lumber are
+## used for different things by different people, and a pile that was either
+## would have to be asked which.
 func absorb(other: ResourceItem) -> bool:
 	if other == null or not is_instance_valid(other) or other == self:
 		return false
-	if other.kind != kind or count + other.count > MOST_IN_A_BUNDLE:
+	if other.kind != kind:
 		return false
-	count += other.count
-	other.queue_free()
+	var room := MOST_IN_A_BUNDLE - count
+	if room <= 0:
+		return false
+	var took := mini(other.count, room)
+	if took <= 0:
+		return false
+	count += took
+	other.count -= took
+	refresh_bundle()
+	if other.count <= 0:
+		other.queue_free()
+	else:
+		other.refresh_bundle()
 	return true
 
 

@@ -227,6 +227,12 @@ func top_up(item: Node) -> bool:
 	var pulled := false
 	if item is FoodItem:
 		var f := item as FoodItem
+		# A HAND IS STILL A HAND. Drawing stock out of the store never asked
+		# what would fit, so a bundle held over a full granary grew without
+		# limit — which made the bundle cap a rule that only applied to the
+		# piles on the grass.
+		if f.count >= FoodItem.MOST_IN_A_BUNDLE:
+			return false
 		if f.food_type == FoodItem.FoodType.PLANT and plant_food > 0:
 			plant_food -= 1
 			f.count += 1
