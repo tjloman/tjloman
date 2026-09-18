@@ -50,32 +50,49 @@ EXITS = ("_rethink()", "_choose()", "_decide()", "state = State.",
 
 
 def bodies(src):
-    """Every function in a script, by name, so an arm that delegates can be
-    followed. Most arms are one line — `_process_go_eat(delta)` — and the way
-    out is inside it; a tool that could not see through that reported five
-    perfectly healthy states as dead ends."""
+    """Every function in a script, by name AND by Class.name, so an arm that
+    delegates can be followed.
+
+    Most arms are one line and the way out is inside it; a tool that could not
+    see through that reported five perfectly healthy states as dead ends. It
+    then did it again the day `_process_go_eat` was lifted out of Villager into
+    a file of its own: the arm still ended itself, in a body this tool was no
+    longer reading. Hence both keys — the qualified one is exact, so
+    `VillagerFeeding.go` cannot be answered by somebody else's `go`.
+    """
     out, name, lines = {}, "", []
+    found = re.search(r"^class_name (\w+)", src, re.M)
+    cls = found.group(1) if found else ""
+    def keep():
+        if not name:
+            return
+        out[name] = "\n".join(lines)
+        if cls:
+            out[cls + "." + name] = "\n".join(lines)
     for line in src.split("\n"):
         m = re.match(r"^(?:static )?func (\w+)\(", line)
         if m:
-            if name:
-                out[name] = "\n".join(lines)
+            keep()
             name, lines = m.group(1), []
             continue
         if name:
             lines.append(line)
-    if name:
-        out[name] = "\n".join(lines)
+    keep()
     return out
 
 
+# EVERY FILE A VILLAGER'S ARM CAN DELEGATE INTO, and the villager files are
+# taken as a DIRECTORY rather than as a list. The list was the bug: the day the
+# eating code was lifted into a file of its own, the tool went on reading the
+# five files somebody had thought of in 2025 and called a healthy state a dead
+# end. A directory cannot be forgotten to be updated.
 FUNCS = {}
-for rel in ("scripts/villager/villager.gd", "scripts/villager/militia.gd",
-            "scripts/villager/villager_needs.gd", "scripts/world/village_jobs.gd",
-            "scripts/world/edubba.gd"):
+for path in sorted((ROOT / "scripts/villager").glob("*.gd")):
+    FUNCS.update(bodies(path.read_text()))
+for rel in ("scripts/world/village_jobs.gd", "scripts/world/edubba.gd"):
     FUNCS.update(bodies((ROOT / rel).read_text()))
 
-CALL = re.compile(r"(?:^|[^\w.])(?:[A-Z]\w*\.)?(\w+)\(")
+CALL = re.compile(r"(?:^|[^\w.])(([A-Z]\w*)\.)?(\w+)\(")
 
 
 def reaches_an_exit(body):
@@ -94,8 +111,11 @@ def reaches_an_exit(body):
     legitimate hides its exit two hops down."""
     if any(door in body for door in EXITS):
         return True
-    for name in CALL.findall(body):
-        if name in FUNCS and any(door in FUNCS[name] for door in EXITS):
+    for m in CALL.finditer(body):
+        # The qualified name when the arm gave one, so a call to somebody
+        # else's `go` cannot be answered by this one's.
+        key = (m.group(2) + "." + m.group(3)) if m.group(2) else m.group(3)
+        if key in FUNCS and any(door in FUNCS[key] for door in EXITS):
             return True
     return False
 

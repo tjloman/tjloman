@@ -44,6 +44,13 @@ was there before them and must survive intact.
   into two abstract units of `meat` and walked them to the granary, where they
   became ordinary stock and were handed out to the whole village. That shipped,
   and no rule about bundles touched it.
+
+  AND A BODY IS NOT A MEAL THAT RUNS OUT. Eating from a corpse takes nothing
+  off it: one villager fills their belly and the body is still lying in the
+  grass, so the next one who has run out of options comes and does the same,
+  and a third joins them. Nobody waits their turn and nobody is served, because
+  nothing is being handed out. That is what lets three of them be down over the
+  same person at once, and it is the whole of why it reads the way it does.
 """
 import pathlib
 import re
@@ -276,6 +283,51 @@ print("DRAWING STOCK OUT of a store %s."
 if not capped:
     fail.append("pulling food out of a store never asks what will fit, so the "
                 "cap is a rule that applies only to the piles on the grass")
+
+# -- AND A BODY IS NOT USED UP -----------------------------------------------
+FEED = (ROOT / "scripts/villager/villager_feeding.gd").read_text()
+eating = body_of(FEED, "meal")
+on_a_body = []
+for i, row in enumerate(eating):
+    if "_feeding_on" in row and "if" in row:
+        on_a_body = eating[i:i + 5]
+        break
+uses_it_up = any("queue_free" in r for r in on_a_body)
+fills = any("hunger = " in r for r in on_a_body)
+print()
+print("EATING FROM A BODY %s."
+      % ("fills them and leaves it lying there" if fills and not uses_it_up
+         else "GETS RID OF THE BODY"))
+if not fills:
+    fail.append("feeding from a corpse does nothing for the hunger that drove "
+                "somebody to it")
+if uses_it_up:
+    fail.append("the body is consumed by the first person to reach it — so the "
+                "second one who has run out of options finds nothing, and the "
+                "thing never reads as what it is")
+
+# AND NOBODY WAITS THEIR TURN. There is no claim on a corpse and there must not
+# be: the moment one villager can reserve it, it becomes a queue, and a queue is
+# the opposite of several people descending on the same body.
+finding = body_of(FEED, "_a_body") + body_of(
+    (ROOT / "scripts/villager/villager.gd").read_text(), "_nearest_corpse")
+claimed = any(w in r for r in finding
+              for w in ["set_meta", "has_meta", "taken", "claimed", "busy", "reserved"])
+print("SEVERAL MAY DESCEND on the same one: %s." % ("yes" if not claimed else "NO"))
+if claimed:
+    fail.append("a corpse is claimed or reserved by whoever gets there first, "
+                "which turns it into a queue — nothing is being handed out, so "
+                "there is nothing to wait for")
+
+# AND THEY LOOK LIKE IT WHILE THEY DO. The pose has to know about the body as
+# well as about a joint, or the darkest thing in the game is a man standing up
+# straight having his dinner.
+seen = body_of((ROOT / "scripts/villager/villager_look.gd").read_text(),
+               "eating_a_person")
+print("AND IT SHOWS: %s." % ("yes" if any("_feeding_on" in r for r in seen) else "NO"))
+if not any("_feeding_on" in r for r in seen):
+    fail.append("the pose asks only about a carried joint, so somebody down "
+                "over a corpse eats it standing up like dinner")
 
 print()
 if fail:

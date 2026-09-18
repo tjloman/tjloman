@@ -188,6 +188,10 @@ var _target_herd: Herd = null
 ## places with its neighbours forever.
 var _school_seat := 0
 var _target_corpse: Corpse = null
+## AND THE ONE THEY ARE EATING, which is a different sentence: a butcher
+## takes a body away, and this one leaves it exactly where it lies for
+## whoever comes next. See VillagerFeeding.
+var _feeding_on: Corpse = null
 var _target_tree: WildTree = null
 var _target_deposit: RockDeposit = null
 var _build_site: House = null
@@ -427,11 +431,11 @@ func _physics_process(delta: float) -> void:
 			if Stroll.walk(self, delta):
 				_rethink()
 		State.GO_EAT:
-			_process_go_eat(delta)
+			VillagerFeeding.go(self, delta)
 		State.EATING:
 			if _wait(delta):
 				VillagerLook.stand_up(self)
-				_eat_meal()
+				VillagerFeeding.meal(self)
 				happiness = minf(happiness + 8.0, 100.0)
 				_rethink()
 		State.GO_SLEEP:
@@ -1070,7 +1074,7 @@ func _choose() -> void:
 	if energy < 20.0:
 		_go_sleep()
 		return
-	if hunger > 60.0 and _plan_eating():
+	if hunger > 60.0 and VillagerFeeding.plan(self):
 		return
 	# Night is for sleeping — though the well-rested potter about a while.
 	# A CHILD'S ENERGY ONLY EVER CLIMBS, so tiredness is a gate they never pass.
@@ -1386,7 +1390,7 @@ func _pick_job() -> bool:
 	if village.nest != null and is_instance_valid(village.nest) and GameState.is_night():
 		scores["circle"] = 30.0
 	if village.diet == Village.Diet.CANNIBAL and store.meat_food < 4 \
-			and _will_eat_human_flesh() and watch.corpse != null:
+			and VillagerFeeding.will_eat_flesh(self) and watch.corpse != null:
 		scores["butcher"] = _wants(FOOD_CEIL + 6.0, want_food)
 	if eats_meat and store.meat_food < 5:
 		if abandoned and Workshop.any_meat(village):
@@ -1606,90 +1610,6 @@ func _find_damaged_house() -> House:
 	return null
 
 
-## Good souls refuse human flesh — until they are starving.
-func _will_eat_human_flesh() -> bool:
-	return morality < 30.0 or hunger > STARVING_HUNGER
-
-
-## Eating --------------------------------------------------------------------
-
-func _plan_eating() -> bool:
-	_target_bush = null
-	_target_food = _nearest_edible_ground_food()
-	if _target_food != null:
-		state = State.GO_EAT
-		return true
-	for type in village.allowed_food_types():
-		if village.store.has(type):
-			_target_food = null
-			state = State.GO_EAT
-			_target = village.store.global_position
-			return true
-	# The granary is bare: go foraging in the wild like anyone's ancestors.
-	_target_bush = _nearest_forage_bush()
-	if _target_bush != null:
-		state = State.GO_EAT
-		return true
-	return false
-
-
-func _process_go_eat(delta: float) -> void:
-	if _target_bush != null:
-		if not is_instance_valid(_target_bush) or not _target_bush.has_berries():
-			_target_bush = null
-			_rethink()
-			return
-		if _move_toward(_target_bush.global_position, WALK_SPEED * _speed_factor(), delta):
-			if _target_bush.take_berry():
-				_dismount()
-				state = State.EATING
-				_action_time = 2.0
-			_target_bush = null
-		return
-	if _target_food != null:
-		if not is_instance_valid(_target_food) or _target_food.is_queued_for_deletion():
-			_target_food = null
-			_rethink()
-			return
-		_target = _target_food.global_position
-		if _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
-			if _target_food.is_human_meat:
-				VillagerLook.gone_to_carrion(self)
-			# Keep the food (it may be a bundle) — EATING takes only as much
-			# as this belly needs, leaving the rest for the next hungry mouth.
-			_dismount()
-			state = State.EATING
-			_action_time = 2.0
-	else:
-		if _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
-			_dismount()
-			for type in village.allowed_food_types():
-				if village.store.take(type, 1) > 0:
-					state = State.EATING
-					_action_time = 2.0
-					return
-			_rethink()
-
-
-## Consume the meal at hand. A ground bundle (_target_food) is eaten a mouthful
-## at a time — only as many units as this belly needs, leaving the rest of the
-## bundle on the ground for the next hungry villager. Bush berries and store
-## meals are already single servings, so they just top up hunger by one unit.
-func _eat_meal() -> void:
-	if _target_food != null and is_instance_valid(_target_food) \
-			and not _target_food.is_queued_for_deletion():
-		var need := clampi(int(ceil(hunger / FoodItem.NUTRITION)), 1, maxi(_target_food.count, 1))
-		hunger = maxf(hunger - need * FoodItem.NUTRITION, 0.0)
-		_target_food.count -= need
-		if _target_food.count <= 0:
-			_target_food.queue_free()
-		else:
-			_target_food.refresh_bundle()
-	else:
-		hunger = maxf(hunger - FoodItem.NUTRITION, 0.0)
-	_target_food = null
-
-
 ## Hauling -------------------------------------------------------------------
 
 ## Shoulder a gathered load and set off for the storehouse on foot. Nothing is
@@ -1805,27 +1725,6 @@ func pulled_free(left: float) -> void:
 		GameState.announce("%s is pulled out from under them, alive — barely."
 			% villager_name)
 	scare(global_position + Vector3(randf() - 0.5, 0, randf() - 0.5))
-
-
-## Target finding ------------------------------------------------------------
-
-func _nearest_edible_ground_food() -> FoodItem:
-	var allowed := village.allowed_food_types()
-	var best: FoodItem = null
-	var best_dist := INF
-	for f in get_tree().get_nodes_in_group("food"):
-		var food := f as FoodItem
-		if not is_instance_valid(food) or food.is_queued_for_deletion():
-			continue
-		if not allowed.has(food.food_type):
-			continue
-		if food.is_human_meat and not _will_eat_human_flesh():
-			continue
-		var d := global_position.distance_to(food.global_position)
-		if d < best_dist and d < village.influence_radius * 1.5:
-			best_dist = d
-			best = food
-	return best
 
 
 ## A dry spot right at the water's edge, or INF if no shore is in reach.
