@@ -598,6 +598,44 @@ def check_untyped_array_results(files):
 VARIANT_RETURNS = ("pop_back", "pop_front", "pop_at", "front", "back",
                    "pick_random", "get")
 
+# AND ENGINE METHODS THAT COME BACK WITH NO USABLE TYPE AT ALL.
+#
+# Same build error, other direction — and the reason this is a LIST rather than
+# a rule is worth saying out loud: there is no Godot binary here to ask, so the
+# only thing that knows which engine calls defeat inference is the game failing
+# to boot. Every name below is one that did, and the list grows by one each
+# time the engine surprises us. That is not a good mechanism; it is the only
+# honest one available, and a list that says where it came from is better than
+# a rule that pretends to know more than it does.
+#
+#   get_transformed_aabb — `var box := vi.get_transformed_aabb()` in the frame
+#   meter stopped the whole project compiling: the HUD, the hand, the creature,
+#   the world and the nav field all failed to load behind it.
+UNTYPED_RETURNS = ("get_transformed_aabb",)
+
+
+def check_stringname_ternary(files):
+    """`node.name if x != null else "?"` — a StringName arm and a String arm.
+
+    Godot calls this INCOMPATIBLE_TERNARY. It does not stop the build, so it is
+    the sort of thing that accumulates: three of them in one file and the
+    warning list is long enough that nobody reads the next one. `Node.name` is
+    a StringName and every quoted literal is a String, so the two arms of the
+    ternary are different types and the result is a Variant.
+
+    `String(node.name)` on the one arm is the whole fix.
+    """
+    problems = []
+    first = re.compile(r"[\w\)\]]\.name\s+if\s+.+\s+else\s+[\"']")
+    second = re.compile(r"[\"'][^\"']*[\"']\s+if\s+.+\s+else\s+[\w\.]+\.name\b")
+    for path in files:
+        with open(path, encoding="utf-8") as fh:
+            for lineno, line in enumerate(fh, 1):
+                bare = line.split("#")[0]
+                if first.search(bare) or second.search(bare):
+                    problems.append((path, lineno, line.strip()))
+    return problems
+
 
 def check_inferred_variant(files):
     """Find `var x := <container>.pop_back()` and friends.
@@ -618,7 +656,7 @@ def check_inferred_variant(files):
     problems = []
     inferred = re.compile(
         r"^\s*var\s+\w+\s*:=\s*[\w\.\[\]\"']+\.(%s)\([^()]*\)\s*(?:#.*)?$"
-        % "|".join(VARIANT_RETURNS))
+        % "|".join(VARIANT_RETURNS + UNTYPED_RETURNS))
     for path in files:
         with open(path, encoding="utf-8") as fh:
             for lineno, line in enumerate(fh, 1):
@@ -2168,10 +2206,16 @@ def main():
               "a loop instead.\n    %s" % (path, lineno, call, name, line))
     variants = check_inferred_variant(files)
     for path, lineno, call, line in variants:
-        print("%s:%d: %s() is declared as returning Variant, so ':=' infers a "
-              "Variant here — this project builds that as an ERROR and it stops "
+        print("%s:%d: %s() comes back with no usable type, so ':=' has nothing "
+              "to infer from — this project builds that as an ERROR and it stops "
               "every dependent script loading. Declare the type, or wrap the "
               "call.\n    %s" % (path, lineno, call, line))
+    ternaries = check_stringname_ternary(files)
+    for path, lineno, line in ternaries:
+        print("%s:%d: one arm of this ternary is a StringName (`.name`) and the "
+              "other is a String — Godot warns INCOMPATIBLE_TERNARY and the "
+              "result is a Variant. Wrap the name in String().\n    %s"
+              % (path, lineno, line))
     shadowed_globals = check_shadowed_globals(files)
     for path, lineno, name, kind, line in shadowed_globals:
         print("%s:%d: the %s '%s' has the same name as the built-in function "
@@ -2350,7 +2394,7 @@ def main():
         + len(class_shadows) + len(confusable) + len(sim_clocks) + len(alive) \
         + len(stand) + len(typed_has) + len(shadowed_own) + len(sentinels) \
         + len(int_div) + len(worth) + len(burnable) + len(kids) + len(bundles) \
-        + len(late_is)
+        + len(late_is) + len(ternaries)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

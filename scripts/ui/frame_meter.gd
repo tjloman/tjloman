@@ -294,19 +294,22 @@ func _the_biggest_thing() -> String:
 				break
 		if skip:
 			continue
-		var box := vi.get_transformed_aabb()
+		# TYPED OUT LOUD. `get_transformed_aabb` comes back untyped, and `:=` on
+		# a value with no type is a PARSE ERROR — not a warning, not a runtime
+		# surprise: the game does not boot at all.
+		var box: AABB = vi.get_transformed_aabb()
 		var across: float = box.size[box.get_longest_axis_index()]
 		# A NON-FINITE VERTEX makes an infinite box, and Godot draws that as a
 		# smear across the whole world. It is the likeliest way a thing gets to
 		# be a mile wide, and it must not be silently sorted to the bottom.
 		if not is_finite(across):
 			return "BIGGEST: %s/%s has a NON-FINITE box" \
-				% [kin.name if kin != null else "?", vi.name]
+				% [String(kin.name) if kin != null else "?", vi.name]
 		if across > GIANT:
 			huge += 1
 		if across > worst:
 			worst = across
-			named = "%s/%s" % [kin.name if kin != null else "?", vi.name]
+			named = "%s/%s" % [String(kin.name) if kin != null else "?", vi.name]
 			at = box.get_center()
 	if named == "":
 		return ""
