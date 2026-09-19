@@ -105,6 +105,27 @@ const BOUNCE_SLIDE := 0.72
 ## it will ever turn.
 const TUMBLE_PER_SPEED := 0.09
 const TUMBLE_MOST := 7.0
+## AND WHAT LANDING ON THE CROWN DOES. A trunk that comes down on its top is
+## levered over by its own momentum — the end that struck stops and the rest of
+## the tree keeps going — so it goes over FASTER than one that landed on the
+## stump. Without this a crown strike and a foot strike are the same event and
+## the tumble reads as a single repeating bounce.
+const CROWN_KICK := 1.35
+## HOW LONG A SLICE OF FLIGHT MAY BE, whatever the frame is doing.
+##
+## A tumbling trunk sweeps its ends fifteen metres about its middle, so on a
+## tenth-of-a-second frame an end travels two metres between one ground test and
+## the next — and two metres is how far into the hillside it gets before
+## anything notices. Simulated at 60 frames it is under a metre at any throwing
+## speed; at nine it was 2.8, and nine is exactly where a god is most likely to
+## be throwing something. So the arc is cut into slices of its own.
+##
+## AND THE SLICES ARE CAPPED. A frame that took a whole second would otherwise
+## run forty of them for every tree in the air; past this the tree simply falls
+## behind real time, which nobody can see, where a stall is the thing they
+## already noticed.
+const FLIGHT_STEP := 0.025
+const FLIGHT_MOST := 0.2
 
 ## Sway: when the creature wades through, trees lean out of its way and spring
 ## back. An underdamped spring gives the little bounce as they right themselves.
@@ -478,16 +499,46 @@ func drop(throw_velocity: Vector3, gentle := false) -> void:
 		_spin_ang = Vector3(deg_to_rad(220.0), 0.0, 0.0)
 
 
+## THE WHOLE ARC, in slices short enough that a swinging end cannot step over
+## the ground between two of them. See FLIGHT_STEP.
 func _fly(delta: float) -> void:
+	var left := minf(delta, FLIGHT_MOST)
+	while left > 0.0 and _flying and not is_queued_for_deletion():
+		var slice := minf(left, FLIGHT_STEP)
+		_fly_step(slice)
+		left -= slice
+
+
+func _fly_step(delta: float) -> void:
 	_fly_velocity.y -= Sling.gravity_for(self, TREE_GRAVITY) * delta   # see Sling
 	global_position += _fly_velocity * delta
+	# ABOUT ITS MIDDLE, NOT ITS STUMP. `global_rotate` turns a body about its own
+	# origin, and a tree's origin is the foot of the trunk — so a thirty-metre
+	# spruce swung its crown through a thirty-metre arc while the foot rode the
+	# parabola. A thrown thing turns about its middle, which halves how far
+	# either end reaches and is most of why this now reads as a tumble rather
+	# than as a mast being spun.
 	if _spin_ang.length() > 0.001:
-		global_rotate(_spin_ang.normalized(), _spin_ang.length() * delta)
+		_turn_about(_middle(), _spin_ang.normalized(), _spin_ang.length() * delta)
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	if world == null:
 		return
-	var ground := world.height_at(global_position.x, global_position.z)
-	if global_position.y > ground:
+	# BOTH ENDS OF THE TRUNK.
+	#
+	# A tree flew as a POINT — its own origin, the foot — so the only part of it
+	# that could ever touch the ground was the stump. For half of every turn the
+	# crown was inside the hillside, and no amount of bounce on the foot could
+	# help, because the foot was nowhere near what should have struck. It cut
+	# through the land like a knife.
+	#
+	# So both ends are asked, and the deeper one is the one that hit. That is
+	# the whole of what makes it cartwheel ALONG a slope instead of through it.
+	var tip := _crown()
+	var under_foot := world.height_at(global_position.x, global_position.z) \
+		- global_position.y
+	var under_crown := world.height_at(tip.x, tip.z) - tip.y
+	var buried := maxf(under_foot, under_crown)
+	if buried < 0.0:
 		return
 	var speed := _fly_velocity.length()
 	# THE HARDEST BLOW IS THE ONE THAT COUNTS. A tree that bounces four times
@@ -497,10 +548,17 @@ func _fly(delta: float) -> void:
 	# was doing when it stopped.
 	_hardest = maxf(_hardest, speed)
 	if speed > SETTLE_UNDER:
-		_bounce(ground, speed)
+		_bounce(buried, under_crown > under_foot, speed)
 		return
 	_flying = false
 	_spin_ang = Vector3.ZERO
+	# WHERE IT ACTUALLY CAME TO REST. `_land` stands the trunk up again at the
+	# origin, and the origin is the foot — so a tree that stopped lying across a
+	# slope would spring upright several metres from the trunk everybody just
+	# watched stop. It stands where its middle ended up.
+	var rest := _middle()
+	global_position.x = rest.x
+	global_position.z = rest.z
 	_land(_hardest)
 	_hardest = 0.0
 
@@ -516,22 +574,63 @@ func _fly(delta: float) -> void:
 ## a hillside. The new axis is the old one bent toward the way it is sliding,
 ## so a trunk skidding downhill goes over sideways rather than cartwheeling on
 ## for ever.
-func _bounce(ground: float, speed: float) -> void:
-	global_position.y = ground + 0.05
+func _bounce(buried: float, on_crown: bool, speed: float) -> void:
+	# LIFTED BY HOWEVER DEEP THE STRUCK END WAS, so that end is the one standing
+	# clear — rather than setting the ORIGIN on the ground, which put the foot on
+	# the grass and left the crown as far under it as it had been.
+	global_position.y += buried + 0.05
 	var slide := Vector3(_fly_velocity.x, 0.0, _fly_velocity.z)
 	_fly_velocity = Vector3(slide.x * BOUNCE_SLIDE,
 		absf(_fly_velocity.y) * BOUNCE_KEEP, slide.z * BOUNCE_SLIDE)
-	var axis := slide.normalized() if slide.length() > 0.5 else Vector3.FORWARD
-	# Across the way it is going, not along it: a log rolls about its length.
-	axis = axis.cross(Vector3.UP).normalized()
+	# ACROSS THE WAY IT IS GOING, AND FORWARD OVER IT. The axis was
+	# `slide.cross(UP)`, which is the same line and the other SENSE: the crown
+	# went over backwards, against the direction of travel, which is a thing
+	# nothing thrown has ever done. `UP.cross(slide)` tips it the way it is
+	# already going, which is what a tumbleweed does.
+	var along := slide.normalized() if slide.length() > 0.5 else Vector3.FORWARD
+	var axis := Vector3.UP.cross(along).normalized()
 	if axis.length() < 0.1:
 		axis = Vector3.FORWARD
-	_spin_ang = axis * clampf(speed * TUMBLE_PER_SPEED, 0.6, TUMBLE_MOST)
+	var rate := clampf(speed * TUMBLE_PER_SPEED, 0.6, TUMBLE_MOST)
+	_spin_ang = axis * (rate * CROWN_KICK if on_crown else rate)
 	# AND IT HURTS WHATEVER IT LANDED ON, every time, not only the last time.
 	# See Blow: a burning pine cartwheeling through a street is several blows.
 	Blow.lands(self, global_position, speed,
 		2.0 + float(timber()) * 0.12, has_meta("hurled_by_god"))
 	SoundBank.play_at("boom", global_position, -10.0, 0.4, 0.7)
+
+
+## THE FAR END OF THE TRUNK, and its middle, in world space. The origin is the
+## foot and local +Y runs up the trunk, so the whole tree is those two facts and
+## `current_height()`.
+func _crown() -> Vector3:
+	return global_position + _up_the_trunk() * current_height()
+
+
+func _middle() -> Vector3:
+	return global_position + _up_the_trunk() * (current_height() * 0.5)
+
+
+## WHICH WAY IS UP THE TRUNK — NORMALIZED, and that is not tidiness.
+##
+## A basis carries the node's SCALE, and a tree's scale is how big it is: the
+## `basis.y` of a full-grown spruce is five units long, and `current_height()`
+## is `_base_height * scale.y`, which already has that five in it. Multiplying
+## the two puts the crown twenty-five times its own length up the sky, so the
+## ground test would be run on a point somewhere over the next valley and the
+## tumble would pivot about a spot outside the world.
+func _up_the_trunk() -> Vector3:
+	return global_transform.basis.y.normalized()
+
+
+## TURN ABOUT A POINT THAT IS NOT THE ORIGIN. The basis turns, and the origin
+## swings round the pivot with it — which is the difference between a tree
+## cartwheeling and a tree spinning on its own stump. Written out rather than
+## using `global_rotate`, which can only ever turn a body about itself.
+func _turn_about(pivot: Vector3, axis: Vector3, radians: float) -> void:
+	var turn := Basis(axis, radians)
+	global_transform = Transform3D(turn * global_transform.basis,
+		pivot + turn * (global_position - pivot))
 
 
 ## Aftertouch hooks: nudge a thrown tree's flight (the curving arc) and set
