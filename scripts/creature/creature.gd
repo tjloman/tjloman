@@ -218,7 +218,6 @@ var _mood_before := 60.0   # mood when the deed began, to judge how it went
 var _deed_verb := ""       # the last FINISHED deed — what praise/scold judges
 var _deed_type := ""
 var _last_decision := 0.0  # GameState.clock at the last real choice; DEED_FLOOR
-var _decay_tick := 0.0
 var _target := Vector3.ZERO
 var _target_food: Node3D = null      # FoodItem or Corpse
 var _watch_subject: Villager = null
@@ -556,11 +555,6 @@ func _tick_feelings(delta: float) -> void:
 	if shed > 0.0:
 		_grow_by(-shed)
 	body.idle(delta)
-	# Opinions it stops rehearsing fade slowly back toward neutral.
-	_decay_tick -= delta
-	if _decay_tick <= 0.0:
-		_decay_tick = 1.0
-		mind.decay()
 	if divine_hand != null and is_instance_valid(divine_hand):
 		var reach := 5.0 + scale.x * 2.0
 		if divine_hand.global_position.distance_to(global_position) < reach:

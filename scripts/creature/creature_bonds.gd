@@ -97,9 +97,22 @@ func settle(reward: float) -> void:
 
 
 ## People it stops having anything to do with slowly become strangers again.
-func fade(delta: float) -> void:
+## PEOPLE HE STOPS SEEING FADE TO STRANGERS — but never quite, once he has met
+## them often enough. Somebody he has dealt with twice is gone in a week of not
+## seeing them; somebody he has dealt with a hundred times is a person he knows
+## for the rest of his life, however long they are away. `met` is already the
+## count of how often, so the floor costs nothing to keep.
+func fade(share: float) -> void:
 	for name: String in folk:
-		folk[name]["regard"] = move_toward(float(folk[name]["regard"]), 0.0, FADE * delta)
+		var ledger: Dictionary = folk[name]
+		var deep: float = maxf(float(ledger.get("deep", 0.0)),
+			absf(float(ledger["regard"])))
+		ledger["deep"] = deep
+		var least := deep * CreatureKeeping.kept(int(ledger.get("met", 0)))
+		if absf(float(ledger["regard"])) <= least:
+			continue
+		ledger["regard"] = move_toward(float(ledger["regard"]),
+			signf(float(ledger["regard"])) * least, FADE * share)
 
 
 func knows(who: Object) -> bool:

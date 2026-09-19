@@ -16,7 +16,11 @@ const LR := 0.2             # learning rate: how fast an outcome reshapes a valu
 const NOVELTY := 0.7        # curiosity: the pull of a (verb,type) never tried
 const EXPLORE := 0.55       # softmax temperature — higher means more experimenting
 const Q_CLAMP := 4.0
-const FORGET := 0.004       # values drift gently back toward zero (slow forgetting)
+const FORGET := 0.004       # values drift gently back toward what they have kept
+## How much forgetting one decision costs, against a night's sleep. Waking life
+## barely thins anything: a creature busy about its day is not losing its mind,
+## and what it does lose it loses lying down (see CreatureMind.decay).
+const PER_CHOICE := 0.35
 const MIRACLE_STEP := 0.05  # familiarity gained per witnessed cast
 const MIRACLE_READY := 0.6  # familiarity needed before it can cast on its own
 ## Learning a PRACTICE (dancing, praying, holding court) by watching others.
@@ -220,6 +224,10 @@ var foresight := CreatureForesight.new()
 ## thing only: to ask how an imagined future would FEEL (see CreatureForesight).
 var heart: CreatureHeart = null
 
+## WHAT EACH VALUE HAS EARNED THE RIGHT TO KEEP: deepest reached, and how often
+## it has been learned. See CreatureKeeping — a thing done four hundred times
+## does not go back to nothing because it has not come up lately.
+var _held := {}
 var _last_judged := 0.0     # GameState.clock at the last judgement; pacing
 var _sated := {}            # "verb|type" -> how thoroughly sick of it it is
 var _last_key := ""         # the (verb,type) the next outcome is credited to
@@ -407,6 +415,9 @@ func choose(options: Array, drive: Dictionary, ctx := {},
 	# Remember the deed AND the circumstances, so a later consequence can be
 	# traced back to it.
 	beliefs.remember(_last_key, ctx, where, felt)
+	# AND A LITTLE OF EVERYTHING ELSE GOES. One decision's worth of forgetting,
+	# spent here because deciding is what a creature's day is made of.
+	decay(PER_CHOICE)
 	return chosen
 
 
@@ -422,6 +433,7 @@ func reinforce(reward: float) -> void:
 	# behind the claim that cruelty is a slower road to a stupider creature.
 	var rate := LR * (welfare.learning() if welfare != null else 1.0)
 	q[_last_key] = clampf(cur + rate * (reward - cur), -Q_CLAMP, Q_CLAMP)
+	CreatureKeeping.learned(_held, _last_key, q[_last_key])
 	seen[_last_key] = int(seen.get(_last_key, 0)) + 1
 	_sated[_last_key] = minf(float(_sated.get(_last_key, 0.0)) + SATIATION, 2.5)
 	beliefs.credit(reward)   # the circumstances get their share of the lesson
@@ -480,16 +492,31 @@ func teach(verb: String, type: String, reward: float, strength := TEACH_LR) -> v
 	var k := _key(verb, type)
 	var cur: float = q.get(k, 0.0)
 	q[k] = clampf(cur + strength * (reward - cur), -Q_CLAMP, Q_CLAMP)
+	# A LESSON FROM YOU IS STILL A LESSON. Being taught counts toward what he
+	# keeps exactly as doing it does, which is the whole reason teaching is
+	# worth the player's attention rather than a way of nudging a number that
+	# will be back where it was in twenty minutes.
+	CreatureKeeping.learned(_held, k, q[k])
 	seen[k] = int(seen.get(k, 0)) + 1
 
 
-## Slow forgetting: unrehearsed opinions drift back toward neutral, so a
-## creature's character reflects what it does OFTEN, not one wild afternoon.
-func decay() -> void:
+## Slow forgetting: unrehearsed opinions drift back toward what they have earned
+## the right to keep, so a creature's character reflects what it does OFTEN, not
+## one wild afternoon — and never reflects nothing at all.
+##
+## CHARGED BY LIVING, NOT BY THE CLOCK. This ran once a second, awake, asleep,
+## and with nobody at the keyboard: a maxed opinion was at its floor in four
+## minutes of standing still, and a night left running took the creature's mind
+## down to the studs. Every other slow number in this game is charged per deed —
+## the ethos moves per deed, satiation per decision, a life per meal — and
+## forgetting is the only one that was charged per second. Now it is spent the
+## same way the rest is: a little at each decision, and the rest in sleep.
+func decay(share := 1.0) -> void:
 	for k: String in q:
-		q[k] = move_toward(q[k], 0.0, FORGET)
-	beliefs.fade()
-	bonds.fade(1.0)
+		q[k] = CreatureKeeping.fade(_held, k, q[k], FORGET * share)
+	CreatureKeeping.prune(_held, q)
+	beliefs.fade(share)
+	bonds.fade(share)
 
 
 ## Something happened TO the creature. Let it work out for itself which of its
@@ -654,6 +681,7 @@ func to_dict() -> Dictionary:
 		# built and a save forgot. The arm is a thing the player GREW; it has
 		# to survive putting the game down.
 		"skill": skill.duplicate(true),
+		"held": _held.duplicate(true),
 		"ethos": ethos.to_dict(),
 		"beliefs": beliefs.to_dict(),
 		"bonds": bonds.to_dict(),
@@ -667,6 +695,9 @@ func from_dict(data: Dictionary) -> void:
 	familiarity = (data.get("familiarity", {}) as Dictionary).duplicate(true)
 	repertoire = (data.get("repertoire", {}) as Dictionary).duplicate(true)
 	skill = (data.get("skill", {}) as Dictionary).duplicate(true)
+	# What each value has earned the right to keep. A save from before the
+	# floors existed simply has none, and earns them again as it is used.
+	_held = (data.get("held", {}) as Dictionary).duplicate(true)
 	# A save from before the compass existed carries one number; unfold it onto
 	# the axes that number used to stand for, so an old creature keeps its soul.
 	if data.has("ethos"):

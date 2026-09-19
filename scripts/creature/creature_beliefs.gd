@@ -116,6 +116,15 @@ const CONFIDENT := 0.45     # a rule this strong is worth acting on / reporting
 ## forgotten man-eatings put "eating people is the right thing to do" on the
 ## nest wall in words. The cap is below the 1.0 an experienced rule can reach,
 ## so a thing he LEARNED still outranks a thing he merely became.
+## HOW FAST EACH STORE THINS, per full step of forgetting. Every one of them is
+## far below the rate the same store LEARNS at — a creature that forgets faster
+## than it learns spends its life relearning and never gets anywhere, which is
+## the whole of why these four are named rather than written inline.
+const RITE_FADE := 0.0012
+const LORE_FADE := 0.0008
+const PLACE_FADE := 0.0006
+const WEIGHT_FADE := 0.0015
+
 const CONVICTION_STEP := 0.55
 const CONVICTION_CAP := 0.85
 
@@ -186,6 +195,11 @@ var places := {}
 ## is written down anywhere, they are all just what kept happening.
 var lore := {}
 
+## WHAT EACH BELIEF HAS EARNED THE RIGHT TO KEEP — deepest reached and how often
+## learned, for every store that fades. One dictionary for all four, keyed by
+## the store it belongs to, because four parallel books would be four chances
+## for one of them to go unmaintained. See CreatureKeeping.
+var _held := {}
 var _trace: Array = []      # recent keys awaiting a consequence, newest first
 var _previous := ""         # the deed before this one, for learning sequences
 var _last_step := ""        # the "prev>next" pair the next outcome will judge
@@ -252,6 +266,7 @@ func credit(reward: float) -> void:
 		sequences[_last_step] = clampf(
 			held + RITUAL_LR * (clampf(reward, -1.0, 1.0) - held),
 			-RITUAL_CLAMP, RITUAL_CLAMP)
+		CreatureKeeping.learned(_held, "rite|" + _last_step, sequences[_last_step])
 
 
 ## HOW RIGHT THIS FEELS RIGHT NOW, given what it just did. A creature that has
@@ -385,6 +400,7 @@ func _learn(key: String, ctx: Dictionary, reward: float) -> void:
 			continue
 		w[f] = clampf(float(w.get(f, 0.0)) + WEIGHT_LR * error * present,
 			-WEIGHT_CLAMP, WEIGHT_CLAMP)
+		CreatureKeeping.learned(_held, "w|" + key + "|" + f, w[f])
 
 
 ## Does it expect this deed to bring this consequence about? Used to let it act
@@ -437,6 +453,7 @@ func _mark_place(place: String, reward: float) -> void:
 	known["feel"] = clampf(
 		float(known["feel"]) + PLACE_LR * (clampf(reward, -1.5, 1.5) - float(known["feel"])),
 		-1.5, 1.5)
+	CreatureKeeping.learned(_held, "place|" + place, known["feel"])
 
 
 ## Full up: drop wherever it has been least, since a place visited once is a
@@ -480,6 +497,7 @@ func _learn_lore(ctx: Dictionary, tag: String, reward: float) -> void:
 		lore[key] = clampf(
 			float(lore.get(key, 0.0)) + LORE_LR * present * (target - float(lore.get(key, 0.0))),
 			-1.0, 1.0)
+		CreatureKeeping.learned(_held, "lore|" + key, lore[key])
 
 
 ## WHAT IT EXPECTS OF THE WORLD RIGHT NOW, before it has done anything at all.
@@ -544,17 +562,26 @@ func _likeness(a: Dictionary, b: Dictionary) -> float:
 
 
 ## Slow forgetting, so old convictions loosen if life stops confirming them.
-func fade() -> void:
+## NOTHING GOES TO NOTHING. Each of these fades toward the floor its own history
+## earned rather than toward zero, so a ritual kept for a hundred days, a stretch
+## of wood it has feared all its life and a lesson learned once are not all on
+## their way out at the same speed. `share` is how much of one full step this
+## costs — a decision costs a fraction, a night's sleep the rest.
+func fade(share := 1.0) -> void:
 	for step: String in sequences:
-		sequences[step] = move_toward(float(sequences[step]), 0.0, 0.0012)
+		sequences[step] = CreatureKeeping.fade(
+			_held, "rite|" + step, float(sequences[step]), RITE_FADE * share)
 	for key: String in lore:
-		lore[key] = move_toward(float(lore[key]), 0.0, 0.0008)
+		lore[key] = CreatureKeeping.fade(
+			_held, "lore|" + key, float(lore[key]), LORE_FADE * share)
 	for place: String in places:
-		places[place]["feel"] = move_toward(float(places[place]["feel"]), 0.0, 0.0006)
+		places[place]["feel"] = CreatureKeeping.fade(
+			_held, "place|" + place, float(places[place]["feel"]), PLACE_FADE * share)
 	for key: String in weights:
 		var w: Dictionary = weights[key]
 		for f: String in w:
-			w[f] = move_toward(float(w[f]), 0.0, 0.0015)
+			w[f] = CreatureKeeping.fade(
+				_held, "w|" + key + "|" + f, float(w[f]), WEIGHT_FADE * share)
 
 
 ## WHAT IT BELIEVES, in plain words — so the player can actually read the
@@ -637,6 +664,7 @@ func _phrase(rule: String, strength: float) -> String:
 func to_dict() -> Dictionary:
 	return {
 		"weights": weights.duplicate(true),
+		"held": _held.duplicate(true),
 		"rules": rules.duplicate(true),
 		"sequences": sequences.duplicate(true),
 		"lore": lore.duplicate(true),
@@ -650,6 +678,7 @@ func to_dict() -> Dictionary:
 
 func from_dict(data: Dictionary) -> void:
 	weights = (data.get("weights", {}) as Dictionary).duplicate(true)
+	_held = (data.get("held", {}) as Dictionary).duplicate(true)
 	rules = (data.get("rules", {}) as Dictionary).duplicate(true)
 	sequences = (data.get("sequences", {}) as Dictionary).duplicate(true)
 	lore = (data.get("lore", {}) as Dictionary).duplicate(true)
