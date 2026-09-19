@@ -219,6 +219,10 @@ var bonds := CreatureBonds.new()
 ## option would leave it in, and asks its own heart how a moment like that would
 ## feel. See CreatureForesight.
 var foresight := CreatureForesight.new()
+## EIGHT NIGHTS OF HIS OWN, and what each of them set. See CreatureDreams: sleep
+## is where a day is rehearsed into something he keeps, and how much of it sets
+## is how well he has been looked after.
+var dreams := CreatureDreams.new()
 
 ## ITS HEART, handed over by the creature at birth. The mind needs it for one
 ## thing only: to ask how an imagined future would FEEL (see CreatureForesight).
@@ -519,6 +523,29 @@ func decay(share := 1.0) -> void:
 	bonds.fade(share)
 
 
+## GONE OVER IN HIS SLEEP. The strongest memory of the day he has not already
+## rehearsed tonight, deepened — and ONLY deepened. Consolidation must not move
+## what he believes, or a long night would be a way of arguing with him: it
+## makes what he already believes harder to lose, which is what sleeping on
+## something actually does.
+func consolidate(already: Dictionary) -> String:
+	var best := ""
+	var most := 0.0
+	for e: Dictionary in beliefs.episodes:
+		var k := String(e.get("key", ""))
+		if k == "" or already.has(k):
+			continue
+		var worth := absf(float(e.get("worth", 0.0)))
+		if worth > most:
+			most = worth
+			best = k
+	if best == "":
+		return ""
+	CreatureKeeping.learned(_held, best, float(q.get(best, 0.0)))
+	beliefs.rehearse(best)
+	return best
+
+
 ## Something happened TO the creature. Let it work out for itself which of its
 ## recent deeds brought this about.
 func experience(tag: String, reward: float) -> void:
@@ -682,6 +709,7 @@ func to_dict() -> Dictionary:
 		# to survive putting the game down.
 		"skill": skill.duplicate(true),
 		"held": _held.duplicate(true),
+		"dreams": dreams.to_dict(),
 		"ethos": ethos.to_dict(),
 		"beliefs": beliefs.to_dict(),
 		"bonds": bonds.to_dict(),
@@ -698,6 +726,7 @@ func from_dict(data: Dictionary) -> void:
 	# What each value has earned the right to keep. A save from before the
 	# floors existed simply has none, and earns them again as it is used.
 	_held = (data.get("held", {}) as Dictionary).duplicate(true)
+	dreams.from_dict(data.get("dreams", {}))
 	# A save from before the compass existed carries one number; unfold it onto
 	# the axes that number used to stand for, so an old creature keeps its soul.
 	if data.has("ethos"):

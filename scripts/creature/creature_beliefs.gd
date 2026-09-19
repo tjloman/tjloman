@@ -403,6 +403,16 @@ func _learn(key: String, ctx: Dictionary, reward: float) -> void:
 		CreatureKeeping.learned(_held, "w|" + key + "|" + f, w[f])
 
 
+## GONE OVER IN HIS SLEEP. What he learned about the circumstances of a deed
+## sets along with the deed itself — a night spent on the day he was mobbed
+## should not leave him remembering the mobbing and forgetting that it was dark.
+## Deepens what is there; changes nothing.
+func rehearse(key: String) -> void:
+	var w: Dictionary = weights.get(key, {})
+	for f: String in w:
+		CreatureKeeping.learned(_held, "w|" + key + "|" + f, float(w[f]))
+
+
 ## Does it expect this deed to bring this consequence about? Used to let it act
 ## on its beliefs — hesitating over what it thinks will end badly.
 func expects(key: String, tag: String) -> float:

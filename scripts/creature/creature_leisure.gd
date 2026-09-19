@@ -218,8 +218,12 @@ static func sleep(who: Creature, delta: float) -> bool:
 	var depth := who.welfare.sleep_depth()
 	who.energy = minf(who.energy + (2.0 + 5.0 * depth) * delta, 100.0)
 	_lie_down(who, true)
+	# AND HE IS DREAMING. The day is gone over while he is under, deeply or
+	# barely, according to how well he has been kept — see CreatureDreams.
+	who.mind.dreams.drift(who, delta)
 	if who.energy > lerpf(55.0, 92.0, depth):
 		_lie_down(who, false)
+		who.mind.dreams.wake(who)
 		who._decide()
 	return false
 

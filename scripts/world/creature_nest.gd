@@ -765,6 +765,12 @@ func _mind_lines() -> Array:
 	out.append(["the world", "no idea yet" if picture.is_empty()
 		else "\n".join(picture)])
 	out.append(["miracles", _miracle_list(mind.known_miracles())])
+	# WHAT HIS NIGHTS HAVE BEEN LIKE. The only line on this wall that says what a
+	# day was LIKE rather than what it changed — and the only place a player can
+	# see what their creature's week has been without being told a number.
+	var nights: Array = mind.dreams.told(2)
+	out.append(["dreams", "has not slept here yet" if nights.is_empty()
+		else "\n".join(nights)])
 	return out
 
 
