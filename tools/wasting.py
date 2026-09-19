@@ -33,6 +33,19 @@ So there is a floor, and this file is what says it holds. Four claims:
   AND THE BOOKS MATCH THE BEAST. Shrinking used to write `stature` and never
   touch the scale, so a wasted creature was the same size on the grass until
   the next mouthful of food happened to put the two back in step.
+
+AND ONE MORE, WHICH IS THE WHOLE POINT OF THE OTHERS:
+
+    "A player leaving the game running overnight should never be punished
+     with a 1 size creature again."
+
+A cap that is a cap on a SITTING is only worth the word if a sitting can be
+fourteen hours long. Two things decide that and neither is obvious from
+reading waste() on its own: nothing may hand the creature a fresh allowance
+part-way through the night, and no single tick may step past the floor however
+long that tick turned out to be. The first is a question about who is allowed
+to make a CreatureWelfare; the second is why the loss is clamped to the room
+left above the floor rather than trusted to be small because delta usually is.
 """
 import pathlib
 import re
@@ -170,6 +183,57 @@ if not redraws:
     fail.append("_grow_by does not re-apply the scale, so wasting moves the "
                 "number and leaves the creature exactly as big as it was")
 
+# -- NOBODY RE-ARMS THE ALLOWANCE MID-RUN ------------------------------------
+#
+# The mark lives on the creature's CreatureWelfare and is never saved, so the
+# sitting it measures is really "the life of that object". A second one built
+# while the game is running -- a respawn, a reset, a mid-session load that
+# reaches into the creature already standing there -- starts at zero and hands
+# out a fresh fifth to lose. The creature's own declaration is the only one
+# there may be.
+makers = []
+for path in sorted(ROOT.glob("scripts/**/*.gd")):
+    for n, row in enumerate(path.read_text().split("\n"), 1):
+        bare = row.split("#")[0]
+        found = re.search(r"\bwelfare\s*=([^=].*)$", bare)
+        if "CreatureWelfare.new()" not in bare and not found:
+            continue
+        # Handing the one that exists to somebody else is not making one. A
+        # right-hand side that CONSTRUCTS is, wherever it is written.
+        builds = "CreatureWelfare.new()" in bare
+        makers.append(("%s:%d" % (path.relative_to(ROOT), n), bare.strip(), builds))
+print()
+print("WHO CAN START A FRESH ALLOWANCE:")
+born = [m for m in makers if m[2]]
+for where, row, builds in makers:
+    first = builds and row.startswith("var welfare :=")
+    note = "the creature, once" if first else (
+        "<-- A SECOND ONE" if builds else "passes the one it has")
+    print("   %-38s %-42s %s" % (where, row, note))
+    if builds and not first:
+        fail.append("%s builds a CreatureWelfare outside the creature's own "
+                    "declaration, which zeroes the high-water mark and hands "
+                    "out a fresh fifth to lose" % where)
+if len(born) != 1:
+    fail.append("a CreatureWelfare is built in %d places, so the sitting the "
+                "allowance covers is not the run of the game" % len(born))
+
+# -- A TICK IS NOT ALLOWED TO BE SMALL ---------------------------------------
+#
+# waste() holds the loss to the room left above the floor, so the floor holds
+# for any delta at all. That matters more than it sounds: an alt-tab, a stall,
+# a breakpoint or a machine waking from sleep all deliver one enormous tick,
+# and a version of this that only multiplied a rate by delta would go through
+# the floor and out the other side on the first of them.
+clamped = any("stature - least" in r for r in waste)
+print()
+print("ONE ENORMOUS TICK (an alt-tab, a stall, a laptop waking up) %s."
+      % ("stops at the floor" if clamped else "GOES STRAIGHT THROUGH IT"))
+if not clamped:
+    fail.append("this tick's loss is not clamped to the room above the floor, "
+                "so a single long frame after a stall takes as much as it "
+                "likes and the night's cap means nothing")
+
 # -- WHAT A BAD DAY COSTS ----------------------------------------------------
 #
 # The worst case the game can produce, run minute by minute: standing pinned at
@@ -205,9 +269,33 @@ else:
               % ("%d hour%s" % (hours, "" if hours == 1 else "s"),
                  was, round(size(was) / size(4000) * 100),
                  now, round(size(now) / size(4000) * 100)))
-    worst = sitting(4000, 8, share, rate, shrink_at, True)
-    print("   a whole day of it costs %d%% of its size, and no more, however "
-          "long it goes on." % round(100 - size(worst) / size(4000) * 100))
+    # THE NIGHT. Fourteen hours of the worst treatment in the game, which is
+    # what a player who left it running and went to bed comes back to.
+    night = sitting(4000, 14, share, rate, shrink_at, True)
+    was_night = sitting(4000, 14, share, rate, shrink_at, False)
+    print()
+    print("LEFT RUNNING OVERNIGHT (14 hours, treated as badly as the game can):")
+    print("   before: stature %.0f, %d%% of the size it went to bed at"
+          % (was_night, round(size(was_night) / size(4000) * 100)))
+    print("   now:    stature %.0f, %d%% of the size it went to bed at"
+          % (night, round(size(night) / size(4000) * 100)))
+    # And the same night arriving as ONE tick, which is what a stall or a
+    # machine coming out of sleep actually delivers.
+    stall = max(4000.0 - (shrink_at + 1.0) / (1.0 + shrink_at) * rate * 14 * 3600,
+                max(4000.0 * (1.0 - share), 1.0))
+    print("   as a single fourteen-hour tick: stature %.0f -- the floor is a "
+          "floor, not a slow brake." % stall)
+    if night < 4000 * (1.0 - share) - 1.0 or stall < 4000 * (1.0 - share) - 1.0:
+        fail.append("a night unattended costs more than the sitting's "
+                    "allowance, which is the thing that must never happen "
+                    "again")
+    if round(size(night) / size(4000) * 100) < 85:
+        fail.append("a creature left running overnight loses more than a "
+                    "seventh of its visible size, which is a punishment for "
+                    "going to bed")
+    worst = night
+    print("   however long it goes on, a sitting costs %d%% of its size and "
+          "stops." % round(100 - size(worst) / size(4000) * 100))
     # Over weeks, though, it must still take a creature apart -- the cap is on
     # the sitting, not on the mechanism.
     stature, days = 4000.0, 0
