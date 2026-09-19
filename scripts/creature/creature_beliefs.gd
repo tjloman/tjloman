@@ -54,6 +54,10 @@ const WHEN_PHRASE := {
 	"kin_glad": "when the people are glad",
 }
 const TAG_PHRASE := {
+	# The two a forgotten deed leaves behind. Everything else in this table is
+	# something that HAPPENED to him; these two are what he came to think.
+	"right": "is the right thing to do",
+	"wrong": "is wrong of it",
 	"mobbed": "brings a mob down on it",
 	"hurt": "ends in pain",
 	"praised": "pleases its god",
@@ -66,6 +70,21 @@ const TAG_PHRASE := {
 	"forgiven": "brings it home again",
 }
 
+
+## WHAT A DEED IS DONE TO, when a conviction names no particular victim. A
+## conviction comes out of hundreds of forgotten deeds rather than one
+## remembered one, so there is nobody left in it to name — and "eating things"
+## is not what he believes. This is more of the same phrase book above, not a
+## second copy of what deeds MEAN.
+const PLAIN_SUBJECT := {
+	"eat_kin": "people", "eat": "what it finds", "smash": "what stands",
+	"throw": "whatever it can lift", "gather": "what the village needs",
+	"tend": "the fields", "gift": "what it has", "rescue": "the drowning",
+	"guard": "the people", "heal": "the hurt", "cull": "the herds",
+	"shepherd": "the herds", "play": "the people", "watch": "the village",
+	"soothe": "the frightened", "commune": "its god", "shun": "its god",
+	"fish": "the water", "cast": "miracles",
+}
 
 ## The circumstances the creature can notice. Keeping this list short and
 ## meaningful is what keeps the learning fast and the beliefs legible.
@@ -92,6 +111,14 @@ const WEIGHT_LR := 0.22     # how fast circumstances reshape a belief
 const WEIGHT_CLAMP := 2.5
 const BELIEF_LR := 0.25     # how fast an action->consequence rule firms up
 const CONFIDENT := 0.45     # a rule this strong is worth acting on / reporting
+## HOW A FORGOTTEN DEED BECOMES A CONVICTION. Each one that falls out of his
+## record lays down this share of what it was worth, and they add up: about five
+## forgotten man-eatings put "eating people is the right thing to do" on the
+## nest wall in words. The cap is below the 1.0 an experienced rule can reach,
+## so a thing he LEARNED still outranks a thing he merely became.
+const CONVICTION_STEP := 0.55
+const CONVICTION_CAP := 0.85
+
 ## HOW FAST A DREAD LOOSENS when the thing dreaded does not happen. Slower than
 ## it firms up (BELIEF_LR 0.25), because it should take more evidence to talk a
 ## creature out of a fear than it took to give it one — but not so slow that a
@@ -327,6 +354,20 @@ func disconfirm(key: String, tag: String) -> void:
 	rules[rule] = clampf(float(rules[rule]) * DISCONFIRM, -1.0, 1.0)
 	if absf(float(rules[rule])) < FORGOTTEN:
 		rules.erase(rule)
+
+
+## A DEED HAS FALLEN OUT OF LIVING MEMORY. He no longer remembers doing it; what
+## is left is what he now thinks about doing it, and that goes up on the wall in
+## his own words. Positive on purpose whichever way it cuts — `foreboding` reads
+## the negative rules as dread, and a conviction is not a dread. What he
+## believes is RIGHT is stored as strongly as what he believes is wrong.
+func conviction(verb: String, worth: float) -> void:
+	if verb == "" or absf(worth) < 0.001:
+		return
+	var rule := verb + "|" + String(PLAIN_SUBJECT.get(verb, "things")) \
+		+ (">right" if worth > 0.0 else ">wrong")
+	rules[rule] = minf(float(rules.get(rule, 0.0))
+		+ CONVICTION_STEP * absf(worth), CONVICTION_CAP)
 
 
 ## Teach one deed which circumstances made it go well or badly.

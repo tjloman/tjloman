@@ -226,6 +226,14 @@ var _last_key := ""         # the (verb,type) the next outcome is credited to
 var _last_verb := ""
 
 
+## The record of his deeds must be able to reach his beliefs: a deed that falls
+## out of memory is not merely subtracted, it becomes something he thinks. Wired
+## here because this is the one class that holds both of them — the same reason
+## the creature hands over the welfare in its own `_ready`.
+func _init() -> void:
+	ethos.deeds.beliefs = beliefs
+
+
 func _key(verb: String, type: String) -> String:
 	return verb + "|" + type
 

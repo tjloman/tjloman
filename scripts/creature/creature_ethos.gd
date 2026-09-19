@@ -40,7 +40,8 @@ const AXES: Array[String] = ["mercy", "bounty", "order", "fellowship", "daring",
 ## WHAT EACH DEED MEANS, on every axis it touches. This is the whole of the
 ## game's moral scaffolding: it never chooses an action, it only says what
 ## having chosen one implies about you. Axes a verb does not mention are not
-## neutral about it — they simply have nothing to say, and drift (see DRIFT).
+## neutral about it — they simply have nothing to say, and an axis nothing has
+## spoken to lately simply carries no weight in the read (see CreatureDeeds).
 const MEANING := {
 	# The kind deeds. Note that none of them is kind in the same WAY.
 	"rescue": {"mercy": 1.3, "fellowship": 0.5, "daring": 0.6},
@@ -95,13 +96,15 @@ const MEANING := {
 const GOOD := {"mercy": 0.55, "bounty": 0.2, "order": 0.25}
 const GOOD_GAIN := 1.4     # so a wholly cruel life still reaches the extreme
 
-## How much one deed moves an axis it names — roughly a twenty-deed memory, so
-## character is the honest ratio of how the creature spends its days.
+## How much of a whole deed one act counts for. It used to be how far a deed
+## MOVED an axis — a twenty-deed impression, which is five minutes of play — and
+## it is now how heavily that deed is written into the record of two hundred and
+## fifty-six (see CreatureDeeds). An hour of conduct, kept deed by deed.
 const DEED_FORCE := 0.05
-## An axis the deed says NOTHING about still drifts toward neutral, slowly. A
-## creature that rescued somebody once and has spent the year since breaking
-## fences is not merciful, and this is why.
-const DRIFT := 0.35
+## The same number as CreatureDeeds.CANVAS_LIMIT, and written out rather than
+## read from it on purpose: these two classes name each other, and Godot will
+## resolve that at runtime but not inside a constant. tools/deeds.py holds them
+## equal, which is the only honest way to keep a number written twice.
 const AXIS_LIMIT := 1.2    # room to overshoot, so extremes are reachable
 
 ## WHAT A LEANING IS CALLED. Every axis has two poles, and every pole has an
@@ -175,6 +178,11 @@ const STRENGTH_WORD: Array[Array] = [
 ## WHERE IT STANDS. Axis name -> -1..+1, all starting dead centre: a newborn
 ## creature has no character at all, and has to go and get one.
 var axis := {}
+## THE RECORD ITSELF: 256 deeds he still remembers, and the canvas of everything
+## he no longer does. `axis` above is the READING of it, kept as a plain
+## dictionary because half the game asks this class where he stands and none of
+## it should have to know how the answer is arrived at.
+var deeds := CreatureDeeds.new()
 
 
 func _init() -> void:
@@ -203,22 +211,24 @@ static func kindness(verb: String) -> float:
 ## `force` is how much of a whole deed this counts for (see CreatureMind's
 ## pacing), and `direction` lets a scolding push the opposite way from the act.
 func learn(verb: String, force := DEED_FORCE, direction := 1.0) -> void:
-	push(MEANING.get(verb, {}), force, direction)
+	push(MEANING.get(verb, {}), force, direction, verb)
 
 
 ## As `learn`, but for a meaning assembled on the spot — watching its god, or
 ## anything else that has a moral shape without being one of its own verbs.
-func push(profile: Dictionary, force := DEED_FORCE, direction := 1.0) -> void:
+func push(profile: Dictionary, force := DEED_FORCE, direction := 1.0,
+		named := "") -> void:
 	var f := clampf(force, 0.0, 1.0)
 	if f <= 0.0:
 		return
-	for a: String in AXES:
-		var target := float(profile.get(a, 0.0)) * direction
-		# Axes the deed says nothing about still relax toward centre, at a
-		# fraction of the rate — unexercised character fades.
-		var rate := f if profile.has(a) else f * DRIFT
-		axis[a] = clampf(float(axis[a]) + (target - float(axis[a])) * rate,
-			-AXIS_LIMIT, AXIS_LIMIT)
+	# A scolding pushes the opposite way from the act, so the deed goes into the
+	# record meaning the reverse of what it meant — which is the honest thing to
+	# write down: what he was told it amounted to.
+	var meant := {}
+	for a: String in profile:
+		meant[a] = float(profile[a]) * direction
+	deeds.add(meant, f, named)
+	axis = deeds.reading()
 
 
 ## HOW CONGENIAL a deed is to the creature it has become — the dot product of
@@ -312,10 +322,24 @@ func _strength(magnitude: float) -> String:
 
 ## Persistence -----------------------------------------------------------------
 
+## The six numbers still go out, because half a dozen readouts and one very old
+## save format expect them — but the RECORD is what is restored from, and the
+## numbers are only what it read at the time.
 func to_dict() -> Dictionary:
-	return axis.duplicate()
+	var out := axis.duplicate()
+	out["deeds"] = deeds.to_dict()
+	return out
 
 
 func from_dict(data: Dictionary) -> void:
-	for a: String in AXES:
-		axis[a] = clampf(float(data.get(a, 0.0)), -AXIS_LIMIT, AXIS_LIMIT)
+	if data.has("deeds"):
+		deeds.from_dict(data["deeds"])
+	else:
+		# A save from before the record existed has six numbers and nothing
+		# behind them. They go on the canvas, which is exactly what the canvas
+		# is: everything he has been that he no longer remembers doing.
+		var was := {}
+		for a: String in AXES:
+			was[a] = clampf(float(data.get(a, 0.0)), -AXIS_LIMIT, AXIS_LIMIT)
+		deeds.inherit(was)
+	axis = deeds.reading()
