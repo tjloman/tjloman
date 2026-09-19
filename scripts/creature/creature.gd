@@ -363,7 +363,8 @@ func _physics_process(delta: float) -> void:
 		State.WANDER:
 			if _move_toward(_target, WALK_SPEED * 0.7, delta):
 				state = State.IDLE
-				_action_time = randf_range(1.5, 4.0)
+				# A creature with nothing in the tank takes longer over nothing.
+				_action_time = body.dawdle(randf_range(1.5, 4.0), energy)
 		State.SEEK_FOOD:
 			_process_seek_food(delta)
 		State.EATING:
@@ -642,7 +643,7 @@ func _decide() -> void:
 		# WHETHER FEAR MAKES IT RUN OR MAKES IT TURN. See CreatureMind's
 		# appraisal: its daring is a thing it earned, not a thing it was given.
 		"nerve": mind.ethos.standing("daring"),
-		"full": body.fullness(growth), "lazy": body.laziness(),
+		"full": body.fullness(growth), "lazy": body.laziness(energy),
 		"pressed": body.pressed(),   # how badly it needs to go
 		# Being alone is a need like any other. A creature with nobody about
 		# leans toward whatever brings it near people — which for one creature

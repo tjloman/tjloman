@@ -105,6 +105,38 @@ const ENERGY_PER_GROWTH := 280.0
 ## smaller one.
 const STONE_PER_LIFT := 2.4
 
+## WHETHER HE IS UP FOR ANYTHING, 0..1 — and it is not a stat.
+##
+## Nothing in this creature says how ACTIVE he is. Character says what he likes
+## doing; welfare says what he can learn; the body said only that fat creatures
+## are lazy, `fat / 100`, which made an empty, wasted creature the keenest thing
+## on the map. It was hungry, therefore not fat, therefore full of beans.
+##
+## So it is derived from how well he is kept, both ways:
+##
+##   NOTHING IN RESERVE is not lean, it is starving. Below 5 he has nothing to
+##   spend and it falls off a cliff.
+##   SIX TO FIFTY is the whole of an animal at its best, and it is flat: a
+##   working creature and a well-fed one are equally up for it.
+##   PAST FIFTY he slides, gently at first — plump and rested is still willing,
+##   obese is not.
+##   AND NO ENERGY IS NO ENERGY, whatever his condition. It multiplies rather
+##   than averages, so a spent creature is torpid even at a perfect weight.
+##
+## The player never sees this number. They see a creature that mooches when it
+## has been left to get fat or run into the ground, and gets on with things when
+## it has been kept properly — which is the whole of what feeding it is FOR.
+const PEAK_FROM := 6.0
+const PEAK_TO := 50.0
+const GAUNT := 0.12          # what is left of him with nothing in reserve
+const GAUNT_CURVE := 0.7
+const STUFFED_LEFT := 0.22   # and what is left at a hundred
+const STUFFED_CURVE := 1.6
+const SPENT_LEFT := 0.10     # flat on his face, whatever his condition
+const RESTED_AT := 40.0
+const SPENT_CURVE := 0.8
+
+
 var stomach := 0.0        # food units currently being digested
 var fat := 0.0            # 0..100 — sleek to obese
 var waste := 0.0          # 0..100 — how badly it needs to go
@@ -237,9 +269,35 @@ func speed_factor() -> float:
 	return clampf(1.0 - fat / 100.0 * 0.4 + might() / 100.0 * 0.15, 0.55, 1.2)
 
 
-## How disinclined it is to do anything strenuous — the couch pull, 0..1.
-func laziness() -> float:
-	return clampf(fat / 100.0, 0.0, 1.0)
+func vigour(energy: float) -> float:
+	return clampf(_from_reserve() * _from_energy(energy), 0.0, 1.0)
+
+
+## How disinclined it is to do anything strenuous — the couch pull, 0..1, and
+## now the starvation pull and the exhaustion pull with it.
+func laziness(energy: float) -> float:
+	return 1.0 - vigour(energy)
+
+
+## HOW LONG HE TAKES OVER NOTHING. A torpid creature does not choose lazier
+## things — it chooses FEWER things, and sits longer between them, which is what
+## being disinclined actually looks like from across a field.
+func dawdle(seconds: float, energy: float) -> float:
+	return seconds / maxf(vigour(energy) * 0.35 + 0.65, 0.35)
+
+
+func _from_reserve() -> float:
+	if fat < PEAK_FROM:
+		return GAUNT + pow(fat / PEAK_FROM, GAUNT_CURVE) * (1.0 - GAUNT)
+	if fat <= PEAK_TO:
+		return 1.0
+	return 1.0 - pow((fat - PEAK_TO) / (100.0 - PEAK_TO), STUFFED_CURVE) \
+		* (1.0 - STUFFED_LEFT)
+
+
+func _from_energy(energy: float) -> float:
+	return minf(SPENT_LEFT + pow(maxf(energy, 0.0) / RESTED_AT, SPENT_CURVE)
+		* (1.0 - SPENT_LEFT), 1.0)
 
 
 func is_boosted() -> bool:
