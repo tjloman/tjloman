@@ -74,9 +74,18 @@ const ENGINE_ROW := &"(the solver)"
 ## are over GIANT. In a sane world that reads "Chunk/@MeshInstance3D 96m" and
 ## means nothing; when it reads "pig 812m" the hunt is over.
 const GIANT := 120.0
-## The only things skipped: the sky and the lights in it, which are meant to be
-## the size of the world, and every MultiMesh, whose bounds are the whole field
-## it scatters over rather than one blade of it.
+## The only things skipped are the sky and the lights in it, which are meant to
+## be the size of the world.
+##
+## MULTIMESHES USED TO BE SKIPPED TOO, on the grounds that a scatter's bounds
+## are the whole field it covers rather than one blade of it. That was the
+## reason this hunt was blind for a fortnight: a MultiMesh is the one thing in
+## the game that can hold a transform NOBODY WROTE, and one of those is an
+## animal-shaped mesh drawn somewhere nobody chose at a scale nobody chose. A
+## herd's bounds are its spread, which is metres; if one ever reads in hundreds,
+## that is the whole answer and it was being filtered out before it could be
+## printed. They are counted, and the line says how many instances are in the
+## book and how many of them the renderer may reach.
 const VAST: Array[String] = ["Sky", "Sun", "Moon", "Horizon", "Star"]
 
 
@@ -287,11 +296,12 @@ func _with_peak(text: String, worst: float) -> String:
 func _the_biggest_thing() -> String:
 	var worst := 0.0
 	var named := ""
+	var flock := ""
 	var at := Vector3.ZERO
 	var huge := 0
 	for n in get_tree().root.find_children("*", "GeometryInstance3D", true, false):
 		var vi := n as VisualInstance3D
-		if vi == null or vi is MultiMeshInstance3D or not vi.is_visible_in_tree():
+		if vi == null or not vi.is_visible_in_tree():
 			continue
 		var kin := vi.get_parent()
 		var skip := false
@@ -323,10 +333,21 @@ func _the_biggest_thing() -> String:
 			worst = across
 			named = "%s/%s" % [String(kin.name) if kin != null else "?", vi.name]
 			at = box.get_center()
+			# AND HOW MANY OF IT THERE ARE, when what won is a scatter. A herd
+			# reading four hundred metres across with four hundred in its book
+			# and every one of them visible says what went wrong in one line.
+			flock = ""
+			var mmi := vi as MultiMeshInstance3D
+			if mmi != null and mmi.multimesh != null:
+				flock = " [%d of %d shown]" % [
+					mmi.multimesh.visible_instance_count
+						if mmi.multimesh.visible_instance_count >= 0
+						else mmi.multimesh.instance_count,
+					mmi.multimesh.instance_count]
 	if named == "":
 		return ""
-	return "big: %s %.0fm @ %.0f,%.0f%s" % [named.left(22), worst, at.x, at.z,
-		"  (%d over %dm)" % [huge, int(GIANT)] if huge > 1 else ""]
+	return "big: %s %.0fm @ %.0f,%.0f%s%s" % [named.left(22), worst, at.x, at.z,
+		flock, "  (%d over %dm)" % [huge, int(GIANT)] if huge > 1 else ""]
 
 
 ## THE READOUT. Ordered so the first three lines answer the only question that

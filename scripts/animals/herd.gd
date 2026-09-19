@@ -662,7 +662,7 @@ func _build_multimesh() -> void:
 	# models README asks for that, and Animal adds its custom model at the body
 	# origin on the same understanding) — while the box has to be lifted by half
 	# its height plus the legs it does not have.
-	_mm.instance_count = head
+	_book_is(head)
 	_mmi = MultiMeshInstance3D.new()
 	_mmi.multimesh = _mm
 	var model := ModelBank.mesh_for(species)
@@ -854,8 +854,7 @@ func _join_into(host: Herd) -> void:
 		_members = []
 		_recount()
 		head = 0
-		if _mm != null:
-			_mm.instance_count = 0
+		_book_is(0)
 		queue_free()
 	else:
 		_joining = null           # the other one is the one that should be walking
@@ -894,8 +893,8 @@ func merge_from(other: Herd) -> void:
 	head = _members.size()
 	_spread = maxf(SPACING * sqrt(float(alive())), SPREAD_LEAST)
 	_settle_left = SETTLE
+	_book_is(_members.size())
 	if _mm != null:
-		_mm.instance_count = _members.size()
 		_write_transforms()
 
 
@@ -1067,6 +1066,41 @@ func _resample_grounds(how_many: int) -> void:
 		_ground_cursor += 1
 
 
+## HOW BIG THE BOOK IS, and the only place that says so.
+##
+## THIS IS WHERE A PIG THE SIZE OF A HILLSIDE COMES FROM.
+##
+## `instance_count` is the BOOK — four hundred head in a barn — and the
+## transforms are written for the ones actually OUT, a slice a tick on a round
+## robin. So every index from `_simulated()` up to the book has to be put
+## somewhere by hand, and the collapse that does it only runs when the barn
+## changes how many it is showing. Grow the book without that changing — which
+## is exactly what a calf being born in a barn herd is, and barns breed all day
+## — and the new index is never written by anybody at all.
+##
+## What is in an instance nobody has written is whatever the buffer held when it
+## was resized. One transform of that is one animal-shaped mesh drawn somewhere
+## nobody chose at a scale nobody chose, which is the shape of the thing that
+## has been coming and going in this world for weeks: a flat-shaded surface
+## across the screen in the colour of some animal, which goes away when you walk
+## far enough for the herd to be rebuilt and comes back a moment later.
+##
+## Every other MultiMesh in this game allocates and writes every instance in the
+## same breath. This is the only one that does not, and so the only one that can
+## hold an instance nobody has spoken for.
+func _book_is(count: int) -> void:
+	if _mm == null:
+		return
+	var was := _mm.instance_count
+	if count < was:
+		# Godot refuses a visible count past the end of the book, so it comes
+		# down first; `_write_transforms` puts it back up.
+		_mm.visible_instance_count = mini(_mm.visible_instance_count, count)
+	_mm.instance_count = count
+	for i in range(was, count):
+		_mm.set_instance_transform(i, Transform3D().scaled(Vector3.ZERO))
+
+
 func _write_transforms(how_many := 0) -> void:
 	if _mm == null or _members.is_empty():
 		return
@@ -1104,6 +1138,12 @@ func _write_transforms(how_many := 0) -> void:
 			_mm.set_instance_transform(i, Transform3D().scaled(Vector3.ZERO))
 		_hidden_to = live
 		_write_cursor = 0
+	# AND THE RENDERER CANNOT REACH PAST WHAT IS WRITTEN. `visible_instance_count`
+	# is what the field is for and it costs nothing — a four-hundred-head book
+	# with twelve of them out draws twelve. Belt as well as braces: `_book_is`
+	# puts every new instance somewhere, and this makes it structurally
+	# impossible to draw one that was missed anyway.
+	_mm.visible_instance_count = live
 	if live <= 0:
 		_written_y = global_position.y
 		return
@@ -1793,8 +1833,7 @@ func _shed_strays() -> void:
 	for m in _members:
 		if _living(m) != null:
 			_afoot_here += 1
-	if _mm != null:
-		_mm.instance_count = _members.size()
+	_book_is(_members.size())
 	_recentre()
 
 
@@ -1874,8 +1913,8 @@ func settled_with(rows: Array[Dictionary], from: Vector3) -> void:
 	_spread = maxf(SPACING * sqrt(float(alive())), SPREAD_LEAST)
 	_home = global_position
 	_target = _home
+	_book_is(_members.size())
 	if _mm != null:
-		_mm.instance_count = _members.size()
 		_write_transforms()
 
 
@@ -1936,8 +1975,8 @@ func _grow(many: int) -> void:
 	head = _members.size()
 	_spread = maxf(SPACING * sqrt(float(alive())), SPREAD_LEAST)
 	_retag()   # a calf is a head more
+	_book_is(_members.size())
 	if _mm != null:
-		_mm.instance_count = _members.size()
 		_write_transforms()
 
 
