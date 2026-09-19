@@ -87,6 +87,36 @@ const SHRINK_AT := -0.62
 const THRIVE_BONUS := 0.55
 const SHRINK_RATE := 0.45
 
+## THE MOST A BODY MAY LOSE IN ONE SITTING, as a fraction of the biggest it has
+## been since the game was opened.
+##
+## Wasting is meant to be the slow visible cost of cruelty over WEEKS of play,
+## and instead it was the tax on an afternoon. At its worst it takes 0.45 of a
+## stature-step a second — twenty-seven a minute, sixteen hundred an hour — and
+## a young creature has only a few thousand steps to its name, so one bad stretch
+## of running errands and going hungry while the player was busy elsewhere put
+## the whole morning's growing back on the ground. A thing that cannot be kept
+## is not a reward.
+##
+##     "With all the running and things the creature does, it's hard to get him
+##      above size 1. I feel like shrinking needs a limiter per session, so he
+##      can't shrink more than a certain percent in a single play session — no
+##      matter what happens."
+##
+## So it is capped per sitting, and measured against the LARGEST it has been
+## this sitting rather than the size it opened at: grow for an hour and the
+## floor comes up with you, so an hour's work can never be taken back to where
+## it started. Stature goes as the square of size, so a fifth of it off is about
+## a tenth off what a player can see — a beast gone noticeably thinner by the
+## end of a bad day, not a beast back to nothing.
+##
+## NOTHING OF THIS IS SAVED. Closing the game and opening it again sets a fresh
+## allowance against a fresh high-water mark, so a player who goes on starving
+## and beating the thing still wastes it away over the weeks they do it in —
+## which is the point of the mechanism and is left alone. The cap is on how much
+## of that can land in one sitting.
+const MOST_LOST_IN_A_SITTING := 0.20
+
 ## Nothing here may swing a faculty further than this either way, so a wretched
 ## creature is hampered rather than inert and a cherished one is quick rather
 ## than omniscient.
@@ -102,6 +132,10 @@ var tether := 0.0      # 0..100, attachment built out of pain and relief
 ## than a fading impression.
 var struck := 0
 var _since_hurt := 999.0
+## The biggest it has been since the game was opened, which is what the sitting's
+## wasting allowance is measured against. Zero until the first tick asks, never
+## written to a save file, and only ever climbs.
+var _high_water := 0.0
 
 
 ## The slow turn of a life. Fed and rested raises care; hungry and spent raises
@@ -231,6 +265,22 @@ func wasting() -> float:
 	if s > SHRINK_AT:
 		return 0.0
 	return (SHRINK_AT - s) / (1.0 + SHRINK_AT) * SHRINK_RATE
+
+
+## HOW MUCH ACTUALLY COMES OFF THIS TICK, which is the rate above with the
+## sitting's allowance already taken out of it — and it is the ONE door stature
+## is lost through, so a cap here is a cap full stop.
+##
+## The high-water mark is taken from whatever it is asked about, so it needs no
+## setting up and it cannot be out of step with a creature that was loaded from
+## a save after the first tick had already run: the mark only ever climbs, and a
+## bigger creature arriving late simply raises it.
+func waste(stature: float, delta: float) -> float:
+	_high_water = maxf(_high_water, stature)
+	var least := maxf(_high_water * (1.0 - MOST_LOST_IN_A_SITTING), 1.0)
+	if stature <= least:
+		return 0.0
+	return minf(wasting() * delta, stature - least)
 
 
 ## WHAT IT SHEDS ON THE WORLD AROUND IT, 0..1. A creature raised well does not

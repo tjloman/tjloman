@@ -549,12 +549,12 @@ func _tick_feelings(delta: float) -> void:
 	var d := body.digest(delta, growth)
 	if d["growth"] > 0.0:
 		# FOOD IS NOT THE WHOLE OF GROWING. A starved, worked, beaten creature
-		# does not put on size even when it is fed; a cherished one outgrows
-		# what its meals alone would explain. Past bearing it wastes instead.
+		# does not put on size even when fed; a cherished one outgrows what its
+		# meals alone would explain. Past bearing it wastes instead.
 		_grow_by(d["growth"] * welfare.growth_factor())
-	var wasting: float = welfare.wasting()
-	if wasting > 0.0:
-		stature = maxf(stature - wasting * delta, 1.0)
+	var shed: float = welfare.waste(stature, delta)
+	if shed > 0.0:
+		_grow_by(-shed)
 	body.idle(delta)
 	# Opinions it stops rehearsing fade slowly back toward neutral.
 	_decay_tick -= delta
@@ -1863,19 +1863,19 @@ func witness(weight: float) -> void:
 
 ## Body ----------------------------------------------------------------------
 
-## Growth is EARNED BY DIGESTION now, a little at a time, rather than jumping
-## whenever a meal is swallowed.
-## It has earned some stature. Steps are small and constant; the SIZE they buy
+## Growth is EARNED BY DIGESTION, a little at a time, rather than jumping
+## whenever a meal is swallowed. Steps are small and constant; the SIZE they buy
 ## is not, which is what makes the first hour feel like progress and the last
-## stretch feel like an achievement.
+## stretch an achievement.
+##
+## THE ONE DOOR STATURE MOVES THROUGH, in either direction — wasting comes in
+## here with a negative step. It used to set `stature` on its own and never touch
+## the scale, so a starved creature stayed as big on the grass as it had been.
 func _grow_by(steps: float) -> void:
-	if stature >= FULL_STATURE:
-		return
 	var before := int(growth * 10.0)
-	stature = minf(stature + steps, FULL_STATURE)
+	stature = clampf(stature + steps, 1.0, FULL_STATURE)
 	_apply_stature()
-	# A quiet word when it visibly grows (each 10% of its arc) — no numbers on
-	# screen; you watch it get bigger.
+	# A quiet word when it visibly grows (each 10% of its arc) — no numbers.
 	if int(growth * 10.0) > before:
 		GameState.announce("Your creature grows a little larger.")
 
