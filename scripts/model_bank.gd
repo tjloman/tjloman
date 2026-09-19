@@ -133,6 +133,25 @@ func bounds(model_name: String) -> AABB:
 	return box
 
 
+## HOW FAR TO LIFT THIS MODEL SO IT STANDS ON THE GROUND.
+##
+## The README asks for a pivot at the feet, and every caller believed it: an
+## Animal adds its model at its own origin and a herd draws its MultiMesh there.
+## A model whose pivot is at its CENTRE — which is what a modelling package
+## gives you unless somebody moved it — then stands buried to the waist. It is
+## the herd that shows it first, because a herd is forty of them at once.
+##
+## MEASURED, NOT ASKED FOR. `bounds` walks every vertex of the thing (see
+## `_measure`), so this is the real distance from the pivot down to the lowest
+## point of the beast — and a model that DOES sit on Y=0 gets a lift of zero and
+## nothing about it changes. The README is a request and this is the answer.
+##
+## Not clamped at zero on purpose: a pivot BELOW the model's lowest point is a
+## model that floats, and the same subtraction seats that one too.
+func footing(model_name: String) -> float:
+	return -bounds(model_name).position.y
+
+
 ## The first of these names that has a model, measured. Mirrors
 ## `instantiate_any`, so a caller asks the same question the same way.
 func bounds_any(names: Array) -> AABB:

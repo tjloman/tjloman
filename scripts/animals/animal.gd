@@ -174,6 +174,10 @@ func _ready() -> void:
 	# it's rigged, an animator plays its clips.
 	var custom := ModelBank.instantiate(species)
 	if custom != null:
+		# ON ITS FEET, whatever its pivot turned out to be. Same answer the herd
+		# uses, from the same place, so a beast and the herd it was promoted out
+		# of cannot stand at two different heights. See ModelBank.footing.
+		custom.position.y += ModelBank.footing(species)
 		add_child(custom)
 		_animator = ModelAnimator.create(custom)
 		Util.apply_lod(self, Quality.actor_distance())

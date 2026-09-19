@@ -662,18 +662,32 @@ func _build_multimesh() -> void:
 	# models README asks for that, and Animal adds its custom model at the body
 	# origin on the same understanding) — while the box has to be lifted by half
 	# its height plus the legs it does not have.
-	_book_is(head)
 	_mmi = MultiMeshInstance3D.new()
 	_mmi.multimesh = _mm
 	var model := ModelBank.mesh_for(species)
 	if model != null:
 		_mm.mesh = model
+		# FEET ON THE EARTH, MEASURED. The note above says a model's pivot is at
+		# its feet because the README asks for one there; a model that was never
+		# moved off its centre stands buried to the waist, and forty of them is
+		# what makes it obvious. See ModelBank.footing, which is zero for a model
+		# that does sit on Y=0.
+		_mmi.position = Vector3(0, ModelBank.footing(species), 0)
 	else:
 		# One box for the whole beast. At the distance these are seen from, legs
 		# are a few pixels of nothing, and one instance per head is the budget.
 		_mm.mesh = Util._pooled_box_mesh(Vector3(body.x, body.y, body.z))
 		_mmi.material_override = Util.shared_mat(spec["color"])
 		_mmi.position = Vector3(0, leg + body.y * 0.5, 0)
+	# THE BOOK IS SIZED ONLY ONCE THERE IS A MESH ON IT.
+	#
+	# `_book_is` writes a transform into every new instance, and writing one
+	# makes the server rebuild the MultiMesh's bounding box — which it cannot do
+	# with no mesh, and says so, once per herd per chunk, on every load. It is a
+	# harmless error and it is still an error printed thousands of times, and
+	# the fix is an ordering rather than a guard: a book with nothing to draw in
+	# it is not a book yet.
+	_book_is(head)
 	add_child(_mmi)
 	Util.apply_lod(_mmi, Quality.camera_far())
 	# WHAT THEY ARE, said out loud over the herd.

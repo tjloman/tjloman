@@ -122,6 +122,46 @@ if not held:
                 "screen and four hundred instances of drawing where twelve "
                 "would do")
 
+# AND THE BOOK IS SIZED AFTER THE MESH IS ON IT.
+#
+# Writing a transform makes the server rebuild the MultiMesh's bounding box,
+# which it cannot do with no mesh — so sizing the book before assigning the mesh
+# printed a C++ error once per herd per chunk, thousands of times, on every
+# load. It is harmless and it is still an error nobody can then read past.
+build = code(HERD)
+build = build[build.index("func _build_multimesh("):]
+build = build[:build.index("\nfunc ", 1)] if "\nfunc " in build[1:] else build
+mesh_at = build.index("_mm.mesh =") if "_mm.mesh =" in build else -1
+book_at = build.index("_book_is(") if "_book_is(" in build else -1
+ordered = mesh_at >= 0 and book_at >= 0 and mesh_at < book_at
+print("THE BOOK IS SIZED %s."
+      % ("once there is a mesh on it" if ordered else "BEFORE THERE IS ANYTHING TO DRAW"))
+if not ordered:
+    fail.append("the herd sizes its book before putting a mesh on it, and "
+                "writing a transform then asks the server to rebuild a bounding "
+                "box it has nothing to build one from — one C++ error per herd "
+                "per chunk, on every load")
+
+# AND A MODEL STANDS ON ITS FEET, wherever its pivot happens to be. The README
+# asks for one at the feet; a model nobody moved off its centre is buried to the
+# waist, and a herd is forty of them.
+BANK = (ROOT / "scripts/model_bank.gd").read_text()
+ANIMAL = (ROOT / "scripts/animals/animal.gd").read_text()
+measured = any("bounds(model_name).position.y" in r
+               for r in body_of(BANK, "footing"))
+seated = "ModelBank.footing(" in code(HERD) and "ModelBank.footing(" in code(ANIMAL)
+print("A MODELLED BEAST STANDS %s."
+      % ("on its feet, measured" if measured and seated
+         else "WHEREVER ITS PIVOT HAPPENS TO BE"))
+if not measured:
+    fail.append("nothing measures how far a model's pivot sits above its lowest "
+                "point, so every caller is trusting a line in a README about "
+                "files it has never seen")
+if not seated:
+    fail.append("a herd and a single beast do not seat their model the same "
+                "way, so a promoted animal stands at a different height from "
+                "the herd it came out of")
+
 # AND EVERY DOOR IN THAT FILE IS THE SAME DOOR.
 # The door's own line is the door, so it does not count against it.
 raw = [r for r in code(HERD).split("\n")
