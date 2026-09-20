@@ -20,6 +20,16 @@ that goes quietly wrong.
   tied somewhere leaves two of them in the world, both tugging, and the beast is
   pulled between them.
 
+  AND A ROPE NO LONGER THAN A ROPE. The rope drew itself between its two ends
+  whatever the gap, and the gap has no natural limit: the hand is wherever the
+  camera looks, so holding the lead and scrolling across the valley put three
+  kilometres between the ends and drew six five-hundred-metre cylinders through
+  the world every frame. Nothing about that is visible as a bug in the code --
+  the sag is capped, the link count is fixed, every number in sight is small --
+  and on screen it is the shearing that has been chased for weeks. It matters
+  twice over now, because a creature summoned through a portal IS three
+  thousand metres away, right up until it is standing at the post.
+
   A ROPE THAT IS NOT A ROPE. If the tug fires every frame the creature never
   finishes a stride; if trust does not gate it, the bond you have spent the
   whole game building buys nothing at the one moment it should be worth most.
@@ -134,6 +144,34 @@ moved = number(ROPE, "TUG_IF_MOVED")
 length = number(ROPE, "ROPE_LENGTH")
 ticking = body_of(ROPE, "_process")
 paced = any("_next_tug" in r for r in ticking)
+# -- A ROPE NO LONGER THAN A ROPE -------------------------------------------
+#
+# The check is on the DRAWN span, not on the gap: the two ends may be any
+# distance apart -- that is what a summons is -- and what may not happen is a
+# link being drawn across it.
+drawing = body_of(ROPE, "_draw_between")
+capped = any("span > length" in r for r in drawing)
+short = any("normalized() * length" in r for r in drawing)
+walks = [r for r in drawing if "lerp(b," in r]
+print()
+print("THE DRAWN ROPE IS %s."
+      % ("never longer than the rope" if capped and short and not walks
+         else "AS LONG AS THE GAP HAPPENS TO BE"))
+LENGTH = number(ROPE, "ROPE_LENGTH")
+LINKS = number(ROPE, "LINKS")
+if LENGTH and LINKS:
+    print("   ends 2m apart: %.2fm a link.  Ends 3km apart: %.2fm a link "
+          "(it was %.0fm)." % (2.0 / LINKS, LENGTH / LINKS, 3000.0 / LINKS))
+if not capped or not short:
+    fail.append("the rope still draws itself across whatever gap there is, so "
+                "a hand scrolled across the valley stretches six links over "
+                "kilometres and the camera ends up inside their bounding "
+                "boxes")
+if walks:
+    fail.append("a link is still laid along the full gap (%s) rather than "
+                "along the capped end, so the cap is a number nothing uses"
+                % walks[0].strip())
+
 print()
 print("THE ROPE TUGS every %.1fs, and only once the hand has moved %.1fm."
       % (every or 0.0, moved or 0.0))

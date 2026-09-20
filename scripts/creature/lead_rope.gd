@@ -304,14 +304,36 @@ func is_tied() -> bool:
 ## DRAWN AS A SAGGING LINE. Straight when it is taut, bellied when there is rope
 ## to spare — which is the only readout the player needs and the only one they
 ## will ever look at.
+## A ROPE IS AS LONG AS IT IS, and this is the line that says so.
+##
+## It drew six links stretched between the two ends whatever the gap — and the
+## gap has no natural limit. The hand is wherever the camera is looking, so a
+## player holding the lead and scrolling across the valley put three kilometres
+## between the ends, and the rope answered by drawing six five-hundred-metre
+## cylinders through the world, every frame, with their bounding boxes swallowing
+## the camera. That is the shape of the shearing in those screenshots: a lead was
+## suspected at the time, the SAG was checked, found to be capped at 1.6m, and
+## cleared. The sag was never the number that could run away.
+##
+## And it is the same line that makes portals work. A creature summoned from the
+## far side of the world is three thousand metres off and then, a moment later,
+## standing at the post: no rope goes through a portal, because no rope ever
+## goes further than a rope goes.
 func _draw_between(a: Vector3, b: Vector3) -> void:
 	var span := a.distance_to(b)
+	var far := b
+	if span > length:
+		# Beyond its own length it is a rope lying taut from the anchor in the
+		# direction he went, and nothing else. The creature is still called —
+		# the tug is the summons and does not care how far away he is.
+		far = a + (b - a).normalized() * length
+		span = length
 	var slack := clampf(1.0 - span / maxf(length, 0.001), 0.0, 1.0)
 	for i in _links.size():
 		var t0 := float(i) / float(_links.size())
 		var t1 := float(i + 1) / float(_links.size())
-		var p0 := a.lerp(b, t0) + Vector3.DOWN * _belly(t0, slack)
-		var p1 := a.lerp(b, t1) + Vector3.DOWN * _belly(t1, slack)
+		var p0 := a.lerp(far, t0) + Vector3.DOWN * _belly(t0, slack)
+		var p1 := a.lerp(far, t1) + Vector3.DOWN * _belly(t1, slack)
 		var link := _links[i]
 		link.global_position = (p0 + p1) * 0.5
 		var along := p1 - p0
