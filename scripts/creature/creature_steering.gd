@@ -33,6 +33,8 @@ const STALE := 5.0             # seconds before a route is replanned anyway
 const GOAL_DRIFT := 6.0        # goal moved this far: the old route is wrong
 const REPLAN_COOLDOWN := 0.7   # never search twice in the same breath
 const WEDGE_RELAX := 0.35      # seconds of shoving before it stops shoving
+## How long a way through is invisible to him after it has put him down.
+const PORTAL_IMMUNITY := 4.0
 
 ## HOW BAD GROUND IS REMEMBERED. Each properly-stuck moment adds to a route
 ## cell's price; the memory fades, because a gully choked with fallen timber in
@@ -63,9 +65,23 @@ const PIT_QUIET := 60.0        # and never again within this many
 var wedge_time := 0.0          # seconds spent shoving without advancing
 var walk_phase := 0.0          # the waddle
 
+## THE ONE HE HAS JUST COME OUT OF, and when. A portal's far end is usually a
+## portal in its own right, so without this he can arrive and immediately be
+## offered the way back as a fresh idea. The arithmetic alone very nearly
+## forbids it — a route he has already improved on cannot be improved on again
+## by reversing it — but "very nearly" is not a thing to leave holding a beast
+## still on a pad for ever. The portal calls `stepped_through` as it moves him.
+var came_from := 0
+var came_at := -999.0
+
 var _path := PackedVector3Array()
 var _at := 0
 var _goal := Vector3.INF
+## WHERE TO WALK WHEN THERE IS NO ROUTE TO FOLLOW — the mouth of whatever he is
+## making for, or the goal itself. Marching at the goal when the short way lies
+## in another direction is how a creature ends up walking the world it could
+## have stepped across.
+var _heading := Vector3.INF
 var _age := 0.0
 var _cooldown := 0.0
 ## Route cell -> how much trouble it has been. NavField costs routes with this.
@@ -131,6 +147,11 @@ func _next_step(who: Creature, target: Vector3, straight: Vector3) -> Vector3:
 		if off.length() > WAYPOINT:
 			return off
 		_at += 1
+	if _heading != Vector3.INF and _heading != target:
+		var aim := Vector3(_heading.x - who.global_position.x, 0.0,
+			_heading.z - who.global_position.z)
+		if aim.length() > WAYPOINT:
+			return aim
 	return straight
 
 
@@ -151,7 +172,14 @@ func _plan(who: Creature, target: Vector3) -> void:
 	_at = 0
 	# It will paddle if it must, and much further once it can walk on water.
 	var wade := 12.0 if who.walks_on_water else 1.6 + who.scale.x * 0.2
-	_path = NavField.route(who.global_position, target, wade, _shun)
+	# WALK, OR STEP THROUGH SOMETHING. PortalPath prices both and hands back a
+	# route either way; when it is through a portal, the route only goes as far
+	# as the mouth, and the portal does the rest when he stands on it.
+	var skip := came_from if GameState.clock - came_at < PORTAL_IMMUNITY else 0
+	var going: Dictionary = PortalPath.best(who.global_position, target, wade,
+		_shun, skip)
+	_path = going["path"]
+	_heading = going["head_for"]
 
 
 ## Wedged? If it is pushing and barely advancing, RELAX the drive so a giant
@@ -200,6 +228,15 @@ func _fade_trouble(delta: float) -> void:
 
 
 ## Drop whatever route is held; the next call plans afresh.
+## A WAY THROUGH HAS PUT HIM DOWN SOMEWHERE ELSE. Everything planned from where
+## he was standing is now about the wrong place, so it goes, and the one that
+## moved him is out of consideration for a few seconds.
+func stepped_through(id: int) -> void:
+	came_from = id
+	came_at = GameState.clock
+	clear()
+
+
 func clear() -> void:
 	_path = PackedVector3Array()
 	_at = 0

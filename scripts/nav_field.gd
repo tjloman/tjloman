@@ -92,6 +92,29 @@ const _NEIGHBOURS: Array[Vector2i] = [
 	Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1),
 ]
 
+## WHAT THE ROUTE JUST RETURNED ACTUALLY COST — the A* figure, not the length of
+## the line. Only meaningful immediately after a `route` call, and INF when that
+## call came back empty for any reason. PortalPath compares routes with it, and
+## comparing them by how long their polylines LOOK would throw away the whole
+## point of a cost that knows about hills, water and thickets.
+var last_cost := INF
+## EVERY WAY THROUGH THE WORLD THAT IS NOT WALKING. A nest has one for as long
+## as it stands; the miracle opens one for five minutes. Kept here rather than
+## found by walking the scene tree, because routing asks for them several times
+## a frame and a group query per ask is a search of its own.
+##
+## Each is {"id", "mouth", "exit", "until"} — `until` being GameState.clock, or
+## INF for one that does not expire. Nothing here moves anybody: a portal MOVES
+## whatever steps on it, and this list only says where stepping on one lands.
+var portals: Array = []
+## THE INSIDE OF THE NETWORK, worked out once and looked up thereafter. See
+## PortalMap: the legs between nests do not change, and re-pricing twenty of
+## them on every decision would spend a frame's whole routing allowance on one
+## creature making up its mind.
+var portal_map := PortalMap.new()
+
+
+var _next_portal := 1
 var _grid := {}          # Vector2i cell -> Array of {p: Vector2, r: float}
 var _timer := 0.0
 ## Vector2i route cell -> {"h": float, "wet": float}. There is no "slope" in it
@@ -397,17 +420,20 @@ func route(from: Vector3, to: Vector3, wade := 2.0, shun := {}) -> PackedVector3
 	# back to steering straight at the thing, which is what it does for an
 	# unroutable target anyway, and it will ask again next frame.
 	if _spent_this_frame >= ROUTES_PER_FRAME:
+		last_cost = INF
 		_routes_deferred += 1
 		return PackedVector3Array()
 	_spent_this_frame += 1
 	var world := _world_gen()
 	var span := Vector2(to.x - from.x, to.z - from.z).length()
 	if world == null or span > ROUTE_REACH:
+		last_cost = INF
 		_routes_failed += 1
 		return PackedVector3Array()
 	var start := _route_cell(from)
 	var goal := _route_cell(to)
 	if start == goal:
+		last_cost = 0.0
 		return PackedVector3Array()
 
 	var came := {}                          # cell -> cell it was reached from
@@ -438,9 +464,51 @@ func route(from: Vector3, to: Vector3, wade := 2.0, shun := {}) -> PackedVector3
 			came[there] = here
 			_enqueue(open, cost + _octile(there, goal), there)
 	if not found:
+		last_cost = INF
 		_routes_failed += 1
 		return PackedVector3Array()
+	last_cost = float(best[goal])
 	return _unwind(came, start, goal, to)
+
+
+## A WAY THROUGH OPENS. `seconds` of 0 or less means for as long as it stands.
+## Returns the handle it is shut with.
+func open_portal(mouth: Vector3, exit: Vector3, seconds := 0.0) -> int:
+	var id := _next_portal
+	_next_portal += 1
+	portals.append({
+		"id": id, "mouth": mouth, "exit": exit,
+		"until": INF if seconds <= 0.0 else GameState.clock + seconds,
+	})
+	return id
+
+
+## And shuts. Harmless if it has already gone.
+func shut_portal(id: int) -> void:
+	for i in portals.size():
+		if int(portals[i]["id"]) == id:
+			portals.remove_at(i)
+			portal_map.forget(id)
+			return
+
+
+## THE ONES THAT ARE STILL THERE, and the sweeping-up of the ones that are not.
+## A route planned through a hole that closed four minutes ago is the whole
+## reason this is asked for rather than read.
+func portals_open() -> Array:
+	var live := []
+	var gone := false
+	for gate: Dictionary in portals:
+		if GameState.clock <= float(gate["until"]):
+			live.append(gate)
+		else:
+			gone = true
+	if gone:
+		for gate: Dictionary in portals:
+			if GameState.clock > float(gate["until"]):
+				portal_map.forget(int(gate["id"]))
+		portals = live.duplicate()
+	return live
 
 
 ## Slot a cell into the frontier so the cheapest is always at the front.
