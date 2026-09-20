@@ -106,6 +106,19 @@ const CHEER_EVERY := 3.0
 ## doing, and it should not be immune — a god who burns a town's faith to the
 ## ground ought to be able to burn the nest with it.
 const MOST_HEALTH := 1500.0
+## WHAT IT COSTS TO RAISE, in one place. It was written as a bare 6 and 10 in
+## the wanting and again in the raising, which is two numbers to keep the same
+## and one village that wants a nest it cannot pay for.
+const LUMBER := 6
+const STONE := 10
+## HOW BURNT A NEST MAY GET, and it is a floor rather than an end.
+##
+## A creature has to have somewhere to be. It is where he sleeps, where the
+## village dances, where his portal stands and — once he can be knocked down —
+## where the earth puts him back down. A player who can burn that away can put
+## their own creature beyond reach of everything that mends it, so the nest
+## chars, the faces blacken, the bar shows it, and it stands.
+const SCORCHED := 0.2
 
 var village: Village
 var creature: Creature
@@ -128,9 +141,22 @@ var _cheer_left := 0.0
 ## Asked here rather than on the village for the same reason Workshop.short_of
 ## is: it is entirely a question about nests.
 static func wanted_by(town: Village) -> bool:
-	return town.nest == null and town.converted and town.belief > 45.0 \
-		and town.construction_site == null \
-		and town.store.lumber >= 6 and town.store.stone >= 10
+	if town.nest != null:
+		return false
+	if town.store.lumber < LUMBER or town.store.stone < STONE:
+		return false
+	# THE FIRST VILLAGE BUILDS IT AT ONCE, and is not asked to earn it.
+	#
+	# Everywhere else a nest is a thing a town comes to want: converted, firm in
+	# its belief, and with a house not already going up. That is right for the
+	# second one and wrong for the first, because the creature needs somewhere
+	# to BE from the beginning — it is where he sleeps, where the earth will put
+	# him down when he is knocked out of the world, and where his way through it
+	# stands. A player should watch it go up in their first few minutes rather
+	# than wait on a belief meter for it.
+	if town.is_player_home:
+		return true
+	return town.converted and town.belief > 45.0 and town.construction_site == null
 
 
 ## RAISED. Kept here with `wanted_by` rather than on the village, which was
@@ -140,7 +166,7 @@ static func raise_at(town: Village, world_spot: Vector3, beast: Creature) -> voi
 	if not world_spot.is_finite():
 		return        # see Village.spawn_farm_at: Vector3.INF is "no spot yet"
 	if town.nest != null or beast == null \
-			or not town.store.try_spend_materials(6, 10):
+			or not town.store.try_spend_materials(LUMBER, STONE):
 		return
 	var n := CreatureNest.new()
 	n.village = town
@@ -269,26 +295,27 @@ func full_health() -> float:
 
 ## Sudden harm — a fireball's core, a quake, a creature in a temper.
 func damage(amount: float) -> void:
-	health -= amount
+	health = maxf(health - amount, MOST_HEALTH * SCORCHED)
 	# AND IT SHOWS. See RuinBar: a thing that can be hurt without looking
 	# hurt is indistinguishable from a thing that cannot be hurt at all,
 	# which is exactly what "the mill will not burn" sounds like from
 	# the other side of the screen.
 	RuinBar.over(self, health / MOST_HEALTH, WALL_HIGH, kindling.alight)
-	if health <= 0.0:
-		burn_down()
 
 
-## GONE, and the town knows it. The village's handle is cleared so it can want
-## another one — `wanted_by` asks for `town.nest == null` — which makes losing a
-## nest a thing a town recovers from rather than a permanent hole.
+## IT DOES NOT. Everything burnable in this game answers to this, and a nest
+## answers by standing there blackened: the fire goes out, the beast grieves for
+## the state of his own place, and the stone is still in the ground.
+##
+## Kept rather than removed because BURNABLE is a contract — `Affords.BURNABLE`
+## names this method, and a burnable thing missing it is a crash the moment a
+## fire reaches it. What has gone is the `queue_free`.
 func burn_down() -> void:
-	if village != null and is_instance_valid(village):
-		village.nest = null
+	kindling.alight = false
+	health = maxf(health, MOST_HEALTH * SCORCHED)
 	if creature != null and is_instance_valid(creature):
 		creature.feel("grief", 0.9, 2.0)
-	GameState.announce("The nest burns down.")
-	queue_free()
+	GameState.announce("The nest is scorched black, and stands.")
 
 
 func _ground_local(x: float, z: float) -> float:

@@ -1385,7 +1385,11 @@ func _pick_job() -> bool:
 	if raise_shop != "":
 		scores["build_shop"] = 28.0
 	if CreatureNest.wanted_by(village):
-		scores["build_nest"] = 30.0
+		# THE FIRST ONE OUTRANKS EVERY OTHER JOB ON THE BOARD, and nothing that
+		# keeps anybody alive: eating, fleeing and fetching a meal all score
+		# higher still. A founding village with the stone for it should be
+		# hammering within the minute rather than after the ploughing.
+		scores["build_nest"] = 36.0 if village.is_player_home else 30.0
 	# GOING OUT TO PREACH. Only from a town that believes firmly enough to spare
 	# somebody for days, and only by the devout.
 	if village.converted and village.belief > MISSION_FAITH \

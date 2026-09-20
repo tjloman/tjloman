@@ -319,6 +319,12 @@ func _ready() -> void:
 	add_child(store)
 	if is_player_home:
 		store.plant_food += 8  # a founding surplus, so the game starts kind
+		# AND THE MAKINGS OF A NEST. The first village starts building one at
+		# once (CreatureNest.wanted_by), and a village that wants a thing it
+		# cannot pay for is a village standing about — a granary begins with
+		# three stone and a nest is cut from ten.
+		store.add_lumber(CreatureNest.LUMBER)
+		store.add_stone(CreatureNest.STONE)
 	# ENOUGH IN THE GRANARY THAT EVERYONE CAN GET ONE MEAL.
 	#
 	# NOT A CHANGE TO STARVATION. Hunger climbs as it always did, a famine
