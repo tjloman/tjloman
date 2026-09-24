@@ -498,7 +498,22 @@ HAND_BUILT = {
     ("scripts/util.gd", "blossom_mesh"): dict(
         tris=lambda: 4, parts=2,
         note="two crossed quads, welded in SurfaceTool"),
+    # THE INFLUENCE RING, which stopped being a torus the scanner could price
+    # and became a ribbon built a corner at a time (GroundRing._raise). Read
+    # off the constant rather than written down, so widening the ring to look
+    # smoother tells this chart what it cost.
+    ("scripts/miracles/ground_ring.gd", "_raise"): dict(
+        tris=lambda: ring_segments() * 2, parts=1,
+        note="a curtain of quads standing on the ground, two triangles a "
+             "corner — GroundRing.SEGMENTS"),
 }
+
+
+def ring_segments():
+    """How many corners a GroundRing is cut into, read from the source."""
+    text = open(os.path.join(SRC, "miracles/ground_ring.gd")).read()
+    found = re.search(r"^const SEGMENTS := (\d+)", text, re.M)
+    return int(found.group(1)) if found else 0
 
 ## `already` is how many copies of the per-instance mesh the SCANNER already
 ## counted in this same function — usually one, because the function builds the
@@ -581,7 +596,7 @@ NAMES = {
 
     ("world/village.gd", "_build_totem"): ("VILLAGE", "Totem"),
     ("world/village.gd", "_build_pen"): ("VILLAGE", "Stock pen"),
-    ("world/village.gd", "_build_influence_ring"): ("VILLAGE", "Influence ring"),
+    ("miracles/ground_ring.gd", "_raise"): ("VILLAGE", "Influence ring"),
     ("world/village.gd", "_build_torches"): ("VILLAGE", "Torchlight, one town"),
     ("world/creature_stake.gd", "_ready"): ("VILLAGE", "Creature stake"),
     ("story/storyboard.gd", "_plant_marker"): ("VILLAGE", "Story marker"),

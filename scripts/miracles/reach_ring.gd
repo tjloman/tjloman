@@ -41,8 +41,9 @@ const OPENS := 4.0
 const CLOSES := 1.2
 ## How long a fizzle keeps it up on its own, in seconds.
 const AFTER_A_FIZZLE := 2.5
-## How far off the ground, so it never z-fights the grass on a slope.
-const OFF_THE_GRASS := 0.35
+## THE RING NO LONGER HOVERS. It stands on the ground the beast holds, rising
+## and falling with it — see GroundRing, which does the same work for a village.
+## What is left here is when it is shown, what colour it is, and the tone.
 
 ## HOW MUCH OF THE LEASH MUST BE GONE before it says anything at all. Half.
 ## Below this is the part of a trip where the answer to "should I turn back"
@@ -61,8 +62,7 @@ const TONE_FADE := 3.0
 
 var divine_hand: DivineHand = null
 
-var _ring: MeshInstance3D
-var _skin: StandardMaterial3D
+var _ring: GroundRing
 var _shown := 0.0
 var _flare := 0.0
 var _tone: AudioStreamPlayer
@@ -70,15 +70,7 @@ var _tone_up := 0.0
 
 
 func _ready() -> void:
-	var torus := TorusMesh.new()
-	torus.inner_radius = 0.965
-	torus.outer_radius = 1.0
-	torus.rings = 48
-	torus.ring_segments = 6
-	_skin = Util.mat(Color(1.0, 0.95, 0.7, 0.0), true)
-	_ring = MeshInstance3D.new()
-	_ring.mesh = torus
-	_ring.material_override = _skin
+	_ring = GroundRing.new()
 	_ring.visible = false
 	add_child(_ring)
 
@@ -109,17 +101,15 @@ func _process(delta: float) -> void:
 		_ring.visible = false
 		return
 	var span := MiracleReach.beast_reach(beast)
-	global_position = Vector3(
-		beast.global_position.x, beast.global_position.y + OFF_THE_GRASS,
-		beast.global_position.z)
-	_ring.scale = Vector3(span, 1.0, span)
+	global_position = beast.global_position
+	_ring.stand_on(beast.global_position, span,
+		get_tree().get_first_node_in_group("world_gen") as WorldGen)
 	_ring.visible = true
 	# It wears the god's alignment, exactly as a village ring does — one
-	# vocabulary for "this ground is yours" across the whole game.
+	# vocabulary for "this ground is yours" across the whole game, and one
+	# answer to whether it smoulders or shines.
 	var c := GameState.alignment_color().lerp(Color.WHITE, 0.15)
-	_skin.albedo_color = Color(c.r, c.g, c.b, 0.5 * _shown)
-	_skin.emission = c
-	_skin.emission_energy_multiplier = 1.6 * _shown
+	_ring.tint(c, GameState.alignment / 100.0, 1.6 * _shown, 0.85 * _shown)
 
 
 ## THE LEASH, IN THE EAR. Pitched by how much of it is left and audible only

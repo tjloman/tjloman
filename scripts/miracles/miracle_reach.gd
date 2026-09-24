@@ -92,10 +92,14 @@ extends RefCounted
 ## the leash. They rise and fall independently, and only one of them is a
 ## resource the player has to manage.
 ##
-## IT REFILLS WHOLE. Five seconds back inside any circle and it is full again,
-## whatever was left of it. That is what makes it a leash rather than a fuel
-## tank: the question is never "can I afford this trip", it is "can I get back
-## before it runs out".
+## IT REFILLS WHOLE, IN A TOWN. Five seconds back inside a circle your FAITHFUL
+## hold and it is full again, whatever was left of it. That is what makes it a
+## leash rather than a fuel tank: the question is never "can I afford this
+## trip", it is "can I get back before it runs out".
+##
+## The creature's own circle is different — it holds what you have and gives
+## almost nothing back, so the beast is a place your reach is SAFE rather than a
+## place it is restored. See HOLDS_AT.
 ##
 ## AND WHEN IT RUNS OUT, NOTHING IS TAKEN. What you are holding stays in your
 ## hand — you may carry it home, and set it down, but you may not hurl it, take
@@ -123,6 +127,35 @@ const AT_A_GIANT := 40.0
 ## the floor -- at 0.45 a sleeping whelp was a six-metre dot, narrow enough that
 ## the slack below was a quarter of it.
 const WHILE_ASLEEP := 0.7
+
+## WHAT STANDING IN THE BEAST'S CIRCLE REFILLS YOU TO. One per cent — the same
+## grip a wagon gives, and for the same reason.
+##
+## THE CREATURE HOLDS GROUND; IT IS NOT A WELL. Its circle filled the leash
+## whole, which made the animal a walking refuelling station: take it to the
+## edge of the world, stand in its ring, and your reach is as complete out there
+## as it is in the middle of your own capital. Nothing about the map mattered
+## after that, because the map could be brought to you.
+##
+##     "The creature's influence doesn't actually replenish the ability to
+##      influence things beyond the rings of cities, instead merely preserving
+##      it... so you can only cast from inside its ring."
+##
+## What it does instead is HOLD. Inside its circle nothing pays out (see
+## `pay_out` — being inside anything stops the drain), so a god who walks out of
+## a city at a full leash and follows the beast across the country still has a
+## full leash when they get there. What the beast cannot do is give any of it
+## back: spend it out in the wild and the animal will keep what is left of it
+## safe, and one per cent is all the topping-up it can manage.
+##
+## So the shape of a long trip changed. It used to be "bring the creature".
+## It is now "leave with what you will need, and the creature will see that you
+## keep it" — and going home is the only way to be full again.
+## It is the same number as Caravan.REFILLS_TO and written out rather than read
+## from it: a constant that reaches into another class is resolved at parse
+## time, and these two classes already name each other. tools/leash.py holds
+## them equal, which is the only honest way to keep a number written twice.
+const HOLDS_AT := 0.01
 
 ## A hair of slack on every edge, so that a miracle landing ON the ring works
 ## rather than fizzling on a rounding error the player cannot see. It has to
@@ -159,7 +192,7 @@ static func circles(tree: SceneTree) -> Array[Dictionary]:
 		found.append({
 			"at": _flat(beast.global_position),
 			"r": beast_reach(beast),
-			"fills": 1.0,
+			"fills": HOLDS_AT,
 			"why": GameState.named("your creature"),
 		})
 	# AND EVERY WAGON ON THE ROAD. A settling party is a town that has not

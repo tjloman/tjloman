@@ -16,6 +16,14 @@ TWO WAYS THIS GOES WRONG AND NEITHER LOOKS LIKE A BUG.
   stand a hundred metres out for half a minute, there is no reason ever to
   convert a village or walk the creature anywhere.
 
+AND THE BEAST IS NOT A WELL. Its circle used to refill the leash whole, which
+made the animal a walking refuelling station: walk it to the far edge of the
+world, stand in its ring, and your reach out there was as complete as in the
+middle of your own capital. Nothing about the map mattered after that, because
+the map could be brought to you. It HOLDS now -- being inside any circle stops
+the drain, so a full leash stays full while you follow the beast -- and it gives
+back one per cent, which is a grip and not a refill.
+
 And one way it goes wrong that IS invisible: the leash is not the prayer pool.
 They are deliberately independent -- the leash is worth what your prayer power
 COULD be, so converts and shrines widen it, but spending one must never touch
@@ -109,6 +117,62 @@ print("IT REFILLS WHOLE IN %.0f SECONDS INSIDE, whatever was left of it."
 if REFILLS_IN <= 0.0 or REFILLS_IN > 20.0:
     fail.append("the leash refills in %.0fs: a trip out of your country becomes "
                 "a thing you have to plan a rest around" % REFILLS_IN)
+
+# -- THE BEAST HOLDS, AND THE TOWN REFILLS -----------------------------------
+#
+# Both halves are load-bearing and they fail in opposite directions. A creature
+# that refills makes the map irrelevant; a creature that does not HOLD makes
+# following it pointless, because the leash would run down while you stood in
+# its ring.
+CIRCLES = REACH[REACH.index("static func circles("):]
+CIRCLES = CIRCLES[:CIRCLES.index("\n\nstatic func")]
+beast_block = CIRCLES[CIRCLES.index("beast_reach(beast)"):]
+beast_fills = re.search(r'"fills": ([\w.]+)', beast_block)
+town_block = CIRCLES[:CIRCLES.index("beast_reach(beast)")]
+town_fills = re.search(r'"fills": ([\w.]+)', town_block)
+holds_at = const("HOLDS_AT", REACH, "MiracleReach")
+wagon = const("REFILLS_TO", (ROOT / "scripts/world/caravan.gd").read_text(), "Caravan")
+if abs(float(holds_at) - float(wagon)) > 1e-9:
+    fail.append("MiracleReach.HOLDS_AT (%s) and Caravan.REFILLS_TO (%s) have "
+                "drifted apart — they are the same idea written twice because "
+                "a constant may not reach across these two classes, and a "
+                "number written twice drifts unless something holds it"
+                % (holds_at, wagon))
+paying = REACH[REACH.index("static func pay_out("):]
+paying = paying[:paying.index("\n\nstatic func")] if "\n\nstatic func" in paying else paying
+stops_drain = "if over > 0.0:" in paying and "return" in paying
+
+print()
+print("STANDING IN A CIRCLE:")
+print("   %-22s refills to %s" % ("a faithful town", town_fills.group(1) if town_fills else "?"))
+print("   %-22s refills to %s (%.0f%% of a leash)"
+      % ("your creature", beast_fills.group(1) if beast_fills else "?",
+         float(holds_at) * 100 if holds_at else -1))
+if beast_fills is None or beast_fills.group(1) == "1.0":
+    fail.append("the creature's circle refills the leash whole, so the beast is "
+                "a walking refuelling station and the map stops mattering — "
+                "walk it to the edge of the world and your reach there is as "
+                "complete as in your own capital")
+if town_fills is None or town_fills.group(1) != "1.0":
+    fail.append("a faithful town no longer refills the leash whole, which "
+                "leaves nowhere at all to be made whole again")
+if not stops_drain:
+    fail.append("being inside a circle no longer stops the leash paying out, so "
+                "the creature HOLDS nothing and following it across the country "
+                "is no better than walking out there alone")
+
+# What that means for the trip the request describes: leave a city full, follow
+# the beast, arrive with what you left with -- and come back to it spent, and
+# leave it spent.
+full_leash = leash(6, 70.0)
+print("   leaving a city at 100% and following the beast: still 100% on "
+      "arrival (nothing drains inside a circle)")
+print("   arriving spent and sitting in its ring: tops up to %.0f%% and stops."
+      % (float(holds_at) * 100 if holds_at else -1))
+if holds_at and float(holds_at) > 0.25:
+    fail.append("the beast tops the leash up to %.0f%%, which is most of a "
+                "refill wearing a smaller number — it was meant to be a grip, "
+                "not a well" % (float(holds_at) * 100))
 
 # -- AND IT IS NOT THE PRAYER POOL ------------------------------------------
 # The one that would never be noticed. Everything that moves the meter lives in

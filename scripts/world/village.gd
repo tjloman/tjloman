@@ -287,8 +287,7 @@ var _dancers := 0
 var _morality := 0.0
 
 var _totem_orb: MeshInstance3D
-var _influence_ring: MeshInstance3D
-var _ring_material: StandardMaterial3D
+var _influence_ring: GroundRing
 var _pen_center := Vector3(0, 0, -11)
 var _housing_timer := 0.0
 var _sim_last := 0                  # the frame it last ticked on; see Scheduler
@@ -604,21 +603,12 @@ func at_capacity() -> bool:
 	return population() >= housing_capacity() + 8
 
 
+## THE RING IS THE READOUT: its SIZE is the population and its COLOUR is belief,
+## so every village wears its state on the ground around it. It stands ON that
+## ground now rather than hovering over it at one height — see GroundRing — and
+## it smoulders or shines according to what the god has become.
 func _build_influence_ring() -> void:
-	var torus := TorusMesh.new()
-	torus.inner_radius = 0.97
-	torus.outer_radius = 1.0
-	# A thin flat ring — its tube needs almost no detail, and the default
-	# 64x32 was pointless geometry on a ring seen edge-on.
-	torus.rings = 48
-	torus.ring_segments = 6
-	_ring_material = Util.mat(Color(1.0, 0.95, 0.7, 0.6), true)
-	_influence_ring = MeshInstance3D.new()
-	_influence_ring.mesh = torus
-	_influence_ring.material_override = _ring_material
-	_influence_ring.position = Vector3(0, 0.3, 0)
-	# The ring IS the readout now: its SIZE is the population, its COLOR
-	# is belief — every village wears its state on the ground around it.
+	_influence_ring = GroundRing.new()
 	_influence_ring.visible = true
 	add_child(_influence_ring)
 
@@ -1209,16 +1199,18 @@ func _convert() -> void:
 func _update_influence() -> void:
 	influence_radius = clampf(10.0 + population() * 1.8, MIN_INFLUENCE, MAX_INFLUENCE)
 	if _influence_ring != null:
-		_influence_ring.scale = Vector3(influence_radius, 1.0, influence_radius)
-	if _ring_material != null:
+		_influence_ring.stand_on(global_position, influence_radius,
+			get_tree().get_first_node_in_group("world_gen") as WorldGen)
 		var c: Color
 		if converted:
 			c = GameState.alignment_color().lerp(Color.WHITE, 0.1)
 		else:
 			c = Color(0.45, 0.45, 0.45).lerp(Color(1.0, 0.9, 0.55), belief / CONVERT_BELIEF)
-		_ring_material.albedo_color = Color(c.r, c.g, c.b, 0.55)
-		_ring_material.emission = c
-		_ring_material.emission_energy_multiplier = 0.4 + (belief / 100.0) * 1.6
+		# A HEATHEN TOWN NEITHER BURNS NOR SHINES. It is not yours to have a
+		# character on the ground, so it gets the quiet end of the beams
+		# whatever the god has been up to elsewhere.
+		var align := GameState.alignment / 100.0 if converted else 1.0
+		_influence_ring.tint(c, align, 0.4 + (belief / 100.0) * 1.6, 0.8)
 	if _totem_orb != null and converted:
 		var orb := _totem_orb.material_override as StandardMaterial3D
 		if orb != null and orb.emission_enabled:
