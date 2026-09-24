@@ -441,6 +441,8 @@ func _readout() -> String:
 		rows.append("   %-18s %6.1f  of %.1f ms of frame"
 			% ["(unclocked)", maxf(page - billed, 0.0), page])
 	rows.append("")
+	rows.append("%d%% of frames over the line, %d stalls ignored"
+		% [int(Quality.share_over() * 100.0), Quality.stalls_ignored()])
 	rows.append("tier %s (%s)   3D at %d%%   physics %d Hz" % [
 		Quality.Tier.keys()[Quality.effective_tier()], Quality.heat_word(),
 		int(Quality.render_scale() * 100.0), Engine.physics_ticks_per_second])

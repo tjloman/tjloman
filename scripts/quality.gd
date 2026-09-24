@@ -59,6 +59,45 @@ const FRAME_BLEND := 0.02
 ## What a full hand costs the far half of the world, in simulation strides.
 const HANDS_RELIEF := 1
 
+## RESISTANCE TO EASING OFF, because most slow frames are not the device.
+##
+## A thermostat that believes every slow patch has spent this game's whole
+## development being wrong in the same direction: something happens OUTSIDE the
+## game — the editor spewing four thousand errors into its own log, a compile,
+## the OS deciding to index something, a window losing focus — the frames go to
+## pieces for a few seconds, and the world dims. Turning the graphics down would
+## not have bought a single millisecond of that back, and the player is left
+## with a worse-looking game and no idea why.
+##
+##     "Sometimes something happens in the background, and changing quality
+##      wouldn't have fixed it one bit."
+##
+## Three things have to be true before anything is turned down now, and each
+## rules out a different way of being fooled.
+##
+## A STALL IS NOT A SLOW DEVICE. A frame far out of line with the ones around it
+## is something blocking, not something rendering, and it does not belong in an
+## average that is supposed to describe a machine. Measured against the running
+## average rather than against a fixed ceiling, so a genuinely slow device —
+## where every frame is slow and none is out of line — is not protected by this
+## at all.
+const SPIKE := 4.0
+const STALL_OVER := 0.1
+
+## IT HAS TO BE MOST OF THE FRAMES, not an average a burst dragged up. Twenty
+## dreadful frames in a quiet minute will lift a mean over the line while
+## fifty-nine frames in sixty were fine. A share is not fooled by that: it asks
+## how many of them were bad, not how bad the bad ones were.
+const MOSTLY := 0.6
+const SHARE_BLEND := 0.02
+
+## AND THE LAST ONE HAD TO HAVE HELPED. If the world was turned down and the
+## frame did not improve, the trouble is not in anything the tier controls —
+## and the next step down is even less likely to be. It is not refused, because
+## a device really can be sinking; it is made to wait far longer for it.
+const HELPED_BY := 0.05
+const STUBBORN_HOLD := 4.0
+
 ## THE FIXED CLOCK, AND THE HOLE A SLOW DEVICE FALLS DOWN IT -----------------
 ##
 ## Godot runs physics on a clock of its own. Every drawn frame it works out how
@@ -111,6 +150,11 @@ var hands_busy := false
 var _frame := 0.016
 var _pressure := 0.0     # seconds the current condition has held
 var _grace := SETTLE
+## The share of recent frames over the line, 0..1, and what the average was when
+## the world was last turned down — see the note by SPIKE.
+var _over := 0.0
+var _dropped_at := 0.0
+var _stalls := 0
 ## Which heat levels have already explained themselves this session.
 var _announced := {}
 
@@ -151,7 +195,15 @@ func _process(delta: float) -> void:
 	if _grace > 0.0:
 		_grace -= real
 		return
+	# A STALL IS NOT A SLOW DEVICE, and does not get a vote. Out of line with
+	# the frames around it AND long in absolute terms, which together mean
+	# something blocked rather than something took a while to draw.
+	if real > STALL_OVER and real > _frame * SPIKE:
+		_stalls += 1
+		return
 	_frame = lerpf(_frame, real, FRAME_BLEND)
+	# How MANY of them are bad, as against how bad the average is. See MOSTLY.
+	_over = lerpf(_over, 1.0 if real > FRAME_WARM else 0.0, SHARE_BLEND)
 	# Climbing is immediate to the band the frames deserve; EASING OFF is one
 	# band at a time, so a device that recovers does not have shadows, glow,
 	# MSAA and every draw distance all snap back in the same frame.
@@ -165,10 +217,25 @@ func _process(delta: float) -> void:
 	if want == heat:
 		_pressure = 0.0
 		return
+	# TURNING DOWN NEEDS MOST OF THE FRAMES, not a mean a burst lifted.
+	if want > heat and _over < MOSTLY:
+		_pressure = 0.0
+		return
 	_pressure += real
-	if _pressure < (HEAT_HOLD if want > heat else COOL_HOLD):
+	var hold := COOL_HOLD
+	if want > heat:
+		# AND IF THE LAST ONE BOUGHT NOTHING, this one waits. `_dropped_at` is
+		# what the average was when the world was last turned down; if it has
+		# not come down since, the trouble is not in anything the tier holds.
+		var helped := _dropped_at <= 0.0 or _frame < _dropped_at * (1.0 - HELPED_BY)
+		hold = HEAT_HOLD if helped else HEAT_HOLD * STUBBORN_HOLD
+	if _pressure < hold:
 		return
 	_pressure = 0.0
+	if want > heat:
+		_dropped_at = _frame
+	else:
+		_dropped_at = 0.0
 	heat = want
 	heat_changed.emit(heat)
 	# Everything that reads a knob reads it through `effective_tier`, so the
@@ -186,12 +253,27 @@ func _process(delta: float) -> void:
 		GameState.announce("The world breathes out again.")
 
 
+## HOW MANY FRAMES WERE THROWN OUT as stalls rather than counted as slowness,
+## and the share of recent frames that were genuinely over the line. The meter
+## prints both: a thermostat that quietly ignores things has to say how often,
+## or the next person to wonder why the world did not ease off has nothing to
+## read.
+func stalls_ignored() -> int:
+	return _stalls
+
+
+func share_over() -> float:
+	return _over
+
+
 ## Start the grace period again — called after a scene reload, when slow frames
 ## mean the world is being built rather than that anything is wrong.
 func settle() -> void:
 	_grace = SETTLE
 	_frame = 0.016
 	_pressure = 0.0
+	_over = 0.0
+	_dropped_at = 0.0
 	# Nobody is holding anything in a world that has just been rebuilt, and a
 	# flag left set here would cost the far world a stride for good.
 	hands_busy = false
