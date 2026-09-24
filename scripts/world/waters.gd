@@ -48,6 +48,10 @@ const SHORE_WITHIN := 75.0
 ## The deck starts just past the net rack, runs out to JETTY_TO, and everything
 ## from WET_FROM outward must be over water or it is not a harbour — it is a
 ## shed by a lake.
+## HOW FAR APART A FLEET SPREADS ITSELF over the fishing, and the turn between
+## one berth and the next — see `a_berth`.
+const APART := 6.0
+const GOLDEN := 2.39996
 const JETTY_FROM := 0.6
 const JETTY_TO := 7.6
 const JETTY_WET_FROM := 2.5
@@ -313,6 +317,40 @@ static func off_shore(world: WorldGen, from: Vector3, reach: float) -> Vector3:
 				return probe
 		out -= STEP
 	return Vector3.INF
+
+
+## A FISHING SPOT OF ONE'S OWN, near the harbour's water but not on top of the
+## last boat that asked.
+##
+## A harbour works out where the fishing is ONCE and hands the same spot to
+## every hull it ever builds, so a fleet of three rowed out to the same square
+## metre and sat inside each other — one flat slab of overlapping boats, which
+## is what a village's whole fishing industry looked like from the shore.
+##
+## The spread is a phyllotaxis: each boat is turned by the golden angle from the
+## one before and set a little further out, which is how a sunflower packs seeds
+## without any of them touching and needs no knowledge of where the others
+## actually are. It only has to be deterministic and it only has to spread; the
+## boats keep out of each other's way while rowing on their own (see
+## FishingBoat._give_way).
+##
+## Water is still the rule. A spot that lands on the beach is walked back in
+## toward the middle until it floats, and a fleet crowded into a narrow inlet
+## ends up in a line down it rather than in a heap at the end of it.
+static func a_berth(world: WorldGen, centre: Vector3, which: int) -> Vector3:
+	if world == null or not centre.is_finite():
+		return centre
+	if which <= 0:
+		return centre
+	var angle := float(which) * GOLDEN
+	var reach := APART * sqrt(float(which))
+	while reach > 1.0:
+		var probe := centre + Vector3(cos(angle), 0.0, sin(angle)) * reach
+		if world.is_underwater(probe.x, probe.z):
+			probe.y = world.water_level_at(probe.x, probe.z)
+			return probe
+		reach -= STEP * 0.5
+	return centre
 
 
 ## FORGET WHAT WAS MEASURED HERE. For the land actually changing under a town —

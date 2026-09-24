@@ -30,6 +30,19 @@ const SWELL := 1.15
 ## Below this it has stopped tumbling and can be set down on whatever it landed
 ## on. Generous, because a hull is not a ball and will not roll for ever.
 const SETTLED_UNDER := 1.1
+
+## HOW MUCH WATER A BOAT KEEPS AROUND ITSELF, and how hard it leans out of the
+## way. A hull is about four metres, so anything closer than this is two boats
+## sharing a square of sea.
+##
+## The berths a harbour hands out are already spread (Waters.a_berth), and this
+## is for everything that spreads cannot know about: a second harbour fishing
+## the same bay, a boat thrown across the map and re-moored wherever it came
+## down, and the crowd at the jetty where the moorings are only a couple of
+## metres apart by design.
+const CLEARS := 4.2
+const GIVES_WAY := 1.6
+
 ## WHAT IT IS MADE OF, and what it is worth pulling apart. Timber and tar and
 ## nothing else, so it catches far more readily than a house does.
 const MOST_HEALTH := 120.0
@@ -194,6 +207,8 @@ func _row(delta: float) -> void:
 		# Facing comes off the heading rather than look_at, which would try to
 		# point the hull at a spot on the water it is already level with.
 		rotation.y = atan2(step.x, step.z)
+	# AND KEEP OUT OF THE OTHER HULLS while doing it.
+	here += _give_way(here) * GIVES_WAY * delta
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	var sea := here.y
 	if world != null:
@@ -202,6 +217,34 @@ func _row(delta: float) -> void:
 	here.y = sea + sin(beat) * BOB
 	global_position = here
 	rotation.z = sin(beat * 0.7) * ROLL
+
+
+## LEAN OUT OF THE WAY OF THE OTHER BOATS. The sum of how far each one nearby
+## is inside this one's water, pointed away from it.
+##
+## TWO BOATS IN EXACTLY THE SAME PLACE have no direction between them to push
+## along, and that is not a hypothetical: it is what the old shared fishing spot
+## produced every time, and the case a separation rule is most likely to be
+## asked about and least likely to have been written for. Each hull leans along
+## a bearing of its own, taken from its own instance, so a pile comes apart
+## instead of sitting there dividing by zero.
+func _give_way(here: Vector3) -> Vector3:
+	var push := Vector3.ZERO
+	for n in get_tree().get_nodes_in_group("boats"):
+		var other := n as Node3D
+		if other == null or other == self or not is_instance_valid(other):
+			continue
+		var gap := Vector3(here.x - other.global_position.x, 0.0,
+			here.z - other.global_position.z)
+		var apart := gap.length()
+		if apart >= CLEARS:
+			continue
+		if apart < 0.01:
+			var mine := float(get_instance_id() % 628) * 0.01
+			push += Vector3(cos(mine), 0.0, sin(mine)) * CLEARS
+			continue
+		push += gap.normalized() * (CLEARS - apart)
+	return push
 
 
 ## THE HAUL, INTO THE GRANARY. The one thing in this file that is not scenery:

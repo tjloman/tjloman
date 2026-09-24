@@ -90,15 +90,49 @@ for short, cb in bare:
                 "'somebody forgot'" % (short, cb))
 
 # -- THE ROW HAS TO SAY WHAT IT IS -------------------------------------------
-meter = (ROOT / "scripts/ui/frame_meter.gd").read_text()
-names_it = "(the engine, before any script)" in meter
+# Read the CODE, not the comments: the file's own header quotes the old name
+# while explaining why it changed, and a check that reads the prose fails on a
+# paragraph about the very thing it is confirming.
+meter = "\n".join(r.split("#")[0] for r in
+                  (ROOT / "scripts/ui/frame_meter.gd").read_text().split("\n"))
+# It must be NAMED — not "everything else", which reads as "the classes we did
+# not clock" and sends the reader looking for one to blame — and it must be
+# printed against something, so the reader can see what share of a frame it is.
+named = "(unclocked)" in meter and "of frame" in meter
+vague = "(everything else)" in meter
 print()
 print("THE LEFTOVER ROW %s."
-      % ("says what it is" if names_it else "IS STILL CALLED SOMETHING VAGUE"))
-if not names_it:
-    fail.append("the meter's leftover row does not say that it is the engine's "
-                "own head-of-frame work, so the next person to read it will "
-                "look for a class to blame")
+      % ("is named, and shown against the frame it is part of" if named and not vague
+         else "IS STILL CALLED SOMETHING VAGUE"))
+if not named or vague:
+    fail.append("the meter's leftover row does not name itself and show what "
+                "share of a frame it is, so the next person to read it will "
+                "read it as a class that has not been found yet")
+
+# -- AND THE BILL IS FOOTED IN THE SAME UNITS AS THE ROWS --------------------
+#
+# The screenshots that followed the clocking showed `script 67.5ms` inside a
+# `16.9ms` frame — a part four times its own whole. Whatever Performance's
+# counters measure on that device, subtracting real wall-clock milliseconds
+# from it does not give milliseconds of anything, and that subtraction WAS the
+# leftover row. It is footed against the ledger's own page now, which is the
+# clock the rows are kept in.
+ledger_src = (ROOT / "scripts/ledger.gd").read_text()
+pages = "static func page_ms()" in ledger_src
+footed = "page - billed" in meter
+impossible = "counters disagree with the wall clock" in meter
+print("THE LEFTOVER IS %s, and an impossible script figure %s."
+      % ("subtracted from the same clock the rows use" if footed and pages
+         else "STILL THE MONITORS MINUS THE WALL CLOCK",
+         "is called out" if impossible else "IS PRINTED AS IF IT WERE FINE"))
+if not pages or not footed:
+    fail.append("the leftover row is still Godot's TIME_PROCESS minus the "
+                "ledger's wall clock — two different measurements, and their "
+                "difference is not milliseconds of anything")
+if not impossible:
+    fail.append("the meter prints a script time larger than the frame it is "
+                "part of without saying so; a meter that cannot tell you it is "
+                "wrong is not a measurement, it is a claim")
 
 # -- AND THE LEDGER'S OWN STORY HAS TO BE TRUE -------------------------------
 ledger = (ROOT / "scripts/ledger.gd").read_text()

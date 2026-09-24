@@ -897,7 +897,11 @@ func _launch(world: WorldGen, tie: Vector3) -> void:
 		_grounds = Waters.off_shore(world, deck_end, GROUNDS_OUT)
 	var boat := FishingBoat.new()
 	boat.mooring = tie
-	boat.grounds = _grounds if _grounds != Vector3.INF else tie
+	# ITS OWN WATER. The harbour works the fishing out once — that part is
+	# right, it is the same bay for everybody — but handing every hull the same
+	# spot put the whole fleet inside one another out there. See Waters.a_berth.
+	boat.grounds = Waters.a_berth(world, _grounds, _fleet.size()) \
+		if _grounds != Vector3.INF else tie
 	boat.home_store = village.store if village != null else null
 	get_parent().add_child(boat)
 	boat.global_position = tie

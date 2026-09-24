@@ -77,6 +77,17 @@ static var _spent := {}
 static var _rang := {}
 static var _page := {}
 static var _rings := {}
+## HOW LONG THE PAGE ITSELF TOOK, wall clock, turn to turn.
+##
+## The rows are wall clock and Godot's TIME_PROCESS is not the same measurement:
+## a screenshot came back reading `script 67.5ms` inside a `16.9ms` frame, which
+## is a part four times its own whole, and the leftover row was that impossible
+## figure minus the honest one. Whatever the monitors are counting, subtracting
+## real milliseconds from it produces a number that is not milliseconds of
+## anything. So the bill is now footed against THIS, which is the same clock the
+## rows are kept in.
+static var _turned := 0
+static var _span := 0
 
 
 ## OPEN A CLOCK ON THIS CLASS, and shut whatever was open.
@@ -121,6 +132,9 @@ static func shut() -> void:
 ## written becomes what is read, and the next frame starts from nothing.
 static func turn_the_page() -> void:
 	shut()
+	var now := Time.get_ticks_usec()
+	_span = now - _turned if _turned > 0 else 0
+	_turned = now
 	_page = _spent
 	_rings = _rang
 	_spent = {}
@@ -135,6 +149,13 @@ static func rows() -> Array:
 			int(_rings.get(what, 0))])
 	out.sort_custom(func(a, b): return a[1] > b[1])
 	return out
+
+
+## THE WHOLE PAGE, in milliseconds — one turn to the next, which is one frame,
+## measured with the same clock as every row. What the rows do not account for
+## is this minus `counted`, and both halves of that subtraction are real.
+static func page_ms() -> float:
+	return float(_span) / 1000.0
 
 
 ## What the ledger accounts for altogether, in milliseconds. The meter prints

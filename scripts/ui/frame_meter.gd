@@ -52,7 +52,7 @@ const BLEND := 0.1
 ## unmistakable rather than merely sufficient.
 const ENGINE_LAST := 1000
 ## What the engine's own work is called on the bill. Parenthesised like
-## "(everything else)", because it is not a class anybody wrote.
+## "(unclocked)", because it is not a class anybody wrote — see the bill.
 const ENGINE_ROW := &"(the solver)"
 
 ## WHAT IS THAT BAND ACROSS THE SKY.
@@ -408,6 +408,18 @@ func _readout() -> String:
 	# figure the rows are absorbing the solver and each other, so it says so
 	# rather than letting the biggest row be read as a culprit.
 	var billed := Ledger.counted()
+	# AND THE ENGINE'S OWN FIGURE HAS TO BE POSSIBLE. `script` comes from
+	# Performance.TIME_PROCESS + TIME_PHYSICS_PROCESS, and a screenshot came
+	# back with it reading 67.5ms inside a 16.9ms frame — a part four times its
+	# own whole. Whatever those monitors count on that device, it is not
+	# milliseconds of this frame, and the leftover row used to be that
+	# impossible number minus an honest one.
+	var page := Ledger.page_ms()
+	if scripted > frame_ms * 1.25 and frame_ms > 0.0:
+		rows.append("   script reads %.1f in a %.1f ms frame — the engine's own"
+			% [scripted, frame_ms])
+		rows.append("   counters disagree with the wall clock here; the rows")
+		rows.append("   below are wall clock and are the ones to trust.")
 	if billed > scripted * 1.05:
 		rows.append("   %-18s %6.1f  of %.1f  <-- OVER-BILLED"
 			% ["(counted)", billed, scripted])
@@ -421,8 +433,13 @@ func _readout() -> String:
 		# server's own step, its broadphase and solver, and the transform
 		# propagation, before a line of script runs. It is not a class anybody
 		# can go and optimise, and reading it as one wasted an evening.
-		rows.append("   %-18s %6.1f   (the engine, before any script)"
-			% ["(unclocked)", maxf(scripted - billed, 0.0)])
+		# FOOTED AGAINST THE PAGE, not against the monitors — same clock as
+		# the rows, so the subtraction is between two real numbers. What is
+		# left is the frame outside any clock: the engine's own step before the
+		# first script of the page runs, and the drawing and the wait for the
+		# screen after the last one.
+		rows.append("   %-18s %6.1f  of %.1f ms of frame"
+			% ["(unclocked)", maxf(page - billed, 0.0), page])
 	rows.append("")
 	rows.append("tier %s (%s)   3D at %d%%   physics %d Hz" % [
 		Quality.Tier.keys()[Quality.effective_tier()], Quality.heat_word(),
