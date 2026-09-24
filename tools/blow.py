@@ -36,6 +36,7 @@ def const(text, name, where="blow.gd"):
 
 PER_MOMENTUM = const(BLOW, "PER_MOMENTUM")
 MATTERS_ABOVE = const(BLOW, "MATTERS_ABOVE")
+MOMENTUM_MATTERS = const(BLOW, "MOMENTUM_MATTERS")
 TO_FLESH = const(BLOW, "TO_FLESH")
 KARMA_PER_HURT = const(BLOW, "KARMA_PER_HURT")
 KARMA_PER_WRECK = const(BLOW, "KARMA_PER_WRECK")
@@ -99,6 +100,9 @@ def blow(mass, speed):
     return speed * max(mass, 0.2) * PER_MOMENTUM
 
 
+fail = []
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--speed", type=float, default=TOP_SPEED * 0.55,
@@ -106,9 +110,29 @@ def main():
     args = ap.parse_args()
     speed = args.speed
 
+    # WHAT CLEARS THE BAR, which is the question the old speed threshold got
+    # backwards: a heavy thing is hard to get moving and does not need to be
+    # moving fast, and that is the entire reason anybody picks up a heavy thing.
+    print("HOW FAST A THING HAS TO BE MOVING TO COUNT AS A BLOW AT ALL:")
+    for what, mass in (("a loaf", heft(1) * 0.5), ("one cut block", heft(1)),
+                       ("a boulder, 15 stone", heft(15)),
+                       ("an armful, 24 stone", heft(24)),
+                       ("a hut-sized rock, 143", heft(143))):
+        print("   %-22s weighs %5.1f, counts above %5.2f m/s"
+              % (what, mass, MOMENTUM_MATTERS / mass))
+    slow, heavy = 1.5, heft(143)
+    light = heft(1)
+    if MOMENTUM_MATTERS / heavy > slow:
+        fail.append("a hut-sized rock has to be moving faster than %.1f m/s to "
+                    "do anything at all — the whole point of a heavy thing is "
+                    "that it does not have to be moving fast" % slow)
+    if MOMENTUM_MATTERS / light < 3.0:
+        fail.append("a single cut block counts as a blow below 3 m/s, so "
+                    "setting one down on a roof damages the roof")
+    print()
     print("read off the source: PER_MOMENTUM %.2f, TO_FLESH %.2f, "
           "a throw counts above %.0f m/s, the hand caps at %.0f m/s\n"
-          % (PER_MOMENTUM, TO_FLESH, MATTERS_ABOVE, TOP_SPEED))
+          % (PER_MOMENTUM, TO_FLESH, MOMENTUM_MATTERS / heft(15), TOP_SPEED))
     print("HITS TO DESTROY, thrown at %.0f m/s\n" % speed)
 
     names = [n for n, _ in TARGETS]
@@ -212,7 +236,13 @@ def main():
         for line in bad:
             print("  " + line)
         return 1
-    print("\nOK: a town can be wrecked by hand, and slowly.")
+    if fail:
+        print()
+        for why in fail:
+            print("BROKEN: %s" % why)
+        return 1
+    print("\nOK: a town can be wrecked by hand and slowly, and weight is what "
+          "decides which.")
     return 0
 
 

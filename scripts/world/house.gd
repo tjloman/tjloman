@@ -74,6 +74,12 @@ func _ready() -> void:
 	collision_mask = 0
 	var w: float = SPECS[size]["width"]
 	var depth := w * (1.6 if size == Size.LONGHOUSE else 1.0)
+	# ON THE GROUND, AND PUT BACK ON IT WHENEVER THE GROUND IS RE-CUT. A
+	# longhouse is nearly six metres deep on a foundation wider again, and it
+	# was being seated against a two-metre square — so its uphill end was in
+	# the earth before anything else went wrong. See WorldGen.reseat_over.
+	add_to_group(WorldGen.SEATED)
+	set_meta("seat_half", maxf(w, depth) / 2.0 + 0.3)
 	var col := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(w + 0.4, 3.0, depth + 0.4)

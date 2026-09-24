@@ -304,7 +304,10 @@ func _reground() -> void:
 		if not is_instance_valid(node):
 			continue
 		kept.append(node)
-		node.position.y = world.height_at(
+		# DRAWN, not seeded: a tree put back on the analytic surface is put back
+		# into the flat triangle that is actually there. Cheaper too — reading
+		# the grid this chunk has already sampled costs no noise at all.
+		node.position.y = world.drawn_height_at(
 			position.x + node.position.x, position.z + node.position.z) - float(
 				node.get_meta("sink", 0.0))
 	_standing = kept
@@ -356,6 +359,104 @@ func _build_terrain() -> void:
 
 	_heights = heights
 	_cut_mesh(tint)
+	# Whatever stands on this ground was seated against a surface that has just
+	# been replaced — a coarse ring re-cut fine, a crater, or (for a village
+	# raised before its land ever streamed in) no surface at all. See
+	# WorldGen.reseat_over.
+	if world != null:
+		world.reseat_over(cell)
+
+
+## THE HEIGHT OF THE LAND AS IT IS ACTUALLY DRAWN HERE, in world metres.
+##
+## Not what the noise says: what this chunk's own triangles say. The two differ
+## by the sag of a cell — more where the grid is coarse, and a great deal more
+## where `seeded_height_at` steps (a biome boundary changes the amplitude, so
+## the analytic surface has cliffs in it that one flat triangle spans).
+##
+## A building seated on the noise and drawn against the mesh is buried by that
+## difference, which is what "many are still sunken into the dirt" was. Reading
+## the mesh cannot be wrong about the mesh.
+##
+## Returns NAN if this chunk has not been cut yet — callers fall back.
+func drawn_height(wx: float, wz: float) -> float:
+	if _cells <= 0 or _heights.is_empty():
+		return NAN
+	return _drawn_local(wx - position.x, wz - position.z)
+
+
+## THE HIGHEST THE DRAWN LAND GETS ANYWHERE UNDER A SQUARE FOOTPRINT.
+##
+## Exact, not sampled, and the difference is metres. The drawn surface is flat
+## inside each triangle, so its maximum over a square is reached at one of:
+## a corner of the square, a grid vertex the square covers, or a point where
+## the square's edge crosses a line the surface bends along. Miss the third and
+## a ridge that runs under a house between the probes is never seen — which,
+## measured against a dense sweep, was very nearly half a metre.
+##
+## Returns NAN if this chunk has not been cut yet.
+func highest_over(wx: float, wz: float, half: float) -> float:
+	if _cells <= 0 or _heights.is_empty():
+		return NAN
+	var step := WorldGen.CHUNK_SIZE / _cells
+	var lx := wx - position.x
+	var lz := wz - position.z
+	# The four edges, ends included — which covers the four corners.
+	var best := _edge_high(lx - half, lx + half, lz - half, true, step)
+	best = maxf(best, _edge_high(lx - half, lx + half, lz + half, true, step))
+	best = maxf(best, _edge_high(lz - half, lz + half, lx - half, false, step))
+	best = maxf(best, _edge_high(lz - half, lz + half, lx + half, false, step))
+	# And every grid vertex the square covers: inside a triangle the land is
+	# flat, so the high point of a triangle is one of its corners.
+	var wide := _cells + 1
+	var lo_x := int(ceilf((lx - half) / step))
+	var hi_x := int(floorf((lx + half) / step))
+	var lo_z := int(ceilf((lz - half) / step))
+	var hi_z := int(floorf((lz + half) / step))
+	for gz in range(maxi(lo_z, 0), mini(hi_z, wide - 1) + 1):
+		for gx in range(maxi(lo_x, 0), mini(hi_x, wide - 1) + 1):
+			best = maxf(best, _heights[gz * wide + gx])
+	return best
+
+
+## THE HIGHEST POINT ALONG ONE AXIS-ALIGNED EDGE OF A FOOTPRINT.
+##
+## The surface bends along the grid lines and along each cell's diagonal. The
+## diagonal runs corner to corner, so it is the line x - z = a whole number of
+## cells — which an axis-aligned edge crosses just as regularly as it crosses
+## the grid itself. Hence the two bases: 0 for the grid, and the edge's own
+## fixed coordinate for the diagonals.
+func _edge_high(a: float, b: float, fixed: float, along_x: bool, step: float) -> float:
+	var best := _drawn_local(a if along_x else fixed, fixed if along_x else a)
+	best = maxf(best, _drawn_local(b if along_x else fixed, fixed if along_x else b))
+	for base in [0.0, fixed]:
+		var first := int(ceilf((a - base) / step))
+		var last := int(floorf((b - base) / step))
+		for k in range(first, last + 1):
+			var t: float = base + k * step
+			best = maxf(best, _drawn_local(t if along_x else fixed,
+				fixed if along_x else t))
+	return best
+
+
+## The drawn height at a point in this chunk's own metres — the two triangles
+## `_cut_mesh` emits, split on the 0-2 diagonal.
+func _drawn_local(lx: float, lz: float) -> float:
+	var wide := _cells + 1
+	var step := WorldGen.CHUNK_SIZE / _cells
+	var u := lx / step
+	var v := lz / step
+	var cx := clampi(int(floorf(u)), 0, _cells - 1)
+	var cz := clampi(int(floorf(v)), 0, _cells - 1)
+	var fu := clampf(u - cx, 0.0, 1.0)
+	var fv := clampf(v - cz, 0.0, 1.0)
+	var h0 := _heights[cz * wide + cx]
+	var h1 := _heights[cz * wide + cx + 1]
+	var h2 := _heights[(cz + 1) * wide + cx + 1]
+	var h3 := _heights[(cz + 1) * wide + cx]
+	if fu >= fv:
+		return h0 + (h1 - h0) * fu + (h2 - h1) * fv
+	return h0 + (h2 - h3) * fu + (h3 - h0) * fv
 
 
 ## Heightmap collision (layer 1 = ground), cut from the grid `_build_terrain`
@@ -562,7 +663,7 @@ func _board_style(style: String, stand: Array) -> void:
 			continue
 		var size := WildTree.board_size(style, int(it["seed"]), carried)
 		var spot: Vector3 = it["spot"]
-		spot.y = world.height_at(position.x + spot.x, position.z + spot.z) - 0.1
+		spot.y = world.drawn_height_at(position.x + spot.x, position.z + spot.z) - 0.1
 		mm.set_instance_transform(shown, Transform3D(
 			Basis.IDENTITY.scaled(Vector3(size.x, size.y, 1.0)), spot))
 		# A little variation in the green, off the seed, so a wood is not one
@@ -748,7 +849,7 @@ func _spot_ok(local: Vector3) -> bool:
 
 
 func _place(node: Node3D, local: Vector3, sink := 0.0) -> void:
-	local.y = world.height_at(position.x + local.x, position.z + local.z) - sink
+	local.y = world.drawn_height_at(position.x + local.x, position.z + local.z) - sink
 	node.position = local
 	add_child(node)
 	# Remembered so it can be set back down if the ground under it ever moves.
@@ -846,7 +947,7 @@ func _scatter_flowers(rng: RandomNumberGenerator, count: int) -> void:
 		var spot := _random_spot(rng)
 		if not _spot_ok(spot):
 			continue
-		spot.y = world.height_at(position.x + spot.x, position.z + spot.z) + 0.02
+		spot.y = world.drawn_height_at(position.x + spot.x, position.z + spot.z) + 0.02
 		# Random yaw always; the 3D model also gets a natural lean and a size.
 		var bloom := Basis(Vector3.UP, rng.randf() * TAU)
 		if custom != null:

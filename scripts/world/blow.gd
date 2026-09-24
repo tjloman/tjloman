@@ -44,8 +44,26 @@ extends Node
 ## to make it watchable should not also make it feeble.
 const PER_MOMENTUM := 1.45
 
-## Under this it is a thing being set down, not a blow.
+## Under this a thing in flight has stopped flying — used for settling and for
+## skipping, where a speed is the right question and always was.
 const MATTERS_ABOVE := 7.0
+
+## And under THIS a landing is a thing being set down rather than a blow — AND
+## IT IS MOMENTUM,
+## not speed.
+##
+## It was a speed alone, seven metres a second, which says that a pebble flicked
+## quickly is a blow and a boulder walked slowly into a wall is not. That is
+## backwards, and it is most of "I was smacking houses with stones and it wasn't
+## doing anything": a heavy thing is hard to get moving and does not need to be
+## moving fast, which is the entire reason anybody picks up a heavy thing.
+##
+## Mass times speed, so the bar is the same bar the damage is reckoned from
+## (see PER_MOMENTUM). Fifteen stone weighs 7.6 and clears it at under two
+## metres a second; a single cut block weighs 2.0 and needs seven, which is
+## about a throw; and a joint of meat set down gently is still a thing being
+## set down.
+const MOMENTUM_MATTERS := 14.0
 
 ## How far the shock reaches from where it came down. Small: this is an impact,
 ## not an explosion, and a rock through one wall should not shake the street.
@@ -216,9 +234,10 @@ func _skipped(thing: RigidBody3D) -> bool:
 ## arrive at the same consequences.
 static func lands(thing: Node3D, at: Vector3, speed: float, mass: float,
 		by_god: bool) -> void:
-	if speed < MATTERS_ABOVE:
+	var heft := maxf(mass, 0.2)
+	if speed * heft < MOMENTUM_MATTERS:
 		return
-	var force := speed * maxf(mass, 0.2) * PER_MOMENTUM
+	var force := speed * heft * PER_MOMENTUM
 	var tree := thing.get_tree()
 	if tree == null:
 		return

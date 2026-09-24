@@ -456,6 +456,8 @@ func _ready() -> void:
 	kindling.temper = Kindling.TEMPER_TIMBER   # a timber shed full of work
 	add_to_group("workshops")
 	add_to_group(Affords.BURNABLE)
+	add_to_group(WorldGen.SEATED)     # see WorldGen.reseat_over
+	set_meta("seat_half", 1.9)
 	var spec: Dictionary = TRADES[trade]
 	set_meta("hover_name", String(spec["label"]))
 	collision_layer = 4     # hoverable; villagers walk through it

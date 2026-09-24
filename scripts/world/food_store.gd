@@ -47,6 +47,8 @@ func _ready() -> void:
 	kindling.temper = Kindling.TEMPER_STORES   # timber, but packed and damp inside
 	add_to_group("stores")
 	add_to_group(Affords.BURNABLE)
+	add_to_group(WorldGen.SEATED)     # see WorldGen.reseat_over
+	set_meta("seat_half", PLATFORM_RADIUS)
 	set_meta("hover_name", "Storehouse")
 	collision_layer = 4  # hoverable/grabbable by the hand; villagers pass through
 	collision_mask = 0

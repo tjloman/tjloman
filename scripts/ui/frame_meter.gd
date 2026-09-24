@@ -74,6 +74,14 @@ const ENGINE_ROW := &"(the solver)"
 ## are over GIANT. In a sane world that reads "Chunk/@MeshInstance3D 96m" and
 ## means nothing; when it reads "pig 812m" the hunt is over.
 const GIANT := 120.0
+## HOW SLOW A FRAME HAS TO BE BEFORE THE METER KEEPS ITS PAGE ON SCREEN, in
+## milliseconds. A hitch is a frame; a STALL is a frame you look up from the
+## game about. Sixty is four frames at the target rate and well past anything
+## the tier ladder is meant to smooth over.
+const STALL_WORTH_NAMING := 60.0
+## How many of the worst frame's rows to name. Three is enough to see whether a
+## stall was one class or the whole world at once.
+const WORST_ROWS_SHOWN := 3
 ## The only things skipped are the sky and the lights in it, which are meant to
 ## be the size of the world.
 ##
@@ -287,6 +295,72 @@ func _with_peak(text: String, worst: float) -> String:
 	return "%-38s peak %5.1f" % [text, worst]
 
 
+## WHAT THE WORST FRAME OF THIS SITTING WAS MADE OF.
+##
+## Every other row here is the frame you are in, which is never the frame you
+## want. A ten-second hang is over before you can look at it, and the page it
+## was written on was turned and discarded while you were still noticing — so
+## the meter could tell you a stall of 10273.7ms had happened and nothing
+## whatever about what it was.
+##
+## The ledger keeps that page whole now (Ledger.worst_rows), and this prints
+## its three dearest rows plus its head. The record is cleared each time the
+## meter is opened, so it is the worst frame SINCE YOU LOOKED — open it, do the
+## thing that stutters, read the answer.
+func _the_worst_frame() -> Array:
+	var span := Ledger.worst_ms()
+	if span < STALL_WORTH_NAMING:
+		return []
+	var out := ["worst frame %.0f ms, since the meter opened:" % span]
+	var shown := 0
+	for row: Array in Ledger.worst_rows():
+		if shown >= WORST_ROWS_SHOWN or float(row[1]) < span * 0.01:
+			break
+		out.append("   %-18s %8.1f  x%d" % [row[0], float(row[1]), int(row[2])])
+		shown += 1
+	out.append("   %-18s %8.1f  before any script ran"
+		% ["(head of frame)", maxf(span - Ledger.worst_counted(), 0.0)])
+	out.append("")
+	return out
+
+
+## THE WORST-SEATED BUILDING IN THE WORLD, and by how much.
+##
+## "Half the houses are great, but many are still sunken into the dirt" is a
+## thing a screenshot shows and an argument cannot settle. Buildings are seated
+## on the land as it is DRAWN now (WorldGen.settle_height, re-asked whenever the
+## ground under them is cut), so this should read zero for every building in
+## every town — and if it does not, it names the one to go and look at.
+##
+## Measured against the same footprint the building was seated with, so the
+## number here and the number the seater worked to are the same number.
+##
+## Walked at the rate the readout is rewritten rather than per frame, and only
+## while the meter is open.
+func _worst_seated() -> String:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world == null:
+		return ""
+	var worst := 0.0
+	var named := ""
+	var at := Vector3.ZERO
+	for n in get_tree().get_nodes_in_group(WorldGen.SEATED):
+		var thing := n as Node3D
+		if thing == null or not is_instance_valid(thing):
+			continue
+		var here := thing.global_position
+		var half := float(thing.get_meta("seat_half", 2.5))
+		var under := world.settle_height(here.x, here.z, half) - here.y
+		if under > worst:
+			worst = under
+			named = thing.get_class() if not thing.has_meta("hover_name") \
+				else String(thing.get_meta("hover_name"))
+			at = here
+	if worst < 0.05:
+		return "buildings all sit on the ground"
+	return "worst seated: %s %.2fm under, at %.0f,%.0f" % [named, worst, at.x, at.z]
+
+
 ## THE BIGGEST DRAWN THING IN THE WORLD, whatever it is.
 ##
 ## Walks every drawn node once every EVERY seconds, and only while the meter is
@@ -441,6 +515,9 @@ func _readout() -> String:
 		rows.append("   %-18s %6.1f  of %.1f ms of frame"
 			% ["(unclocked)", maxf(page - billed, 0.0), page])
 	rows.append("")
+	for line in _the_worst_frame():
+		rows.append(line)
+	rows.append(_worst_seated())
 	rows.append("%d%% of frames over the line, %d stalls ignored"
 		% [int(Quality.share_over() * 100.0), Quality.stalls_ignored()])
 	rows.append("tier %s (%s)   3D at %d%%   physics %d Hz" % [

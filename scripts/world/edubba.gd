@@ -115,6 +115,8 @@ func _ready() -> void:
 	kindling.temper = Kindling.TEMPER_STONE   # mostly walls
 	add_to_group("edubba")
 	add_to_group(Affords.BURNABLE)
+	add_to_group(WorldGen.SEATED)     # see WorldGen.reseat_over
+	set_meta("seat_half", 2.5)
 	for i in CLASSES_MOST:
 		_lesson.append(LESSONS[randi() % LESSONS.size()])
 		_left.append(randf_range(LESSON_LEAST, LESSON_MOST))

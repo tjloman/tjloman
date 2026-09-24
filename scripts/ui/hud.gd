@@ -681,6 +681,13 @@ func _build_frame_meter() -> void:
 func _toggle_frames() -> void:
 	if _frames != null and is_instance_valid(_frames):
 		_frames.visible = not _frames.visible
+		# A fresh worst frame per sitting. The ledger only clocks while the
+		# meter is up, so the record it keeps is the record OF THIS LOOK — open
+		# it, reproduce the stutter, read what the stall was made of. A record
+		# carried over from a previous look would be a different session's
+		# answer sitting on top of the one you are trying to get.
+		if _frames.visible:
+			Ledger.forget_worst()
 
 
 func _build_creature_button() -> void:

@@ -88,6 +88,21 @@ static var _rings := {}
 ## rows are kept in.
 static var _turned := 0
 static var _span := 0
+## THE WORST PAGE SINCE THE METER WAS OPENED, kept whole.
+##
+## A stall is the one frame you cannot ask about, because the rows you are
+## looking at belong to the frame AFTER it — by the time a ten-second hang has
+## finished hanging, the page it was written on has been turned and thrown away,
+## and all that survives is a number in a corner saying it happened. Which is
+## how "a 10273.7 hang, very easy to notice while playing" could be reported
+## precisely and diagnosed not at all.
+##
+## So the dearest page is kept: every row of it, as it was. It costs one
+## comparison a frame and a dictionary copy on the rare frame that sets a new
+## record.
+static var _worst_page := {}
+static var _worst_rings := {}
+static var _worst_span := 0
 
 
 ## OPEN A CLOCK ON THIS CLASS, and shut whatever was open.
@@ -137,6 +152,13 @@ static func turn_the_page() -> void:
 	_turned = now
 	_page = _spent
 	_rings = _rang
+	# The first page is not a record worth keeping: `_turned` was zero, so its
+	# span is zero, and the frame that loaded the scene is not a frame anybody
+	# is going to fix.
+	if on and _span > _worst_span:
+		_worst_span = _span
+		_worst_page = _page.duplicate()
+		_worst_rings = _rings.duplicate()
 	_spent = {}
 	_rang = {}
 
@@ -165,3 +187,38 @@ static func counted() -> float:
 	for what: StringName in _page:
 		all += int(_page[what])
 	return float(all) / 1000.0
+
+
+## THE DEAREST PAGE SINCE THE METER OPENED, dearest row first — the same shape
+## as `rows`, so the meter prints it the same way.
+static func worst_rows() -> Array:
+	var out := []
+	for what: StringName in _worst_page:
+		out.append([String(what), float(_worst_page[what]) / 1000.0,
+			int(_worst_rings.get(what, 0))])
+	out.sort_custom(func(a, b): return a[1] > b[1])
+	return out
+
+
+## How long that page took, in milliseconds. Zero until one has been kept.
+static func worst_ms() -> float:
+	return float(_worst_span) / 1000.0
+
+
+## What the worst page's rows add up to — so the head of that frame (the
+## engine's own work before any script ran) is `worst_ms() - worst_counted()`,
+## the same subtraction the live bill prints.
+static func worst_counted() -> float:
+	var all := 0
+	for what: StringName in _worst_page:
+		all += int(_worst_page[what])
+	return float(all) / 1000.0
+
+
+## FORGET IT. A stall you have already read and dealt with should not sit at the
+## top of the meter for the rest of the session — and the one frame that loads
+## the scene would otherwise be the record forever.
+static func forget_worst() -> void:
+	_worst_page = {}
+	_worst_rings = {}
+	_worst_span = 0

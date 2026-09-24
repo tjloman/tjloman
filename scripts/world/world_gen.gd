@@ -26,6 +26,11 @@ extends Node3D
 ## as yours but believe in nothing — until your miracles convince them.
 
 const CHUNK_SIZE := 48.0
+## Everything that is PUT ON the ground rather than dropped onto it: houses,
+## workshops, stores, farms, the edubba, the nest. They are re-seated whenever
+## the land under them is cut. Each one sets a `seat_half` meta for its own
+## footprint half-width.
+const SEATED := &"seated"
 const WATER_LEVEL := 0.0
 ## HOW MUCH OF A FRAME THE WORLD MAY HAVE, in milliseconds — near ring, far
 ## ring and coarsening together. See `_frame_spent` for why this is a budget
@@ -611,15 +616,95 @@ func line_dry(ax: float, az: float, bx: float, bz: float, samples := 6) -> bool:
 ## The HIGHEST ground under a footprint. Structures settle on the high
 ## side so their sunken foundations bridge the downhill gap — never the
 ## uphill wall buried in the slope.
+## THE HEIGHT OF THE GROUND AS IT IS ACTUALLY DRAWN, which is not the height
+## the noise says.
+##
+## A chunk is cut into a grid of triangles and the land is flat between the
+## corners, so the drawn surface and the analytic one disagree by the sag of a
+## cell. That is small on a fine grid over gentle country and NOT small
+## anywhere else: the far ring is cut at six cells to a forty-eight metre chunk
+## (eight-metre cells), and `seeded_height_at` steps where the biome changes,
+## because the amplitude is chosen per point — so the analytic surface has
+## cliffs in it that a single flat triangle spans.
+##
+## A building seated on the noise and drawn against the mesh is buried by that
+## difference. So the mesh is asked first, and it can only be asked where the
+## land has actually been cut — a village raised before its chunk ever streamed
+## in (which is every founding house of Elsmere, built in Main._ready) has no
+## mesh to ask. Those fall back to the coarse-grid estimate below and are put
+## right the moment their ground arrives; see `reseat_over`.
+func drawn_height_at(x: float, z: float) -> float:
+	var chunk := chunk_at(x, z)
+	if chunk != null:
+		var drawn := chunk.drawn_height(x, z)
+		if not is_nan(drawn):
+			return drawn
+	# NO GROUND CUT HERE YET, so there is nothing to read and the seed is the
+	# best answer there is. It is also the CHEAP answer, which matters: this
+	# path is walked hundreds of thousands of times while a village is being
+	# founded (see `find_build_spot`), and paying four noise reads for a guess
+	# at a mesh that does not exist would be paying for nothing. Whatever it
+	# gets wrong is put right the moment the land arrives — see `reseat_over`.
+	return height_at(x, z)
+
+
+## The loaded chunk a point falls in, or null. Null is a real answer — most of
+## the world is not resident.
+func chunk_at(x: float, z: float) -> Chunk:
+	var chunk = _chunks.get(cell_of(x, z))
+	if chunk == null or not is_instance_valid(chunk):
+		return null
+	return chunk as Chunk
+
+
+## WHERE A THING THIS WIDE SITS. The highest the drawn ground gets anywhere
+## under its footprint, so it rests on the ground rather than in it.
+##
+## `half` is the footprint HALF-WIDTH, and it wants to be generous: a longhouse
+## is five and a half metres deep on a foundation half a metre wider again, and
+## grounding it against a two-metre square left its uphill end in the earth.
 func settle_height(x: float, z: float, half := 2.5) -> float:
-	var best := height_at(x, z)
+	var chunk := chunk_at(x, z)
+	if chunk != null:
+		var exact := chunk.highest_over(x, z, half)
+		if not is_nan(exact):
+			# The footprint can still hang over the chunk edge, and the corners
+			# are what catch that.
+			return maxf(exact, _corner_max(x, z, half))
+	return _corner_max(x, z, half)
+
+
+## RE-SEAT WHATEVER STANDS OVER A CELL WHOSE GROUND HAS JUST BEEN CUT.
+##
+## Buildings do not fall. They were placed at a height that was true when they
+## were placed, and the land under them is re-cut whenever it coarsens, refines,
+## or is cratered — and, for a village founded before the world streamed, is
+## cut for the FIRST time long after the houses went up. Nothing put them back
+## on the surface, which is the whole of "buildings are spawning below ground".
+##
+## `seat_half` is the footprint half-width each kind of building registers for
+## itself; anything in the group without one settles as a two-and-a-half metre
+## square, which is a house.
+func reseat_over(cell: Vector2i) -> void:
+	for node in get_tree().get_nodes_in_group(SEATED):
+		var body := node as Node3D
+		if body == null or not is_instance_valid(body):
+			continue
+		var at := body.global_position
+		if cell_of(at.x, at.z) != cell:
+			continue
+		body.global_position.y = settle_height(
+			at.x, at.z, float(body.get_meta("seat_half", 2.5)))
+
+
+func _corner_max(x: float, z: float, half: float) -> float:
+	var best := drawn_height_at(x, z)
 	for corner in [Vector2(half, half), Vector2(-half, half),
 			Vector2(half, -half), Vector2(-half, -half)]:
-		best = maxf(best, height_at(x + corner.x, z + corner.y))
+		best = maxf(best, drawn_height_at(x + corner.x, z + corner.y))
 	return best
 
 
-## Approximate slope (rise over 2m) — used to veto building/village sites.
 func slope_at(x: float, z: float) -> float:
 	var h := height_at(x, z)
 	return maxf(
@@ -1072,8 +1157,11 @@ func _spawn_chunk(cell: Vector2i, bare := false) -> void:
 	chunk.world = self
 	chunk.cell = cell
 	chunk.position = Vector3(cell.x * CHUNK_SIZE, 0, cell.y * CHUNK_SIZE)
-	add_child(chunk)
+	# Registered BEFORE it is raised: cutting the ground re-seats what stands on
+	# it (see `reseat_over`), and that asks `chunk_at` for the very chunk being
+	# built. A chunk filed afterwards is invisible to its own first cut.
 	_chunks[cell] = chunk
+	add_child(chunk)
 	# Seen once is seen forever, and walking a cell you had only glimpsed
 	# upgrades it — never the other way about.
 	var standing: int = WALKED if not bare else SEEN
