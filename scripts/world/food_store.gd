@@ -77,6 +77,11 @@ func _ready() -> void:
 	# stack on its four quadrants (withdraw/deposit works by position).
 	var custom := ModelBank.instantiate("store")
 	if custom != null:
+		# ON ITS FOOTING, whatever pivot the model was authored with — the
+		# same answer, from the same place, that a beast is stood up with.
+		# A model pivoted at its middle sinks to the waist without this,
+		# which is what "buildings are spawning below ground" was.
+		custom.position.y += ModelBank.footing("store")
 		add_child(custom)
 	else:
 		_build_structure()

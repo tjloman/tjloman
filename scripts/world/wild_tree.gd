@@ -196,6 +196,10 @@ func _ready() -> void:
 	# still scales with growth and tumbles when uprooted.
 	var custom := ModelBank.instantiate_any(["tree_" + style, "tree"])
 	if custom != null:
+		# ON ITS FOOTING, whatever pivot the model was authored with — of
+		# whichever of these names the bank actually had. See
+		# ModelBank.footing_any.
+		custom.position.y += ModelBank.footing_any(["tree_" + style, "tree"])
 		add_child(custom)
 	else:
 		# Pooled, low-poly, shared-material parts: every tree of a style draws

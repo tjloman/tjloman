@@ -154,6 +154,13 @@ func footing(model_name: String) -> float:
 
 ## The first of these names that has a model, measured. Mirrors
 ## `instantiate_any`, so a caller asks the same question the same way.
+## THE SAME, FOR WHICHEVER OF THESE THE BANK ACTUALLY HAS. A tree asks for
+## `tree_pine` and settles for `tree`, and it has to be lifted by the footing of
+## the one it got rather than the one it wanted.
+func footing_any(names: Array) -> float:
+	return -bounds_any(names).position.y
+
+
 func bounds_any(names: Array) -> AABB:
 	for n: String in names:
 		var box := bounds(n)

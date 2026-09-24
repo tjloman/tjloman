@@ -85,6 +85,8 @@ func _look_for_timber(tree: SceneTree, here: Vector3, reach: float) -> void:
 			continue
 		if wood.is_felled() or wood.is_held() or wood.burning:
 			continue
+		if _unreachable(tree, wood.global_position):
+			continue
 		var d := here.distance_to(wood.global_position)
 		if d < best:
 			best = d
@@ -97,6 +99,8 @@ func _look_for_stone(tree: SceneTree, here: Vector3, reach: float) -> void:
 	for n in tree.get_nodes_in_group("rock_deposits"):
 		var rock := n as RockDeposit
 		if rock == null or not is_instance_valid(rock) or rock.is_queued_for_deletion():
+			continue
+		if _unreachable(tree, rock.global_position):
 			continue
 		var d := here.distance_to(rock.global_position)
 		if d < best:
@@ -114,6 +118,8 @@ func _look_for_beasts(tree: SceneTree, here: Vector3, reach: float) -> void:
 	for n in tree.get_nodes_in_group("animals"):
 		var beast := n as Animal
 		if beast == null or not is_instance_valid(beast) or beast.is_queued_for_deletion():
+			continue
+		if _unreachable(tree, beast.global_position):
 			continue
 		var d := here.distance_to(beast.global_position)
 		if d >= reach:
@@ -144,6 +150,24 @@ func _look_for_stock(tree: SceneTree, here: Vector3, reach: float) -> void:
 			stock = herd
 
 
+## IS THAT SOMEWHERE A VILLAGER WOULD DROWN GETTING TO?
+##
+## The town's eye is where most of what anybody walks to comes from, so the
+## question is asked once here rather than by each job afterwards. A drowned
+## animal drops its meat in the water; a felled tree can be thrown into a lake
+## by the god; a rock can sit in the shallows. Every one of those was a whole
+## village walking in after it, one at a time.
+##
+## Asked once a second for a town, which is what makes the depth read
+## affordable here and not in anybody's per-frame work.
+func _unreachable(tree: SceneTree, at: Vector3) -> bool:
+	var world := tree.get_first_node_in_group("world_gen") as WorldGen
+	if world == null:
+		return false
+	return world.water_level_at(at.x, at.z) - world.height_at(at.x, at.z) \
+		> Villager.DROWN_DEPTH
+
+
 ## THE NEAREST BODY WORTH WALKING TO — and the drowned are not.
 ##
 ## A corpse lying under the water sent a butcher in after it, who drowned and
@@ -153,16 +177,12 @@ func _look_for_stock(tree: SceneTree, here: Vector3, reach: float) -> void:
 func _look_for_corpse(tree: SceneTree, here: Vector3, reach: float) -> void:
 	corpse = null
 	var best := reach
-	var world := tree.get_first_node_in_group("world_gen") as WorldGen
 	for n in tree.get_nodes_in_group("corpses"):
 		var body := n as Corpse
 		if body == null or not is_instance_valid(body) or body.is_queued_for_deletion():
 			continue
-		if world != null:
-			var at := body.global_position
-			if world.water_level_at(at.x, at.z) - world.height_at(at.x, at.z) \
-					> Villager.DROWN_DEPTH:
-				continue
+		if _unreachable(tree, body.global_position):
+			continue
 		var d := here.distance_to(body.global_position)
 		if d < best:
 			best = d

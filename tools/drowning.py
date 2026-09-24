@@ -86,24 +86,49 @@ REACH = number(HAND, "GATHER_REACH")
 HOVER = number(HAND, "HOVER_HEIGHT")
 
 # -- NOTHING IS SENT SOMEWHERE IT WOULD DROWN --------------------------------
-PICKERS = [
-    ("loose food on the ground", FEED, "_ground_food"),
-    ("the nearest corpse", MAN, "_nearest_corpse"),
-    ("a beast worth gentling", MAN, "_nearest_tamable"),
-    ("the town's own watcher", WATCH, "_look_for_corpse"),
-]
-print("WHO ASKS WHETHER A THING CAN BE REACHED ALIVE:")
-for what, text, func in PICKERS:
-    rows = body_of(text, func)
-    asks = any("would_drown_at(" in r or "DROWN_DEPTH" in r for r in rows)
-    print("   %-28s %s" % (what, "asks" if asks else "<-- SENDS THEM IN"))
-    if not rows:
-        fail.append("%s is gone (%s), so this file is guarding something that "
-                    "has moved" % (what, func))
-    elif not asks:
-        fail.append("%s never asks whether the thing is standing in water deep "
-                    "enough to drown in, so the nearest meat in the shallows "
-                    "is still the whole town's next destination" % what)
+# EVERY PICKER, FOUND RATHER THAN LISTED.
+#
+# This file first named four of them by hand — the four that were fixed — and
+# a fifth went on drowning people for another session, because a list of names
+# only ever guards what somebody already thought of. A picker is anything that
+# walks a group of nodes and chooses one by distance, and every one of those
+# ends with somebody walking to what it chose.
+EXCUSED = {
+    "_nearest_heathen": "a village, which stands on ground it was founded on",
+    "_look_for_heathen": "a village, as above",
+    "_village_here": "asks which village this IS, and walks nowhere",
+    "_look_for_stock": "a herd's centre, and the herd is what is walked to",
+}
+pickers = []
+for what, text in [("villager.gd", MAN), ("villager_feeding.gd", FEED),
+                   ("village_watch.gd", WATCH)]:
+    src = code(text)
+    for chunk in re.split(r"\n(?=(?:static )?func )", src):
+        name = re.match(r"(?:static )?func (\w+)", chunk)
+        if not name or "get_nodes_in_group(" not in chunk:
+            continue
+        if "distance_to(" not in chunk:
+            continue
+        pickers.append((what, name.group(1), chunk))
+
+print("EVERY PICKER THAT CHOOSES SOMETHING TO WALK TO, and whether it asks:")
+for where, name, chunk in pickers:
+    if name in EXCUSED:
+        print("   %-24s %-22s excused: %s" % (name, where, EXCUSED[name]))
+        continue
+    asks = "would_drown_at(" in chunk or "_unreachable(" in chunk \
+        or "DROWN_DEPTH" in chunk
+    print("   %-24s %-22s %s" % (name, where, "asks" if asks else "<-- SENDS THEM IN"))
+    if not asks:
+        fail.append("%s (%s) chooses something for a villager to walk to and "
+                    "never asks whether they would drown getting there — the "
+                    "last version of this file listed the pickers by hand, "
+                    "which is why this one was still sending people into the "
+                    "water a session later" % (name, where))
+if len(pickers) < 8:
+    fail.append("only %d pickers were found, which is fewer than this game has "
+                "— the search for them has stopped matching, and a check that "
+                "finds nothing passes" % len(pickers))
 
 # -- THE SHORTCUT ASKS TOO ---------------------------------------------------
 walking = body_of(MAN, "_move_toward")

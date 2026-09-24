@@ -285,6 +285,9 @@ func _ready() -> void:
 	# waddle/pose steps aside.
 	var custom := ModelBank.instantiate("creature")
 	if custom != null:
+		# ON ITS FEET, whatever pivot the model was authored with — the same
+		# answer, from the same place, a beast is stood up with.
+		custom.position.y += ModelBank.footing("creature")
 		_body.add_child(custom)
 		_animator = ModelAnimator.create(custom)
 		# Collect renderables so alignment/expression can be pushed to the

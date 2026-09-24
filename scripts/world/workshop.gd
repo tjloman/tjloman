@@ -468,6 +468,11 @@ func _ready() -> void:
 	add_child(col)
 	var custom := ModelBank.instantiate(trade)
 	if custom != null:
+		# ON ITS FOOTING, whatever pivot the model was authored with — the
+		# same answer, from the same place, that a beast is stood up with.
+		# A model pivoted at its middle sinks to the waist without this,
+		# which is what "buildings are spawning below ground" was.
+		custom.position.y += ModelBank.footing(trade)
 		add_child(custom)
 	else:
 		_build_stand_in(spec)

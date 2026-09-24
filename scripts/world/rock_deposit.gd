@@ -107,6 +107,10 @@ func _ready() -> void:
 	named.append("rock")
 	var custom := ModelBank.instantiate_any(named)
 	if custom != null:
+		# ON ITS FOOTING, whatever pivot the model was authored with — of
+		# whichever of these names the bank actually had. See
+		# ModelBank.footing_any.
+		custom.position.y += ModelBank.footing_any(named)
 		# A custom rock model won't shrink as it's worked, but quarries fine.
 		add_child(custom)
 	else:

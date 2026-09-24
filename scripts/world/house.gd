@@ -273,6 +273,11 @@ func _build_visuals() -> void:
 	# windows, so the night-glow (which drives _window_mat) simply idles.
 	var custom := ModelBank.instantiate("house")
 	if custom != null:
+		# ON ITS FOOTING, whatever pivot the model was authored with — the
+		# same answer, from the same place, that a beast is stood up with.
+		# A model pivoted at its middle sinks to the waist without this,
+		# which is what "buildings are spawning below ground" was.
+		custom.position.y += ModelBank.footing("house")
 		add_child(custom)
 		_window_mat = null
 		return

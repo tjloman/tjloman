@@ -284,6 +284,10 @@ func _ready() -> void:
 	# villager model, then the primitive body.
 	var custom := ModelBank.instantiate_any([_sex_model(), "villager"])
 	if custom != null:
+		# ON ITS FOOTING, whatever pivot the model was authored with — of
+		# whichever of these names the bank actually had. See
+		# ModelBank.footing_any.
+		custom.position.y += ModelBank.footing_any([_sex_model(), "villager"])
 		# A custom villager model stands in for the whole body. If it's rigged
 		# with clips, an animator drives them and the procedural "bend" yields.
 		_body_mesh = custom
@@ -1770,6 +1774,8 @@ func _nearest_forage_bush() -> ForageBush:
 		var bush := b as ForageBush
 		if not is_instance_valid(bush) or not bush.has_berries():
 			continue
+		if would_drown_at(bush.global_position):
+			continue
 		var d := global_position.distance_to(bush.global_position)
 		if d < best_dist and d < village.influence_radius * 2.0:
 			best_dist = d
@@ -1788,6 +1794,8 @@ func _nearest_huntable() -> Animal:
 			continue
 		if animal.spec.get("predator", false):
 			continue  # villagers hunt dinner, not death
+		if would_drown_at(animal.global_position):
+			continue
 		var d := global_position.distance_to(animal.global_position)
 		if d < reach:
 			_consider(best, animal, d)
@@ -1842,6 +1850,8 @@ func _nearest_in_group(group: String, max_dist: float) -> Node3D:
 			continue
 		if node is WildTree and ((node as WildTree).is_felled() \
 				or (node as WildTree).is_held() or (node as WildTree).burning):
+			continue
+		if would_drown_at(node.global_position):
 			continue
 		var d := global_position.distance_to(node.global_position)
 		if d < max_dist:
