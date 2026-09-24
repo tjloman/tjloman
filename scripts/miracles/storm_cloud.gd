@@ -270,8 +270,8 @@ static func _vapour_skin() -> StandardMaterial3D:
 	# or the layer that happens to be nearest punches a hole in the rest.
 	m.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
 	m.disable_receive_shadows = true
-	_skin = m
-	return m
+	_skin = Util.lit(m)
+	return _skin
 
 
 ## A STREAKED PATCH OF VAPOUR, drawn in code like everything else in this game.

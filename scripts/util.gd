@@ -12,12 +12,113 @@ class_name Util
 ##                          instead of thousands, which is what kept budget
 ##                          phones from drowning as chunks stream in.
 
+## Sweep the dead out of the register once it has grown by this much. Without
+## it a long session walking across the world leaves a row per chunk material
+## ever made, all of them empty.
+const SWEEP_EVERY := 512
+
 # Pools keyed by their defining parameters. Never mutate a resource fetched
 # from here — it is shared by every part that asked for the same thing.
 static var _mesh_pool := {}
 static var _mat_pool := {}
 static var _glow: ImageTexture = null   # the soft dot every torch is drawn with
 static var _dot: ImageTexture = null    # and the round one every mark is
+
+## CEL SHADING, AND WHY IT IS A REGISTER RATHER THAN A SWITCH.
+##
+## There is no one material in this game. There is water that goes opaque on a
+## budget phone, foliage on scissor-cut billboards, crops coloured per vertex,
+## critters that are deliberately unlit, and a hundred ordinary painted parts —
+## seventeen places in all, each with settings it needs. None of them can be
+## funnelled through one builder without losing what makes it itself.
+##
+## So every material made anywhere passes through `lit` on its way out, which
+## writes down a WEAK reference to it and the modes it was born with. Turning
+## cel shading on walks that register and re-marks everything alive; turning it
+## off puts each material back the way IT was, rather than back to a default
+## this file guessed at. Two things follow that are worth saying out loud:
+##
+##   THE REFERENCES ARE WEAK because terrain streams. A chunk two hundred
+##   metres behind you is freed, and a register holding it by the hand would
+##   keep every material of every chunk you ever walked through alive for the
+##   session. It sweeps itself as it grows, and again whenever it is walked.
+##
+##   AND NOTHING UNLIT IS TOUCHED. A critter and a storm cloud are UNSHADED on
+##   purpose; there is no lighting on them to band, and "cel shading" that
+##   quietly re-lit them would be a different bug for each.
+##
+## WHAT IS NOT YET CONFIRMED, and must be before this is called done: whether
+## the Mobile renderer this game uses honours StandardMaterial3D's built-in
+## toon diffuse and specular modes at all. Forward+ does. If Mobile ignores
+## them, the fix is `_cel_one` and nothing else — the register, the sweep, the
+## toggle and the saving are the same either way, which is why it is built like
+## this rather than around a shader that may not be needed.
+static var _painted: Array = []
+static var _cel := false
+static var _since_sweep := 0
+
+
+## EVERY MATERIAL IN THE GAME GOES THROUGH HERE on its way out — see the note
+## by `_painted`. It is one line at each of the seventeen places that build one,
+## and it is what makes cel shading a thing that can be turned on while you are
+## looking at the world rather than a thing that waits for a reload.
+static func lit(m: StandardMaterial3D) -> StandardMaterial3D:
+	# What it was born as. Restoring THIS rather than a named default means a
+	# part that deliberately chose its own lighting keeps it, and that this file
+	# never has to be right about what the engine's defaults are called.
+	_painted.append([weakref(m), m.diffuse_mode, m.specular_mode])
+	_since_sweep += 1
+	if _since_sweep >= SWEEP_EVERY:
+		_sweep()
+	if _cel:
+		_cel_one(m, true, m.diffuse_mode, m.specular_mode)
+	return m
+
+
+## ON OR OFF, NOW, for everything alive. Dead entries go while we are walking
+## the register anyway.
+static func cel_shading(on: bool) -> void:
+	_cel = on
+	var live := []
+	for row: Array in _painted:
+		var m := (row[0] as WeakRef).get_ref() as StandardMaterial3D
+		if m == null:
+			continue
+		live.append(row)
+		_cel_one(m, on, row[1], row[2])
+	_painted = live
+	_since_sweep = 0
+
+
+static func cel_is_on() -> bool:
+	return _cel
+
+
+## How many materials are being kept marked, for the readouts — a register that
+## only ever grows is the leak this was written to avoid.
+static func painted_count() -> int:
+	return _painted.size()
+
+
+## THE ONE PLACE THE LOOK IS DECIDED. Toon diffuse cuts the light into bands and
+## toon specular does the same to the highlight; roughness is left alone on
+## purpose, because it is what softens the edge of the band and the world
+## already varies it from matte ground to wet stone.
+static func _cel_one(m: StandardMaterial3D, on: bool, was_diffuse: int,
+		was_specular: int) -> void:
+	if m.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED:
+		return
+	m.diffuse_mode = BaseMaterial3D.DIFFUSE_TOON if on else was_diffuse
+	m.specular_mode = BaseMaterial3D.SPECULAR_TOON if on else was_specular
+
+
+static func _sweep() -> void:
+	var live := []
+	for row: Array in _painted:
+		if (row[0] as WeakRef).get_ref() != null:
+			live.append(row)
+	_painted = live
+	_since_sweep = 0
 
 
 static func mat(color: Color, emission := false) -> StandardMaterial3D:
@@ -29,7 +130,7 @@ static func mat(color: Color, emission := false) -> StandardMaterial3D:
 		m.emission_enabled = true
 		m.emission = Color(color.r, color.g, color.b)
 		m.emission_energy_multiplier = 1.5
-	return m
+	return lit(m)
 
 
 static func mesh_node(mesh: Mesh, color: Color, pos := Vector3.ZERO, emission := false) -> MeshInstance3D:
@@ -134,7 +235,7 @@ static func speck_mesh(width: float, height: float, color: Color,
 	skin.billboard_keep_scale = true
 	skin.cull_mode = BaseMaterial3D.CULL_DISABLED
 	skin.disable_receive_shadows = true
-	m.material = skin
+	m.material = lit(skin)
 	_mesh_pool[key] = m
 	return m
 
@@ -301,7 +402,7 @@ static func ground_material() -> StandardMaterial3D:
 	m = StandardMaterial3D.new()
 	m.vertex_color_use_as_albedo = true
 	m.roughness = 1.0
-	_mat_pool["ground"] = m
+	_mat_pool["ground"] = lit(m)
 	return m
 
 
@@ -315,7 +416,7 @@ static func blossom_material() -> StandardMaterial3D:
 	m.vertex_color_use_as_albedo = true
 	m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	m.roughness = 1.0
-	_mat_pool["blossom"] = m
+	_mat_pool["blossom"] = lit(m)
 	return m
 
 
@@ -377,7 +478,7 @@ static func flame_mesh(width: float, height: float) -> QuadMesh:
 	skin.disable_receive_shadows = true
 	skin.vertex_color_use_as_albedo = true   # per-instance colour and flicker
 	skin.no_depth_test = false
-	m.material = skin
+	m.material = lit(skin)
 	_mesh_pool[key] = m
 	return m
 
@@ -411,7 +512,7 @@ static func dot_mesh(size: float, color := Color.WHITE) -> QuadMesh:
 	skin.cull_mode = BaseMaterial3D.CULL_DISABLED
 	skin.disable_receive_shadows = true
 	skin.vertex_color_use_as_albedo = true   # per-instance colour AND fade
-	m.material = skin
+	m.material = lit(skin)
 	_mesh_pool[key] = m
 	return m
 

@@ -661,7 +661,7 @@ func _build_water() -> void:
 	else:
 		mat.albedo_color = Color(0.22, 0.44, 0.62)
 		mat.roughness = 0.6
-	water.material_override = mat
+	water.material_override = Util.lit(mat)
 	water.position = Vector3(WorldGen.CHUNK_SIZE / 2.0, WorldGen.WATER_LEVEL, WorldGen.CHUNK_SIZE / 2.0)
 	add_child(water)
 

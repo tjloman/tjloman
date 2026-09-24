@@ -107,7 +107,7 @@ static func board(style: String) -> QuadMesh:
 	# Lit, not unshaded: an unshaded wood keeps its noon colour through the
 	# night and reads as a row of lamps on a dark hillside.
 	skin.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	m.material = skin
+	m.material = Util.lit(skin)
 	_boards[style] = m
 	return m
 

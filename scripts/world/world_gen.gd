@@ -550,7 +550,7 @@ func _show_pond(pond: Dictionary) -> void:
 		skin.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		skin.roughness = 0.1
 		skin.metallic = 0.3
-		disc.material_override = skin
+		disc.material_override = Util.lit(skin)
 	add_child(disc)
 	pond["node"] = disc
 

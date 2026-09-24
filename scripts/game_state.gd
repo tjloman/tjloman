@@ -24,6 +24,10 @@ signal stone_read(nest: Node)
 
 ## One full day/night cycle, in real seconds. (The pace of the sun is the
 ## heartbeat of the game — tuned once, everything else derives from it.)
+## Where the player's own choices live — the crowd cap, the volume, the look
+## of the light. Read at startup by `load_settings`, written by the settings
+## screen through `save_settings`.
+const SETTINGS_PATH := "user://rites.cfg"
 const DAY_SECONDS := 320.0
 
 ## A villager's whole life (60-85 "years") spans about this many day/night
@@ -143,14 +147,64 @@ var tree_friends: bool:
 		settings_changed.emit()
 
 
+## CEL SHADING: the world drawn in bands of light rather than a smooth falloff.
+##
+## Kept here rather than in Quality because it is not a performance tier — it
+## costs nothing either way and is purely what the player wants to look at. The
+## work of it is in Util (see the note by `_painted`): setting this walks every
+## material in the world and re-marks it, so it comes on while you are looking
+## at the hillside rather than at the next reload.
+var cel_shading: bool:
+	get:
+		return _cel_shading
+	set(value):
+		if _cel_shading == value:
+			return
+		_cel_shading = value
+		Util.cel_shading(value)
+		settings_changed.emit()
+
+
 ## HOW HARD THE PLAYER IS CONCENTRATING, 0..1. Driven by the divine hand while
 ## a rune is being drawn, and read by two things: the engine's time scale (the
 ## world slows a little) and every critter's voice (the chorus stops being
 ## intermittent and comes forward). See DivineHand._tick_focus.
 var focus := 0.0
 
+var _cel_shading := false
 ## What the player last chose, before the entitlement is taken into account.
 var _tree_friends := true
+
+
+## WHAT THE PLAYER CHOSE LAST TIME, READ AT STARTUP.
+##
+## It used to be read by the settings screen's own `_ready`, and that screen is
+## only built when somebody walks into that room of the temple — so a player's
+## saved crowd cap, master volume and now their cel shading applied on the day
+## they went and looked at the settings, and not before. A preference nobody
+## has opened the menu to see is still a preference.
+##
+## The screen writes through here too, so there is one path to the file.
+func _ready() -> void:
+	load_settings()
+
+
+func load_settings() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(SETTINGS_PATH) != OK:
+		return
+	folk_cap = int(cfg.get_value("world", "folk_cap", 0))
+	cel_shading = bool(cfg.get_value("look", "cel_shading", false))
+	AudioServer.set_bus_volume_db(0, linear_to_db(
+		clampf(float(cfg.get_value("sound", "master", 1.0)), 0.0, 1.0)))
+
+
+func save_settings() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("world", "folk_cap", folk_cap)
+	cfg.set_value("look", "cel_shading", cel_shading)
+	cfg.set_value("sound", "master", db_to_linear(AudioServer.get_bus_volume_db(0)))
+	cfg.save(SETTINGS_PATH)
 
 
 func _process(delta: float) -> void:

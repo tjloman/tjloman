@@ -198,7 +198,7 @@ func _stone(tint: Color) -> StandardMaterial3D:
 	mat.albedo_color = tint
 	mat.roughness = 0.85
 	mat.metallic = 0.0
-	return mat
+	return Util.lit(mat)
 
 
 ## THE WELL, in the middle of the floor: a gilded rim, a shaft of shadow, and
@@ -221,7 +221,7 @@ func _build_well() -> void:
 	gilt.albedo_color = GOLD
 	gilt.metallic = 0.85
 	gilt.roughness = 0.35
-	rim.material_override = gilt
+	rim.material_override = Util.lit(gilt)
 	rim.position = Vector3(0.0, 0.08, 0.0)
 	add_child(rim)
 
@@ -273,7 +273,7 @@ func show_world(image: Texture2D) -> void:
 	skin.emission_enabled = true
 	skin.emission_texture = image
 	skin.emission_energy_multiplier = 0.9
-	_water.material_override = skin
+	_water.material_override = Util.lit(skin)
 
 
 ## THE CHANDELIER. A gilded ring of candles, turning slowly, hung high enough
@@ -295,7 +295,7 @@ func _build_chandelier() -> void:
 	gilt.albedo_color = GOLD
 	gilt.metallic = 0.9
 	gilt.roughness = 0.3
-	hoop.material_override = gilt
+	hoop.material_override = Util.lit(gilt)
 	_chandelier.add_child(hoop)
 
 	var flame := StandardMaterial3D.new()
@@ -311,7 +311,7 @@ func _build_chandelier() -> void:
 		bead.radial_segments = 6
 		bead.rings = 3
 		ball.mesh = bead
-		ball.material_override = flame
+		ball.material_override = Util.lit(flame)
 		var turn := TAU * float(i) / 8.0
 		ball.position = Vector3(sin(turn) * 1.56, 0.16, cos(turn) * 1.56)
 		_chandelier.add_child(ball)

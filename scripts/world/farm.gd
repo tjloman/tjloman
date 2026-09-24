@@ -135,7 +135,7 @@ func _build_soil(world: WorldGen) -> void:
 	var mat := StandardMaterial3D.new()
 	mat.vertex_color_use_as_albedo = true
 	mat.roughness = 1.0
-	mi.material_override = mat
+	mi.material_override = Util.lit(mat)
 	add_child(mi)
 
 

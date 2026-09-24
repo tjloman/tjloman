@@ -22,7 +22,6 @@ extends ScrollContainer
 ## Kept beside the graphics override rather than in the save, because these are
 ## facts about the DEVICE and must not travel with a creature to a machine that
 ## cannot hold them.
-const RITES_PATH := "user://rites.cfg"
 
 ## The ceilings offered, and what each is for. A phone wants the low end; a
 ## desktop that has been running four hours wants the high one.
@@ -49,22 +48,15 @@ func _ready() -> void:
 	_fill()
 
 
-## WHAT THE DEVICE IS ALLOWED TO DO. Read once on entry — a config file is not
-## something to poll.
+## WHAT THE PLAYER CHOSE, which GameState has already read at startup — this
+## screen is built when somebody walks into this room, and settings that only
+## take effect when you go and LOOK at them are not settings.
 func _load() -> void:
-	var cfg := ConfigFile.new()
-	if cfg.load(RITES_PATH) != OK:
-		return
-	GameState.folk_cap = int(cfg.get_value("world", "folk_cap", 0))
-	AudioServer.set_bus_volume_db(0,
-		linear_to_db(clampf(float(cfg.get_value("sound", "master", 1.0)), 0.0, 1.0)))
+	GameState.load_settings()
 
 
 func _save() -> void:
-	var cfg := ConfigFile.new()
-	cfg.set_value("world", "folk_cap", GameState.folk_cap)
-	cfg.set_value("sound", "master", db_to_linear(AudioServer.get_bus_volume_db(0)))
-	cfg.save(RITES_PATH)
+	GameState.save_settings()
 
 
 func _fill() -> void:
@@ -118,6 +110,15 @@ func _fill() -> void:
 	_note("Bees, crickets, squirrels and moths in the wood around you. They "
 		+ "cost a little and are worth it; switching them off empties the "
 		+ "trees within a second, with no reload either way.")
+	var cel := CheckBox.new()
+	cel.text = "Cel shading"
+	cel.button_pressed = GameState.cel_shading
+	cel.toggled.connect(_set_cel)
+	_body.add_child(cel)
+	_note("The light cut into bands instead of falling off smoothly, the way a "
+		+ "painted picture book does it. Costs nothing either way, applies the "
+		+ "moment you tick it, and touches nothing that was drawn unlit on "
+		+ "purpose.")
 	var friends := CheckBox.new()
 	friends.text = "Living wood"
 	friends.button_pressed = GameState.tree_friends
@@ -151,6 +152,11 @@ func _set_loud(to: float) -> void:
 	# Silence is -inf decibels, which linear_to_db returns correctly and which
 	# the bus takes; the clamp is only against a slider that went negative.
 	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(to, 0.0)))
+	_save()
+
+
+func _set_cel(on: bool) -> void:
+	GameState.cel_shading = on
 	_save()
 
 

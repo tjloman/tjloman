@@ -464,7 +464,7 @@ func _build_pool() -> void:
 		else BaseMaterial3D.TRANSPARENCY_DISABLED
 	mat.metallic = 0.5
 	mat.roughness = 0.12
-	pool.material_override = mat
+	pool.material_override = Util.lit(mat)
 	var pool_z := POOL_R * 0.9
 	var pool_x := BED_LONG * 0.32
 	pool.position = Vector3(pool_x, _ground_local(pool_x, pool_z) + 0.1, pool_z)

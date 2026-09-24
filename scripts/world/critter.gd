@@ -72,7 +72,7 @@ func _build_plate() -> void:
 	_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_mat.disable_receive_shadows = true
 	_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	quad.material = _mat
+	quad.material = Util.lit(_mat)
 	_plate = MeshInstance3D.new()
 	_plate.mesh = quad
 	_plate.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
