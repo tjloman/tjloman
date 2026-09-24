@@ -493,12 +493,14 @@ func _physics_process(delta: float) -> void:
 					_rethink()
 		State.GO_FEED:
 			if not _carrying_feed:
-				if _move_toward(village.store.global_position, WALK_SPEED * _speed_factor(), delta):
+				if _move_toward(village.store.global_position, WALK_SPEED * _speed_factor(),
+						delta, ARRIVE_DIST, true):
 					if village.store.take(FoodItem.FoodType.PLANT, 1) > 0:
 						_carrying_feed = true
 					else:
 						_rethink()
-			elif _move_toward(village.pen_position(), WALK_SPEED * _speed_factor(), delta):
+			elif _move_toward(village.pen_position(), WALK_SPEED * _speed_factor(),
+					delta, ARRIVE_DIST, true):
 				village.feed_penned()
 				_carrying_feed = false
 				_rethink()
@@ -518,7 +520,8 @@ func _physics_process(delta: float) -> void:
 				_fish_spot = Vector3.INF
 				_begin_haul("meat", 1, "fish")
 		State.GO_BUILD_FARM:
-			if _move_toward(_farm_spot, WALK_SPEED * _speed_factor(), delta):
+			if _move_toward(_farm_spot, WALK_SPEED * _speed_factor(), delta,
+					ARRIVE_DIST, true):
 				_dismount()
 				state = State.BUILDING_FARM
 				_action_time = 10.0
@@ -531,7 +534,8 @@ func _physics_process(delta: float) -> void:
 				_farm_spot = Vector3.INF
 				_rethink()
 		State.GO_BUILD_EDUBBA:
-			if _move_toward(_edubba_spot, WALK_SPEED * _speed_factor(), delta):
+			if _move_toward(_edubba_spot, WALK_SPEED * _speed_factor(), delta,
+					ARRIVE_DIST, true):
 				_dismount()
 				state = State.BUILDING_EDUBBA
 				_action_time = 22.0
@@ -544,7 +548,8 @@ func _physics_process(delta: float) -> void:
 				_edubba_spot = Vector3.INF
 				_rethink()
 		State.GO_BUILD_NEST:
-			if _move_toward(_shop_spot, WALK_SPEED * _speed_factor(), delta):
+			if _move_toward(_shop_spot, WALK_SPEED * _speed_factor(), delta,
+					ARRIVE_DIST, true):
 				_dismount()
 				state = State.BUILDING_NEST
 				_action_time = 26.0
@@ -582,7 +587,8 @@ func _physics_process(delta: float) -> void:
 			if _action_time <= 0.0 or not GameState.is_night():
 				_rethink()
 		State.GO_BUILD_SHOP:
-			if _move_toward(_shop_spot, WALK_SPEED * _speed_factor(), delta):
+			if _move_toward(_shop_spot, WALK_SPEED * _speed_factor(), delta,
+					ARRIVE_DIST, true):
 				_dismount()
 				state = State.BUILDING_SHOP
 				_action_time = 18.0
@@ -599,7 +605,8 @@ func _physics_process(delta: float) -> void:
 			if workshop == null or not is_instance_valid(workshop):
 				workshop = null
 				_rethink()
-			elif _move_toward(workshop.post(), WALK_SPEED * _speed_factor(), delta):
+			elif _move_toward(workshop.post(), WALK_SPEED * _speed_factor(), delta,
+					ARRIVE_DIST, true):
 				_dismount()
 				state = State.WORKING
 				_shift_left = Workshop.SHIFT
@@ -745,7 +752,8 @@ func _physics_process(delta: float) -> void:
 			if _build_site == null or not is_instance_valid(_build_site):
 				_build_site = null
 				_rethink()
-			elif _move_toward(_build_site.global_position, WALK_SPEED * _speed_factor(), delta):
+			elif _move_toward(_build_site.global_position,
+					WALK_SPEED * _speed_factor(), delta, ARRIVE_DIST, true):
 				state = State.BUILDING
 		State.BUILDING:
 			_apply_gravity_only(delta)
@@ -1793,6 +1801,10 @@ func _nearest_tamable() -> Animal:
 		var animal := a as Animal
 		if not is_instance_valid(animal) or not animal.is_tamable():
 			continue
+		# A beast standing in deep water is a beast that is drowning, and
+		# nobody is gentling it. See `would_drown_at`.
+		if would_drown_at(animal.global_position):
+			continue
 		var d := global_position.distance_to(animal.global_position)
 		if d < reach:
 			_consider(best, animal, d)
@@ -1805,6 +1817,10 @@ func _nearest_corpse() -> Corpse:
 	for c in get_tree().get_nodes_in_group("corpses"):
 		var corpse := c as Corpse
 		if not is_instance_valid(corpse) or corpse.is_queued_for_deletion():
+			continue
+		# The drowned are left where they are. Somebody who went in after the
+		# meat and did not come out is not a reason for the next one to go.
+		if would_drown_at(corpse.global_position):
 			continue
 		var d := global_position.distance_to(corpse.global_position)
 		if d < reach:
@@ -1942,7 +1958,10 @@ func _process_at_school(delta: float) -> void:
 
 ## Movement ------------------------------------------------------------------
 
-func _move_toward(target: Vector3, speed: float, delta: float, arrive := ARRIVE_DIST) -> bool:
+## WALK THERE. `placed` is the caller saying "this is somewhere the town put",
+## which is the only claim that earns the shortcut past the water guard.
+func _move_toward(target: Vector3, speed: float, delta: float,
+		arrive := ARRIVE_DIST, placed := false) -> bool:
 	var to_target := target - global_position
 	to_target.y = 0
 	if to_target.length() < arrive:
@@ -1957,7 +1976,19 @@ func _move_toward(target: Vector3, speed: float, delta: float, arrive := ARRIVE_
 	# over a fixed 1.7m probe.
 	#
 	# NOT INSIDE THEIR OWN VILLAGE, THOUGH — see `_both_ends_at_home`.
-	if not VillagerLook.at_home(self, target):
+	#
+	# AND THE SHORTCUT IS ONLY GOOD FOR GROUND THE TOWN PROVED — which is why
+	# the caller has to say what it is walking to. `at_home` skips the water
+	# probe on the grounds that a village builds on nothing but dry, gently
+	# sloped ground with a dry way to it. That is true of a well, a workshop, a
+	# granary and a build site. It is not true of an animal, a corpse, a joint
+	# of meat or a person, because none of those was PLACED — they are wherever
+	# they ended up, and a drowned animal ends up at the bottom of the water.
+	#
+	# Inside its own circle the town took the shortcut to the meat and walked
+	# in after it, one soul at a time, each drowning leaving another corpse and
+	# another armful of joints in the water to draw the next.
+	if not placed or not VillagerLook.at_home(self, target):
 		dir = NavField.water_route(self, global_position, dir, _world(),
 			maxf(1.7, speed * _sim_scale * 0.05))
 	if dir == Vector3.ZERO:
@@ -1971,6 +2002,17 @@ func _move_toward(target: Vector3, speed: float, delta: float, arrive := ARRIVE_
 	# from the direction of travel to face it. (Yes, everyone used to moonwalk.)
 	look_at(global_position - Vector3(dir.x, 0, dir.z), Vector3.UP)
 	return false
+
+
+## WOULD WE DROWN STANDING THERE? The same depth the hazard tick kills us at,
+## asked about somewhere else — so that wanting a thing and being able to
+## survive fetching it are the same question.
+func would_drown_at(at: Vector3) -> bool:
+	var world := _world()
+	if world == null:
+		return false
+	return world.water_level_at(at.x, at.z) - world.height_at(at.x, at.z) \
+		> DROWN_DEPTH
 
 
 func _apply_gravity_only(delta: float) -> void:

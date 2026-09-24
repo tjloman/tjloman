@@ -621,8 +621,22 @@ func _update_hover(mouse_pos: Vector2) -> void:
 		else:
 			ground_point = _mouse_on_plane(mouse_pos)
 	else:
+		# WHERE THE RAY LANDED, INCLUDING UNDER THE WATER.
+		#
+		# This clamped to y >= 0, which is the sea's surface — so a hand
+		# pointed at the seabed stopped at the top of the water and everything
+		# lying on the bottom became ungrabbable. A drowned animal's meat sits
+		# a metre and a half down; the hand hovered over it, the forgiving pick
+		# searched a sphere at the surface and found nothing, and `_gather_kindred`
+		# measured its 2.6m from a hand that could not get within 2.9m of the
+		# pile it was trying to join. That is the whole of "the water plane
+		# prevents me from grabbing all the meat at once".
+		#
+		# The clamp is still right for the OTHER case, where the ray hit
+		# nothing at all and the hand rests on the water rather than falling
+		# through the world — and that case is `_mouse_on_plane`, which is a
+		# y = 0 plane by construction and needs no clamping to stay there.
 		ground_point = hit.position
-		ground_point.y = maxf(ground_point.y, 0.0)
 		var collider = hit.collider
 		if is_instance_valid(collider) and collider is Node3D \
 				and not (collider as Node3D).is_in_group("ground"):

@@ -144,13 +144,25 @@ func _look_for_stock(tree: SceneTree, here: Vector3, reach: float) -> void:
 			stock = herd
 
 
+## THE NEAREST BODY WORTH WALKING TO — and the drowned are not.
+##
+## A corpse lying under the water sent a butcher in after it, who drowned and
+## left another corpse under the water, which sent the next one. Looked for once
+## a second for the whole town, so the depth read costs a town what it used to
+## cost one villager a frame.
 func _look_for_corpse(tree: SceneTree, here: Vector3, reach: float) -> void:
 	corpse = null
 	var best := reach
+	var world := tree.get_first_node_in_group("world_gen") as WorldGen
 	for n in tree.get_nodes_in_group("corpses"):
 		var body := n as Corpse
 		if body == null or not is_instance_valid(body) or body.is_queued_for_deletion():
 			continue
+		if world != null:
+			var at := body.global_position
+			if world.water_level_at(at.x, at.z) - world.height_at(at.x, at.z) \
+					> Villager.DROWN_DEPTH:
+				continue
 		var d := here.distance_to(body.global_position)
 		if d < best:
 			best = d
