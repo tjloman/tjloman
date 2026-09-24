@@ -130,6 +130,7 @@ var _spent_this_frame := 0
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"NavField")
 	_spent_this_frame = 0
 	_timer -= delta
 	if _timer <= 0.0:

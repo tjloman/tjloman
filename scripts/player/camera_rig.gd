@@ -86,6 +86,7 @@ func _tick_shake(delta: float) -> void:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"CameraRig")
 	GameState.camera_focus = global_position  # sim-LOD anchor for the whole world
 	if follow_target != null and is_instance_valid(follow_target):
 		var t := follow_target.global_position

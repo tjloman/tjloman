@@ -137,6 +137,7 @@ func _set_the_clock() -> void:
 ## Watch the frames go by. Three floats a frame; nothing here is measured with
 ## anything more expensive than the delta the engine already handed us.
 func _process(delta: float) -> void:
+	Ledger.open(&"Quality")
 	# IN REAL SECONDS, NOT THE WORLD'S. `delta` here has already been through
 	# Engine.time_scale, and the casting session runs the world at 0.75 (see
 	# DivineHand._tick_focus). So the instant a rune is drawn, a perfectly

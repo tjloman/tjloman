@@ -153,6 +153,7 @@ func at() -> int:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"Storyboard")
 	if not running or _at < 0 or _at >= beats.size():
 		return
 	_ease = minf(_ease + delta, FRAME_EASE)

@@ -150,6 +150,7 @@ func _from() -> Vector3:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"LeadRope")
 	if creature == null or not is_instance_valid(creature):
 		queue_free()
 		return

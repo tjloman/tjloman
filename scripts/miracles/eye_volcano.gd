@@ -112,6 +112,7 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	Ledger.open(&"EyeVolcano")
 	if creature == null or not is_instance_valid(creature) or left <= 0:
 		queue_free()
 		return

@@ -153,6 +153,7 @@ static func ride(thing: Node3D, by_god: bool) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	Ledger.open(&"Blow")
 	var thing := get_parent() as RigidBody3D
 	if thing == null or not is_instance_valid(thing):
 		queue_free()

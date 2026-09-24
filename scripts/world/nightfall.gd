@@ -113,6 +113,7 @@ func _resize_pool(want: int) -> void:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"Nightfall")
 	# THE SENSOR FIRST, AND WHATEVER THE POOL IS DOING. A device with no hearth
 	# lights at all still has a sky, a town's torches and a creature in it, and
 	# it is the tier that needs the exposure most.

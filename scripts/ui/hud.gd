@@ -1003,6 +1003,7 @@ it."""
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"Hud")
 	_tick_stone(delta)
 	if village != null:
 		_diet_label.text = "Diet [1-4]: %s" % village.diet_name()

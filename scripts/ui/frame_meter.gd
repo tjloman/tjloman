@@ -414,8 +414,15 @@ func _readout() -> String:
 		rows.append("   rows include the solver and each other; read them as")
 		rows.append("   an order, not as milliseconds.")
 	else:
-		rows.append("   %-18s %6.1f" % ["(everything else)",
-			maxf(scripted - billed, 0.0)])
+		# WHAT IS LEFT IS THE ENGINE, and it is worth naming as such now that
+		# every callback in the game is clocked. The ledger's baton is
+		# continuous — everything after the first clock of a page is on
+		# somebody's bill — so this row is the HEAD of the frame: the physics
+		# server's own step, its broadphase and solver, and the transform
+		# propagation, before a line of script runs. It is not a class anybody
+		# can go and optimise, and reading it as one wasted an evening.
+		rows.append("   %-18s %6.1f   (the engine, before any script)"
+			% ["(unclocked)", maxf(scripted - billed, 0.0)])
 	rows.append("")
 	rows.append("tier %s (%s)   3D at %d%%   physics %d Hz" % [
 		Quality.Tier.keys()[Quality.effective_tier()], Quality.heat_word(),

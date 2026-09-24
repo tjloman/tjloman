@@ -18,24 +18,29 @@ extends RefCounted
 ## actually run a script is well under a millisecond — and buys the ability to answer this question on the device
 ## rather than by argument. It is only ever ON while the frame meter is open.
 ##
-## WHAT IS NOT CLOCKED, AND WHY. Villager and Creature are not, and that is a
-## decision rather than an oversight: both files sit exactly on the 2500-line
-## limit, and the wrapper does not fit without trimming somebody else's
-## comments to make room for instrumentation. Neither is lost. They run in
-## `_physics_process`, which the meter already reports on its own, and Animal —
-## the only other numerous thing on that clock — IS measured. What physics
-## costs, less Animal, less a handful of singletons, is Villager. A number you
-## get by subtraction is still a number.
+## WHAT IS NOT CLOCKED, AND WHY — AND IT IS NOW ALMOST NOTHING.
 ##
-## WHAT IS NOT CLOCKED, AND WHY. Villager and Creature are not. Both files sit
-## exactly on the 2500-line limit, and one line is one line — the only way in
-## was to shorten somebody's paragraph to make room for a stopwatch, which is
-## not a trade worth making. Neither is lost: both run in `_physics_process`,
-## which the meter reports on its own, and Animal — the only other numerous
-## thing on that clock — IS measured. Physics, less Animal, less a handful of
-## singletons, is Villager. A number you get by subtraction is still a number,
-## and Creature is one node, which is the one case where a name buys least.
+## This file used to say that Villager and Creature were not clocked, because
+## both sat exactly on the 2500-line limit and a stopwatch cost a line somebody
+## else's paragraph would have to pay for. Both are clocked now, and so is every
+## other `_process` and `_physics_process` in the game — thirty of them went in
+## at once, because a bill with a forty-three millisecond line reading
+## "(everything else)" is not a bill, it is a shrug.
 ##
+## WHAT THE GAP MEANS, EXACTLY, and it is worth being precise because it is the
+## row people read first. The baton is continuous: from the first `open` of a
+## page to the page turning, SOMEBODY is always being charged. So the gap is not
+## "the classes nobody clocked" scattered through the frame — everything after
+## the first clock goes on somebody's bill whether it belongs there or not.
+##
+## The gap is the head of the frame: the span between the page turning and the
+## first `open` of the next one. With every callback clocked, what is left in it
+## is the engine's own work before any script runs — the physics server's step,
+## its broadphase and solver, the transform propagation — which is real, is
+## often most of it, and is not a class anybody can go and optimise. That is
+## worth knowing as such, and tools/attribution.py keeps it that way by failing
+## the moment a per-frame callback goes unclocked again.
+
 ## WHAT A ROW IS, EXACTLY: AN UPPER BOUND, NOT A COST.
 ##
 ## A clock is shut by the next one opening, so a class is charged from its own
@@ -58,11 +63,9 @@ extends RefCounted
 ## also a claim.
 ##
 ## AND THE UNACCOUNTED IS PRINTED TOO. The sum of what is measured is always
-## less than Godot's own `TIME_PROCESS`, and the gap is the rest of the game:
-## the classes nobody thought to clock, the engine's own per-node dispatch, and
-## anything that turns out not to be where anybody was looking. A ledger that
-## only shows what it was told to show is a ledger that confirms whatever the
-## person writing it already believed.
+## less than Godot's own `TIME_PROCESS`, and the gap is printed rather than
+## quietly dropped. A ledger that only shows what it was told to show is a
+## ledger that confirms whatever the person writing it already believed.
 
 ## Kept in microseconds and turned over once a frame, so the meter is reading a
 ## finished page rather than one being written under it.

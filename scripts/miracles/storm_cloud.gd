@@ -153,6 +153,7 @@ func _new_layer(spread: float, sheet: float, spin: float, staggered := false) ->
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"StormCloud")
 	_age += delta
 	if _leaving > 0.0:
 		_leaving -= delta

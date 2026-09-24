@@ -68,6 +68,7 @@ func link(other: Portal) -> void:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"Portal")
 	_spin += delta * 1.2
 	_ring.rotation_degrees.y = rad_to_deg(_spin)
 	if twin == null or not is_instance_valid(twin):

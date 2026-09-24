@@ -59,6 +59,7 @@ static func where() -> Vector3:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"Ear")
 	var focus := GameState.camera_focus
 	if not is_finite(focus.x):
 		return

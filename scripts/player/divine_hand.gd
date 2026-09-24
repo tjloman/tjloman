@@ -407,6 +407,7 @@ func _tick_beam(delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	Ledger.open(&"DivineHand")
 	var mouse_pos := get_viewport().get_mouse_position()
 	_update_hover(mouse_pos)
 

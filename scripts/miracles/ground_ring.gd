@@ -126,6 +126,7 @@ func tint(colour: Color, align: float, glow := 1.0, alpha := 1.0) -> void:
 ## still around every town in the world and flicker once, briefly, when somebody
 ## was born. Anything drawn as fire has to burn on its own clock.
 func _process(delta: float) -> void:
+	Ledger.open(&"GroundRing")
 	if not visible:
 		return
 	_flow += delta

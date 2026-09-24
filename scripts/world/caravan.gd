@@ -269,6 +269,7 @@ func hover_text() -> String:
 
 
 func _physics_process(delta: float) -> void:
+	Ledger.open(&"Caravan")
 	if freeze:
 		_settling = 0.0
 		_travelled = true

@@ -134,6 +134,7 @@ func _build() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	Ledger.open(&"StormShroud")
 	if creature == null or not is_instance_valid(creature):
 		queue_free()
 		return

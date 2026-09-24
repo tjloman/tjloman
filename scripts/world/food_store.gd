@@ -112,6 +112,7 @@ func _build_structure() -> void:
 ## Absorb items resting on the platform (polled: released items don't
 ## re-trigger area signals, so we sweep instead).
 func _process(delta: float) -> void:
+	Ledger.open(&"FoodStore")
 	_tick_fire(delta)
 	_intake_time -= delta
 	if _intake_time > 0.0:

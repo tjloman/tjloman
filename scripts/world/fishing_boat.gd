@@ -130,6 +130,7 @@ func hover_text() -> String:
 
 
 func _physics_process(delta: float) -> void:
+	Ledger.open(&"FishingBoat")
 	kindling.cool(delta)
 	var harm := kindling.smoulder(self, delta, MOST_HEALTH)
 	if harm > 0.0:

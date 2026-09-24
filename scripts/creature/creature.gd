@@ -345,6 +345,7 @@ func _exit_tree() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	Ledger.open(&"Creature")
 	# WHERE IT IS, published for the world to stream and promote around — the
 	# same anchor the camera rig writes for itself. Without it a creature left
 	# alone falls out of the world: its chunk unloads and every beast near it

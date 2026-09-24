@@ -103,6 +103,7 @@ func _notification(what: int) -> void:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"SaveGame")
 	if active == "":
 		return
 	_played += delta

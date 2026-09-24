@@ -75,6 +75,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"TreeFriends")
 	_since_census += delta
 	if _since_census < CENSUS:
 		return

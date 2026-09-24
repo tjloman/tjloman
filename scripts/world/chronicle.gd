@@ -108,6 +108,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"Chronicle")
 	_due -= delta
 	if _due > 0.0:
 		return

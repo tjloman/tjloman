@@ -501,6 +501,7 @@ func _build_fire() -> void:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"CreatureNest")
 	# BEFORE THE DISTANCE GATE. Everything below this is the nest's LOOK — the
 	# flicker of its fire pit, the recarving of its faces — and is rightly
 	# skipped when nobody is near. A nest burning down is not a look; a fire

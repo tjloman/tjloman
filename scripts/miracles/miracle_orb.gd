@@ -68,6 +68,7 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	Ledger.open(&"MiracleOrb")
 	if freeze:
 		return  # in the grip: the fuse does not burn and nothing resolves
 	_fuse_left -= delta

@@ -244,6 +244,7 @@ func _on_quality_changed() -> void:
 
 
 func _process(_delta: float) -> void:
+	Ledger.open(&"Main")
 	_update_daylight()
 
 

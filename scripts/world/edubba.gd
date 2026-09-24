@@ -279,6 +279,7 @@ func _ring_radius(count: int) -> float:
 ## THE LESSON CHANGES. Long enough that a passer-by sees a class doing one
 ## thing rather than a crowd flickering between five.
 func _process(delta: float) -> void:
+	Ledger.open(&"Edubba")
 	_tick_fire(delta)
 	for k in CLASSES_MOST:
 		_drift[k] += delta

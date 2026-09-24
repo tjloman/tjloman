@@ -262,6 +262,7 @@ func _try_catch() -> bool:
 
 
 func _physics_process(delta: float) -> void:
+	Ledger.open(&"Fireball")
 	if freeze:
 		_hearth(delta)  # still in the grip, and burning what it is held against
 		return

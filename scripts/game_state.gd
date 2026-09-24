@@ -208,6 +208,7 @@ func save_settings() -> void:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"GameState")
 	game_years += delta / YEAR_SECONDS
 	clock += delta
 

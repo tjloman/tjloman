@@ -89,6 +89,7 @@ func _ready() -> void:
 ## stops with the tree, so the ring holds its state through a paused temple
 ## rather than blinking out while you read a chart.
 func _process(delta: float) -> void:
+	Ledger.open(&"ReachRing")
 	var beast := get_tree().get_first_node_in_group("creature") as Creature
 	if beast == null or not is_instance_valid(beast):
 		_ring.visible = false
