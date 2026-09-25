@@ -19,7 +19,7 @@ enum State {
 	GO_WORK, WORKING, GO_BUILD_SHOP, BUILDING_SHOP,
 	GO_BUILD_NEST, BUILDING_NEST, GO_CIRCLE, CIRCLING,
 	MUSTERING, HAULING, GO_ARM, FIGHT, HIDE,
-	FLEE, HELD, FALLING, PINNED, DYING, LEAVING,
+	FLEE, HELD, FALLING, PINNED, DYING, LEAVING, HIDDEN,
 }
 
 ## Names are drawn by sex, so a villager's name reads with its model.
@@ -172,9 +172,9 @@ var social := 70.0
 var happiness := 60.0
 var health := 100.0
 var burning := false   # ablaze: drains health until doused or dead
-## A child that harm reached, walking to the school or a roof to go inside and
-## be gone. Nothing turns it back. See ChildSafety.spared.
-var leaving := false
+## A child that harm reached: walking home, or indoors until morning. See
+## ChildSafety.spared.
+var sheltering := false
 var weapon := ""      # "" = bare-handed; otherwise a Weapon.SPECS kind
 
 ## Personal karma: -100 wicked .. +100 saintly.
@@ -434,6 +434,12 @@ func _physics_process(delta: float) -> void:
 	if _animator != null:
 		_animator.play(VillagerLook.pose(self))
 
+	# A SHELTERING CHILD STAYS SHELTERING, whatever else writes to them. A scare,
+	# a festival, the militia's muster — anything that sets a villager's state
+	# from outside would otherwise walk an invisible child out of their house
+	# and into a field. See ChildSafety.
+	if sheltering and state not in [State.LEAVING, State.HIDDEN, State.HELD, State.FALLING]:
+		ChildSafety.resume(self)
 	# THE PLAN IS OVER AND THE NEW ONE HAS NOT COME. Stand where you finished;
 	# do NOT run the arm again, or its one-shot runs again too. See `_rethink`.
 	if _decision_due and state != State.HELD and state != State.FALLING:
@@ -443,6 +449,10 @@ func _physics_process(delta: float) -> void:
 		State.LEAVING:
 			if ChildSafety.leave_step(self, delta):
 				queue_free()   # gone inside, to family elsewhere: see ChildSafety
+			return
+		State.HIDDEN:
+			if ChildSafety.hide_step(self):
+				_rethink()     # morning: out of the house, and on with the day
 			return
 		State.HELD:
 			velocity = Vector3.ZERO
@@ -1161,8 +1171,8 @@ func cheer(amount: float) -> void:
 ## Decision-making -----------------------------------------------------------
 
 func _choose() -> void:
-	if leaving:   # set down again after being lifted: they carry on home
-		state = State.LEAVING
+	if sheltering:   # set down again after being lifted: they carry on home
+		ChildSafety.resume(self)
 		return
 	_dismount()
 	_release_farm()  # re-deciding drops any field claim, so others may take it

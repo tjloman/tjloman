@@ -218,6 +218,13 @@ func day_fraction() -> float:
 	return fmod(0.35 + game_years / DAY_YEARS, 1.0)
 
 
+## WHICH DAY IT IS, counted from the first — it turns over at midnight, when
+## `day_fraction` wraps. The same expression as the hour, so the two can never
+## disagree about when a day ends.
+func day_number() -> int:
+	return int(floorf(0.35 + game_years / DAY_YEARS))
+
+
 ## -1 (deepest night) .. +1 (high noon).
 func sun_elevation() -> float:
 	return -cos(day_fraction() * TAU)

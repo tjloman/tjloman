@@ -6,8 +6,9 @@ keeps that from being a game is there being NO PAYOFF: not a punishment (which
 is a payoff of its own to the player hunting for one), not a refusal (which is a
 puzzle), but the dullest possible answer. Any harm that reaches a child — fire,
 a stone, a fireball, a quake, a wolf, water, the creature, hunger — turns at the
-door into this: they walk to the school or the nearest roof, go inside, and are
-gone to family elsewhere. No announcement, no scream, no body, no mourners, no
+door into this: they walk home, go inside, and stay in until the next morning.
+Only a run of it — the same child harmed day after day with no clear day between
+— sends them to family elsewhere for good. No announcement, no scream, no body, no mourners, no
 karma, nothing for the creature to learn, nothing for the village to witness.
 
 A RULE LIKE THIS FAILS BY LEAKING, not by being wrong, so this checks every door
@@ -134,7 +135,8 @@ def silence(fail):
     loud = ("GameState.announce", "GameState.hint", "hive.witness", "mourn(",
             "shift_alignment", "SoundBank", "Corpse.new", "witness_horror",
             "change_belief", "judge(", "express(")
-    for name in ("spared", "send_away", "_set_off", "shelter_for", "leave_step", "_let_go"):
+    for name in ("spared", "take_shelter", "resume", "_set_off", "shelter_for",
+                 "leave_step", "_go_in", "hide_step", "_come_out"):
         b = body(SAFE, name)
         if b is None:
             fail.append("ChildSafety.%s is missing" % name)
@@ -145,8 +147,9 @@ def silence(fail):
                         "nothing happens" % (name, ", ".join(said)))
     print("  no word, no sound, no body, no karma, no lesson  checked")
     over = body(WORDS, "status_text") or ""
-    if 'Villager.State.LEAVING: return ""' not in over:
-        fail.append("something is written over a leaving child's head")
+    if 'Villager.State.LEAVING, Villager.State.HIDDEN: return ""' not in over:
+        fail.append("something is written over the head of a child going home, "
+                    "or where one is hiding")
     else:
         print("  and nothing floats over their head ............ yes")
     arm = (body(V, "_physics_process") or "").split("State.LEAVING:")[-1][:200]
@@ -155,11 +158,97 @@ def silence(fail):
     if "shelter_for(" in (body(SAFE, "leave_step") or ""):
         fail.append("the walk home looks for a roof every frame — every house in "
                     "the world, per leaving child, per physics tick")
-    if "state = State.LEAVING" not in (body(V, "_choose") or ""):
+    if "ChildSafety.resume(self)" not in (body(V, "_choose") or ""):
         fail.append("a child lifted out of harm's way and set down forgets they "
                     "were leaving")
     else:
         print("  set down again, they carry on home ............ yes")
+
+
+def const(text, name):
+    m = re.search(r"^const %s\s*:?=\s*(-?[0-9.]+)" % name, text, re.M)
+    if not m:
+        sys.exit("could not read %s" % name)
+    return float(m.group(1))
+
+
+class Child:
+    """ChildSafety.take_shelter's run, mirrored: how bad has it been?"""
+
+    def __init__(self):
+        self.hid_on = -99
+        self.hidings = 0
+        self.gone = False
+
+    def harmed(self, today, leaves_after):
+        run = self.hidings if today - self.hid_on <= 1 else 0
+        run += 1
+        self.hidings = run
+        self.hid_on = today
+        if run >= leaves_after:
+            self.gone = True
+
+
+def a_day_indoors(fail):
+    print()
+    print("A DAY INDOORS, NOT A TOWN EMPTIED")
+    leaves = int(const(SAFE, "LEAVES_AFTER"))
+    morning = const(SAFE, "MORNING")
+    print("  harmed, they come out at the next first light (%.2f of a day)" % morning)
+    print("  harmed %d days running, with no clear day between, they are gone" % leaves)
+
+    # "I just watched a village go 32 people to 17 for one lightning bolt."
+    kids = [Child() for _ in range(15)]
+    for k in kids:
+        k.harmed(0, leaves)
+    back = sum(1 for k in kids if not k.gone)
+    print("  one lightning bolt over fifteen children: %d come back out next day" % back)
+    if back != len(kids):
+        fail.append("one bad moment still removes children for good — %d of %d "
+                    "gone. 'We don't just zero out villages from one or two "
+                    "negligent acts of recklessness.'" % (len(kids) - back, len(kids)))
+    twice = Child()
+    twice.harmed(0, leaves)
+    twice.harmed(1, leaves)
+    if twice.gone:
+        fail.append("two careless days running send a child away for good")
+    spaced = Child()
+    for day in range(0, 12, 2):
+        spaced.harmed(day, leaves)
+    print("  harmed every other day for a fortnight: %s"
+          % ("gone" if spaced.gone else "still at home — a clear day forgives"))
+    if spaced.gone:
+        fail.append("a clear day between does not clear the run")
+    run = Child()
+    for day in range(leaves):
+        run.harmed(day, leaves)
+    print("  harmed %d days in a row: %s" % (leaves, "gone" if run.gone else "still here"))
+    if not run.gone:
+        fail.append("no amount of harm ever sends a child away — then the god "
+                    "who does it every day is only inconveniencing them")
+
+    take = body(SAFE, "take_shelter") or ""
+    if "today - last <= 1" not in take or "run >= LEAVES_AFTER" not in take:
+        fail.append("take_shelter no longer counts a run the way this models it "
+                    "— the simulation above is checking a rule the game lost")
+    step = body(SAFE, "leave_step") or ""
+    if 'get_meta("for_good", false)' not in step:
+        fail.append("the walk home ends the body without asking whether this "
+                    "was the time it was for good")
+    hide = body(SAFE, "hide_step") or ""
+    if "today <= int(" not in hide or "day_fraction() < MORNING" not in hide:
+        fail.append("a hidden child comes out before the next morning")
+    go_in = body(SAFE, "_go_in") or ""
+    if "visible = false" not in go_in or "collision_layer = 0" not in go_in:
+        fail.append("a child indoors can still be seen, hovered or hit")
+    else:
+        print("  indoors, nothing can see, hover or reach them .. yes")
+    if "if sheltering and state not in" not in (body(V, "_physics_process") or ""):
+        fail.append("anything that writes a villager's state from outside — a "
+                    "scare, a festival, a muster — walks an invisible child out "
+                    "of their house and into a field")
+    else:
+        print("  and nothing else can walk them out of it ....... yes")
 
 
 def frees(fail):
@@ -189,6 +278,7 @@ def main():
     doors(fail)
     creature(fail)
     silence(fail)
+    a_day_indoors(fail)
     frees(fail)
     print()
     if fail:
