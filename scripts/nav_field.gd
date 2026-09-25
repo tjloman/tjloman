@@ -149,8 +149,13 @@ func _rebuild() -> void:
 			continue
 		_add(tree.global_position, 0.45 * tree.scale.x + 0.35, true)
 	for r in st.get_nodes_in_group("rock_deposits"):
-		if is_instance_valid(r):
-			_add((r as Node3D).global_position, 1.5, false)
+		var rock := r as RockDeposit
+		if not is_instance_valid(rock) or rock.is_loose():
+			continue
+		# ITS OWN SIZE, not a flat metre and a half. The ladder runs from a
+		# pebble to a thing the size of a hut, and routing round the pebble as
+		# though it were the hut is how a path takes the long way for nothing.
+		_add(rock.global_position, rock.girth() + 0.3, false)
 
 
 func _add(pos: Vector3, radius: float, is_tree: bool) -> void:

@@ -56,8 +56,17 @@ const STAND := {
 ## it has been rolled — and stone up a dry hillside is whatever the hill is
 ## made of. One check against the ground it lands on, and a riverbank shingles
 ## itself without anything anywhere having to know where the rivers are.
-const STONE_SPREAD: Array[int] = [0, 0, 0, 0, 1, 1, 1, 2, 2, 3, 3, 4]
+##
+## THE LADDER RUNS TO TEN NOW — see RockDeposit.WORTH — so these are rungs of
+## that, and the top of it is a megalith the size of a hut. One in eighteen of
+## a hillside's rocks is worth finding; the rest are what you trip over.
+const STONE_SPREAD: Array[int] = [0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 8, 9]
 const SHINGLE: Array[int] = [0, 0, 0, 1, 1, 2]
+## HOW OFTEN A HILLSIDE ROCK IS AN OUTCROP INSTEAD — part of the hill, three
+## hundred stone deep, quarried rather than lifted. This is what a village's
+## stone actually comes from, and it is the rate the old rung-four tor came up
+## at, so no town is any poorer for the ladder above.
+const VEIN_CHANCE := 1.0 / 12.0
 ## How close to the waterline counts as a shore, in metres of height above it.
 const SHORE_WITHIN := 1.6
 
@@ -307,6 +316,11 @@ func _reground() -> void:
 		# DRAWN, not seeded: a tree put back on the analytic surface is put back
 		# into the flat triangle that is actually there. Cheaper too — reading
 		# the grid this chunk has already sampled costs no noise at all.
+		# A ROCK IN THE AIR IS NOT SCENERY. Anything that has been thrown is
+		# under physics and will find its own ground; setting its height from
+		# here would snatch it out of its own arc. See RockDeposit.is_loose.
+		if node.has_method("is_loose") and bool(node.call("is_loose")):
+			continue
 		node.position.y = world.drawn_height_at(
 			position.x + node.position.x, position.z + node.position.z) - float(
 				node.get_meta("sink", 0.0))
@@ -916,8 +930,13 @@ func _scatter_deposits(rng: RandomNumberGenerator, count: int) -> void:
 			continue
 		var rock := RockDeposit.new()
 		var shore: bool = world != null and spot.y - WorldGen.WATER_LEVEL < SHORE_WITHIN
-		var ladder: Array[int] = SHINGLE if shore else STONE_SPREAD
-		rock.rung = ladder[rng.randi() % ladder.size()]
+		# Shingle is rolled stone: small, rounded, and never an outcrop. A
+		# hillside is whatever the hill is made of, outcrops included.
+		if not shore and rng.randf() < VEIN_CHANCE:
+			rock.vein = true
+		else:
+			var ladder: Array[int] = SHINGLE if shore else STONE_SPREAD
+			rock.rung = ladder[rng.randi() % ladder.size()]
 		_place(rock, spot, 0.2)
 		rock.rotation.y = rng.randf() * TAU  # a random facing, not all alike
 		Util.apply_lod(rock, Quality.clutter_distance())

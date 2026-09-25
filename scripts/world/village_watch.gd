@@ -100,6 +100,12 @@ func _look_for_stone(tree: SceneTree, here: Vector3, reach: float) -> void:
 		var rock := n as RockDeposit
 		if rock == null or not is_instance_valid(rock) or rock.is_queued_for_deletion():
 			continue
+		# A QUARRIER WORKS THE HILL, NOT THE FIELD. A rock on the ladder is a
+		# thing you pick up and carry to the storehouse — see RockDeposit — and
+		# sending a man with a pick to chip three stone off a pebble was how a
+		# village spent its afternoons on a rock worth one.
+		if not rock.vein:
+			continue
 		if _unreachable(tree, rock.global_position):
 			continue
 		var d := here.distance_to(rock.global_position)

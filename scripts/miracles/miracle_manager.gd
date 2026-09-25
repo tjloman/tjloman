@@ -1104,10 +1104,20 @@ func _quake_everything(pos: Vector3, reach: float, potency: float) -> void:
 	# Anything loose is thrown into the air — the readable signature of a quake.
 	for p in get_tree().get_nodes_in_group(Affords.PICKABLE):
 		var loose := p as RigidBody3D
-		if not is_instance_valid(loose) or loose.freeze:
+		if not is_instance_valid(loose):
 			continue
-		if loose.global_position.distance_to(pos) < reach:
-			loose.apply_impulse(Vector3(
+		if loose.global_position.distance_to(pos) > reach:
+			continue
+		# AND THE ROCKS COME OUT OF THE HILL. A rock at rest is frozen — it is
+		# scenery, out of the solver, which is what makes a boulder field cost
+		# nothing (see RockDeposit). This skipped anything frozen, so the one
+		# thing on the map that most obviously ought to leap when the ground
+		# heaves was the one thing that never moved.
+		if loose.freeze:
+			if not loose.has_method("shake_loose"):
+				continue
+			loose.call("shake_loose")
+		loose.apply_impulse(Vector3(
 				randf_range(-2.0, 2.0), randf_range(3.0, 6.0), randf_range(-2.0, 2.0)))
 	var creature := get_tree().get_first_node_in_group("creature") as Creature
 	if creature != null and creature.global_position.distance_to(pos) < reach:

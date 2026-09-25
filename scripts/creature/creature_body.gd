@@ -264,6 +264,37 @@ func lift_limit(growth: float) -> float:
 	return (0.6 + growth * 6.0) * (0.4 + might() / 100.0 * 1.6)
 
 
+## WHAT A THING WEIGHS, IN THE SAME UNITS `lift_limit` ANSWERS IN.
+##
+## Every heavy thing in the world on one scale, so `Creature.can_lift` is one
+## comparison rather than a ladder of `is` tests that grows a rung every time
+## something new becomes liftable. INF is "nobody lifts this" — an outcrop is
+## part of the hill.
+##
+## Zero for anything not listed, which is the honest answer: a villager, a
+## sheep, a loaf. Those are not weighed, they are simply picked up.
+static func burden(thing: Node3D) -> float:
+	if thing is WildTree:
+		return (thing as WildTree).lumber
+	if thing is ResourceItem:
+		return float((thing as ResourceItem).count) / STONE_PER_LIFT
+	if thing is RockDeposit:
+		# A ROCK IS WEIGHED IN STONE, the same as a bundle of it — so a whelp
+		# that cannot shoulder twenty-four stone of rubble cannot shoulder a
+		# hundred-and-forty-three-stone megalith either, and finds it out by the
+		# same arithmetic rather than by a rule of its own.
+		var stone := thing as RockDeposit
+		if not stone.liftable_whole():
+			# AN OUTCROP WEIGHS NOTHING, because nobody lifts one. The beast
+			# walks up to the hill and breaks a piece OFF it, and a piece is
+			# always something it can carry — see CreatureThrowing._collect.
+			# Answering INF here read as "too heavy" and quietly stopped every
+			# creature in the game from ever working a vein again.
+			return 0.0
+		return float(stone.worth()) / STONE_PER_LIFT
+	return 0.0
+
+
 ## Fat slows you down; muscle carries you. 0.6 (obese) .. ~1.15 (lean and strong).
 func speed_factor() -> float:
 	return clampf(1.0 - fat / 100.0 * 0.4 + might() / 100.0 * 0.15, 0.55, 1.2)

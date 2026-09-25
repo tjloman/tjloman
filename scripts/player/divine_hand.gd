@@ -1327,6 +1327,18 @@ func _tapped_twice() -> bool:
 	if hud != null and is_instance_valid(hud) and hud.stone_is_open():
 		hud.shut_the_stone()
 		return true
+	# A ROCK CRACKS. The one thing in the game bought purely with the player's
+	# own time: no prayer, no miracle, just standing over a stone and working at
+	# it until it comes apart into two of the rung below — which between them
+	# are worth MORE than the one you started with. See RockDeposit.crack.
+	#
+	# Ahead of the rope on purpose. A tap that landed on a particular thing gets
+	# that thing's own answer; pointing the creature at what you tapped is what
+	# a tap means when nothing under it had anything better to say. You still
+	# get both when you crack one with the rope in hand — see below, a beast
+	# does not ignore a rock splitting open in front of it.
+	if _cracked_a_rock():
+		return true
 	# WITH THE ROPE IN HAND, IT POINTS. Not an order — the creature goes on
 	# doing what it was doing — but its attention goes where you tapped, which
 	# is how you show a beast a thing rather than send it to one. See
@@ -1350,6 +1362,42 @@ func _tapped_twice() -> bool:
 		GameState.hint("Your creature looks where you pointed.")
 		return true
 	return false
+
+
+## THE DOUBLE TAP THAT BREAKS A STONE OPEN. True when it claimed the press.
+##
+## Every crack is one tap and a rock wants as many as its rung — two for a
+## cobble, nine for a megalith the size of a hut. Nothing is spent but the time,
+## and that is the design: a god who will stand there and work at a rock ends up
+## with more stone than the world was made with, and a god in a hurry does not.
+##
+## Refused past your reach, like every other thing this hand does — you may not
+## reach into somebody else's country and quarry it.
+func _cracked_a_rock() -> bool:
+	if state == HandState.HOLDING:
+		return false        # what is in your hand is not under your finger
+	var rock := hover_target as RockDeposit
+	if rock == null or not is_instance_valid(rock):
+		return false
+	if not MiracleReach.may_act(get_tree(), rock.global_position):
+		return false        # the ordinary press says so, and says it once
+	if not rock.can_split():
+		if rock.liftable_whole():
+			GameState.hint("There is nothing inside a pebble.")
+		else:
+			GameState.hint("That is the hill itself. Take hold of it to cleave a piece off.")
+		return true
+	var broke := rock.crack()
+	# AND YOUR CREATURE SEES IT. A stone splitting open an arm's length away is
+	# the loudest thing that has happened all day, and watching you do a thing
+	# is the only way it ever learns to do it. See CreatureHead.startled.
+	if has_lead() and lead.creature != null and is_instance_valid(lead.creature):
+		CreatureHead.startled(lead.creature, rock.global_position)
+	if broke:
+		GameState.hint("The stone splits. Two of them now, and more stone than there was.")
+	else:
+		GameState.hint("A crack runs through it.")
+	return true
 
 
 ## A second finger landed: the camera takes over. Abort any in-progress

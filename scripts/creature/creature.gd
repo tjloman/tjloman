@@ -2237,12 +2237,10 @@ func can_lift(thing: Node3D, to_throw := false) -> bool:
 	var limit := body.lift_limit(growth)
 	if to_throw:
 		limit *= 1.0 + mind.knack("throw") * THROW_MASTERY
-	if thing is WildTree:
-		return (thing as WildTree).lumber <= limit
-	if thing is ResourceItem:   # see CreatureBody.STONE_PER_LIFT
-		return float((thing as ResourceItem).count) \
-			<= limit * CreatureBody.STONE_PER_LIFT
-	return true
+	# ONE SCALE FOR EVERYTHING HEAVY — see CreatureBody.burden, which is where
+	# the ladder of "what is this and what does it weigh" lives now. Anything
+	# not on it weighs nothing and is simply picked up.
+	return CreatureBody.burden(thing) <= limit
 
 
 func is_flying() -> bool:
