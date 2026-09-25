@@ -145,7 +145,11 @@ func _rebuild() -> void:
 		return
 	for t in st.get_nodes_in_group("trees"):
 		var tree := t as WildTree
-		if not is_instance_valid(tree) or tree.is_felled() or tree.is_held():
+		# A LOG IS NOT AN OBSTACLE. You step over a trunk lying on the ground,
+		# and routing round one as though it were still standing put a phantom
+		# tree in every path a thrown pine had crossed.
+		if not is_instance_valid(tree) or tree.is_felled() or tree.is_held() \
+				or tree.is_down():
 			continue
 		_add(tree.global_position, 0.45 * tree.scale.x + 0.35, true)
 	for r in st.get_nodes_in_group("rock_deposits"):

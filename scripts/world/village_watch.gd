@@ -35,6 +35,11 @@ const LOOK_EVERY := 1.1
 ## smaller catchment for a villager out at the edge and a slightly larger one
 ## for a villager in the middle, and it is the more correct question of the two:
 ## it is the TOWN that has timber in reach, not the individual.
+## HOW MANY METRES OF DETOUR A TRUNK ALREADY ON THE GROUND IS WORTH. Twenty:
+## far enough that a woodcutter crosses the clearing for one, near enough that
+## it never sends a man to the next valley. See WildTree.LIES_FOR — a felled
+## trunk nobody comes for is gone in half a minute.
+const DOWNED_TIMBER_WORTH := 20.0
 const TIMBER_REACH := 2.5
 const STONE_REACH := 2.5
 const GAME_REACH := 2.0
@@ -88,6 +93,12 @@ func _look_for_timber(tree: SceneTree, here: Vector3, reach: float) -> void:
 		if _unreachable(tree, wood.global_position):
 			continue
 		var d := here.distance_to(wood.global_position)
+		# A TRUNK ALREADY ON THE GROUND IS WORTH WALKING PAST TWO STANDING ONES
+		# FOR. It is the same timber with the felling already done, and it is on
+		# a clock — see WildTree.LIES_FOR — so a woodcutter who ignores it in
+		# favour of the nearest sapling watches it rot instead.
+		if wood.is_down():
+			d -= DOWNED_TIMBER_WORTH
 		if d < best:
 			best = d
 			timber = wood

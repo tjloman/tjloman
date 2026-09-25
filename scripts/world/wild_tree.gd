@@ -15,6 +15,23 @@ const MAX_LUMBER := 10.0
 ## but a share of its real worth rather than of its size. See `_land`.
 const SPLINTER_SHARE := 0.25
 const SPLINTER_MOST := 5
+## HOW LONG A FELLED TRUNK LIES THERE BEFORE IT IS ONLY LUMBER, in seconds.
+##
+## A thrown tree used to burst into bundles the instant it stopped moving, which
+## meant the best thing in the game — throw a pine, chase it, boot it down the
+## hill, throw it again — lasted exactly one throw. It lies where it comes to
+## rest now and stays a TREE. Touch it and the clock starts over; walk away and
+## in half a minute it is firewood, which is the honest end for a trunk nobody
+## came back for.
+const LIES_FOR := 30.0
+## And how far clear of the ground it lies, so a trunk across a slope does not
+## have its crown in the hillside.
+const LIES_CLEAR := 0.15
+## THE BLOW AT WHICH A TRUNK IS BROKEN RATHER THAN FELLED. Below it nothing is
+## wasted; at and above it only SPLINTER_SHARE of what the tree was worth
+## survives, and in between it is a straight line. A god who hurls a giant into
+## a cliff at forty metres a second is not harvesting it.
+const SPLINTERS_ABOVE := 14.0
 ## The running sum of Fibonacci, one entry per whole size: 1, 1+1, +2, +3, +5...
 ## Written out rather than computed because it is ten numbers that will never
 ## change, and a table can be read at a glance by anyone balancing the economy.
@@ -146,6 +163,14 @@ var burning := false
 var _felled := false
 var _held := false
 var _flying := false
+## LYING ON THE GROUND AND STILL A TREE. Not `_felled`, which means the axe is
+## in it and it is two seconds from being gone — this is a trunk you can pick
+## back up, set alight, kick down a hill, or leave.
+var _down := false
+var _lying_for := 0.0
+## How much of it the landing ruined, 0..1. Kept from the impact because
+## `_hardest` is cleared the moment it comes to rest.
+var _spoiled := 0.0
 ## The hardest blow it has taken this flight — what `_land` is judged on, and
 ## not the gentle one it happened to stop on.
 var _hardest := 0.0
@@ -227,6 +252,13 @@ func _process(delta: float) -> void:
 	if _felled:
 		return
 	if _held:
+		# AND THE FIRE COMES WITH IT INTO YOUR HAND. The burn was skipped while
+		# a tree was held, so a blazing pine picked up off the ground froze
+		# mid-fire and — because `_spread` lives inside the burn — could be
+		# carried through a forest without lighting a single thing. Carrying a
+		# firebrand IS the mechanic; this was the line that forbade it.
+		if burning:
+			_burn(delta)
 		return
 	if _flying:
 		# THE FIRE GOES WITH IT. A blazing tree turning end over end across a
@@ -236,6 +268,16 @@ func _process(delta: float) -> void:
 		if burning:
 			_burn(delta)
 		_fly(delta)
+		return
+	# A TRUNK ON THE GROUND DOES NOT SWAY, GROW OR SEED. It burns, and it waits
+	# to see whether anybody comes back for it.
+	if _down:
+		if burning:
+			_burn(delta)
+			return
+		_lying_for += delta
+		if _lying_for >= LIES_FOR:
+			_break_up()
 		return
 	_update_lean(delta)
 	_animate_growth(delta)
@@ -327,6 +369,12 @@ func _take_spurt(d: float) -> void:
 ## lean decays and springs upright once the pushing stops.
 func sway(from_pos: Vector3, amount: float) -> void:
 	if _felled or _held or _flying:
+		return
+	# A TRUNK ON THE GROUND DOES NOT LEAN — but being walked over IS being
+	# played with, so the half-minute starts again. A creature nosing round a
+	# log it threw keeps the log.
+	if _down:
+		touched()
 		return
 	var away := global_position - from_pos
 	away.y = 0.0
@@ -489,13 +537,18 @@ func current_height() -> float:
 func pick_up() -> void:
 	_held = true
 	_flying = false
+	_down = false
+	touched()
 	collision_layer = 0
 
 
 func drop(throw_velocity: Vector3, gentle := false) -> void:
 	_held = false
 	if gentle:
-		_land(0.0)
+		# SET DOWN ON PURPOSE, SO IT TAKES ROOT. This is the one way left to
+		# PLANT a tree, and keeping it is the whole reason `_land` is asked
+		# which of the two happened rather than guessing from the speed.
+		_land(0.0, true)
 	else:
 		_flying = true
 		_fly_velocity = throw_velocity
@@ -650,8 +703,7 @@ func set_flight_spin(angular: Vector3) -> void:
 
 ## Touchdown. Storehouse first; then either a rough landing (splinters
 ## into lumber, most of it lost — a wasteful god) or a fresh planting.
-func _land(impact_speed: float) -> void:
-	rotation = Vector3(0.0, _plant_yaw, 0.0)  # upright again, at its own facing
+func _land(impact_speed: float, planted := false) -> void:
 	# WHOEVER'S GROUND THIS IS JUST WATCHED A TREE FALL OUT OF THE SKY. A pine
 	# coming down in the square is not a miracle and it is a very long way from
 	# nothing — and one coming down ON FIRE is the other kind of belief.
@@ -681,36 +733,92 @@ func _land(impact_speed: float) -> void:
 			queue_free()
 			return
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-	if world != null:
-		if world.is_underwater(global_position.x, global_position.z):
-			queue_free()  # swallowed by the lake
-			return
-		global_position.y = world.height_at(global_position.x, global_position.z) - 0.1
-	if impact_speed > 14.0:
-		# SPLINTERED. A share of what the tree was worth, and the rest is lost
-		# — which is the point, and was always the point. But the share has to
-		# be of `timber()`: off the raw size a hurled giant burst into three
-		# bundles worth three, against the eighty-eight a woodcutter would have
-		# had, so the wasteful god was not being taxed, he was being robbed.
-		#
-		# Carried in `count`, so five physical bundles can be worth twenty-two
-		# without putting twenty-two rigid bodies on the grass. FoodStore reads
-		# it; so does the creature, now.
-		var worth := maxi(int(float(timber()) * SPLINTER_SHARE), 1)
-		var bundles := clampi(worth, 1, SPLINTER_MOST)
-		var each := float(worth) / float(bundles)
-		for i in bundles:
-			var bundle := ResourceItem.new()
-			bundle.kind = "lumber"
-			# Exact split, remainder and all: this bundle's boundary less the
-			# one before it, so the pieces always sum back to `worth`.
-			bundle.count = int(round(each * float(i + 1))) - int(round(each * float(i)))
-			get_parent().add_child(bundle)
-			bundle.global_position = global_position \
-				+ Vector3(randf_range(-1, 1), 1.0, randf_range(-1, 1))
-		queue_free()
+	if world != null and world.is_underwater(global_position.x, global_position.z):
+		queue_free()  # swallowed by the lake
 		return
-	collision_layer = 8  # replanted, roots take hold, growth resumes
+	if planted:
+		rotation = Vector3(0.0, _plant_yaw, 0.0)  # upright again, at its own facing
+		if world != null:
+			global_position.y = world.drawn_height_at(
+				global_position.x, global_position.z) - 0.1
+		collision_layer = 8  # replanted, roots take hold, growth resumes
+		return
+	_lie_down(world, impact_speed)
+
+
+## IT COMES TO REST LYING DOWN, AND IT IS STILL A TREE.
+##
+## It used to stand back up at the spot it stopped — roots and all, growth
+## resumed — unless it had been going over fourteen metres a second, in which
+## case it burst into lumber and vanished. Neither is a felled tree. A trunk you
+## threw should lie there long enough to be chased, kicked, set alight, picked
+## back up and thrown again, and only become firewood if nobody does any of
+## that. See LIES_FOR.
+##
+## LAID ALONG THE WAY IT WAS POINTING, with both ends clear of the ground. The
+## trunk runs up local +Y from the foot, so lying down is a basis with +Y
+## horizontal — and the height is taken from the higher of the two ends, or a
+## trunk across a slope buries its crown in the hillside.
+func _lie_down(world: WorldGen, impact_speed: float) -> void:
+	var along := _up_the_trunk()
+	along.y = 0.0
+	if along.length() < 0.01:
+		along = Vector3(cos(_plant_yaw), 0.0, sin(_plant_yaw))
+	along = along.normalized()
+	var side := Vector3.UP.cross(along).normalized()
+	basis = Basis(side, along, side.cross(along)).scaled(_scale_for_lumber())
+	if world != null:
+		var tip := global_position + along * current_height()
+		global_position.y = maxf(
+			world.drawn_height_at(global_position.x, global_position.z),
+			world.drawn_height_at(tip.x, tip.z)) + LIES_CLEAR
+	_down = true
+	_lying_for = 0.0
+	# HOW MUCH OF IT THE LANDING RUINED, kept now because `_hardest` is cleared
+	# the moment it stops. A trunk set down whole is worth all of itself; one
+	# driven into a hillside at speed is worth a quarter. See SPLINTERS_ABOVE.
+	_spoiled = clampf(impact_speed / SPLINTERS_ABOVE, 0.0, 1.0)
+	collision_layer = 8
+
+
+## WHAT IS LEFT OF A TRUNK NOBODY CAME BACK FOR.
+##
+## A share of what the tree was worth, and the rest is lost — which is the
+## point, and was always the point. But the share has to be of `timber()`: off
+## the raw size a hurled giant burst into three bundles worth three, against the
+## eighty-eight a woodcutter would have had, so the wasteful god was not being
+## taxed, he was being robbed.
+##
+## Carried in `count`, so five physical bundles can be worth twenty-two without
+## putting twenty-two rigid bodies on the grass.
+func _break_up() -> void:
+	var worth := maxi(int(round(
+		float(timber()) * lerpf(1.0, SPLINTER_SHARE, _spoiled))), 1)
+	var bundles := clampi(worth, 1, SPLINTER_MOST)
+	var each := float(worth) / float(bundles)
+	for i in bundles:
+		var bundle := ResourceItem.new()
+		bundle.kind = "lumber"
+		# Exact split, remainder and all: this bundle's boundary less the one
+		# before it, so the pieces always sum back to `worth`.
+		bundle.count = int(round(each * float(i + 1))) - int(round(each * float(i)))
+		get_parent().add_child(bundle)
+		bundle.global_position = global_position \
+			+ Vector3(randf_range(-1, 1), 1.0, randf_range(-1, 1))
+	queue_free()
+
+
+## LYING ON THE GROUND, still a tree and still worth picking up. Asked by
+## routing (you step over a log) and by anything that wants to know whether the
+## wood here is standing.
+func is_down() -> bool:
+	return _down
+
+
+## SOMEBODY IS STILL PLAYING WITH IT. Starts the half-minute over, so a trunk
+## that is being chased down a hill never turns into firewood under the chase.
+func touched() -> void:
+	_lying_for = 0.0
 
 
 func is_held() -> bool:
@@ -729,8 +837,12 @@ func is_held() -> bool:
 ## specifically forbade. There was no reason for it beyond the guard being
 ## written as a list of "not now" states without anybody asking what a
 ## firebrand is.
+## A TREE IN YOUR HAND CAN BE LIT TOO, and that is the other half of it. `_held`
+## was in the refusal, so the thing the whole mechanic is for — pick up a pine,
+## set it alight, walk it into somebody's wood — could not be started. `_felled`
+## stays: an axe is in that one and it is two seconds from being gone.
 func ignite() -> void:
-	if burning or _felled or _held:
+	if burning or _felled:
 		return
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	if world != null and world.is_underwater(global_position.x, global_position.z):
