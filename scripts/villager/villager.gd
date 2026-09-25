@@ -2180,11 +2180,19 @@ func die(of_old_age: bool) -> void:
 	# hundred separate people each noticing a body.
 	if village != null:
 		village.hive.witness("death", global_position, 1.0 if of_old_age else 1.4)
-	var corpse := Corpse.new()
-	corpse.villager_name = villager_name
-	var parent := get_parent() as Node3D
-	corpse.position = parent.to_local(global_position + Vector3(0, 0.5, 0))
-	parent.add_child(corpse)
+	# NO BODY IS LEFT WHERE A CHILD DIED, and this is not squeamishness about a
+	# word — a corpse in this world is an OBJECT, and every object like it is
+	# PICKABLE: it can be carried off, hurled at a wall, set alight, eaten by a
+	# creature or butchered by a village on the cannibal diet. There is no
+	# version of this game in which those are things to do to a dead child. The
+	# grief, the oath, the announcement and what the death teaches the creature
+	# all still happen. What does not happen is the object.
+	if is_adult():
+		var corpse := Corpse.new()
+		corpse.villager_name = villager_name
+		var parent := get_parent() as Node3D
+		corpse.position = parent.to_local(global_position + Vector3(0, 0.5, 0))
+		parent.add_child(corpse)
 	if village.is_player_home:
 		if of_old_age:
 			GameState.announce("%s died peacefully at %d, full of years." % [villager_name, int(age)])

@@ -774,15 +774,28 @@ func die(drop_meat := true) -> void:
 	if tamed_by != null:
 		tamed_by.on_tamed_lost(self)
 	var meat: int = spec["meat"]
+	# IT LEAVES A BODY. It used to leave three chops in the grass where a bison
+	# had been standing — the animal simply stopped existing, and the meat
+	# appeared. Now there is a carcass with the beast's own weight in it, to
+	# drag off, throw at a wall, burn, or leave; and a body nobody comes for
+	# falls apart into exactly the joints it would have dropped, so no village
+	# anywhere is a mouthful poorer for this. See Carcass.LIES_FOR.
+	#
+	# `drop_meat` is false when something has already taken the body — a hunter
+	# carrying the kill home, a creature swallowing it — and those leave nothing
+	# behind, as they always did.
 	if drop_meat and meat > 0:
 		var parent := get_parent() as Node3D
-		for i in meat:
-			var item := FoodItem.new()
-			item.food_type = FoodItem.FoodType.MEAT
-			item.meat_name = MEAT_NAMES.get(species, "%s meat" % species)
-			item.position = parent.to_local(global_position
-				+ Vector3(randf_range(-0.5, 0.5), 0.5, randf_range(-0.5, 0.5)))
-			parent.add_child(item)
+		var body := Carcass.new()
+		body.species = species
+		body.meat = meat
+		body.meat_name = MEAT_NAMES.get(species, "%s meat" % species)
+		body.body = spec["body"]
+		body.hue = spec["color"]
+		parent.add_child(body)
+		body.global_position = global_position + Vector3(0, 0.2, 0)
+		# Lying the way it fell, rather than every body in the world facing north.
+		body.rotation.y = rotation.y
 	queue_free()
 
 

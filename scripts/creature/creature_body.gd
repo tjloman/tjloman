@@ -278,6 +278,12 @@ static func burden(thing: Node3D) -> float:
 		return (thing as WildTree).lumber
 	if thing is ResourceItem:
 		return float((thing as ResourceItem).count) / STONE_PER_LIFT
+	if thing is Carcass:
+		# A BODY IS WEIGHED LIKE A ROCK, in the units this scale is kept in: a
+		# bison is nine and a half of anything and a whelp has no business
+		# lifting one. STONE_PER_LIFT is the word between the two scales, and a
+		# carcass's heft is already in the same currency a bundle of stone is.
+		return (thing as Carcass).heft() / STONE_PER_LIFT
 	if thing is RockDeposit:
 		# A ROCK IS WEIGHED IN STONE, the same as a bundle of it — so a whelp
 		# that cannot shoulder twenty-four stone of rubble cannot shoulder a
