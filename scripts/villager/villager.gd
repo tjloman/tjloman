@@ -38,6 +38,15 @@ const WALK_SPEED := 3.0
 ## band costs nothing anybody was getting any good out of.
 const LABEL_WITHIN := 38.0
 const FLEE_SPEED := 5.5
+## HOW LONG ONE FRIGHT LASTS, and how long after it they are STEADIED: they
+## have run, they know where the trouble is, and the next bang does not send
+## them running again. Without it a burning town re-scared its children and
+## elders every seven seconds (Kindling.SPREAD_EVERY) for as long as it burned,
+## and they spent the day in terror and went to bed hungry.
+const FRIGHT_SECONDS := 4.0
+const STEADY_FOR := 25.0
+## ...unless it is right on top of them. That is not a fright, it is a fire.
+const TOO_CLOSE := 5.0
 const GRAVITY := 20.0
 const ARRIVE_DIST := 0.9
 
@@ -210,6 +219,7 @@ var _target_deposit: RockDeposit = null
 var _build_site: House = null
 var _mount: Animal = null
 var _flee_from := Vector3.ZERO
+var _steady_until := -INF
 var _fall_speed := 0.0
 var _burn_visual: Node3D = null
 ## ALIGHT, OR IN THE AIR — neither is a thing fear can help with. See Agitation.
@@ -455,6 +465,11 @@ func _physics_process(delta: float) -> void:
 			away.y = 0
 			_move_toward(global_position + away.normalized() * 5.0, FLEE_SPEED, delta)
 			if _action_time <= 0.0:
+				# THE FRIGHT IS OVER NOW, not when the next plan comes. The wait
+				# for a turn to think can be seconds in a big town, and they
+				# stood through all of it frozen under "!!!".
+				state = State.WANDER
+				_target = global_position
 				_rethink()
 		State.WANDER, State.PLAY:
 			# Legs and pauses, not a destination — see Stroll.
@@ -2262,11 +2277,21 @@ func _defect_to(host: Village) -> void:
 func scare(from_pos: Vector3) -> void:
 	if state in [State.HELD, State.DYING, State.PINNED]:
 		return
+	happiness = maxf(happiness - 10.0, 0.0)
+	# STEADIED: they ran from the last one. It still costs them their peace.
+	if GameState.clock < _steady_until \
+			and global_position.distance_to(from_pos) > TOO_CLOSE:
+		return
 	_dismount()
 	state = State.FLEE
 	_flee_from = from_pos
-	_action_time = 4.0
-	happiness = maxf(happiness - 10.0, 0.0)
+	_action_time = FRIGHT_SECONDS
+	_steady_until = GameState.clock + FRIGHT_SECONDS + STEADY_FOR
+	# RUNNING IS THE PLAN, as of now. A scare landing while they waited in
+	# line for a turn to think set the state and left the latch on, and the
+	# latch stands a villager still whatever their state says — so they
+	# "fled in terror" without moving a step. See Spool.
+	_decision_due = false
 	_pitch_body(0.0)
 
 
