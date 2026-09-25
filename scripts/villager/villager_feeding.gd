@@ -23,6 +23,18 @@ extends RefCounted
 ## both places that ask, so "would they?" and "would they FIRST?" can never
 ## drift apart.
 const WICKED := 30.0
+## AND HOW FAR PAST IT A SOUL HAS TO BE TO DO IT IN FRONT OF THE MOURNERS.
+##
+## Somebody standing over the dead is the one thing between that body and the
+## people who would eat it. A wicked soul will kneel over an unwatched corpse and
+## will not do it with the dead man's neighbours weeping at arm's length — shame
+## is the last decency a wicked person has. A MONSTROUS one has not got even
+## that, and does it anyway, in front of them; which is where the horror is. So
+## a mourner decides it. See `shamed`.
+##
+## The same number the word "monstrous" is drawn at (VillagerWords), so a card
+## that says monstrous and a villager who behaves monstrously are one line.
+const MONSTROUS := -60.0
 ## WHAT A BODY IS WORTH. All of it: a grown person is a great deal more meat
 ## than one belly can hold, and the point of the mechanic is not the arithmetic.
 const BODY_FILLS := 0.0
@@ -51,7 +63,18 @@ static func will_eat_flesh(who: Villager) -> bool:
 static func _a_body(who: Villager) -> Corpse:
 	if not will_eat_flesh(who):
 		return null
-	return VillagerSearch.corpse(who)
+	var body := VillagerSearch.corpse(who)
+	if body != null and shamed(who, body):
+		return null
+	return body
+
+
+## WOULD THEY DO IT HERE, IN FRONT OF THESE PEOPLE? Anybody short of monstrous
+## will not, while somebody is weeping over the body. Asked when they choose it
+## and again when they arrive — a mourner may have knelt down in between.
+static func shamed(who: Villager, body: Corpse) -> bool:
+	return who.morality >= MONSTROUS \
+		and VillagerSearch.being_mourned(who.get_tree(), body)
 
 
 ## Choose a meal. False when there is nothing anywhere, which is what a famine
@@ -118,6 +141,11 @@ static func go(who: Villager, delta: float) -> void:
 		who._target = who.feeding_on.global_position
 		if who._move_toward(who._target, pace, delta):
 			who._dismount()
+			# THEY GOT THERE AND SOMEBODY WAS WEEPING. They turn away.
+			if shamed(who, who.feeding_on):
+				who.feeding_on = null
+				who._rethink()
+				return
 			VillagerLook.gone_to_carrion(who)
 			who.state = Villager.State.EATING
 			who._action_time = 2.0

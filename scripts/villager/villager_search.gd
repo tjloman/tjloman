@@ -122,6 +122,19 @@ static func being_eaten(tree: SceneTree, body: Corpse, at_it := false) -> bool:
 	return false
 
 
+## IS SOMEBODY STANDING OVER THIS ONE, WEEPING? Present, not on their way —
+## what shames an eater is a face, not an intention. See VillagerFeeding.shamed.
+static func being_mourned(tree: SceneTree, body: Corpse) -> bool:
+	if body == null or not is_instance_valid(body):
+		return false
+	for v in tree.get_nodes_in_group("villagers"):
+		var other := v as Villager
+		if other != null and is_instance_valid(other) \
+				and other.state == Villager.State.MOURNING and other._target_corpse == body:
+			return true
+	return false
+
+
 ## THE NEAREST BEAST'S BODY, for a butcher. A carcass is free meat with the
 ## killing already done — see Carcass, which falls apart into joints on its own
 ## if nobody comes for it.

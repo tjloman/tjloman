@@ -38,7 +38,9 @@ static func morality_word(who: Villager) -> String:
 		return "decent"
 	if who.morality > -20.0:
 		return "coarse"
-	if who.morality > -60.0:
+	# Drawn at the line a soul stops being shamed by mourners — see
+	# VillagerFeeding.MONSTROUS. The word and the deed are one number.
+	if who.morality >= VillagerFeeding.MONSTROUS:
 		return "wicked"
 	return "monstrous"
 

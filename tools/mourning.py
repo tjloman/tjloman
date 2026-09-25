@@ -46,6 +46,7 @@ SEARCH = (ROOT / "scripts/villager/villager_search.gd").read_text()
 WATCH = (ROOT / "scripts/world/village_watch.gd").read_text()
 SOUND = (ROOT / "scripts/audio/sound_bank.gd").read_text()
 CARCASS = (ROOT / "scripts/world/carcass.gd").read_text()
+FEEDING = (ROOT / "scripts/villager/villager_feeding.gd").read_text()
 
 ## gdlint's ceiling. A file at it cannot take another behaviour.
 FILE_LINES = 2500
@@ -229,6 +230,36 @@ def over_the_eaten(fail):
                     "into eating the body themselves" % (horror, worst))
 
 
+def the_guard(fail):
+    """A mourner decides it: the wicked hold back, the monstrous do not."""
+    print()
+    print("A MOURNER IS THE LAST THING BETWEEN A BODY AND THE WICKED")
+    monstrous = const(FEEDING, "MONSTROUS", "villager_feeding.gd")
+    print("  a soul above %.0f will not eat in front of somebody weeping" % monstrous)
+    if "shamed(who, body)" not in body(FEEDING, "_a_body"):
+        fail.append("a wicked soul chooses a body with a mourner at it — the "
+                    "mourner is supposed to be what stops them")
+    elif "shamed(who, who.feeding_on)" not in body(FEEDING, "go"):
+        fail.append("a wicked soul who arrives to find somebody weeping goes "
+                    "ahead anyway — a mourner may kneel down while they walk")
+    else:
+        print("  asked when they choose it, and again on arrival . yes")
+    sh = body(FEEDING, "shamed")
+    if "MONSTROUS" not in sh or "being_mourned(" not in sh:
+        fail.append("shame is no longer the monstrous line and a mourner — "
+                    "either everybody holds back, which is not a horror game, "
+                    "or nobody does")
+    mourned = body(SEARCH, "being_mourned")
+    if "State.MOURNING" not in mourned or "GO_MOURN" in mourned:
+        fail.append("somebody merely on their way to mourn counts as standing "
+                    "there — what shames an eater is a face, not an intention")
+    if "VillagerFeeding.MONSTROUS" not in body(WORDS, "morality_word"):
+        fail.append("the word 'monstrous' and the line a soul stops being "
+                    "shamed are two numbers, and can say different things")
+    else:
+        print("  and 'monstrous' on the card is that same line ... yes")
+
+
 def butchery(fail):
     print()
     print("BUTCHERING A BEAST")
@@ -267,6 +298,7 @@ def main():
     every_state_named(fail)
     grief(fail)
     over_the_eaten(fail)
+    the_guard(fail)
     butchery(fail)
     print()
     if fail:
