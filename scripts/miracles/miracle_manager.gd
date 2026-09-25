@@ -249,12 +249,9 @@ const GLOB_LEAN_MAX := 0.62
 ## Above 1 so a crater takes fewer loads to level than a hill takes to build —
 ## pouring into a bowl is easier than stacking on flat ground.
 const FILL_RATE := 1.6
-## Where a dug crater's rim actually sits, as a fraction of its radius — the
-## ring of spoil it threw up around itself. See `_maybe_flood`.
-const LIP_OF := 0.82
-## And how wide the water sits inside it: just short of the lip, so the pool
-## lies IN the bowl rather than lapping over the edge of it.
-const POOL_OF := 0.9
+## How near the storm's aim a dug scar must be for the ground to be measured
+## as dug (see `_flood_dug`) rather than probed as a natural hollow.
+const DUG_WITHIN := 12.0
 ## How far below the rim a pond's surface must sit. Level with the rim, the
 ## water spills and every point out to the pond's radius reads as underwater.
 const FREEBOARD := 0.4
@@ -944,29 +941,21 @@ func _maybe_flood(pos: Vector3, potency: float) -> void:
 	# crater's own scale it is 59, and the rest are craters cut into a slope,
 	# where the water really would run away.
 	#
-	# So if something has been DUG here, its own scar says how wide it is; a
-	# natural hollow gets a modest fixed probe instead. Either way the storm's
-	# size decides how FULL it gets, never how wide.
+	# So if something has been DUG here, the hole itself is measured, however
+	# many blasts made it; a natural hollow gets a modest fixed probe instead.
+	# Either way the storm's size decides how FULL it gets, never how wide.
 	var here := Vector2(pos.x, pos.z)
-	var hollow := world.scars.hollow_near(here)
-	var reach := NATURAL_HOLLOW
+	var hollow := world.scars.hollow_near(here, DUG_WITHIN)
 	if not hollow.is_empty():
-		here = Vector2(float(hollow["x"]), float(hollow["z"]))
-		# ON THE LIP, not past it. A crater throws a ring of spoil up around
-		# itself, and that ring is LITERALLY what holds the water in — it sits
-		# at about four fifths of the radius. Probing outside it samples natural
-		# ground instead, which slopes, so the answer becomes "it drains" on any
-		# ground that is not a billiard table. Measured over 200 craters on
-		# rough terrain: on the lip 200 fill, one radius out 145, and at the
-		# storm's own reach (where this started) 24.
-		reach = float(hollow["radius"]) * LIP_OF
+		_flood_dug(world, here, potency)
+		return
 	# NEVER ON A TOWN. A pond makes its ground "underwater", and underwater
 	# ground is not workable: the farms stop, and a village quietly starves
 	# around a pretty blue disc. Whatever else rain may do, it does not drown
 	# your own people while your back is turned.
 	if _settled_near(here):
 		return
-	var rim := world.basin_rim(here, reach)
+	var rim := world.basin_rim(here, NATURAL_HOLLOW)
 	if rim == -INF:
 		return                       # open on a side: it runs off
 	var floor_y := world.height_at(here.x, here.y)
@@ -979,20 +968,49 @@ func _maybe_flood(pos: Vector3, potency: float) -> void:
 	var level := lerpf(floor_y, rim - FREEBOARD, clampf(potency / 3.6, 0.35, 0.92))
 	if level <= floor_y + 0.25:
 		return                       # not enough to be worth calling a pond
-	var pool := reach if hollow.is_empty() else float(hollow["radius"]) * POOL_OF
-	world.flood(here, pool, level)
+	world.flood(here, NATURAL_HOLLOW, level)
+	GameState.announce("The water has nowhere to run. A pool stands where the ground was broken.")
+
+
+## GROUND THAT HAS BEEN DUG: measured as water would find it.
+##
+## This used to probe the lip of the ONE nearest scar. A pit shelled two dozen
+## times is several scars grown into each other, and that lip sits inside the
+## big pit, on ground lower than the floor — so it said "drains" and a deluge
+## straight into the hole left nothing behind. `WorldGen.measure_basin` floods
+## outward instead and finds the lowest gap in the rim, whatever its shape.
+func _flood_dug(world: WorldGen, here: Vector2, potency: float) -> void:
+	var basin := world.measure_basin(here)
+	if basin.is_empty():
+		return                       # open on a side: it runs off
+	var floor_y: float = basin["floor"]
+	var rim: float = basin["rim"]
+	if rim - floor_y < 0.8:
+		return                       # barely a dip; not worth a pond
+	var middle := Vector2(float(basin["x"]), float(basin["z"]))
+	var pool: float = basin["radius"]
+	# Still never on a town, and the WHOLE disc is kept out, not just its
+	# middle: a pit dug at the edge of a village would otherwise spread its
+	# water in over the first row of houses.
+	if _settled_near(middle, pool):
+		GameState.announce("The rain runs off the village streets. It will not stand where people live.")
+		return
+	var level := lerpf(floor_y, rim - FREEBOARD, clampf(potency / 3.6, 0.35, 0.92))
+	if level <= floor_y + 0.25:
+		return                       # not enough to be worth calling a pond
+	world.flood(middle, pool, level)
 	GameState.announce("The water has nowhere to run. A pool stands where the ground was broken.")
 
 
 ## Is there a settlement here? Ponds and other standing water keep away from
 ## the ground people live and farm on.
-func _settled_near(at: Vector2) -> bool:
+func _settled_near(at: Vector2, spread := 0.0) -> bool:
 	for v in get_tree().get_nodes_in_group("village"):
 		var town := v as Village
 		if not is_instance_valid(town):
 			continue
 		var flat := Vector2(town.global_position.x, town.global_position.z)
-		if flat.distance_to(at) < town.influence_radius + TOWN_CLEARANCE:
+		if flat.distance_to(at) < town.influence_radius + TOWN_CLEARANCE + spread:
 			return true
 	return false
 

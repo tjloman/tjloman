@@ -541,6 +541,146 @@ func basin_rim(at: Vector2, reach: float) -> float:
 	return lowest
 
 
+## HOW MUCH WATER WILL THIS HOLE HOLD, and where does it stand?
+##
+## `basin_rim` asks one ring at one radius, which suits one clean crater and
+## nothing else. A pit shelled two dozen times is several scars grown into
+## each other: lumpy, not round, with ridges inside it where the bowls meet.
+## Probed at one scar's lip the ring lands INSIDE the big pit, finds ground
+## lower than the floor it started from, and says "it drains".
+##
+## So this does what water does. Starting at the lowest ground near `near`,
+## it floods outward, always taking the lowest next cell (a priority flood).
+## The level it has to rise to before it gets OUT — down onto undug ground
+## below it, or to the edge of the search `most` metres off — is the SPILL
+## LEVEL: the lowest gap in the rim, whatever shape the rim is. Ridges inside
+## the pit are simply filled over on the way.
+##
+## Returns {} when the water gets out at barely above the floor. Otherwise
+## {x, z, floor, rim, radius}: the disc is centred on what floods, and its
+## radius stops short of any low ground OUTSIDE the rim, so the flat water
+## never hangs out over the far side of a lip.
+func measure_basin(near: Vector2, most := 40.0, step := 1.0) -> Dictionary:
+	# The floor: the lowest DUG ground near where the storm was aimed. Not the
+	# lowest ground of any kind — on a hillside that is the natural slope
+	# eight metres downhill, outside the pit altogether, and the water would
+	# be found to run straight off from there.
+	var low := near
+	var floor_y := height_at(near.x, near.y)
+	for gz in range(-8, 9):
+		for gx in range(-8, 9):
+			var p := near + Vector2(gx, gz)
+			var dug := scars.offset_at(p.x, p.y)
+			if dug >= 0.0:
+				continue
+			var ground := seeded_height_at(p.x, p.y) + dug
+			if ground < floor_y:
+				floor_y = ground
+				low = p
+	var heights := {}
+	var reached := {Vector2i.ZERO: true}
+	var undug := {}
+	var heap_h: Array[float] = [floor_y]
+	var heap_c: Array[Vector2i] = [Vector2i.ZERO]
+	var rim := floor_y
+	while not heap_c.is_empty():
+		var h := heap_h[0]
+		var cell := heap_c[0]
+		_heap_pop(heap_h, heap_c)
+		# OUT: at the edge of the search, or DOWN onto ground nobody dug —
+		# over the lip and away. Lower ground INSIDE the pit is only another
+		# of its bowls, and is filled over; that is the whole point.
+		if Vector2(cell).length() * step >= most or (h < rim and undug.has(cell)):
+			_heap_push(heap_h, heap_c, h, cell)   # the way out bounds the pool too
+			break
+		rim = maxf(rim, h)
+		heights[cell] = h
+		for dir: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var next := cell + dir
+			if reached.has(next):
+				continue
+			reached[next] = true
+			var at := low + Vector2(next) * step
+			var dug := scars.offset_at(at.x, at.y)
+			if dug == 0.0:
+				undug[next] = true
+			_heap_push(heap_h, heap_c, seeded_height_at(at.x, at.y) + dug, next)
+	if rim - floor_y <= 0.3:
+		return {}                       # open ground: it runs off
+	# What is under the rim — the pool — and the middle of it.
+	var sum := Vector2.ZERO
+	var wet := 0
+	for cell: Vector2i in heights:
+		if float(heights[cell]) < rim:
+			sum += Vector2(cell)
+			wet += 1
+	var middle := sum / maxf(wet, 1)
+	var widest := 0.0
+	for cell: Vector2i in heights:
+		if float(heights[cell]) < rim:
+			widest = maxf(widest, (Vector2(cell) - middle).length())
+	var radius := (widest + 1.0) * step
+	# ...but never out over something low on the far side of the rim. A pit
+	# is seldom round, and a circle wide enough for its long way reaches past
+	# the lip on its short way, where the ground may fall below the water.
+	# Every cell under the disc that the water did NOT reach, and that is
+	# lower than the rim, pulls the edge in short of it.
+	var reach := ceili(radius / step)
+	var mid := Vector2i(middle.round())
+	for gz in range(-reach, reach + 1):
+		for gx in range(-reach, reach + 1):
+			var cell := mid + Vector2i(gx, gz)
+			if heights.has(cell):
+				continue
+			var off := (Vector2(cell) - middle).length() * step
+			if off >= radius:
+				continue
+			var at := low + Vector2(cell) * step
+			if height_at(at.x, at.y) < rim:
+				radius = off - step * 0.5
+	var centre := low + middle * step
+	return {"x": centre.x, "z": centre.y, "floor": floor_y, "rim": rim,
+		"radius": maxf(radius, step)}
+
+
+static func _heap_push(hs: Array[float], cs: Array[Vector2i], h: float, c: Vector2i) -> void:
+	hs.append(h)
+	cs.append(c)
+	var i := hs.size() - 1
+	while i > 0:
+		var up := (i - 1) >> 1
+		if hs[up] <= hs[i]:
+			break
+		_heap_swap(hs, cs, i, up)
+		i = up
+
+
+static func _heap_pop(hs: Array[float], cs: Array[Vector2i]) -> void:
+	var last := hs.size() - 1
+	_heap_swap(hs, cs, 0, last)
+	hs.resize(last)
+	cs.resize(last)
+	var i := 0
+	while true:
+		var least := i
+		for kid in [i * 2 + 1, i * 2 + 2]:
+			if kid < last and hs[kid] < hs[least]:
+				least = kid
+		if least == i:
+			break
+		_heap_swap(hs, cs, i, least)
+		i = least
+
+
+static func _heap_swap(hs: Array[float], cs: Array[Vector2i], a: int, b: int) -> void:
+	var h := hs[a]
+	hs[a] = hs[b]
+	hs[b] = h
+	var c := cs[a]
+	cs[a] = cs[b]
+	cs[b] = c
+
+
 ## FILL A HOLLOW. Water stands to `level`, out to `radius`. Everything that
 ## asks whether a point is underwater agrees immediately.
 func flood(at: Vector2, radius: float, level: float) -> void:
