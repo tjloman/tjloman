@@ -193,6 +193,31 @@ if not kills_at or not refuses_at:
                 "the same constant, so the game can send somebody exactly as "
                 "far as the water that kills them")
 
+# -- AND WHEN THE WATER COMES TO THEM ----------------------------------------
+#
+# "Several of them chilled inside it til they were 10% health and walked out."
+# They had walked into a DRY pit to watch the fireblasts, and a deluge filled
+# it over them. Routing keeps a walker out of water; a crowd standing at prayer
+# is not walking, and asked nothing. Drowning must get them moving, shoreward,
+# at once — not when the line for a turn to think reaches them.
+wades = [r for r in hazard if "Wading.out(self" in r]
+guard = [r for r in hazard if "state != State.FLEE" in r]
+WADING = (ROOT / "scripts/villager/wading.gd").read_text()
+out = "\n".join(body_of(WADING, "out"))
+print()
+print("SOMEBODY THE WATER RISES OVER %s."
+      % ("WADES OUT" if wades and guard else "STANDS THERE AND DROWNS"))
+if not wades or not guard:
+    fail.append("the drowning tick does not send a drowning villager out of "
+                "the water — anyone standing still when a pond fills over them "
+                "stays in it")
+if "who._decision_due = false" not in out or "who.state = Villager.State.FLEE" not in out:
+    fail.append("Wading.out does not start them moving at once: it must set FLEE "
+                "and lift the Spool latch, or they wait in line up to their necks")
+if "water_level_at" not in out:
+    fail.append("Wading.out does not look for the shallow side — it could walk "
+                "them deeper in")
+
 # -- AND THE GOD CAN STILL FISH IT OUT ---------------------------------------
 hovering = body_of(HAND, "_update_hover")
 clamped = [r for r in hovering if "ground_point.y = maxf" in r]

@@ -2036,6 +2036,12 @@ func _tick_hazards(delta: float) -> void:
 				return    # out of the water and away home: no slow drowning to watch
 			if burning:
 				extinguish()  # water douses the flames, but the drowning goes on
+			# THE WATER CAME TO THEM. Walking INTO water is routed round (see
+			# NavField.water_route), but only a body that is walking asks: a
+			# crowd stood praying in a dry pit when a deluge filled it, and
+			# prayed on up to their necks until they were nearly dead.
+			if state != State.FLEE:
+				Wading.out(self, world)
 			health -= HAZARD_RATE * delta
 			if health <= 0.0:
 				enter_dying()
