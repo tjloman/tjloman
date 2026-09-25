@@ -1230,6 +1230,27 @@ func chunk_rng(cell: Vector2i, salt := 0) -> RandomNumberGenerator:
 	return rng
 
 
+## IS THIS TOWN GROUND? Asked by the stone scatter, which puts small stones
+## where people live and the big ones out in the country — see Chunk.
+##
+## TWO ANSWERS, BECAUSE A VILLAGE EXISTS IN TWO STATES. Once founded it is a
+## node you can measure to. Before that it is a CELL the seed has already
+## decided on, and a chunk scatters its stones inside `_spawn_chunk` — BEFORE
+## `_maybe_found_village` runs on the same cell. Asking only the live villages
+## would seed every town site in the world with megaliths a moment before the
+## town turned up on top of them.
+func village_ground(x: float, z: float, within := 40.0) -> bool:
+	if _is_village_cell(cell_of(x, z)):
+		return true
+	for v in get_tree().get_nodes_in_group("village"):
+		var town := v as Node3D
+		if not is_instance_valid(town):
+			continue
+		if Vector2(town.global_position.x - x, town.global_position.z - z).length() < within:
+			return true
+	return false
+
+
 ## Neutral villages -----------------------------------------------------------
 
 ## Deterministic placement: a cell is a village site if it wins the hash

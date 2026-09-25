@@ -174,7 +174,16 @@ func _ready() -> void:
 		# whichever of these names the bank actually had. See
 		# ModelBank.footing_any.
 		custom.position.y += ModelBank.footing_any(named)
-		custom.scale = Vector3.ONE * girth()
+		# FITTED TO ITS RUNG, not scaled BY it. One `rock.glb` has to answer for
+		# every size on the ladder, and multiplying an artist's model by 0.235
+		# for a pebble and 1.23 for a megalith only works if the artist happened
+		# to author it at exactly one metre. Measured instead: whatever the model
+		# is, it comes out the width its rung says. A model with no width at all
+		# is left alone rather than divided by zero.
+		var box := ModelBank.bounds_any(named)
+		var wide := maxf(box.size.x, box.size.z)
+		if wide > 0.001:
+			custom.scale = Vector3.ONE * (girth() * 2.0 / wide)
 		add_child(custom)
 	else:
 		var wide := girth()

@@ -60,13 +60,36 @@ const STAND := {
 ## THE LADDER RUNS TO TEN NOW — see RockDeposit.WORTH — so these are rungs of
 ## that, and the top of it is a megalith the size of a hut. One in eighteen of
 ## a hillside's rocks is worth finding; the rest are what you trip over.
-const STONE_SPREAD: Array[int] = [0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 8, 9]
+## OPEN COUNTRY: anything up to a tor. The big ones are what a god goes looking
+## for, so roughly one rock in three out here is worth carrying.
+const STONE_SPREAD: Array[int] = [0, 0, 0, 0, 1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 7]
+## TOWN GROUND: a block and under. People have been picking this ground over for
+## a generation — the loose stone worth having went into the walls long ago, and
+## a town with a megalith in the square would have built the square round it.
+const TOWN_SPREAD: Array[int] = [0, 0, 0, 1, 1, 2, 3]
+## SHINGLE: rolled stone at the waterline, small and rounded, never an outcrop.
 const SHINGLE: Array[int] = [0, 0, 0, 1, 1, 2]
-## HOW OFTEN A HILLSIDE ROCK IS AN OUTCROP INSTEAD — part of the hill, three
-## hundred stone deep, quarried rather than lifted. This is what a village's
-## stone actually comes from, and it is the rate the old rung-four tor came up
-## at, so no town is any poorer for the ladder above.
+## HOW OFTEN A WILD ROCK IS AN OUTCROP INSTEAD — part of the hill, three hundred
+## stone deep, quarried rather than lifted. Every village is GIVEN one of these
+## outright (see Village._raise_quarry), so this is the wilderness rate: what a
+## god finds out in the country, not what a town lives on.
 const VEIN_CHANCE := 1.0 / 12.0
+
+## THE TWO ROCKS AT THE TOP OF THE LADDER — a monolith and a megalith, the size
+## of a hut, eighty-eight and a hundred and forty-three stone.
+##
+## THEY ARE NOT ON THE ORDINARY SPREAD ON PURPOSE. A thing you find one of is
+## worth crossing a valley for; a thing that turns up in every third meadow is
+## scenery. So a chunk rolls ONCE for one of these, at long odds — the same
+## shape as the rare caribou herd — and the odds are far better in the rocky
+## hills, because that is where stone comes from.
+const GREAT_STONES: Array[int] = [8, 9]
+const GREAT_STONE_CHANCE := 0.02
+const GREAT_STONE_IN_HILLS := 0.09
+## Where stone is scattered at all — the arms of `_scatter` that call
+## `_scatter_deposits`. A great stone cannot turn up in a swamp.
+const STONE_COUNTRY: Array[String] = ["forest", "grassland", "rocky_hills",
+	"desert", "tundra"]
 ## How close to the waterline counts as a shore, in metres of height above it.
 const SHORE_WITHIN := 1.6
 
@@ -843,6 +866,31 @@ func _scatter(plant_wood := true) -> void:
 			_scatter_bushes(rng, rng.randi_range(2, 4))
 			_scatter_animals(rng, {"frog": 0.9, "pig": 0.12, "anteater": 0.12,
 				"coati": 0.1})
+	# LAST, ALWAYS LAST. It draws from the same stream every arm above drew
+	# from, and adding a consumer anywhere but the end would move every tree,
+	# rock and beast in the world by one roll.
+	_maybe_great_stone(rng, biome)
+
+
+## ONE ROLL FOR A GREAT STONE. See GREAT_STONES: the two rungs at the top of the
+## ladder are not scattered, they are FOUND, and a chunk gets one chance at one.
+func _maybe_great_stone(rng: RandomNumberGenerator, biome: String) -> void:
+	if not STONE_COUNTRY.has(biome):
+		return
+	var odds := GREAT_STONE_IN_HILLS if biome == "rocky_hills" else GREAT_STONE_CHANCE
+	if rng.randf() >= odds:
+		return
+	var spot := _random_spot(rng)
+	if not _spot_ok(spot):
+		return
+	# Never in somebody's square. A town would have built round it.
+	if world != null and world.village_ground(position.x + spot.x, position.z + spot.z):
+		return
+	var rock := RockDeposit.new()
+	rock.rung = GREAT_STONES[rng.randi() % GREAT_STONES.size()]
+	_place(rock, spot, 0.3)
+	rock.rotation.y = rng.randf() * TAU
+	Util.apply_lod(rock, Quality.clutter_distance())
 
 
 func _random_spot(rng: RandomNumberGenerator) -> Vector3:
@@ -930,13 +978,19 @@ func _scatter_deposits(rng: RandomNumberGenerator, count: int) -> void:
 			continue
 		var rock := RockDeposit.new()
 		var shore: bool = world != null and spot.y - WorldGen.WATER_LEVEL < SHORE_WITHIN
-		# Shingle is rolled stone: small, rounded, and never an outcrop. A
-		# hillside is whatever the hill is made of, outcrops included.
-		if not shore and rng.randf() < VEIN_CHANCE:
+		# WHERE IT IS DECIDES WHAT IT IS. Town ground has been picked over for a
+		# generation and keeps nothing bigger than a block; shingle is rolled
+		# stone at the waterline; open country is whatever the hill is made of,
+		# outcrops included.
+		if world != null and world.village_ground(
+				position.x + spot.x, position.z + spot.z):
+			rock.rung = TOWN_SPREAD[rng.randi() % TOWN_SPREAD.size()]
+		elif shore:
+			rock.rung = SHINGLE[rng.randi() % SHINGLE.size()]
+		elif rng.randf() < VEIN_CHANCE:
 			rock.vein = true
 		else:
-			var ladder: Array[int] = SHINGLE if shore else STONE_SPREAD
-			rock.rung = ladder[rng.randi() % ladder.size()]
+			rock.rung = STONE_SPREAD[rng.randi() % STONE_SPREAD.size()]
 		_place(rock, spot, 0.2)
 		rock.rotation.y = rng.randf() * TAU  # a random facing, not all alike
 		Util.apply_lod(rock, Quality.clutter_distance())

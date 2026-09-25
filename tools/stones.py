@@ -40,6 +40,9 @@ BLOW = (ROOT / "scripts/world/blow.gd").read_text()
 HOUSE = (ROOT / "scripts/world/house.gd").read_text()
 HAND = (ROOT / "scripts/player/divine_hand.gd").read_text()
 WATCH = (ROOT / "scripts/world/village_watch.gd").read_text()
+CHUNK = (ROOT / "scripts/world/chunk.gd").read_text()
+VILLAGE = (ROOT / "scripts/world/village.gd").read_text()
+WORLD = (ROOT / "scripts/world/world_gen.gd").read_text()
 BODY = (ROOT / "scripts/creature/creature_body.gd").read_text()
 
 ## A THROW A PERSON ACTUALLY MAKES, against the ceiling the hand allows. The
@@ -219,6 +222,56 @@ def breaking(fail):
                     "to be paid for with the player's own time" % cost)
 
 
+def where(fail):
+    """WHICH ROCKS TURN UP WHERE, read off the scatter tables."""
+    town = int_list(CHUNK, "TOWN_SPREAD", "chunk.gd")
+    open_country = int_list(CHUNK, "STONE_SPREAD", "chunk.gd")
+    shingle = int_list(CHUNK, "SHINGLE", "chunk.gd")
+    great = int_list(CHUNK, "GREAT_STONES", "chunk.gd")
+    vein = eval(re.search(r"^const VEIN_CHANCE := (.+)$", CHUNK, re.M).group(1))
+    odds = const(CHUNK, "GREAT_STONE_CHANCE", "chunk.gd")
+    hills = const(CHUNK, "GREAT_STONE_IN_HILLS", "chunk.gd")
+    chunk_m = const(WORLD, "CHUNK_SIZE", "world_gen.gd")
+
+    print()
+    print("WHICH ROCKS TURN UP WHERE")
+    for label, spread in (("a town", town), ("open country", open_country),
+                          ("the waterline", shingle)):
+        top = max(spread)
+        big = sum(1 for r in spread if r >= 4) / float(len(spread))
+        print("  %-14s rungs %d..%d (%s at most, %d stone) — %.0f%% worth carrying"
+              % (label, min(spread), top, NAMES[top], WORTH[top], big * 100.0))
+    print("  %-14s %d%% of wild rocks, and one per village outright"
+          % ("outcrops", round(vein * 100.0)))
+    print("  %-14s rungs %s, one roll a chunk" % ("great stones",
+          " and ".join(NAMES[r] for r in great)))
+
+    print()
+    print("HOW FAR YOU WALK TO FIND A GREAT STONE")
+    for label, p in (("ordinary country", odds), ("the rocky hills", hills)):
+        per = 1.0 / p
+        side = (per * chunk_m * chunk_m) ** 0.5
+        print("  %-18s one in %.0f chunks — about a %.0fm square of it"
+              % (label, per, side))
+
+    if max(town) > 3:
+        fail.append("town ground can grow a %s — a town would have built the "
+                    "square round anything that big" % NAMES[max(town)])
+    if max(open_country) >= min(great):
+        fail.append("open country scatters a %s, which is supposed to be a "
+                    "thing you go and FIND, not a thing in every third meadow"
+                    % NAMES[max(open_country)])
+    if max(open_country) < 4:
+        fail.append("nothing above a %s spawns in open country — 'I haven't "
+                    "found any megalith, indeed nothing as large as a boulder'"
+                    % NAMES[max(open_country)])
+    if sorted(great) != [len(WORTH) - 2, len(WORTH) - 1]:
+        fail.append("the great stones are not the top two rungs of the ladder")
+    if max(shingle) > 2:
+        fail.append("shingle is rolled stone — it does not run to a %s"
+                    % NAMES[max(shingle)])
+
+
 def source(fail):
     print()
     print("WHAT THE SOURCE ACTUALLY DOES")
@@ -276,6 +329,27 @@ def source(fail):
         print("  quarriers work outcrops, not field stones ....... yes")
 
     burden = body(BODY, "burden")
+    ready = body(VILLAGE, "_ready")
+    quarry = body(VILLAGE, "_raise_quarry")
+    if ready.count("_raise_quarry()") != 1:
+        fail.append("a village raises its own rock %d times — it is meant to be "
+                    "exactly one" % ready.count("_raise_quarry()"))
+    elif "quarry.vein = true" not in quarry:
+        fail.append("a village's own rock is not an outcrop, so it can be "
+                    "picked up and carried off")
+    else:
+        print("  every village is given exactly one outcrop ..... yes")
+
+    ground = body(WORLD, "village_ground")
+    if "_is_village_cell(" not in ground or 'get_nodes_in_group("village")' not in ground:
+        # A chunk scatters its stones before the village on that cell exists, so
+        # the live-village test alone seeds every town site with megaliths.
+        fail.append("WorldGen.village_ground no longer asks BOTH the seed and "
+                    "the live villages, so town ground is decided by whichever "
+                    "of the two happens to have run first")
+    else:
+        print("  town ground is known before the town is ........ yes")
+
     if "thing is RockDeposit" not in burden:
         fail.append("CreatureBody.burden no longer weighs a rock, so a "
                     "fledgling can shoulder a megalith")
@@ -298,6 +372,7 @@ def main():
     ladder(fail)
     biggest(fail)
     breaking(fail)
+    where(fail)
     source(fail)
     print()
     if fail:

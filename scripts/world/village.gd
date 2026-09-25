@@ -180,6 +180,10 @@ const ROOM_ROUND_A_HOUSE := 3.2
 const ROOM_ROUND_A_SHOP := 7.0
 const ROOM_ROUND_A_FARM := 7.0
 const ROOM_ROUND_THE_SCHOOL := 9.0
+## HOW WIDE A BERTH THE TOWN'S OWN ROCK GETS. Bigger than a workshop's: it is
+## three metres across, people work it with picks all day, and a hut built
+## against it would have a quarry for a back garden.
+const ROOM_ROUND_THE_QUARRY := 8.0
 
 ## THE TOWN'S OWN NUMBERS, WORKED OUT ONCE FOR EVERYBODY.
 ##
@@ -238,6 +242,9 @@ var workshops: Array[Workshop] = []
 ## The place the village made for the creature, once it loved him. See
 ## CreatureNest — it is the only building here that is about somebody.
 var nest: CreatureNest = null
+## THE TOWN'S OWN ROCK. Exactly one, raised with the village — see
+## `_raise_quarry`.
+var quarry: RockDeposit = null
 
 ## Militia state. `alarm` counts down while the village is roused; `threat_pos`
 ## is where the trouble was last seen; `grudge` is their anger at the creature.
@@ -324,6 +331,7 @@ func _ready() -> void:
 		# three stone and a nest is cut from ten.
 		store.add_lumber(CreatureNest.LUMBER)
 		store.add_stone(CreatureNest.STONE)
+	_raise_quarry()
 	# ENOUGH IN THE GRANARY THAT EVERYONE CAN GET ONE MEAL.
 	#
 	# NOT A CHANGE TO STARVATION. Hunger climbs as it always did, a famine
@@ -658,6 +666,32 @@ func _build_starting_houses() -> void:
 	_assign_housing()
 
 
+
+## EVERY TOWN HAS A ROCK. Exactly one outcrop, raised with the village.
+##
+## Stone used to arrive by luck: a wild rock had a one-in-twelve chance of being
+## an outcrop, so whether a village could build in stone at all came down to
+## whether the seed had put a vein within walking distance — and a town founded
+## on a soft green valley simply never built anything. Wood grows back and stone
+## does not, so that is not a hardship, it is a dead end.
+##
+## It is placed through `find_build_spot` like everything else the town raises,
+## so it lands in an open band near the edge rather than in the square, and
+## `_spot_blocked` knows about it afterwards so nothing is ever built on top of
+## it. Three hundred stone: a season's quarrying, and the only stone a village
+## can reach without a god's help.
+func _raise_quarry() -> void:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	var spot := find_build_spot(world, ROOM_ROUND_THE_QUARRY)
+	quarry = RockDeposit.new()
+	quarry.vein = true
+	# GROUND THAT WOULD TAKE NOTHING ELSE STILL TAKES THIS. A village hemmed in
+	# by water and slope would otherwise be the one village with no stone, which
+	# is the thing this exists to prevent — so it goes where it can.
+	quarry.position = to_local(spot) if spot.is_finite() \
+		else _grounded(Vector3(cos(randf() * TAU), 0.0, sin(randf() * TAU)) * 19.0, 2.0)
+	add_child(quarry)
+
 ## WHERE THE i-TH FOUNDING HOUSE STANDS: rings widening out from the totem,
 ## turned a little against each other so the second ring does not sit squarely
 ## behind the first. Anything that would land on the market, the field or the
@@ -712,6 +746,10 @@ func _spot_blocked(pos: Vector3, own_room := 0.0) -> bool:
 	# origin and a radius from that origin leaves the back of it buildable. See
 	# CreatureNest.covers.
 	if nest != null and is_instance_valid(nest) and nest.covers(pos, own_room):
+		return true
+	if quarry != null and is_instance_valid(quarry) \
+			and quarry.global_position.distance_to(pos) \
+			< maxf(ROOM_ROUND_THE_QUARRY, own_room):
 		return true
 	return pen_position().distance_to(pos) < maxf(6.0, own_room)
 
@@ -1832,6 +1870,11 @@ func to_dict() -> Dictionary:
 		"edubba": has_edubba(),
 		"trades": _trade_counts(),
 		"nest": nest != null and is_instance_valid(nest),
+		# HOW MUCH OF THE TOWN'S ROCK IS LEFT. It is raised fresh in `_ready`,
+		# so without this a village that had quarried its outcrop down to
+		# nothing came back from a save with a full one — which is the sort of
+		# kindness that quietly removes a constraint the whole economy rests on.
+		"quarry": quarry.stone_left if quarry != null and is_instance_valid(quarry) else 0,
 	}
 
 
@@ -1971,6 +2014,17 @@ func _rebuild(data: Dictionary) -> void:
 			shop.position = to_local(shop_spot)
 			add_child(shop)
 			workshops.append(shop)
+	# THE TOWN'S ROCK, WORN DOWN TO WHERE IT WAS. Absent from an old save means
+	# an untouched outcrop, not a spent one — a missing key is a game that was
+	# saved before towns had rocks, and starting those towns with no stone would
+	# be reading silence as bad news.
+	if quarry != null and is_instance_valid(quarry) and data.has("quarry"):
+		var left := int(data["quarry"])
+		if left <= 0:
+			quarry.queue_free()
+			quarry = null
+		else:
+			quarry.stone_left = mini(left, quarry.stone_left)
 	if bool(data.get("nest", false)) and nest == null:
 		var spot := find_build_spot(world, CreatureNest.FOOTPRINT)
 		var beast := get_tree().get_first_node_in_group("creature") as Creature
