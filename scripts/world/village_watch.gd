@@ -97,8 +97,6 @@ func _look_for_timber(tree: SceneTree, here: Vector3, reach: float) -> void:
 			continue
 		if wood.is_felled() or wood.is_held() or wood.burning:
 			continue
-		if _unreachable(tree, wood.global_position):
-			continue
 		var d := here.distance_to(wood.global_position)
 		# A TRUNK ALREADY ON THE GROUND IS WORTH WALKING PAST TWO STANDING ONES
 		# FOR. It is the same timber with the felling already done, and it is on
@@ -106,7 +104,8 @@ func _look_for_timber(tree: SceneTree, here: Vector3, reach: float) -> void:
 		# favour of the nearest sapling watches it rot instead.
 		if wood.is_down():
 			d -= DOWNED_TIMBER_WORTH
-		if d < best:
+		if d < best \
+				and not _unreachable(tree, wood.global_position):
 			best = d
 			timber = wood
 
@@ -124,10 +123,9 @@ func _look_for_stone(tree: SceneTree, here: Vector3, reach: float) -> void:
 		# village spent its afternoons on a rock worth one.
 		if not rock.vein:
 			continue
-		if _unreachable(tree, rock.global_position):
-			continue
 		var d := here.distance_to(rock.global_position)
-		if d < best:
+		if d < best \
+				and not _unreachable(tree, rock.global_position):
 			best = d
 			stone = rock
 
@@ -143,10 +141,12 @@ func _look_for_beasts(tree: SceneTree, here: Vector3, reach: float) -> void:
 		var beast := n as Animal
 		if beast == null or not is_instance_valid(beast) or beast.is_queued_for_deletion():
 			continue
-		if _unreachable(tree, beast.global_position):
-			continue
 		var d := here.distance_to(beast.global_position)
 		if d >= reach:
+			continue
+		# Only now, for a beast actually in reach: the water question is two
+		# noise reads, and there are dozens of beasts in the loaded world.
+		if _unreachable(tree, beast.global_position):
 			continue
 		if d < best_game and beast.meat_yield() > 0 and beast.tamed_by == null \
 				and not beast.spec.get("predator", false):
@@ -211,10 +211,9 @@ func _look_for_carcass(tree: SceneTree, here: Vector3, reach: float) -> void:
 			continue
 		if body.is_spoiled():
 			continue
-		if _unreachable(tree, body.global_position):
-			continue
 		var d := here.distance_to(body.global_position)
-		if d < best:
+		if d < best \
+				and not _unreachable(tree, body.global_position):
 			best = d
 			carcass = body
 
@@ -226,10 +225,9 @@ func _look_for_corpse(tree: SceneTree, here: Vector3, reach: float) -> void:
 		var body := n as Corpse
 		if body == null or not is_instance_valid(body) or body.is_queued_for_deletion():
 			continue
-		if _unreachable(tree, body.global_position):
-			continue
 		var d := here.distance_to(body.global_position)
-		if d < best:
+		if d < best \
+				and not _unreachable(tree, body.global_position):
 			best = d
 			corpse = body
 

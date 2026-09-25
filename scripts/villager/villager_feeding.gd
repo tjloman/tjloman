@@ -219,10 +219,9 @@ static func _ground_food(who: Villager) -> FoodItem:
 		# can see it will send everybody in after it, one at a time, each new
 		# corpse leaving more meat in the water than the last. The god can fish
 		# it out; the village leaves it.
-		if who.would_drown_at(food.global_position):
-			continue
 		var d := who.global_position.distance_to(food.global_position)
-		if d < best_dist and d < who.village.influence_radius * 1.5:
+		if d < best_dist and d < who.village.influence_radius * 1.5 \
+				and not who.would_drown_at(food.global_position):
 			best_dist = d
 			best = food
 	return best

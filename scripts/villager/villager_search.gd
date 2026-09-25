@@ -9,8 +9,12 @@ extends RefCounted
 ##
 ## TWO RULES RUN THROUGH ALL OF THEM.
 ##
-## NOBODY WALKS INTO THE WATER FOR ANYTHING. Every candidate is asked
-## `would_drown_at` first. A joint of meat floating in a lake used to take the
+## NOBODY WALKS INTO THE WATER FOR ANYTHING. Every candidate that is in reach is
+## asked `would_drown_at` — and ONLY the ones in reach, last, after the distance.
+## It is two or three reads of the terrain noise, and it used to be asked of
+## every tree in the loaded world before the distance threw most of them away:
+## one woodcutter choosing a tree was hundreds of reads, and a busy frame of
+## decisions was ten thousand of them. See tools/sweeps.py. A joint of meat floating in a lake used to take the
 ## whole town in after it, one at a time, each drowning where the last one did.
 ##
 ## AND THE NEAREST IS NOT THE ANSWER. If it were, every idle hand in the village
@@ -49,10 +53,9 @@ static func forage(who: Villager) -> ForageBush:
 		var bush := b as ForageBush
 		if not is_instance_valid(bush) or not bush.has_berries():
 			continue
-		if who.would_drown_at(bush.global_position):
-			continue
 		var d := who.global_position.distance_to(bush.global_position)
-		if d < best_dist and d < who.village.influence_radius * 2.0:
+		if d < best_dist and d < who.village.influence_radius * 2.0 \
+				and not who.would_drown_at(bush.global_position):
 			best_dist = d
 			best = bush
 	return best
@@ -67,10 +70,9 @@ static func tamable(who: Villager) -> Animal:
 			continue
 		# A beast standing in deep water is a beast that is drowning, and
 		# nobody is gentling it.
-		if who.would_drown_at(animal.global_position):
-			continue
 		var d := who.global_position.distance_to(animal.global_position)
-		if d < reach:
+		if d < reach \
+				and not who.would_drown_at(animal.global_position):
 			_consider(best, animal, d)
 	return _my_pick(who, best) as Animal
 
@@ -95,10 +97,9 @@ static func corpse(who: Villager, spare_the_eaten := false) -> Corpse:
 			continue
 		# The drowned are left where they are. Somebody who went in after the
 		# meat and did not come out is not a reason for the next one to go.
-		if who.would_drown_at(body.global_position):
-			continue
 		var d := who.global_position.distance_to(body.global_position)
-		if d < reach:
+		if d < reach \
+				and not who.would_drown_at(body.global_position):
 			_consider(best, body, d)
 	return _my_pick(who, best) as Corpse
 
@@ -151,10 +152,9 @@ static func carcass(who: Villager) -> Carcass:
 		# to one is sending them on an errand the world has already spoiled.
 		if beast.is_spoiled():
 			continue
-		if who.would_drown_at(beast.global_position):
-			continue
 		var d := who.global_position.distance_to(beast.global_position)
-		if d < reach:
+		if d < reach \
+				and not who.would_drown_at(beast.global_position):
 			_consider(best, beast, d)
 	return _my_pick(who, best) as Carcass
 
@@ -189,10 +189,9 @@ static func in_group(who: Villager, group: String, max_dist: float) -> Node3D:
 		if node is WildTree and ((node as WildTree).is_felled() \
 				or (node as WildTree).is_held() or (node as WildTree).burning):
 			continue
-		if who.would_drown_at(node.global_position):
-			continue
 		var d := who.global_position.distance_to(node.global_position)
-		if d < max_dist:
+		if d < max_dist \
+				and not who.would_drown_at(node.global_position):
 			_consider(best, node, d)
 	return _my_pick(who, best)
 
