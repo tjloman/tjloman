@@ -226,6 +226,8 @@ var _target_herd: Herd = null
 var _school_seat := 0
 var _target_corpse: Corpse = null
 var _target_carcass: Carcass = null
+## What this dancer circles and faces. See VillageGathering.
+var _dance_mid := Vector3.INF
 var _target_tree: WildTree = null
 var _target_deposit: RockDeposit = null
 var _build_site: House = null
@@ -619,7 +621,7 @@ func _physics_process(delta: float) -> void:
 			if village.nest != null and is_instance_valid(village.nest):
 				# Round the fire, and facing it. The circle actually turns —
 				# a ring of people standing still is a queue, not a dance.
-				var mid := village.nest.global_position
+				var mid := _dance_mid if _dance_mid.is_finite() else village.nest.global_position
 				var out := global_position - mid
 				out.y = 0.0
 				global_position = mid + out.rotated(Vector3.UP, delta * 0.45) \
@@ -1242,7 +1244,9 @@ func _choose() -> void:
 		return
 	if social < 30.0:
 		state = State.GO_WORSHIP
-		_target = village.totem.global_position + Vector3(randf_range(-3, 3), 0, randf_range(-3, 3))
+		# Wherever the town gathers — see VillageGathering. It was the totem,
+		# for everybody, and a town of four hundred stood on one patch of dirt.
+		_target = VillageGathering.spot(village, self)["at"]
 		return
 	# WHAT THE TOWN IS DOING. The village has already worked out, once, what it
 	# has lately seen and what it is minded to do about it; this reads the answer
@@ -1385,8 +1389,9 @@ func _go_sleep() -> void:
 		_target = home.global_position \
 			+ Vector3(randf_range(-berth, berth), 0, randf_range(-berth, berth))
 	else:
-		# Homeless: a patch of dirt near the totem.
-		_target = village.totem.global_position + Vector3(randf_range(-4, 4), 0, randf_range(-4, 4))
+		# Homeless: somebody's doorstep, or the totem now and then. It was always
+		# the totem, and a town short of roofs slept in one heap in the square.
+		_target = VillageGathering.spot(village, self)["at"]
 	_maybe_mount()
 
 
@@ -1721,7 +1726,12 @@ func _start_job(job: String) -> void:
 				state = State.WANDER
 				_action_time = 2.0
 				return
-			_target = village.nest.ring_spot(randi() % CreatureNest.DANCERS)
+			# ROUND THE WHOLE TOWN, not only the nest's fire: at the shrines, the
+			# nest, and round people's own houses. The prayer is still the nest's
+			# — it counts every dancer, wherever they are (Village._dancers).
+			var circle := VillageGathering.spot(village, self)
+			_target = circle["at"]
+			_dance_mid = circle["mid"]
 			state = State.GO_CIRCLE
 		"build_shop":
 			_shop_kind = Workshop.short_of(village)
