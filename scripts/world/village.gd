@@ -291,6 +291,8 @@ var _teachers := 0
 var _jobs := {}
 var _worshippers := 0
 var _dancers := 0
+## Mothers expecting, counted at the tally. See `at_capacity`.
+var _expecting := 0
 var _morality := 0.0
 
 var _totem_orb: MeshInstance3D
@@ -607,8 +609,14 @@ func spawn_farm_at(world_spot: Vector3) -> void:
 
 ## Births are bounded by shelter: a village can outgrow its housing a
 ## little, but not without limit — build homes to grow the flock.
+##
+## THE CHILDREN ALREADY ON THE WAY COUNT. This was asked at conception and knew
+## only who had been born — so a big town reaching its limit with forty mothers
+## expecting took in forty more than it had beds for, three quarters of a year
+## later, every time. A town of five hundred was carrying a crowd sleeping rough
+## that no rule had ever let it have.
 func at_capacity() -> bool:
-	return population() >= housing_capacity() + 8
+	return population() + _expecting >= housing_capacity() + 8
 
 
 ## THE RING IS THE READOUT: its SIZE is the population and its COLOUR is belief,
@@ -1144,6 +1152,7 @@ func _retally() -> void:
 	_teachers = 0
 	_worshippers = 0
 	_dancers = 0
+	_expecting = 0
 	_jobs = {}
 	var morals := 0.0
 	for v in _roster:
@@ -1160,6 +1169,8 @@ func _retally() -> void:
 			_worshippers += 1
 		if v.state == Villager.State.CIRCLING:
 			_dancers += 1
+		if v.pregnant:
+			_expecting += 1
 		var job := v.current_job()
 		if job != "":
 			_jobs[job] = _jobs.get(job, 0) + 1

@@ -333,7 +333,13 @@ func size_name() -> String:
 func hover_text() -> String:
 	var census := ""
 	if village != null and is_instance_valid(village):
-		census = "\n%s — population %d" % [village.village_name, village.population()]
+		# THE TOWN'S BEDS, EXACTLY. How big a town can get is a question about
+		# its roofs — hut 3, house 6, longhouse 12 — and the mix cannot be read
+		# off a screenshot; the town knows it to the bed. Asked when somebody
+		# hovers a house, never per frame.
+		census = "\n%s — population %d · beds %d · %d sleeping rough" % [
+			village.village_name, village.population(),
+			village.housing_capacity(), village.homeless_count()]
 	if under_construction:
 		return "%s under construction — %d%%%s" % [size_name(), int(progress), census]
 	return "%s — health %d%%, age %d years, sleeps %d%s" % [
