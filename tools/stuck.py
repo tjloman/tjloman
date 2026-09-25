@@ -45,8 +45,11 @@ SRC = (ROOT / "scripts/villager/villager.gd").read_text()
 # The ways out. `_rethink` asks for a plan; `_choose` and `_decide` take one;
 # assigning `state` moves along by itself; and a handful of helpers exist
 # precisely to end an arm.
+# `queue_free()` is the body ending without a death — a child gone to family
+# elsewhere (ChildSafety). The failure below already names "ends the body" as a
+# way out; this is the other spelling of it.
 EXITS = ("_rethink()", "_choose()", "_decide()", "state = State.",
-         "_set_out()", "die(", "scare(")
+         "_set_out()", "die(", "scare(", "queue_free()")
 
 
 def bodies(src):

@@ -269,6 +269,10 @@ static func lands(thing: Node3D, at: Vector3, speed: float, mass: float,
 			continue
 		if soul.global_position.distance_to(at) > SPLASH:
 			continue
+		# A CHILD IS SENT HOME AND COUNTS FOR NOTHING — no hurt, and so no
+		# karma. Karma is a payoff to the god who wants to be evil.
+		if ChildSafety.spared(soul):
+			continue
 		# `by_god` is passed through as the damage's own flag, which is what
 		# lets VillagerNeeds tell a stoning from a wolf when it comes to
 		# reckoning the death — see Villager.take_damage.

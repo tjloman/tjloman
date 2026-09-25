@@ -847,8 +847,8 @@ func _things_around(radius: float) -> Array:
 	for group in ["villagers", "animals", "houses", "trees", "rock_deposits", "corpses"]:
 		for n in get_tree().get_nodes_in_group(group):
 			var node := n as Node3D
-			if not is_instance_valid(node) or node == self:
-				continue
+			if not is_instance_valid(node) or node == self or ChildSafety.is_child(node):
+				continue   # a child is never among the things it could do anything to
 			if node.global_position.distance_to(global_position) < radius:
 				found.append(node)
 				if found.size() >= 24:
@@ -1230,6 +1230,8 @@ func _run_speed() -> float:
 
 
 func _pick_up_thing(node: Node3D, why: String) -> void:
+	if ChildSafety.is_child(node):
+		return   # never, by any door — see ChildSafety
 	# A GOOD creature (gentle+) lifting a dying villager cradles them back to a
 	# sliver of life, same as the hand. A wild or cruel one does no such mercy —
 	# it will eat what it's handed (see _intent_for / _eat_carried).

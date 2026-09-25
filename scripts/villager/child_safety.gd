@@ -50,6 +50,13 @@ const STEPS_IN_FROM := 26.0
 const SET_DOWN := "set_down"
 const HELD_FAST := "held_fast"
 
+## Faster than a stroll, slower than a run. They are not fleeing anything; they
+## are going somewhere, and they know the way.
+const WALKS_HOME := 1.3
+## And the most the walk is allowed to take, in seconds. A child stuck against
+## water or a cliff is not left pacing it for ever.
+const GIVES_UP_AFTER := 40.0
+
 
 ## Is this a child? The one definition, so nothing anywhere has its own idea.
 static func is_child(thing: Node3D) -> bool:
@@ -128,3 +135,120 @@ static func throw_answer(thing: Node3D) -> String:
 static func let_go(thing: Node3D) -> void:
 	if is_instance_valid(thing) and thing.has_meta("shielding"):
 		thing.remove_meta("shielding")
+
+
+## AND THERE IS NO HURTING THEM EITHER — AND NOTHING TO SEE IF YOU TRY.
+##
+## Any harm that reaches a child — fire, a thrown stone, a fireball, a quake, a
+## wolf, the water, the creature, hunger — is turned at the door into this: they
+## get up and walk to the school, or the nearest house, go inside, and are gone.
+## They have gone to live with family somewhere else. No announcement, no
+## scream, no body, no mourners, no karma, nothing learned by the creature,
+## nothing for the village to witness.
+##
+## THAT IS THE DESIGN AND IT IS AIMED AT A PERSON, NOT AT A VILLAGER. Somebody
+## is going to get bored and try to murder the children in this game, and the
+## only thing that stops that being a game is there being NO PAYOFF — not a
+## punishment, which is a payoff of its own to the kind of player looking for
+## one, and not a refusal, which is a puzzle to be solved. A child who simply
+## leaves is the dullest possible answer. It is not meaningless: the village is
+## one child smaller, and a god who keeps doing it will find the school empty.
+## But there is nothing in it to enjoy.
+##
+## Returns true when the harm was turned. Every door asks this FIRST, before any
+## of its own consequences, or the consequences are the payoff.
+static func spared(soul: Villager) -> bool:
+	if not is_child(soul):
+		return false
+	send_away(soul)
+	return true
+
+
+static func send_away(child: Villager) -> void:
+	if child.leaving:
+		return
+	child.leaving = true
+	_set_off(child)
+	child.extinguish()
+	child.health = maxf(child.health, 1.0)
+	Mauling.free_of(child)
+	# In a hand, or in the air: they set off once they are on their feet — see
+	# Villager._choose, which sends a leaving child straight back to it.
+	if child.state == Villager.State.HELD or child.state == Villager.State.FALLING:
+		return
+	child._dismount()
+	child._decision_due = false
+	child.state = Villager.State.LEAVING
+	_set_off(child)
+
+
+## O(N) BY DESIGN: once per child, at the moment harm turns them, and never
+## again — send_away returns at `if child.leaving` before it can be asked twice.
+## The walk itself reads the answer it stored; see `leave_step`.
+## WHERE THEY GO IN. The school first — it is where a child goes when things are
+## wrong — then the nearest roof in their own village, then anybody's.
+static func shelter_for(child: Villager) -> Node3D:
+	var town := child.village
+	if town != null and is_instance_valid(town):
+		if town.edubba != null and is_instance_valid(town.edubba):
+			return town.edubba
+		var best: Node3D = null
+		var best_d := INF
+		for h in town.houses:
+			if not is_instance_valid(h) or h.under_construction:
+				continue
+			var d := child.global_position.distance_to(h.global_position)
+			if d < best_d:
+				best_d = d
+				best = h
+		if best != null:
+			return best
+	var near: Node3D = null
+	var near_d := INF
+	for h in child.get_tree().get_nodes_in_group("houses"):
+		var house := h as Node3D
+		if not is_instance_valid(house):
+			continue
+		var gap := child.global_position.distance_to(house.global_position)
+		if gap < near_d:
+			near_d = gap
+			near = house
+	return near
+
+
+## WHERE, DECIDED ONCE. Asked when harm turns them, never per frame: finding the
+## nearest roof walks every house in the world, and a leaving child is on the
+## physics tick. (Asked twice is harmless — a lifted child sets off again.)
+static func _set_off(child: Villager) -> void:
+	child.set_meta("leaving_to", shelter_for(child))
+	child.set_meta("leaving_left", GIVES_UP_AFTER)
+
+
+## One step of the walk. True when they are gone — inside, or simply away — and
+## the villager's own arm ends the body; see Villager, State.LEAVING.
+##
+## The house they were walking to may burn down on the way, and the walk may be
+## blocked for good. Neither keeps them here: they have gone anyway.
+static func leave_step(child: Villager, delta: float) -> bool:
+	var left := float(child.get_meta("leaving_left", 0.0)) - delta
+	child.set_meta("leaving_left", left)
+	# UNTYPED UNTIL PROVED ALIVE. The house may have burnt down on the way, and
+	# putting a freed object into a typed variable is the error, before any
+	# check below could catch it.
+	var kept: Variant = child.get_meta("leaving_to") if child.has_meta("leaving_to") else null
+	if left <= 0.0 or kept == null or not is_instance_valid(kept):
+		_let_go(child)
+		return true
+	var shelter := kept as Node3D
+	# `placed`: a building is set on proved ground, so the walk asks no water
+	# question of it — see Villager._move_toward.
+	if child._move_toward(shelter.global_position, Villager.WALK_SPEED * WALKS_HOME,
+			delta, Villager.ARRIVE_DIST, true):
+		_let_go(child)
+		return true
+	return false
+
+
+static func _let_go(child: Villager) -> void:
+	Mauling.free_of(child)
+	child._dismount()

@@ -82,6 +82,7 @@ static func status_word(who: Villager) -> String:
 		Villager.State.AT_SCHOOL: return "at school"
 		Villager.State.TEACH: return "teaching the children"
 		Villager.State.HIDE: return "hiding"
+		Villager.State.LEAVING: return "going home"
 		Villager.State.FLEE: return "fleeing in terror"
 		Villager.State.HELD: return "in the grip of a god"
 		Villager.State.FALLING: return "airborne"
@@ -120,6 +121,7 @@ static func status_text(who: Villager) -> String:
 		Villager.State.GO_WORK, Villager.State.WORKING: return "work"
 		Villager.State.PLAY: return "wheee"
 		Villager.State.HIDE: return "shh"
+		Villager.State.LEAVING: return ""   # nothing over their head: see ChildSafety
 		Villager.State.FLEE, Villager.State.FALLING: return "!!!"
 		Villager.State.HELD: return "?!"
 	if who.pregnant:

@@ -74,6 +74,8 @@ var _since_cry := SCREAM_EVERY   # so the first tick screams
 static func seize(prey: Villager, beast: Animal) -> void:
 	if prey == null or not is_instance_valid(prey) or prey.is_dying():
 		return
+	if ChildSafety.spared(prey):
+		return    # no child is pinned — see ChildSafety.spared
 	if prey.village == null or not is_instance_valid(prey.village):
 		return
 	prey.village.feud.seize(prey, beast)

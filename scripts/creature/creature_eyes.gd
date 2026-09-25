@@ -109,6 +109,11 @@ static func cheer_near(who: Creature, radius: float, amount: float) -> void:
 ## other village-facing effects rather than in the state machine: almost all of
 ## what this does is to the TOWN, and only two lines of it are to the creature.
 static func devour(who: Creature, victim: Villager) -> void:
+	# NO CHILD IS EATEN, by any road that gets here. The creature is never
+	# offered one (Creature._things_around) and never takes one up
+	# (Creature._pick_up_thing); this is the last door, and it is shut too.
+	if ChildSafety.spared(victim):
+		return
 	var victim_name := victim.villager_name
 	# Eating people is the fastest way to make a village hate you enough to
 	# arm itself against your creature.

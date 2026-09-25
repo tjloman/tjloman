@@ -69,6 +69,10 @@ static func live(who: Villager, delta: float) -> void:
 	if who.hunger > 85.0:
 		who.happiness = maxf(who.happiness - 1.5 * delta, 0.0)
 	if who.hunger >= 100.0:
+		# A starving child goes to family elsewhere, before the announcement —
+		# which would otherwise be said over them. See ChildSafety.spared.
+		if ChildSafety.spared(who):
+			return
 		who.health -= 2.0 * delta
 		if who.health <= 0.0:
 			if who.village.is_player_home:

@@ -19,7 +19,7 @@ enum State {
 	GO_WORK, WORKING, GO_BUILD_SHOP, BUILDING_SHOP,
 	GO_BUILD_NEST, BUILDING_NEST, GO_CIRCLE, CIRCLING,
 	MUSTERING, HAULING, GO_ARM, FIGHT, HIDE,
-	FLEE, HELD, FALLING, PINNED, DYING,
+	FLEE, HELD, FALLING, PINNED, DYING, LEAVING,
 }
 
 ## Names are drawn by sex, so a villager's name reads with its model.
@@ -172,6 +172,9 @@ var social := 70.0
 var happiness := 60.0
 var health := 100.0
 var burning := false   # ablaze: drains health until doused or dead
+## A child that harm reached, walking to the school or a roof to go inside and
+## be gone. Nothing turns it back. See ChildSafety.spared.
+var leaving := false
 var weapon := ""      # "" = bare-handed; otherwise a Weapon.SPECS kind
 
 ## Personal karma: -100 wicked .. +100 saintly.
@@ -437,6 +440,10 @@ func _physics_process(delta: float) -> void:
 		_apply_gravity_only(delta)
 		return
 	match state:
+		State.LEAVING:
+			if ChildSafety.leave_step(self, delta):
+				queue_free()   # gone inside, to family elsewhere: see ChildSafety
+			return
 		State.HELD:
 			velocity = Vector3.ZERO
 			return
@@ -1154,6 +1161,9 @@ func cheer(amount: float) -> void:
 ## Decision-making -----------------------------------------------------------
 
 func _choose() -> void:
+	if leaving:   # set down again after being lifted: they carry on home
+		state = State.LEAVING
+		return
 	_dismount()
 	_release_farm()  # re-deciding drops any field claim, so others may take it
 	# ...and the post itself, freed on this frame rather than at the village's
@@ -2023,6 +2033,8 @@ func _tick_hazards(delta: float) -> void:
 		var surface := world.water_level_at(global_position.x, global_position.z)
 		var depth := surface - world.height_at(global_position.x, global_position.z)
 		if depth > DROWN_DEPTH and global_position.y < surface + 0.4:
+			if ChildSafety.spared(self):
+				return    # out of the water and away home: no slow drowning to watch
 			if burning:
 				extinguish()  # water douses the flames, but the drowning goes on
 			health -= HAZARD_RATE * delta
@@ -2049,6 +2061,8 @@ func _process_dying(delta: float) -> void:
 
 
 func enter_dying() -> void:
+	if ChildSafety.spared(self):
+		return
 	if state == State.DYING:
 		return
 	_dismount()
@@ -2082,6 +2096,8 @@ func is_dying() -> bool:
 
 
 func ignite() -> void:
+	if ChildSafety.spared(self):
+		return
 	if burning or state == State.HELD or state == State.DYING:
 		return
 	var world := _world()
@@ -2111,6 +2127,9 @@ func hurt_by(foe: Node3D, amount: float) -> void:
 
 
 func take_damage(amount: float, by_god := false, instant := false) -> void:
+	# FIRST, before the mark, the belief, the grief — any of those is a payoff.
+	if ChildSafety.spared(self):
+		return
 	if state == State.DYING:
 		return
 	if by_god:
@@ -2127,6 +2146,8 @@ func take_damage(amount: float, by_god := false, instant := false) -> void:
 
 
 func die(of_old_age: bool) -> void:
+	if ChildSafety.spared(self):
+		return
 	_dismount()
 	# Killed by a beast? The whole village swears a blood debt against THAT
 	# animal and will hunt it down wherever it runs.

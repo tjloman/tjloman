@@ -440,6 +440,9 @@ func _go_off() -> void:
 	for v in get_tree().get_nodes_in_group("villagers"):
 		var villager := v as Villager
 		var d := villager.global_position.distance_to(pos)
+		# A CHILD IN REACH IS SENT HOME, before the kill karma — see ChildSafety.
+		if d < reach and ChildSafety.spared(villager):
+			continue
 		# A gout has no killing core at all — `kill` is zero and this never
 		# fires. Being set alight can still finish somebody; it just is not
 		# instant, and it is survivable if the town is quick.
