@@ -1137,6 +1137,122 @@ def check_late_validity_guards(files):
     return problems
 
 
+# Value types a freed object can never be. A parameter typed as one of these is
+# not the trap below, whatever the body checks.
+VALUE_TYPES = {"int", "float", "bool", "String", "StringName", "Vector2", "Vector3",
+               "Vector2i", "Vector3i", "Color", "Array", "Dictionary", "Basis",
+               "Transform3D", "Quaternion", "Rect2", "AABB", "Callable", "Variant",
+               "PackedFloat32Array", "PackedVector3Array", "PackedStringArray",
+               "NodePath", "Plane"}
+# THE ONES ALREADY THERE WHEN THIS RULE WAS WRITTEN, as file:function:param.
+# A ratchet, not an amnesty: a function NOT on this list with the shape fails,
+# and an entry on it that no longer has the shape fails too — cross it off.
+# Each wants the same fix (take it untyped, guard it, type it), and each needs
+# the body read, because this project builds an inferred Variant as an error and
+# untyping a parameter can break every line below it. Work it down to nothing.
+KNOWN_TYPED_GUARDS = {
+    "scripts/animals/herd.gd:absorb:beast",
+    "scripts/creature/creature_bonds.gd:name_of:who",
+    "scripts/creature/creature_eyes.gd:plight_of:villager",
+    "scripts/creature/creature_head.gd:startled:who",
+    "scripts/creature/creature_herding.gd:go:herd",
+    "scripts/creature/creature_lead.gd:in_sight:who",
+    "scripts/creature/creature_lead.gd:tied_up:who",
+    "scripts/creature/creature_lead.gd:to_thing:what",
+    "scripts/creature/creature_offer.gd:_forget:who",
+    "scripts/creature/creature_throwing.gd:send:thing",
+    "scripts/miracles/miracle_manager.gd:_run_tornado:funnel",
+    "scripts/miracles/miracle_reach.gd:beast_reach:who",
+    "scripts/miracles/portal.gd:_send:body",
+    "scripts/miracles/volley.gd:count:what",
+    "scripts/miracles/volley.gd:fan:first",
+    "scripts/miracles/volley.gd:mark:what",
+    "scripts/player/divine_hand.gd:_release_body:body",
+    "scripts/player/hand_pose.gd:ease:thumb",
+    "scripts/player/sling.gd:heft:body",
+    "scripts/player/sling.gd:loft:body",
+    "scripts/save_game.gd:regenerate_world:creature",
+    "scripts/ui/hud.gd:_snap_to_village:vil",
+    "scripts/ui/temple.gd:disk_at:cam",
+    "scripts/util.gd:bulk_of:what",
+    "scripts/util.gd:within:what",
+    "scripts/villager/child_safety.gd:let_go:thing",
+    "scripts/villager/child_safety.gd:throw_answer:thing",
+    "scripts/villager/mauling.gd:bite:beast",
+    "scripts/villager/mauling.gd:let_go:beast",
+    "scripts/villager/mauling.gd:seize:prey",
+    "scripts/villager/militia.gd:strike:foe",
+    "scripts/villager/villager.gd:hurt_by:foe",
+    "scripts/villager/villager_search.gd:being_eaten:body",
+    "scripts/villager/villager_search.gd:being_mourned:body",
+    "scripts/villager/weapon.gd:affordable:store",
+    "scripts/villager/weapon.gd:strike:foe",
+    "scripts/world/agitation.gd:cry:who",
+    "scripts/world/agitation.gd:flail:visuals",
+    "scripts/world/agitation.gd:settle:visuals",
+    "scripts/world/blow.gd:ride:thing",
+    "scripts/world/caravan.gd:why_not:town",
+    "scripts/world/creature_nest.gd:holding:beast",
+    "scripts/world/food_item.gd:absorb:other",
+    "scripts/world/footing.gd:settle:what",
+    "scripts/world/kindling.gd:douse:who",
+    "scripts/world/kindling.gd:light:who",
+    "scripts/world/kindling.gd:warm:who",
+    "scripts/world/map_file.gd:save_as:world",
+    "scripts/world/resource_item.gd:absorb:other",
+    "scripts/world/ruin_bar.gd:over:who",
+    "scripts/world/village.gd:mark_for_death:beast",
+    "scripts/world/waters.gd:bearing_for:town",
+    "scripts/world/waters.gd:forget:town",
+    "scripts/world/waters.gd:harbour_for:town",
+}
+func_head_re = re.compile(r"^(?:static\s+)?func\s+(\w+)\s*\((.*)\)")
+
+
+def check_typed_guarded_params(files):
+    """A TYPED PARAMETER that the function then asks is_instance_valid() about.
+
+    The same trap as check_late_validity_guards, one door earlier. The check
+    inside says "what I was handed may already be freed" — but handing a freed
+    object to a parameter typed as a class is itself the error, raised at the
+    CALL, before the first line of the body runs. So the guard can never fire on
+    the only case it exists for.
+
+    This took the game down in a live session: a house burned to the ground
+    while a villager was running to beat it out, and
+    `Firefight.ablaze(thing: Node)` — whose first line was an is_instance_valid
+    — was handed what was left of it.
+
+    Leave the parameter untyped (`thing: Variant` or bare `thing`), ask whether
+    it is still there, and only then give it a type.
+    """
+    problems = []
+    for path in files:
+        lines = open(path, encoding="utf-8").read().split("\n")
+        for i, line in enumerate(lines):
+            head = func_head_re.match(line.split("#")[0].strip())
+            if not head:
+                continue
+            typed = {}
+            for part in head.group(2).split(","):
+                m = re.match(r"\s*(\w+)\s*:\s*(\w+)", part)
+                if m and m.group(2) not in VALUE_TYPES:
+                    typed[m.group(1)] = m.group(2)
+            if not typed:
+                continue
+            body = []
+            for ahead in lines[i + 1:]:
+                if ahead.strip() and not ahead.startswith(("\t", " ")):
+                    break
+                body.append(ahead.split("#")[0])
+            text = "\n".join(body)
+            for name, kind in typed.items():
+                if re.search(r"is_instance_valid\(\s*%s\s*\)" % re.escape(name), text):
+                    problems.append((path, i + 1, name, kind, line.strip(),
+                                     head.group(1)))
+    return problems
+
+
 # `who.thirst` — a member READ or WRITTEN on a variable whose class is known.
 # Not followed by "(", because calls are already checked by check() above.
 dotted_member_re = re.compile(r"(?<![\w.$@\"])([a-z_]\w*)\s*\.\s*(\w+)\b(?!\s*\()")
@@ -2386,6 +2502,25 @@ def main():
               "object to a TYPED variable is itself the error, raised before "
               "that check can run. Read it untyped, guard it, then type it."
               "\n    %s" % (path, lineno, name, kind, line))
+    seen_guards = check_typed_guarded_params(files)
+    here = {"%s:%s:%s" % (os.path.relpath(g[0]), g[5], g[2]) for g in seen_guards}
+    guarded_params = [g[:5] for g in seen_guards
+                      if "%s:%s:%s" % (os.path.relpath(g[0]), g[5], g[2])
+                      not in KNOWN_TYPED_GUARDS]
+    for stale in sorted(KNOWN_TYPED_GUARDS - here):
+        print("%s: is on KNOWN_TYPED_GUARDS and no longer has the shape — it was "
+              "fixed; cross it off the list." % stale)
+        guarded_params.append((stale, 0, "", "", ""))
+    if KNOWN_TYPED_GUARDS & here:
+        print("(%d typed parameters guarded too late are known and listed in "
+              "KNOWN_TYPED_GUARDS — work them down.)" % len(KNOWN_TYPED_GUARDS & here))
+    for path, lineno, name, kind, line in [g for g in guarded_params if g[1]]:
+        print("%s:%d: parameter '%s' is typed as %s and the body asks "
+              "is_instance_valid() about it — but passing an already-freed object "
+              "to a parameter typed as a class is itself the error, raised at the "
+              "call before the check can run. Leave it untyped, guard it, then "
+              "type it."
+              "\n    %s" % (path, lineno, name, kind, line))
     alive = check_null_as_alive(files)
     for path, lineno, name, line in alive:
         print("%s:%d: `%s != null` does not mean '%s is a live object' — a FREED "
@@ -2480,7 +2615,8 @@ def main():
         + len(class_shadows) + len(confusable) + len(sim_clocks) + len(alive) \
         + len(stand) + len(typed_has) + len(shadowed_own) + len(sentinels) \
         + len(int_div) + len(worth) + len(burnable) + len(kids) + len(bundles) \
-        + len(late_is) + len(ternaries) + len(gone) + len(orphan_vars)
+        + len(late_is) + len(ternaries) + len(gone) + len(orphan_vars) \
+        + len(guarded_params)
     print("checked %d classes across %d files — %d problem(s)"
           % (len(classes), len(files), total))
     return 1 if total else 0

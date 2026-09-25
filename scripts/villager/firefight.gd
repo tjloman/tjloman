@@ -34,8 +34,13 @@ static func can_beat(who: Villager) -> bool:
 
 
 ## IS IT BURNING? Buildings keep their fire in a Kindling; a field keeps its own.
-static func ablaze(thing: Node) -> bool:
-	if thing == null or not is_instance_valid(thing):
+##
+## UNTYPED ON PURPOSE, and this is the line that crashed the game: a house burned
+## to the ground while a beater was still running to it, and handing what was
+## left of it to a parameter typed `Node` is the error, raised at the call before
+## the validity check below could say "it is gone". See tools/check_calls.py.
+static func ablaze(thing: Variant) -> bool:
+	if not is_instance_valid(thing):
 		return false
 	var fire: Variant = thing.get("kindling")
 	if fire is Kindling:

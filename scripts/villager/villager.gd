@@ -1483,7 +1483,7 @@ func _pick_job() -> bool:
 	# they are doing and run at it — above every job on the board, below eating
 	# and running for your life. The crowd penalty thins them: a house needs a
 	# handful of beaters, not the whole town round it.
-	if watch.blaze != null and Firefight.can_beat(self):
+	if Firefight.ablaze(watch.blaze) and Firefight.can_beat(self):
 		scores["beat"] = 40.0
 	if watch.corpse != null and not VillagerFeeding.will_eat_flesh(self) \
 			and not VillagerSearch.being_eaten(get_tree(), watch.corpse):
@@ -1624,10 +1624,14 @@ func _start_job(job: String) -> void:
 				return
 			state = State.GO_SKIN
 		"beat":
-			_target_blaze = village.watch.blaze
-			if not Firefight.ablaze(_target_blaze):
+			# UNTYPED UNTIL PROVED ALIVE. The watch looks once a second, and the
+			# house it saw may have burned down since; putting that into a typed
+			# variable is the error, before any check could catch it.
+			var seen: Variant = village.watch.blaze
+			if not Firefight.ablaze(seen):
 				_rethink()
 				return
+			_target_blaze = seen as Node3D
 			_target = Firefight.stand_for(self, _target_blaze)
 			state = State.GO_BEAT
 		"mourn":
