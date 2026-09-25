@@ -706,7 +706,10 @@ func rain_upon(pos: Vector3, reach: float, bless: float) -> void:
 		if farm.global_position.distance_to(pos) < reach:
 			farm.water(bless)
 	# Rain also quickens the wild larder: trees and berry bushes it falls on.
-	for grp in ["trees", "forage"]:
+	# AND SHORTENS A BURNING STONE, which is all weather can do to one — a rock
+	# that has caught is put out by water it is IN and by nothing else. It is on
+	# this list and deliberately not on the dousing list below.
+	for grp in ["trees", "forage", "rock_deposits"]:
 		for n in get_tree().get_nodes_in_group(grp):
 			var plant := n as Node3D
 			if is_instance_valid(plant) and plant.has_method("rain") \

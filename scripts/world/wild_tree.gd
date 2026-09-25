@@ -902,15 +902,29 @@ func _burn(delta: float) -> void:
 
 	_fire_tick -= delta
 	if _fire_tick <= 0.0:
-		_fire_tick = 0.6
+		_fire_tick = _fire_beat_length()
 		_harm_nearby()
 		_spread()
+		# AND IT HEATS THE STONE IT IS LYING AGAINST. This is the whole furnace:
+		# there is no furnace object, no recipe and no build menu — a tree
+		# burning against a rock puts seconds into the rock, and a rock with
+		# enough seconds in it catches. See RockDeposit.HOLDS_PER_STONE.
+		RockDeposit.warm_near(get_tree(), global_position,
+			RockDeposit.WARMS_WITHIN, RockDeposit.SOAKS * _fire_beat_length())
 		if randf() < 0.4:
 			SoundBank.play_at("boom", global_position, -14.0, 0.4)  # a soft crackle
 
 	if _burn_time <= 0.0:
 		# Consumed to ash — no lumber, and a gap the fire can't cross.
 		queue_free()
+
+
+## HOW OFTEN A BURNING TREE LOOKS AROUND IT, in seconds. Named rather than
+## written twice because the stone it warms is paid in exactly these seconds —
+## see RockDeposit.warm — and a beat that drifted from the payment would heat
+## rocks at a rate nobody chose.
+func _fire_beat_length() -> float:
+	return 0.6
 
 
 ## Fire scares and lightly burns whatever stands too close (it should flee),

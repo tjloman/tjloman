@@ -87,6 +87,61 @@ const HEFT_PER_STONE := 0.12
 ## A pebble is rung zero and cannot be broken at all; there is nothing in it.
 const CRACKS_PER_RUNG := 1
 
+## HEAT, AND IT IS MEASURED IN SECONDS.
+##
+## That one decision is the whole mechanic. A rock soaks up a second of heat for
+## every second it spends against a flame, and sheds a second for every second
+## it does not — so five seconds in a fire is five seconds of glow, and a rock is
+## FULL when it has taken as many seconds as it has stone. A megalith holds a
+## hundred and forty-three of them: two and a half minutes of a thing that is
+## itself on fire. Nothing here needed a second unit, a second curve or a second
+## table; the ladder already said how much rock there is and this says how long
+## that much rock stays hot.
+##
+## AND SO THE FURNACE IS NOT A BUILDING. It is a hole with stones in it and
+## trees burning on top, and it works because the arithmetic works: a rock that
+## has caught is itself a flame, so a pit of them keeps each other topped up
+## long after the wood is gone. Nobody had to write "furnace" anywhere.
+const HOLDS_PER_STONE := 1.0
+
+## Below this it is a warm rock and it does not show. "A rock that brushes a
+## flame does nothing" is this line and the one below it: a flame reports in
+## beats of FIRE_BEAT, so ONE beat — the least a rock can ever be handed — has
+## to land under this or a stone carried through a bonfire would come out
+## glowing. Above it, five seconds against a flame is four seconds of orange,
+## which is the hint the whole mechanic is taught by.
+const GLOWS_ABOVE := 1.0
+
+## HOW CLOSE THE FLAME HAS TO BE, over and above the rock's own size.
+const WARMS_WITHIN := 1.6
+
+## What it sheds a second, and what the rain adds to that.
+##
+## RAIN CANNOT PUT A BURNING ROCK OUT, and that is deliberate: past the point
+## where the stone itself has caught, weather buys you time and nothing else.
+## Only water it is actually IN will do it — see `_drowned`.
+const COOLS := 1.0
+const RAIN_COOLS := 1.0
+
+## What one flame hands it, per second. Two flames is twice as fast, which is
+## the whole reason anybody piles more than one tree on a pit.
+const SOAKS := 1.0
+
+## How long a warming lasts before the rock starts shedding again. A flame
+## reports in beats rather than continuously (see WildTree._burn), so without
+## this a rock would cool in the gaps between two ticks of the fire warming it.
+const STAYS_WARMED := 1.5
+
+## How often a rock that has caught looks around it — the same beat a burning
+## tree uses, for the same reason.
+const FIRE_BEAT := 0.6
+
+## WHAT A FIREBALL HANDS A STONE. A fireball is over in an instant, so it cannot
+## rest against anything; this is what one direct hit is worth. Eighteen of them
+## bring a megalith to the point of catching, which is "cast fireballs on it for
+## a few minutes" — the slow way, for a god with no trees to hand.
+const FIREBALL_SECONDS := 8.0
+
 ## WHERE THE HALVES GO when a rock comes apart — half a metre either side of
 ## where it stood, so they are two rocks and not one rock drawn twice.
 const SPLIT_APART := 0.55
@@ -103,8 +158,21 @@ var vein := false
 var style := ""
 var stone_left := 1
 
+## HOW MANY SECONDS OF HEAT IT IS HOLDING. See HOLDS_PER_STONE — this is the
+## only number the whole business is kept in.
+var heat := 0.0
+## PAST HOLDING HEAT AND INTO GIVING IT OFF. Latched: it catches when it fills
+## and it does not go out until it is cold, so a rock that is burning cannot be
+## nudged back under the line by a moment's rain.
+var ablaze := false
+
 var _cracks := 0
 var _boulders: Array[MeshInstance3D] = []
+var _warmed := 0.0
+var _rain_time := 0.0
+var _fire_beat := 0.0
+var _glow: MeshInstance3D = null
+var _flames: Node3D = null
 
 
 func _init() -> void:
@@ -157,6 +225,11 @@ func _ready() -> void:
 	mass = heft()
 	# A rock that has been thrown and has come to rest is scenery again.
 	sleeping_state_changed.connect(_on_sleep_changed)
+	# A COLD ROCK COSTS NOTHING. `_process` is switched on by the first thing
+	# that warms it and switches itself off when the last of the heat is gone,
+	# so a hillside of two hundred stones runs no code at all — which is the
+	# same bargain the frozen rigid body strikes with the physics server.
+	set_process(false)
 
 	# THE LADDER OF MESHES: this exact kind of rock at this exact size, then
 	# either on its own, then the plain one. `rock_flint_pebble`, `rock_flint`,
@@ -291,6 +364,11 @@ func split() -> void:
 		# where the old rock's middle used to be.
 		half.shake_loose()
 		half.linear_velocity = Vector3(side * 1.6, 1.2, randf_range(-0.6, 0.6))
+		# HEAT GOES WITH THE PIECES. "Splitting it in half while it's red and
+		# inflamed makes two smaller flaming rocks" — and each half holds only
+		# what a rock its size can hold, so a megalith at a hundred and
+		# forty-three seconds gives two monoliths at eighty-eight, both alight.
+		half.warm(heat)
 	queue_free()
 
 
@@ -301,6 +379,201 @@ func split() -> void:
 func shake_loose() -> void:
 	freeze = false
 	sleeping = false
+
+
+## THE MOST HEAT THIS ROCK CAN HOLD, in seconds. Its worth, and nothing else.
+func holds() -> float:
+	return float(worth()) * HOLDS_PER_STONE
+
+
+## PUT THIS MANY SECONDS OF FIRE INTO IT. Called by whatever is burning — a
+## tree resting against it, a fireball, or another rock that has already caught.
+##
+## The rock does not go looking for flames, and that is the arrangement that
+## makes a field of stones free: only things that are ON FIRE do any work, and
+## they were already sweeping their surroundings for something to set light to.
+func warm(seconds: float) -> void:
+	if seconds <= 0.0 or is_queued_for_deletion():
+		return
+	heat = minf(heat + seconds, holds())
+	# It is being warmed, so it is not cooling. A flame reports in beats and
+	# this is what carries the rock across the gaps between them; without it a
+	# fire handing over 0.6s every 0.6s would exactly cancel the shedding and
+	# nothing in the world would ever get hot.
+	_warmed = STAYS_WARMED
+	set_process(true)
+	if not ablaze and heat >= holds():
+		_catch()
+
+
+## SOAK EVERY STONE NEAR THIS POINT. One door, so a burning tree, a fireball and
+## a rock that has caught all heat the ground the same way.
+static func warm_near(tree: SceneTree, at: Vector3, reach: float,
+		seconds: float, except: Node3D = null) -> void:
+	for r in tree.get_nodes_in_group("rock_deposits"):
+		# `stone`, not `rock`: `prise` further down names a ResourceItem `rock`,
+		# and tools/check_calls.py reads a name once per file.
+		var stone := r as RockDeposit
+		if stone == null or not is_instance_valid(stone) or stone == except:
+			continue
+		# Measured to the rock's SKIN, not its pivot: a megalith is two and a
+		# half metres across and a flame against its flank is a flame against it.
+		if stone.global_position.distance_to(at) - stone.girth() > reach:
+			continue
+		stone.warm(seconds)
+
+
+## Rain shortens a burn; it never ends one. See RAIN_COOLS.
+func rain(seconds: float) -> void:
+	_rain_time = maxf(_rain_time, seconds)
+
+
+## HOW HOT IT IS, 0..1 — for the glow, and for anything that wants to say so.
+func glow() -> float:
+	return clampf(heat / maxf(holds(), 0.001), 0.0, 1.0)
+
+
+func _process(delta: float) -> void:
+	Ledger.open(&"RockDeposit")
+	if heat <= 0.0:
+		set_process(false)
+		return
+	# IN THE WATER IT IS OUT, and that is the only thing that ends a burning
+	# rock outright. Asked of the ground rather than of the weather.
+	if _drowned():
+		heat = 0.0
+		_go_cold()
+		return
+	if _warmed > 0.0:
+		_warmed -= delta
+	else:
+		heat -= (COOLS + (RAIN_COOLS if _rain_time > 0.0 else 0.0)) * delta
+	_rain_time = maxf(_rain_time - delta, 0.0)
+	if heat <= 0.0:
+		heat = 0.0
+		_go_cold()
+		return
+	_show_heat()
+	if not ablaze:
+		return
+	_fire_beat -= delta
+	if _fire_beat > 0.0:
+		return
+	_fire_beat = FIRE_BEAT
+	_burn_around()
+
+
+func _drowned() -> bool:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	return world != null and world.is_underwater(global_position.x, global_position.z)
+
+
+## IT HAS CAUGHT. Past here it is not a hot rock, it is a fire — and a fire that
+## warms the stone beside it, which is the whole of why a pit of these keeps
+## itself going long after the wood that lit it has burnt away.
+func _catch() -> void:
+	ablaze = true
+	_fire_beat = 0.0
+	_build_flames()
+	SoundBank.play_at("boom", global_position, -12.0, 0.5, 0.8)
+
+
+func _go_cold() -> void:
+	ablaze = false
+	if _flames != null and is_instance_valid(_flames):
+		_flames.queue_free()
+	_flames = null
+	if _glow != null and is_instance_valid(_glow):
+		_glow.queue_free()
+	_glow = null
+	set_process(false)
+
+
+## WHAT A BURNING ROCK DOES TO WHAT IS AROUND IT — the same list a burning tree
+## works through, at a stone's reach rather than a crown's.
+func _burn_around() -> void:
+	var tree := get_tree()
+	var reach := girth() + WARMS_WITHIN
+	# THE LOOP. Stone warms stone, so a handful of them in a hole go on
+	# reigniting one another after the trees are ash.
+	RockDeposit.warm_near(tree, global_position, reach, SOAKS * FIRE_BEAT, self)
+	for t in tree.get_nodes_in_group("trees"):
+		var wood := t as WildTree
+		if is_instance_valid(wood) and not wood.burning \
+				and wood.global_position.distance_to(global_position) < reach:
+			wood.ignite()
+	# AND WHAT THE TOWN BUILT. A stone heated white and dropped through a roof
+	# is the point of the whole exercise; it would be a strange fire that set
+	# light to the woods and left the house it was sitting in alone.
+	for b in tree.get_nodes_in_group(Affords.BURNABLE):
+		var built := b as Node3D
+		if not is_instance_valid(built) or built == self or not built.has_method("scorch"):
+			continue
+		if Util.within(built, global_position, reach):
+			built.call("scorch", Kindling.HEAT_OF_A_BLAZE / 3.0)
+	for grp in ["villagers", "animals", "creature"]:
+		for n in tree.get_nodes_in_group(grp):
+			var body := n as Node3D
+			if not is_instance_valid(body):
+				continue
+			if body.global_position.distance_to(global_position) > reach:
+				continue
+			if body.has_method("scare"):
+				body.call("scare", global_position)
+			if body.has_method("take_damage"):
+				body.call("take_damage", 4.0)
+
+
+## ORANGE WHEN IT IS WARM, RED WHEN IT IS FULL. One unshaded shell a hair wider
+## than the stone, fading in with the heat — it sits over a generated boulder
+## and over an artist's model alike, which a material override would not.
+func _show_heat() -> void:
+	if heat < GLOWS_ABOVE:
+		if _glow != null and is_instance_valid(_glow):
+			_glow.queue_free()
+			_glow = null
+		return
+	if _glow == null or not is_instance_valid(_glow):
+		_glow = Util.lite_sphere(girth() * 1.04, Color(1.0, 0.45, 0.06),
+			Vector3(0, girth() * 0.6, 0), 10, true)
+		add_child(_glow)
+	var hot := glow()
+	var mat := _glow.material_override as StandardMaterial3D
+	if mat == null:
+		# `lite_sphere` hands out a SHARED material, and tinting that would
+		# set every rock in the world alight. Its own from here on.
+		return
+	if not mat.has_meta("mine"):
+		mat = mat.duplicate() as StandardMaterial3D
+		mat.set_meta("mine", true)
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_glow.material_override = mat
+	var tint := Color(1.0, 0.45, 0.06).lerp(Color(1.0, 0.12, 0.03), hot)
+	tint.a = lerpf(0.18, 0.85, hot)
+	mat.albedo_color = tint
+	mat.emission = tint
+	mat.emission_energy_multiplier = lerpf(0.6, 3.0, hot)
+
+
+func _build_flames() -> void:
+	_flames = Node3D.new()
+	var wide := girth()
+	for i in 3:
+		var cone := CylinderMesh.new()
+		cone.top_radius = 0.0
+		cone.bottom_radius = wide * 0.5
+		cone.height = wide * 1.8
+		var flame := Util.mesh_node(cone, Color(1.0, randf_range(0.35, 0.65), 0.1),
+			Vector3(randf_range(-0.4, 0.4) * wide, wide * 1.4,
+				randf_range(-0.4, 0.4) * wide), true)
+		_flames.add_child(flame)
+	var light := OmniLight3D.new()
+	light.light_color = Color(1.0, 0.45, 0.12)
+	light.light_energy = 2.5
+	light.omni_range = wide + WARMS_WITHIN + 2.0
+	light.position = Vector3(0, wide, 0)
+	_flames.add_child(light)
+	add_child(_flames)
 
 
 ## One quarrying pass: yields stone, wears the pile down, frees when spent.
@@ -358,6 +631,15 @@ func hover_text() -> String:
 		return "Outcrop — %d stone left. Part of the hill; take hold to cleave a piece off." \
 			% stone_left
 	var what := kind_name().capitalize()
+	# HOW HOT IT IS, said plainly, because the whole furnace mechanic is
+	# invisible otherwise — a stone that has taken forty seconds of fire and one
+	# that has taken four look the same until one of them catches.
+	if ablaze:
+		return "%s — %d stone, BURNING. %ds of it left; rain will only shorten that." \
+			% [what, worth(), int(heat)]
+	if heat >= GLOWS_ABOVE:
+		return "%s — %d stone, hot. %ds of heat in it, of the %d it takes to catch." \
+			% [what, worth(), int(heat), worth()]
 	if not can_split():
 		return "%s — %d stone. Lift it, throw it, or drop it on a storehouse." % [what, worth()]
 	return "%s — %d stone. Drop it on a storehouse, or double-tap to crack it (%d to go)." \

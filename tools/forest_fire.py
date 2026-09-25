@@ -44,8 +44,12 @@ TIMBER = ast.literal_eval(
 BURN = const("BURN_SECONDS")
 SPREAD_RADIUS = const("SPREAD_RADIUS")
 SPREAD_CHANCE = const("SPREAD_CHANCE")
-# The fire tick is a bare literal in _burn; read it rather than assume.
-TICK = float(re.search(r"_fire_tick = ([0-9.]+)", TEXT).group(1))
+# The fire tick used to be a bare literal in `_burn`. It is a named function
+# now, because the seconds of heat a burning tree hands the stone beside it are
+# paid in exactly these units — see RockDeposit.warm and tools/forge.py — and a
+# beat written twice is a beat that drifts. Read off the function.
+TICK = float(re.search(r"func _fire_beat_length\(\) -> float:\s*\n\s*return ([0-9.]+)",
+                       TEXT).group(1))
 
 
 def stand(trees, spacing, seed):

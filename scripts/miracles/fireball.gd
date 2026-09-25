@@ -377,6 +377,11 @@ func _ignite_trail(pos: Vector3, reach: float) -> void:
 		var farm := f as Farm
 		if is_instance_valid(farm) and farm.global_position.distance_to(pos) < reach:
 			farm.ignite()
+	# AND THE STONE TAKES HEAT. A fireball is over in an instant, so it cannot
+	# REST against a rock the way a burning tree does — this is what one direct
+	# hit is worth instead. Eighteen of them bring a megalith to the point of
+	# catching, which is the slow way, for a god with no trees to hand.
+	RockDeposit.warm_near(get_tree(), pos, reach, RockDeposit.FIREBALL_SECONDS)
 	# AND WHAT THE TOWN BUILT, which the trail has never touched. A gout rolling
 	# down a street past six houses did nothing to any of them — it lit the
 	# trees and the fields and left the village standing, which is not what
@@ -512,6 +517,11 @@ func _go_off() -> void:
 		var farm := f as Farm
 		if is_instance_valid(farm) and farm.global_position.distance_to(pos) < reach:
 			farm.ignite()
+	# AND THE STONE TAKES HEAT. A fireball is over in an instant, so it cannot
+	# REST against a rock the way a burning tree does — this is what one direct
+	# hit is worth instead. Eighteen of them bring a megalith to the point of
+	# catching, which is the slow way, for a god with no trees to hand.
+	RockDeposit.warm_near(get_tree(), pos, reach, RockDeposit.FIREBALL_SECONDS)
 
 	# THE EARTH ITSELF. A bowl gouged out of the ground with a lip of thrown
 	# spoil around it, and the whole of it burned black — and unlike everything
