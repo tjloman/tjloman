@@ -10,7 +10,7 @@ extends CharacterBody3D
 enum State {
 	WANDER, GO_EAT, EATING, GO_SLEEP, SLEEPING,
 	GO_FARM, FARMING, GO_HUNT, HUNTING, GO_BUTCHER, BUTCHERING,
-	GO_SKIN, SKINNING, GO_MOURN, MOURNING,
+	GO_SKIN, SKINNING, GO_MOURN, MOURNING, GO_BEAT, BEATING,
 	GO_CHOP, CHOPPING, GO_QUARRY, QUARRYING, GO_BUILD, BUILDING,
 	GO_TAME, TAMING, GO_WORSHIP, WORSHIPPING, PLAY,
 	GO_PREACH, PREACHING, GO_FEED, GO_BUILD_FARM, BUILDING_FARM,
@@ -66,31 +66,6 @@ const BERTH_PER_HEAD := 0.25
 ## this is only so the one after it does not start from an empty yard.
 const MATERIAL_SPARE := 6
 
-## HOW LONG THEY STAND OVER A BODY AND WEEP, in seconds.
-##
-## A death in this game was a line of text and a corpse nobody looked at. The
-## village hive registered it, the god was told, and every soul in the place
-## carried on hauling stone past their neighbour lying in the road. Grief that
-## nothing DOES is not grief, it is bookkeeping.
-##
-## Long enough to be a thing you notice happening from across the square, short
-## enough that a bad week does not stop the harvest. Crowding does the rest: the
-## job board already docks a job by how many are at it (see CROWD_PENALTY), so
-## two or three go and the rest keep working, which is what a funeral looks like.
-const MOURN_SECONDS := 14.0
-## WHAT IT DOES TO SOMEBODY to look up from their dead and find them being
-## eaten, and how often a mourner checks, in physics frames.
-##
-## HIGH ON THE SCALE AND NOT OFF IT. `witness_horror` takes MORALITY, because in
-## this game atrocity hardens whoever sees it — and a villager under
-## VillagerFeeding.WICKED eats bodies before the granary. A weight big enough to
-## tip a decent mourner under that line in one sighting would send them from
-## weeping over the dead to eating them, which is a spiral nobody asked for.
-## Six sits beside the worst things a village already sees (see Village).
-const HORROR_OF_IT := 6.0
-const HORROR_EVERY := 12
-## How long a beast takes to cut up where it fell.
-const SKIN_SECONDS := 4.0
 
 const MISSION_RANGE := 320.0
 const MISSION_FAITH := 55.0
@@ -226,6 +201,8 @@ var _target_herd: Herd = null
 var _school_seat := 0
 var _target_corpse: Corpse = null
 var _target_carcass: Carcass = null
+## The fire this one is beating out. See Firefight.
+var _target_blaze: Node3D = null
 ## What this dancer circles and faces. See VillageGathering.
 var _dance_mid := Vector3.INF
 var _target_tree: WildTree = null
@@ -763,60 +740,29 @@ func _physics_process(delta: float) -> void:
 					FoodItem.joints_of_a_person(2, cut_at, get_parent())
 				_rethink()
 		State.GO_SKIN:
-			_process_go_target(_target_carcass, delta, State.SKINNING, SKIN_SECONDS)
+			_process_go_target(_target_carcass, delta, State.SKINNING,
+				VillagerGrief.SKIN_SECONDS)
 		State.SKINNING:
-			_apply_gravity_only(delta)
-			_action_time -= delta
-			_work_noise("saw", 1.1, delta)
-			if _action_time <= 0.0:
-				var joints := 0
-				if is_instance_valid(_target_carcass):
-					var beast := _target_carcass.species
-					joints = _target_carcass.butcher()
-					_carry_announce = "%s butchered a %s." % [villager_name, beast]
-				_target_carcass = null
+			var joints := VillagerGrief.skin(self, delta)
+			if joints >= 0:
 				# Shouldered and walked home, like every other gathered load —
 				# nothing is banked until they actually arrive.
 				_begin_haul("meat", joints, "skin")
+		State.GO_BEAT:
+			if Firefight.approach(self, delta):
+				_target_blaze = null
+				_rethink()
+		State.BEATING:
+			if Firefight.work(self, delta):
+				_target_blaze = null
+				_rethink()
 		State.GO_MOURN:
 			# THEY STOP SHORT, at the arm's length `_process_go_target` stops
-			# everybody at. A body is a thing you stand BESIDE, and since each
-			# of them walks up from wherever they happened to be, they end up
-			# ringing it rather than stacking on it.
-			_process_go_target(_target_corpse, delta, State.MOURNING, MOURN_SECONDS)
+			# everybody at, and ring the body rather than stacking on it.
+			_process_go_target(_target_corpse, delta, State.MOURNING,
+				VillagerGrief.MOURN_SECONDS)
 		State.MOURNING:
-			_apply_gravity_only(delta)
-			_action_time -= delta
-			# OPENLY. Every couple of seconds, at a volume that carries about as
-			# far as the body does — this is meant to be heard by somebody
-			# standing in the square, not across the valley. See SoundBank.
-			_work_noise("weep", 2.3, delta)
-			# THE BODY MAY BE TAKEN WHILE THEY ARE STILL AT IT: a god lifts it,
-			# a creature eats it, the decay timer runs out. Then there is
-			# nothing left to weep over and they get up.
-			if not is_instance_valid(_target_corpse):
-				_target_corpse = null
-				_rethink()
-			# AND IF SOMEBODY KNEELS DOWN BESIDE THEM AND BEGINS TO EAT, they do
-			# not go on sobbing. They were never going to: nobody stands and
-			# weeps politely at arm's length from that. Asked a few times a
-			# second rather than every tick — there are only ever two or three
-			# mourners, but there are two hundred villagers to ask about.
-			elif Engine.get_physics_frames() % HORROR_EVERY == 0 \
-					and VillagerSearch.being_eaten(get_tree(), _target_corpse, true):
-				witness_horror(HORROR_OF_IT)
-				scare(_target_corpse.global_position)
-				_target_corpse = null
-			elif _action_time <= 0.0:
-				# WHAT IT LEAVES BEHIND. Grief costs happiness and it is not
-				# supposed to be free — but standing with your dead is the
-				# decent thing, and a person who does it comes away a little
-				# better than they went in.
-				happiness = maxf(happiness - 12.0, 0.0)
-				morality = minf(morality + 3.0, 100.0)
-				if village != null:
-					village.hive.witness("death", global_position, 0.5)
-				_target_corpse = null
+			if VillagerGrief.mourn(self, delta):
 				_rethink()
 		State.GO_CHOP:
 			_process_go_target(_target_tree, delta, State.CHOPPING, 4.0)
@@ -1533,6 +1479,12 @@ func _pick_job() -> bool:
 	# It scores like a need rather than like work, which is what makes it
 	# interrupt a harvest: a neighbour lying in the road outranks the stone that
 	# was being carried past them. Crowding keeps it from emptying the village.
+	# THE TOWN IS ON FIRE. Grown men and women not carrying a child drop what
+	# they are doing and run at it — above every job on the board, below eating
+	# and running for your life. The crowd penalty thins them: a house needs a
+	# handful of beaters, not the whole town round it.
+	if watch.blaze != null and Firefight.can_beat(self):
+		scores["beat"] = 40.0
 	if watch.corpse != null and not VillagerFeeding.will_eat_flesh(self) \
 			and not VillagerSearch.being_eaten(get_tree(), watch.corpse):
 		scores["mourn"] = 34.0
@@ -1671,6 +1623,13 @@ func _start_job(job: String) -> void:
 				_rethink()
 				return
 			state = State.GO_SKIN
+		"beat":
+			_target_blaze = village.watch.blaze
+			if not Firefight.ablaze(_target_blaze):
+				_rethink()
+				return
+			_target = Firefight.stand_for(self, _target_blaze)
+			state = State.GO_BEAT
 		"mourn":
 			_target_corpse = VillagerSearch.corpse(self, true)
 			if _target_corpse == null:
@@ -1822,6 +1781,7 @@ func current_job() -> String:
 		State.GO_FISH, State.FISHING: return "fish"
 		State.GO_BUTCHER, State.BUTCHERING: return "butcher"
 		State.GO_SKIN, State.SKINNING: return "skin"
+		State.GO_BEAT, State.BEATING: return "beat"
 		# NAMED SO THE CROWD CAN SEE IT. The job board docks a job by how many
 		# are already at it (CROWD_PENALTY), and that is the ONLY thing keeping
 		# a death from emptying the village into a ring round one body. A state
@@ -2248,7 +2208,9 @@ func _on_placed_gently() -> void:
 	if host == null or host == village:
 		_rethink()
 		return
-	if host.converted:
+	# A FULL TOWN TAKES NOBODY, however carefully they are set down in it. See
+	# Village.MOST_SOULS.
+	if host.converted and host.population() < Village.MOST_SOULS:
 		_defect_to(host)
 	elif village.converted:
 		_mission_village = host

@@ -180,6 +180,11 @@ const ROOM_ROUND_A_HOUSE := 3.2
 const ROOM_ROUND_A_SHOP := 7.0
 const ROOM_ROUND_A_FARM := 7.0
 const ROOM_ROUND_THE_SCHOOL := 9.0
+## THE MOST PEOPLE ANY ONE TOWN MAY HOLD, however many roofs it raises. A town of
+## five hundred ran at ten frames a second on a desktop, and every villager is
+## script on every frame they are near the camera. PROVISIONAL: set this from a
+## phone, reading the town's beds off a house's hover card. See at_capacity.
+const MOST_SOULS := 400
 ## HOW WIDE A BERTH THE TOWN'S OWN ROCK GETS. Bigger than a workshop's: it is
 ## three metres across, people work it with picks all day, and a hut built
 ## against it would have a quarry for a back garden.
@@ -615,8 +620,12 @@ func spawn_farm_at(world_spot: Vector3) -> void:
 ## expecting took in forty more than it had beds for, three quarters of a year
 ## later, every time. A town of five hundred was carrying a crowd sleeping rough
 ## that no rule had ever let it have.
+##
+## AND NEVER PAST MOST_SOULS, whatever it has built. The roofs are the everyday
+## limit and stone is what paces them; this is the floor under the frame rate,
+## for the device the game is running on rather than for the town.
 func at_capacity() -> bool:
-	return population() + _expecting >= housing_capacity() + 8
+	return population() + _expecting >= mini(housing_capacity() + 8, MOST_SOULS)
 
 
 ## THE RING IS THE READOUT: its SIZE is the population and its COLOUR is belief,

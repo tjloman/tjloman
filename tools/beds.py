@@ -15,6 +15,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 VILLAGE = (ROOT / "scripts/world/village.gd").read_text()
+VILLAGER = (ROOT / "scripts/villager/villager.gd").read_text()
 HOUSE = (ROOT / "scripts/world/house.gd").read_text()
 
 
@@ -36,6 +37,14 @@ def main():
                     "in flight lands on top of it")
     else:
         print("  the limit counts the children on the way ........ yes")
+    most = re.search(r"^const MOST_SOULS := (\d+)", VILLAGE, re.M)
+    if most is None or "MOST_SOULS" not in body(VILLAGE, "at_capacity"):
+        fail.append("there is no hard ceiling on a town, so a town with the "
+                    "stone for it grows past what any phone can run")
+    else:
+        print("  and never past %s, whatever it builds ........... yes" % most.group(1))
+    if "host.population() < Village.MOST_SOULS" not in body(VILLAGER, "_on_placed_gently"):
+        fail.append("the god can set people down into a full town, past its ceiling")
     if "if v.pregnant:" not in body(VILLAGE, "_retally") \
             or "_expecting += 1" not in body(VILLAGE, "_retally"):
         fail.append("nothing counts the expecting mothers, so the limit is "

@@ -109,6 +109,9 @@ const BURN_SECONDS := 45.0
 const SPREAD_RADIUS := 6.0
 const SPREAD_CHANCE := 0.05 # per spread-tick, per near neighbour
 const HARM_RADIUS := 3.5
+## What a burning tree puts into a wall it touches, per fire beat. About six
+## seconds to light timber — see Kindling.TEMPER_TIMBER.
+const SCORCHES_A_WALL := 25.0
 
 ## HOW A THROWN TRUNK COMES TO REST. Under SETTLE_UNDER it has stopped; above
 ## it, it kicks and goes over again. BOUNCE_KEEP is how much of the blow comes
@@ -927,9 +930,17 @@ func _fire_beat_length() -> float:
 	return 0.6
 
 
-## Fire scares and lightly burns whatever stands too close (it should flee),
-## but leaves buildings alone — this stays a forest-clearing tool.
+## Fire scares and lightly burns whatever stands too close (it should flee) —
+## AND HEATS THE BUILDING IT IS LYING AGAINST. It used to leave buildings alone,
+## "a forest-clearing tool", which meant a god carrying a blazing pine into a
+## town could lean it on every roof in the street and light none of them. A few
+## seconds against a timber wall now sets it going; stone takes much longer.
 func _harm_nearby() -> void:
+	for b in get_tree().get_nodes_in_group(Affords.BURNABLE):
+		var built := b as Node3D
+		if is_instance_valid(built) and built != self and built.has_method("scorch") \
+				and Util.within(built, global_position, HARM_RADIUS):
+			built.call("scorch", SCORCHES_A_WALL)
 	for grp in ["villagers", "animals", "creature"]:
 		for n in get_tree().get_nodes_in_group(grp):
 			var node := n as Node3D

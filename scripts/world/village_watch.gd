@@ -62,6 +62,9 @@ var corpse: Corpse = null
 ## THE NEAREST BEAST'S BODY worth cutting up. Kept beside the human dead because
 ## it is the same question asked of a different group — see VillagerSearch.
 var carcass: Carcass = null
+## THE NEAREST OF THE TOWN'S OWN THINGS ON FIRE — a building or a field. See
+## Firefight.
+var blaze: Node3D = null
 var shore := Vector3.INF
 var heathen: Village = null
 
@@ -83,6 +86,7 @@ func scan(delta: float, town: Village) -> void:
 	_look_for_beasts(tree, here, reach * GAME_REACH)
 	_look_for_corpse(tree, here, reach * CORPSE_REACH)
 	_look_for_carcass(tree, here, reach * CARCASS_REACH)
+	_look_for_blaze(tree, here, reach)
 	_look_for_stock(tree, here, reach * GAME_REACH)
 	_look_for_shore(tree, here)
 	_look_for_heathen(tree, town, here)
@@ -202,6 +206,20 @@ func _unreachable(tree: SceneTree, at: Vector3) -> bool:
 ## clock, because a carcass nobody comes for falls apart into loose joints by
 ## itself (see Carcass.LIES_FOR). A town that never notices them is a town that
 ## eats later and worse.
+func _look_for_blaze(tree: SceneTree, here: Vector3, reach: float) -> void:
+	blaze = null
+	var best := reach
+	for n in tree.get_nodes_in_group(Affords.BURNABLE):
+		var thing := n as Node3D
+		# A carcass burning in a field is not the town's to save.
+		if thing == null or thing is Carcass or not Firefight.ablaze(thing):
+			continue
+		var d := here.distance_to(thing.global_position)
+		if d < best and not _unreachable(tree, thing.global_position):
+			best = d
+			blaze = thing
+
+
 func _look_for_carcass(tree: SceneTree, here: Vector3, reach: float) -> void:
 	carcass = null
 	var best := reach

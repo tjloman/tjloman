@@ -47,6 +47,11 @@ WATCH = (ROOT / "scripts/world/village_watch.gd").read_text()
 SOUND = (ROOT / "scripts/audio/sound_bank.gd").read_text()
 CARCASS = (ROOT / "scripts/world/carcass.gd").read_text()
 FEEDING = (ROOT / "scripts/villager/villager_feeding.gd").read_text()
+GRIEF = (ROOT / "scripts/villager/villager_grief.gd").read_text()
+FIRE = (ROOT / "scripts/villager/firefight.gd").read_text()
+KINDLING = (ROOT / "scripts/world/kindling.gd").read_text()
+TREE = (ROOT / "scripts/world/wild_tree.gd").read_text()
+MIRACLES = (ROOT / "scripts/miracles/miracle_manager.gd").read_text()
 
 ## gdlint's ceiling. A file at it cannot take another behaviour.
 FILE_LINES = 2500
@@ -76,8 +81,8 @@ def const(text, name, where):
     return float(m.group(1))
 
 
-MOURN_SECONDS = const(V, "MOURN_SECONDS", "villager.gd")
-SKIN_SECONDS = const(V, "SKIN_SECONDS", "villager.gd")
+MOURN_SECONDS = const(GRIEF, "MOURN_SECONDS", "villager_grief.gd")
+SKIN_SECONDS = const(GRIEF, "SKIN_SECONDS", "villager_grief.gd")
 
 
 def states():
@@ -158,14 +163,15 @@ def grief(fail):
                     "flesh: `%s`" % before.strip())
     else:
         print("  a flesh-eater does not weep over the meat ...... yes")
-    st = body(V, "_physics_process")
-    grieving = st.split("State.MOURNING:")[-1].split("State.GO_CHOP:")[0]
+    grieving = body(GRIEF, "mourn")
+    if "VillagerGrief.mourn(self, delta)" not in body(V, "_physics_process"):
+        fail.append("the MOURNING state no longer runs the mourning")
     for what, why in (
             ('_work_noise("weep"', "they weep openly — it has to be heard"),
-            ("is_instance_valid(_target_corpse)",
+            ("is_instance_valid(who._target_corpse)",
              "the body can be lifted or eaten while they are still at it"),
-            ("happiness = maxf", "grief costs something"),
-            ("morality = minf", "and standing with your dead is decent")):
+            ("who.happiness = maxf", "grief costs something"),
+            ("who.morality = minf", "and standing with your dead is decent")):
         if what not in grieving:
             fail.append("mourning no longer does this: %s" % why)
     if "weep" not in SOUND or '"weep"' not in SOUND:
@@ -202,9 +208,8 @@ def over_the_eaten(fail):
         fail.append("a mourner still sets out for a body somebody is eating")
     else:
         print("  a mourner never sets out for one ............... yes")
-    st = body(V, "_physics_process")
-    grieving = st.split("State.MOURNING:")[-1].split("State.GO_CHOP:")[0]
-    if "being_eaten(get_tree(), _target_corpse, true)" not in grieving:
+    grieving = body(GRIEF, "mourn")
+    if "being_eaten(who.get_tree(), who._target_corpse, true)" not in grieving:
         fail.append("somebody can kneel down and start eating beside a mourner "
                     "and the mourner goes on sobbing")
     elif "witness_horror(" not in grieving or "scare(" not in grieving:
@@ -215,10 +220,10 @@ def over_the_eaten(fail):
     # ON THE SCALE, NOT OFF IT. witness_horror takes morality, and a mourner
     # tipped under VillagerFeeding.WICKED in one sighting goes from weeping over
     # the dead to eating them.
-    horror = const(V, "HORROR_OF_IT", "villager.gd")
+    horror = const(GRIEF, "HORROR_OF_IT", "villager_grief.gd")
     worst = 0.0
     for path in ROOT.glob("scripts/**/*.gd"):
-        if path.name == "villager.gd":
+        if path.name == "villager_grief.gd":
             continue
         for m in re.finditer(r"witness_horror\(([0-9.]+)\)", path.read_text()):
             worst = max(worst, float(m.group(1)))
@@ -260,6 +265,58 @@ def the_guard(fail):
         print("  and 'monstrous' on the card is that same line ... yes")
 
 
+def the_fire(fail):
+    """Who runs at a burning building, and who runs from it."""
+    print()
+    print("HOW A FIRE STARTS — nothing lit a building but three fireballs")
+    blaze = const(KINDLING, "HEAT_OF_A_BLAZE", "kindling.gd")
+    timber = const(KINDLING, "TEMPER_TIMBER", "kindling.gd")
+    cooling = const(KINDLING, "COOLING", "kindling.gd")
+    roof = const(MIRACLES, "LIGHTNING_ON_A_ROOF", "miracle_manager.gd")
+    wall = const(TREE, "SCORCHES_A_WALL", "wild_tree.gd")
+    beat = float(re.search(r"func _fire_beat_length\(\) -> float:\s*\n\s*return ([0-9.]+)", TREE).group(1))
+    print("  a bolt on a roof: %.0f heat against timber's %.0f — %s"
+          % (blaze * roof, timber, "it catches" if blaze * roof >= timber else "IT DOES NOT"))
+    net = wall / beat - cooling
+    print("  a burning tree against a wall: %.1fs to light it" % (timber / net if net > 0 else -1))
+    if blaze * roof < timber:
+        fail.append("a lightning bolt on a timber roof does not light it")
+    if net <= 0 or timber / net > 20.0:
+        fail.append("a burning tree against a house takes too long to light it, "
+                    "or never does")
+    if "scorch" not in body(MIRACLES, "_cast_lightning"):
+        fail.append("lightning no longer heats the buildings it strikes")
+    if "SCORCHES_A_WALL" not in body(TREE, "_harm_nearby"):
+        fail.append("a burning tree leaves buildings alone again")
+    print()
+    print("THE TOWN IS ON FIRE")
+    out = const(FIRE, "BEATEN_OUT_AFTER", "firefight.gd")
+    burns = const(KINDLING, "BURN_SECONDS", "kindling.gd")
+    for n in (1, 2, 4, 8):
+        print("  %d beating it: out in %4.1fs of a %.0fs burn" % (n, out / n, burns))
+    if out >= burns:
+        fail.append("one beater can never put a fire out before it burns down")
+    can = body(FIRE, "can_beat")
+    if "is_adult()" not in can or "not who.pregnant" not in can:
+        fail.append("children or pregnant women are sent to beat fires — only "
+                    "grown men and women not carrying a child go")
+    else:
+        print("  only grown men and women not carrying a child ... yes")
+    away = body(FIRE, "clear_the_way")
+    if "can_beat(soul)" not in away or "scare(" not in away:
+        fail.append("the ones who cannot fight it do not run from it")
+    elif "Firefight.clear_the_way(" not in body(KINDLING, "light"):
+        fail.append("nobody clears out when a building first catches")
+    else:
+        print("  and everyone else runs from it .................. yes")
+    pick = body(V, "_pick_job")
+    line = [ln for ln in pick.splitlines() if 'scores["beat"]' in ln]
+    if not line or "Firefight.can_beat(self)" not in pick[:pick.index(line[0])].splitlines()[-1]:
+        fail.append("the job board offers the fire to anybody")
+    if "State.BEATING" not in body(V, "current_job"):
+        fail.append("beaters are not counted, so the whole town rings one house")
+
+
 def butchery(fail):
     print()
     print("BUTCHERING A BEAST")
@@ -278,7 +335,7 @@ def butchery(fail):
     else:
         print("  and never to a burnt one ....................... yes")
     st = body(V, "_physics_process")
-    skinning = st.split("State.SKINNING:")[-1].split("State.GO_MOURN:")[0]
+    skinning = st.split("State.SKINNING:")[-1].split("State.GO_BEAT:")[0] + body(GRIEF, "skin")
     if "butcher()" not in skinning:
         fail.append("skinning no longer butchers anything")
     elif '_begin_haul("meat"' not in skinning:
@@ -299,6 +356,7 @@ def main():
     grief(fail)
     over_the_eaten(fail)
     the_guard(fail)
+    the_fire(fail)
     butchery(fail)
     print()
     if fail:

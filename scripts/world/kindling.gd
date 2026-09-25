@@ -126,6 +126,8 @@ func light(who: Node3D, flame_high := 2.4) -> bool:
 	_fire = Util.small_flame(flame_high)
 	who.add_child(_fire)
 	SoundBank.play_at("boom", who.global_position, -9.0, 0.3)
+	# The children and the pregnant run from it; the rest come to fight it.
+	Firefight.clear_the_way(who.get_tree(), who.global_position)
 	return true
 
 
@@ -153,6 +155,7 @@ func smoulder(who: Node3D, delta: float, most := 100.0) -> float:
 	if _spread_in <= 0.0:
 		_spread_in = SPREAD_EVERY
 		_catch_the_neighbours(who)
+		Firefight.clear_the_way(who.get_tree(), who.global_position)
 	if _left <= 0.0:
 		douse(who)
 		return most        # whatever is left of it, all at once

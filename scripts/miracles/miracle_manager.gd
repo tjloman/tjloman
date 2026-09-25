@@ -125,6 +125,8 @@ const KARMA := {
 
 const LIGHTNING_KILL_RADIUS := 3.0
 const LIGHTNING_BURN_RADIUS := 8.0
+## What a direct hit puts into a roof, in blazes. Timber catches at 2.1.
+const LIGHTNING_ON_A_ROOF := 2.5
 const CREATURE_SIGHT_RANGE := 45.0
 ## What a twister takes out of a herd it is standing in, per tick of its own
 ## clock (five a second). Over the life of one funnel that is a few head, which
@@ -811,6 +813,18 @@ func _cast_lightning(pos: Vector3) -> void:
 
 	# A bolt sets the nearest trees — and any field it strikes — alight.
 	ignite_trees_near(pos, 5.0)
+	# AND THE ROOF IT HITS. A bolt into thatch is the oldest way a village has
+	# ever burned, and this used to strike the square and leave every building
+	# standing untouched. A direct hit lights timber outright; a near miss only
+	# warms it — stone shrugs off either.
+	for b in get_tree().get_nodes_in_group(Affords.BURNABLE):
+		var built := b as Node3D
+		if not is_instance_valid(built) or not built.has_method("scorch"):
+			continue
+		if Util.within(built, pos, LIGHTNING_KILL_RADIUS):
+			built.call("scorch", Kindling.HEAT_OF_A_BLAZE * LIGHTNING_ON_A_ROOF)
+		elif Util.within(built, pos, LIGHTNING_BURN_RADIUS):
+			built.call("scorch", Kindling.HEAT_OF_A_BLAZE)
 	for f in get_tree().get_nodes_in_group("farms"):
 		var farm := f as Farm
 		if is_instance_valid(farm) and farm.global_position.distance_to(pos) < LIGHTNING_BURN_RADIUS:
