@@ -939,7 +939,11 @@ func _on_grab() -> void:
 		_begin_carry()
 		if held_body is RigidBody3D:
 			(held_body as RigidBody3D).freeze = true
-		elif held_body.has_method("pick_up"):
+		# AND IT IS TOLD, rigid or not. This was an `elif`, so no rigid body's
+		# `pick_up` ever ran: a boat went on sailing in the god's hand, and a
+		# rock stayed on the ground layer while it was carried — a wall that
+		# walked about with whoever held it. See RockDeposit.pick_up.
+		if held_body.has_method("pick_up"):
 			held_body.call("pick_up")
 	else:
 		# Grabbing open sky isn't grabbing land — don't start a drag there.

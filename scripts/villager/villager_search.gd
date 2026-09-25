@@ -79,12 +79,19 @@ static func tamable(who: Villager) -> Animal:
 ## who simply wants to stand over them and weep. See Villager.State.MOURNING:
 ## the same list answers both, because "where are the dead" is one question
 ## however differently two towns answer it.
-static func corpse(who: Villager) -> Corpse:
+##
+## `spare_the_eaten` is the mourner asking. Nobody goes to weep over a body that
+## somebody is already down on — see `being_eaten`. The eater does NOT ask it:
+## several of them down over the same person at once is the darkest thing in
+## this game and VillagerFeeding says why it is meant to be possible.
+static func corpse(who: Villager, spare_the_eaten := false) -> Corpse:
 	var best: Array = []
 	var reach := who.village.influence_radius * 1.5
 	for c in who.get_tree().get_nodes_in_group("corpses"):
 		var body := c as Corpse
 		if not is_instance_valid(body) or body.is_queued_for_deletion():
+			continue
+		if spare_the_eaten and being_eaten(who.get_tree(), body):
 			continue
 		# The drowned are left where they are. Somebody who went in after the
 		# meat and did not come out is not a reason for the next one to go.
@@ -96,25 +103,46 @@ static func corpse(who: Villager) -> Corpse:
 	return _my_pick(who, best) as Corpse
 
 
+## IS SOMEBODY EATING THIS ONE? `at_it` asks whether they are down on it NOW,
+## rather than merely on their way — which is the difference between a mourner
+## who never sets out and one who looks up to find it happening beside them.
+##
+## "A decent man sobbing over the man who is simultaneously being eaten.
+## Positively awkward." It was: two unrelated jobs, each perfectly sensible on
+## its own, pointed at the same body by two people who could not see each other.
+static func being_eaten(tree: SceneTree, body: Corpse, at_it := false) -> bool:
+	if body == null or not is_instance_valid(body):
+		return false
+	for v in tree.get_nodes_in_group("villagers"):
+		var other := v as Villager
+		if other == null or not is_instance_valid(other) or other.feeding_on != body:
+			continue
+		if not at_it or other.state == Villager.State.EATING:
+			return true
+	return false
+
+
 ## THE NEAREST BEAST'S BODY, for a butcher. A carcass is free meat with the
 ## killing already done — see Carcass, which falls apart into joints on its own
 ## if nobody comes for it.
 static func carcass(who: Villager) -> Carcass:
 	var best: Array = []
 	var reach := who.village.influence_radius * 2.0
+	# `beast`, not `body`: tools/check_calls.py reads a name once per file,
+	# and `corpse` above calls its Corpse `body`.
 	for c in who.get_tree().get_nodes_in_group("carcasses"):
-		var body := c as Carcass
-		if not is_instance_valid(body) or body.is_queued_for_deletion():
+		var beast := c as Carcass
+		if not is_instance_valid(beast) or beast.is_queued_for_deletion():
 			continue
-		# Nothing burnt. A charred body feeds nobody, and sending a butcher out
+		# Nothing burnt. A charred beast feeds nobody, and sending a butcher out
 		# to one is sending them on an errand the world has already spoiled.
-		if body.is_spoiled():
+		if beast.is_spoiled():
 			continue
-		if who.would_drown_at(body.global_position):
+		if who.would_drown_at(beast.global_position):
 			continue
-		var d := who.global_position.distance_to(body.global_position)
+		var d := who.global_position.distance_to(beast.global_position)
 		if d < reach:
-			_consider(best, body, d)
+			_consider(best, beast, d)
 	return _my_pick(who, best) as Carcass
 
 

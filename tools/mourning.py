@@ -139,7 +139,16 @@ def grief(fail):
         fail.append("nothing puts mourning on the job board")
         return
     line = [ln for ln in pick.splitlines() if 'scores["mourn"]' in ln]
-    before = pick[:pick.index(line[0])].splitlines()[-1]
+    # THE WHOLE CONDITION, not the line above it. The `if` runs over two lines
+    # now, and reading only the nearer one found the continuation and failed a
+    # gate that was there.
+    above = pick[:pick.index(line[0])].splitlines()
+    cond = [above[-1]]
+    for ln in reversed(above[:-1]):
+        if not ln.rstrip().endswith("\\"):
+            break
+        cond.insert(0, ln)
+    before = " ".join(c.strip() for c in cond)
     if "will_eat_flesh" not in before:
         # A town that eats its dead must not queue grief behind dinner, and the
         # gate is on the VILLAGER because a decent soul in a cannibal town is
@@ -168,6 +177,56 @@ def grief(fail):
                     "penalty cannot see them and one death empties the village")
     else:
         print("  mourners are counted, so a crowd thins itself .. yes")
+
+
+def over_the_eaten(fail):
+    """A decent man sobbing over a man who is being eaten beside him."""
+    print()
+    print("NOBODY WEEPS BESIDE SOMEBODY EATING")
+    pick = body(V, "_pick_job")
+    line = [ln for ln in pick.splitlines() if 'scores["mourn"]' in ln][0]
+    gate = pick[:pick.index(line)].splitlines()
+    gate = " ".join(gate[-2:])
+    if "being_eaten(" not in gate:
+        # Without it, `mourn` scores 34 for a body only an eater can reach, the
+        # job start finds nothing, and the villager re-decides the same thing
+        # forever.
+        fail.append("the job board scores mourning over a body somebody is "
+                    "eating, so the mourner sets out, finds nothing, and does "
+                    "it again every decision")
+    else:
+        print("  the board does not offer a body being eaten ... yes")
+    start = body(V, "_start_job")
+    if "VillagerSearch.corpse(self, true)" not in start:
+        fail.append("a mourner still sets out for a body somebody is eating")
+    else:
+        print("  a mourner never sets out for one ............... yes")
+    st = body(V, "_physics_process")
+    grieving = st.split("State.MOURNING:")[-1].split("State.GO_CHOP:")[0]
+    if "being_eaten(get_tree(), _target_corpse, true)" not in grieving:
+        fail.append("somebody can kneel down and start eating beside a mourner "
+                    "and the mourner goes on sobbing")
+    elif "witness_horror(" not in grieving or "scare(" not in grieving:
+        fail.append("a mourner who sees it happen is neither horrified nor "
+                    "gets up and runs")
+    else:
+        print("  and one who sees it start is horrified, and runs  yes")
+    # ON THE SCALE, NOT OFF IT. witness_horror takes morality, and a mourner
+    # tipped under VillagerFeeding.WICKED in one sighting goes from weeping over
+    # the dead to eating them.
+    horror = const(V, "HORROR_OF_IT", "villager.gd")
+    worst = 0.0
+    for path in ROOT.glob("scripts/**/*.gd"):
+        if path.name == "villager.gd":
+            continue
+        for m in re.finditer(r"witness_horror\(([0-9.]+)\)", path.read_text()):
+            worst = max(worst, float(m.group(1)))
+    print("  seeing it costs %.0f morality; the worst the world already does "
+          "is %.0f" % (horror, worst))
+    if horror > worst:
+        fail.append("seeing their dead eaten costs %.0f morality, off the top "
+                    "of a scale that runs to %.0f — enough to tip a mourner "
+                    "into eating the body themselves" % (horror, worst))
 
 
 def butchery(fail):
@@ -207,6 +266,7 @@ def main():
     the_split(fail)
     every_state_named(fail)
     grief(fail)
+    over_the_eaten(fail)
     butchery(fail)
     print()
     if fail:

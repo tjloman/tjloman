@@ -1151,8 +1151,8 @@ func _try_catch_throw() -> void:
 	if global_position.distance_to(thrown.global_position) > 2.2 + scale.x:
 		return
 	_catch_checked_id = thrown.get_instance_id()  # one attempt per throw
-	if attention < 35.0:
-		return  # not watching your hand; it sails past
+	if attention < 35.0 or not can_lift(thrown):
+		return  # not watching your hand, or it is a hut and this is a whelp
 	var skill := clampf(catch_skill * 0.55, 0.12, 0.95)
 	if randf() > skill:
 		GameState.announce("Your creature lunged... and fumbled the catch. Practice.")
@@ -1239,7 +1239,7 @@ func _pick_up_thing(node: Node3D, why: String) -> void:
 	_carry_intent = why
 	if node is RigidBody3D:
 		(node as RigidBody3D).freeze = true
-	elif node.has_method("pick_up"):
+	if node.has_method("pick_up"):   # rigid or not: see DivineHand._on_grab
 		node.call("pick_up")
 	state = State.CARRYING
 	_action_time = 1.4 if why in ["eat", "hurl"] else 5.0

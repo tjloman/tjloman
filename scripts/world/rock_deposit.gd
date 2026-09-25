@@ -372,6 +372,18 @@ func split() -> void:
 	queue_free()
 
 
+## TAKEN UP — by a god's hand or a creature's arms. OFF THE GROUND LAYER.
+##
+## A rock at rest is on layer 1 with the hills, so people walk round it and the
+## ground ray lands on it. A rock being CARRIED on layer 1 is a wall that moves
+## with whoever is holding it: the creature collides with layer 1, so it was
+## shoved out of the stone it was holding, every frame, backwards — and a small
+## beast that caught a megalith slid fifty metres out of town doing it. It goes
+## back on the ground layer when it comes to rest; see `_on_sleep_changed`.
+func pick_up() -> void:
+	collision_layer = 0
+
+
 ## LET PHYSICS HAVE IT. Called when a rock is split off another — the hand's
 ## own release path already unfreezes what it throws (see
 ## DivineHand._release_body), which is exactly the same thing said by somebody
@@ -670,8 +682,10 @@ func _on_sleep_changed() -> void:
 		return
 	# DEFERRED: this arrives from inside the physics server's own step, and
 	# freezing a body it is in the middle of solving is how you get a frame
-	# where the rock is in two places.
+	# where the rock is in two places. And back on the ground layer with the
+	# hills it came from — see `pick_up`.
 	set_deferred("freeze", true)
+	set_deferred("collision_layer", 1)
 
 
 ## DROPPED ON A STOREHOUSE, IT IS STORES. The one place a rock stops being a

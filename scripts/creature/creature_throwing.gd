@@ -342,7 +342,7 @@ func _collect(who: Creature, delta: float) -> void:
 		return
 	if next is RigidBody3D:
 		(next as RigidBody3D).freeze = true
-	elif next.has_method("pick_up"):
+	if next.has_method("pick_up"):   # rigid or not: see DivineHand._on_grab
 		next.call("pick_up")
 	aloft.append(next)
 	_scooping = null

@@ -363,6 +363,40 @@ def source(fail):
         print("  a fledgling cannot lift a megalith .............. yes")
         print("  a beast can still break a piece off the hill .... yes")
 
+    # THE MOONWALK. A rock rests on layer 1 with the hills; the creature
+    # collides with layer 1; so a rock carried on layer 1 is a wall that walks
+    # with whoever holds it, and a small beast that caught a megalith was
+    # shoved backwards out of its own arms, every frame, for fifty metres.
+    if "collision_layer = 0" not in body(ROCK, "pick_up"):
+        fail.append("a carried rock stays on the ground layer, so whoever holds "
+                    "it is shoved out of it every frame — the moonwalk")
+    elif 'set_deferred("collision_layer", 1)' not in body(ROCK, "_on_sleep_changed"):
+        fail.append("a rock that has been carried never goes back on the ground "
+                    "layer, so it is a ghost everybody walks through")
+    else:
+        print("  a carried rock is off the ground layer .......... yes")
+    CREATURE = (ROOT / "scripts/creature/creature.gd").read_text()
+    THROWING = (ROOT / "scripts/creature/creature_throwing.gd").read_text()
+    # `pick_up` has to be ASKED, rigid body or not. It was an `elif` after the
+    # freeze in all three lifters, so no rigid body's pick_up ever ran — which
+    # is also why a fishing boat went on sailing in the god's hand.
+    for who, where, fn in (("the hand", HAND, "_on_grab"),
+                           ("the creature", CREATURE, "_pick_up_thing"),
+                           ("a gathering creature", THROWING, "_collect")):
+        seen = body(where, fn)
+        if not seen:
+            fail.append("could not read %s's %s — if it moved, this is not "
+                        "checking anything" % (who, fn))
+        elif re.search(r"elif \w+\.has_method\(\"pick_up\"\)", seen):
+            fail.append("%s only tells a thing it has been picked up when it "
+                        "is NOT a rigid body — no rock, and no boat, ever hears "
+                        "it" % who)
+    print("  every lifter tells a rigid body it is lifted .... yes")
+    if "can_lift(thrown)" not in body(CREATURE, "_try_catch_throw"):
+        fail.append("a whelp can catch a megalith")
+    else:
+        print("  a whelp does not catch a hut ................... yes")
+
     if len(NAMES) != len(WORTH):
         fail.append("%d rungs and %d names" % (len(WORTH), len(NAMES)))
 

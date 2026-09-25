@@ -78,6 +78,17 @@ const MATERIAL_SPARE := 6
 ## job board already docks a job by how many are at it (see CROWD_PENALTY), so
 ## two or three go and the rest keep working, which is what a funeral looks like.
 const MOURN_SECONDS := 14.0
+## WHAT IT DOES TO SOMEBODY to look up from their dead and find them being
+## eaten, and how often a mourner checks, in physics frames.
+##
+## HIGH ON THE SCALE AND NOT OFF IT. `witness_horror` takes MORALITY, because in
+## this game atrocity hardens whoever sees it — and a villager under
+## VillagerFeeding.WICKED eats bodies before the granary. A weight big enough to
+## tip a decent mourner under that line in one sighting would send them from
+## weeping over the dead to eating them, which is a spiral nobody asked for.
+## Six sits beside the worst things a village already sees (see Village).
+const HORROR_OF_IT := 6.0
+const HORROR_EVERY := 12
 ## How long a beast takes to cut up where it fell.
 const SKIN_SECONDS := 4.0
 
@@ -767,6 +778,16 @@ func _physics_process(delta: float) -> void:
 			if not is_instance_valid(_target_corpse):
 				_target_corpse = null
 				_rethink()
+			# AND IF SOMEBODY KNEELS DOWN BESIDE THEM AND BEGINS TO EAT, they do
+			# not go on sobbing. They were never going to: nobody stands and
+			# weeps politely at arm's length from that. Asked a few times a
+			# second rather than every tick — there are only ever two or three
+			# mourners, but there are two hundred villagers to ask about.
+			elif Engine.get_physics_frames() % HORROR_EVERY == 0 \
+					and VillagerSearch.being_eaten(get_tree(), _target_corpse, true):
+				witness_horror(HORROR_OF_IT)
+				scare(_target_corpse.global_position)
+				_target_corpse = null
 			elif _action_time <= 0.0:
 				# WHAT IT LEAVES BEHIND. Grief costs happiness and it is not
 				# supposed to be free — but standing with your dead is the
@@ -1487,7 +1508,8 @@ func _pick_job() -> bool:
 	# It scores like a need rather than like work, which is what makes it
 	# interrupt a harvest: a neighbour lying in the road outranks the stone that
 	# was being carried past them. Crowding keeps it from emptying the village.
-	if watch.corpse != null and not VillagerFeeding.will_eat_flesh(self):
+	if watch.corpse != null and not VillagerFeeding.will_eat_flesh(self) \
+			and not VillagerSearch.being_eaten(get_tree(), watch.corpse):
 		scores["mourn"] = 34.0
 	if eats_meat and store.meat_food < 5:
 		if abandoned and Workshop.any_meat(village):
@@ -1625,7 +1647,7 @@ func _start_job(job: String) -> void:
 				return
 			state = State.GO_SKIN
 		"mourn":
-			_target_corpse = VillagerSearch.corpse(self)
+			_target_corpse = VillagerSearch.corpse(self, true)
 			if _target_corpse == null:
 				_rethink()
 				return
