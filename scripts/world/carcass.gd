@@ -160,6 +160,13 @@ func butcher() -> int:
 	return got
 
 
+## BURNT, AND SO WORTH NOTHING TO ANYBODY. Asked before a butcher walks out to
+## one: sending somebody across a field to a body the fire already ruined is an
+## errand the world has spoiled, and they would arrive and turn round.
+func is_spoiled() -> bool:
+	return _charred
+
+
 ## Fire ------------------------------------------------------------------------
 
 func ignite() -> void:

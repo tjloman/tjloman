@@ -51,7 +51,7 @@ static func will_eat_flesh(who: Villager) -> bool:
 static func _a_body(who: Villager) -> Corpse:
 	if not will_eat_flesh(who):
 		return null
-	return who._nearest_corpse()
+	return VillagerSearch.corpse(who)
 
 
 ## Choose a meal. False when there is nothing anywhere, which is what a famine
@@ -80,7 +80,7 @@ static func plan(who: Villager) -> bool:
 	if body != null:
 		return _go_to(who, body)
 	# The granary is bare: go foraging in the wild like anyone's ancestors.
-	who.target_bush = who._nearest_forage_bush()
+	who.target_bush = VillagerSearch.forage(who)
 	if who.target_bush != null:
 		who.state = Villager.State.GO_EAT
 		return true

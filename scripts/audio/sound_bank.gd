@@ -29,7 +29,7 @@ const MOST_TAKES := 8
 const ONE_SHOTS: Array[String] = [
 	"baa", "cluck", "oink", "neigh", "bark", "howl", "croak", "saw", "pick",
 	"hammer", "murmur", "chatter", "boom", "coo", "caw", "screech", "drum",
-	"whisper", "roar", "scream",
+	"whisper", "roar", "scream", "weep",
 ]
 ## THE SMALL VOICES. Everything above is a one-shot; these are LOOPS, because
 ## a cricket is not an event. See `_make_loop` and `voice`.
@@ -325,6 +325,28 @@ func _make_roar() -> AudioStreamWAV:
 		rasp = rasp * 0.82 + (randf() * 2.0 - 1.0) * 0.18
 		var throat := rasp * (0.35 + 0.45 * sin(frac * PI))
 		samples[i] = (chest * 0.34 + throat) * _env(t, dur, 0.06, 0.45) * 0.72
+	return _make_wav(samples)
+
+
+## WEEPING. A breath drawn in and let go, catching twice on the way down — two
+## slow tremolos over a falling tone, which is the shape of a sob and not of any
+## other noise a person makes. Quiet on purpose: it is meant to be heard when
+## you are standing over the body and not across the valley.
+func _make_weep() -> AudioStreamWAV:
+	var dur := 1.1
+	var n := int(dur * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := i / float(SAMPLE_RATE)
+		# Falling, the way a voice does when it gives up halfway through.
+		var hz := 240.0 - 90.0 * (t / dur)
+		phase += hz / SAMPLE_RATE
+		var tone := sin(phase * TAU) * 0.7 + sin(phase * 2.0 * TAU) * 0.3
+		# The catch: two hitches in the breath, not a smooth wobble.
+		var catch := 0.55 + 0.45 * absf(sin(t * 2.6 * TAU))
+		samples[i] = tone * catch * _env(t, dur, 0.09, 0.45) * 0.28
 	return _make_wav(samples)
 
 

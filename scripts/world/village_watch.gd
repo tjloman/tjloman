@@ -44,6 +44,9 @@ const TIMBER_REACH := 2.5
 const STONE_REACH := 2.5
 const GAME_REACH := 2.0
 const CORPSE_REACH := 1.5
+## Further than a human body: a beast dies where it was grazing, which is out in
+## the fields rather than in the square.
+const CARCASS_REACH := 2.0
 const SHORE_STEPS: Array[float] = [10.0, 20.0, 35.0, 50.0]
 const SHORE_SPOKES := 8
 
@@ -56,6 +59,9 @@ var tamable: Animal = null
 ## can cut a head out of and raise as its own.
 var stock: Herd = null
 var corpse: Corpse = null
+## THE NEAREST BEAST'S BODY worth cutting up. Kept beside the human dead because
+## it is the same question asked of a different group — see VillagerSearch.
+var carcass: Carcass = null
 var shore := Vector3.INF
 var heathen: Village = null
 
@@ -76,6 +82,7 @@ func scan(delta: float, town: Village) -> void:
 	_look_for_stone(tree, here, reach * STONE_REACH)
 	_look_for_beasts(tree, here, reach * GAME_REACH)
 	_look_for_corpse(tree, here, reach * CORPSE_REACH)
+	_look_for_carcass(tree, here, reach * CARCASS_REACH)
 	_look_for_stock(tree, here, reach * GAME_REACH)
 	_look_for_shore(tree, here)
 	_look_for_heathen(tree, town, here)
@@ -191,6 +198,27 @@ func _unreachable(tree: SceneTree, at: Vector3) -> bool:
 ## left another corpse under the water, which sent the next one. Looked for once
 ## a second for the whole town, so the depth read costs a town what it used to
 ## cost one villager a frame.
+## A body left in a field is meat with the killing already done — and it is on a
+## clock, because a carcass nobody comes for falls apart into loose joints by
+## itself (see Carcass.LIES_FOR). A town that never notices them is a town that
+## eats later and worse.
+func _look_for_carcass(tree: SceneTree, here: Vector3, reach: float) -> void:
+	carcass = null
+	var best := reach
+	for n in tree.get_nodes_in_group("carcasses"):
+		var body := n as Carcass
+		if body == null or not is_instance_valid(body) or body.is_queued_for_deletion():
+			continue
+		if body.is_spoiled():
+			continue
+		if _unreachable(tree, body.global_position):
+			continue
+		var d := here.distance_to(body.global_position)
+		if d < best:
+			best = d
+			carcass = body
+
+
 func _look_for_corpse(tree: SceneTree, here: Vector3, reach: float) -> void:
 	corpse = null
 	var best := reach

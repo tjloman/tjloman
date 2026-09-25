@@ -10,6 +10,7 @@ extends CharacterBody3D
 enum State {
 	WANDER, GO_EAT, EATING, GO_SLEEP, SLEEPING,
 	GO_FARM, FARMING, GO_HUNT, HUNTING, GO_BUTCHER, BUTCHERING,
+	GO_SKIN, SKINNING, GO_MOURN, MOURNING,
 	GO_CHOP, CHOPPING, GO_QUARRY, QUARRYING, GO_BUILD, BUILDING,
 	GO_TAME, TAMING, GO_WORSHIP, WORSHIPPING, PLAY,
 	GO_PREACH, PREACHING, GO_FEED, GO_BUILD_FARM, BUILDING_FARM,
@@ -65,6 +66,21 @@ const BERTH_PER_HEAD := 0.25
 ## this is only so the one after it does not start from an empty yard.
 const MATERIAL_SPARE := 6
 
+## HOW LONG THEY STAND OVER A BODY AND WEEP, in seconds.
+##
+## A death in this game was a line of text and a corpse nobody looked at. The
+## village hive registered it, the god was told, and every soul in the place
+## carried on hauling stone past their neighbour lying in the road. Grief that
+## nothing DOES is not grief, it is bookkeeping.
+##
+## Long enough to be a thing you notice happening from across the square, short
+## enough that a bad week does not stop the harvest. Crowding does the rest: the
+## job board already docks a job by how many are at it (see CROWD_PENALTY), so
+## two or three go and the rest keep working, which is what a funeral looks like.
+const MOURN_SECONDS := 14.0
+## How long a beast takes to cut up where it fell.
+const SKIN_SECONDS := 4.0
+
 const MISSION_RANGE := 320.0
 const MISSION_FAITH := 55.0
 ## How much the town may want food before its trades close for the day.
@@ -117,12 +133,6 @@ const FED_ENOUGH := 2.0
 ## point instead of a village spread out over its land, which is exactly what a
 ## village is NOT.
 ##
-## So nobody takes the nearest. Everybody gathers the nearest few and takes the
-## one at their OWN rank among them — a number each villager has for life and
-## nobody else shares, so the fan-out costs no bookkeeping, no claims register
-## and no agreement between them. They simply want slightly different things,
-## which is what makes a crowd of people look like people.
-const SPREAD_CHOICES := 8
 
 ## How much an already-taken job is discouraged for each villager on it, so
 ## the flock spreads across the village's needs instead of all rushing one.
@@ -201,6 +211,7 @@ var _target_herd: Herd = null
 ## places with its neighbours forever.
 var _school_seat := 0
 var _target_corpse: Corpse = null
+var _target_carcass: Carcass = null
 var _target_tree: WildTree = null
 var _target_deposit: RockDeposit = null
 var _build_site: House = null
@@ -403,7 +414,7 @@ func _physics_process(delta: float) -> void:
 	if _label.visible != shown:
 		_label.visible = shown
 	if shown:
-		var status := _status_text()
+		var status := VillagerWords.status_text(self)
 		if _label.text != status:  # Label3D re-renders on every assignment
 			_label.text = status
 	if _animator != null:
@@ -720,6 +731,52 @@ func _physics_process(delta: float) -> void:
 				_target_corpse = null
 				if cut_at.is_finite():
 					FoodItem.joints_of_a_person(2, cut_at, get_parent())
+				_rethink()
+		State.GO_SKIN:
+			_process_go_target(_target_carcass, delta, State.SKINNING, SKIN_SECONDS)
+		State.SKINNING:
+			_apply_gravity_only(delta)
+			_action_time -= delta
+			_work_noise("saw", 1.1, delta)
+			if _action_time <= 0.0:
+				var joints := 0
+				if is_instance_valid(_target_carcass):
+					var beast := _target_carcass.species
+					joints = _target_carcass.butcher()
+					_carry_announce = "%s butchered a %s." % [villager_name, beast]
+				_target_carcass = null
+				# Shouldered and walked home, like every other gathered load —
+				# nothing is banked until they actually arrive.
+				_begin_haul("meat", joints, "skin")
+		State.GO_MOURN:
+			# THEY STOP SHORT, at the arm's length `_process_go_target` stops
+			# everybody at. A body is a thing you stand BESIDE, and since each
+			# of them walks up from wherever they happened to be, they end up
+			# ringing it rather than stacking on it.
+			_process_go_target(_target_corpse, delta, State.MOURNING, MOURN_SECONDS)
+		State.MOURNING:
+			_apply_gravity_only(delta)
+			_action_time -= delta
+			# OPENLY. Every couple of seconds, at a volume that carries about as
+			# far as the body does — this is meant to be heard by somebody
+			# standing in the square, not across the valley. See SoundBank.
+			_work_noise("weep", 2.3, delta)
+			# THE BODY MAY BE TAKEN WHILE THEY ARE STILL AT IT: a god lifts it,
+			# a creature eats it, the decay timer runs out. Then there is
+			# nothing left to weep over and they get up.
+			if not is_instance_valid(_target_corpse):
+				_target_corpse = null
+				_rethink()
+			elif _action_time <= 0.0:
+				# WHAT IT LEAVES BEHIND. Grief costs happiness and it is not
+				# supposed to be free — but standing with your dead is the
+				# decent thing, and a person who does it comes away a little
+				# better than they went in.
+				happiness = maxf(happiness - 12.0, 0.0)
+				morality = minf(morality + 3.0, 100.0)
+				if village != null:
+					village.hive.witness("death", global_position, 0.5)
+				_target_corpse = null
 				_rethink()
 		State.GO_CHOP:
 			_process_go_target(_target_tree, delta, State.CHOPPING, 4.0)
@@ -1312,7 +1369,7 @@ func _pick_job() -> bool:
 	# fifty of them stood in the road re-deciding this forever — which is both
 	# why nobody was building and why it ran so badly.
 	var homeless := village.homeless_count()
-	var damaged := _find_damaged_house()
+	var damaged := VillagerSearch.damaged_house(self)
 	var next_house: Dictionary = House.SPECS[village.next_house_size()]
 	var lumber_due: int = next_house["lumber"]
 	var stone_due: int = next_house["stone"]
@@ -1416,6 +1473,22 @@ func _pick_job() -> bool:
 	if village.diet == Village.Diet.CANNIBAL and store.meat_food < 4 \
 			and VillagerFeeding.will_eat_flesh(self) and watch.corpse != null:
 		scores["butcher"] = _wants(FOOD_CEIL + 6.0, want_food)
+	# A BEAST'S BODY IS MEAT WITH THE KILLING ALREADY DONE, and no diet has an
+	# opinion about it — this is butchery, not cannibalism, and every town does
+	# it. Scored under the plough and over the trades: worth dropping a workshop
+	# shift for, not worth abandoning a field. It is also on a clock, because a
+	# carcass nobody comes for falls apart into loose joints by itself.
+	if eats_meat and watch.carcass != null and store.meat_food < 8:
+		scores["skin"] = _wants(FOOD_CEIL - 4.0, want_food)
+	# AND THE DEAD ARE WEPT OVER. Not by a town that eats its dead — for those
+	# a body is a job, and the one thing this must never be is queued behind
+	# dinner. Everybody else goes and stands over them for a while.
+	#
+	# It scores like a need rather than like work, which is what makes it
+	# interrupt a harvest: a neighbour lying in the road outranks the stone that
+	# was being carried past them. Crowding keeps it from emptying the village.
+	if watch.corpse != null and not VillagerFeeding.will_eat_flesh(self):
+		scores["mourn"] = 34.0
 	if eats_meat and store.meat_food < 5:
 		if abandoned and Workshop.any_meat(village):
 			scores["butcher_pen"] = _wants(FOOD_CEIL, want_food)
@@ -1486,7 +1559,7 @@ func _start_job(job: String) -> void:
 			if village.construction_site != null:
 				_build_site = village.construction_site
 			else:
-				_build_site = _find_damaged_house()
+				_build_site = VillagerSearch.damaged_house(self)
 				if _build_site == null:
 					_build_site = village.start_construction(_world())
 			if _build_site == null:
@@ -1496,11 +1569,11 @@ func _start_job(job: String) -> void:
 			state = State.GO_BUILD
 			_maybe_mount()
 		"chop":
-			_target_tree = _nearest_in_group("trees", village.influence_radius * 2.5) as WildTree
+			_target_tree = VillagerSearch.in_group(self, "trees", village.influence_radius * 2.5) as WildTree
 			state = State.GO_CHOP
 			_maybe_mount()
 		"quarry":
-			_target_deposit = _nearest_in_group("rock_deposits",
+			_target_deposit = VillagerSearch.in_group(self, "rock_deposits",
 				village.influence_radius * 2.5) as RockDeposit
 			state = State.GO_QUARRY
 			_maybe_mount()
@@ -1534,10 +1607,10 @@ func _start_job(job: String) -> void:
 			state = State.GO_BUILD_EDUBBA
 			_maybe_mount()
 		"fish":
-			_fish_spot = _find_shore()
+			_fish_spot = VillagerSearch.shore(self)
 			state = State.GO_FISH
 		"butcher":
-			_target_corpse = _nearest_corpse()
+			_target_corpse = VillagerSearch.corpse(self)
 			state = State.GO_BUTCHER
 		"butcher_pen":
 			# A loose beast in the yard if there is one; otherwise the barn's
@@ -1545,8 +1618,20 @@ func _start_job(job: String) -> void:
 			# been built. Workshop.butchery settles which and sets us going.
 			_target_animal = village.best_penned_meat()
 			state = Workshop.butchery(self, _target_animal) as State
+		"skin":
+			_target_carcass = VillagerSearch.carcass(self)
+			if _target_carcass == null:
+				_rethink()
+				return
+			state = State.GO_SKIN
+		"mourn":
+			_target_corpse = VillagerSearch.corpse(self)
+			if _target_corpse == null:
+				_rethink()
+				return
+			state = State.GO_MOURN
 		"tame":
-			_target_animal = _nearest_tamable()
+			_target_animal = VillagerSearch.tamable(self)
 			if _target_animal == null:
 				state = State.WANDER
 				_action_time = 2.0
@@ -1577,7 +1662,7 @@ func _start_job(job: String) -> void:
 			state = State.GO_BUILD_NEST
 			_maybe_mount()
 		"preach":
-			_mission_village = _nearest_heathen()
+			_mission_village = VillagerSearch.heathen(self)
 			if _mission_village == null:
 				state = State.WANDER
 				_action_time = 2.0
@@ -1610,28 +1695,6 @@ func _start_job(job: String) -> void:
 			Workshop.claim_raising(village, _shop_kind)   # nobody else raises it
 			state = State.GO_BUILD_SHOP
 			_maybe_mount()
-
-
-## THE NEAREST TOWN THAT DOES NOT BELIEVE, within a missionary's reach.
-func _nearest_heathen() -> Village:
-	var best: Village = null
-	var closest := MISSION_RANGE
-	for v in get_tree().get_nodes_in_group("village"):
-		var town := v as Village
-		if not is_instance_valid(town) or town == village or town.converted:
-			continue
-		var gap := town.global_position.distance_to(global_position)
-		if gap < closest:
-			closest = gap
-			best = town
-	return best
-
-
-func _find_damaged_house() -> House:
-	for h in village.houses:
-		if is_instance_valid(h) and h.needs_repair():
-			return h
-	return null
 
 
 ## Hauling -------------------------------------------------------------------
@@ -1706,6 +1769,12 @@ func current_job() -> String:
 		State.MUSTERING: return "expedition"
 		State.GO_FISH, State.FISHING: return "fish"
 		State.GO_BUTCHER, State.BUTCHERING: return "butcher"
+		State.GO_SKIN, State.SKINNING: return "skin"
+		# NAMED SO THE CROWD CAN SEE IT. The job board docks a job by how many
+		# are already at it (CROWD_PENALTY), and that is the ONLY thing keeping
+		# a death from emptying the village into a ring round one body. A state
+		# missing from this list is a job nobody is counted as doing.
+		State.GO_MOURN, State.MOURNING: return "mourn"
 		State.GO_TAME, State.TAMING: return "tame"
 		State.HAULING: return _carry_job
 	return ""
@@ -1752,134 +1821,10 @@ func pulled_free(left: float) -> void:
 
 
 ## A dry spot right at the water's edge, or INF if no shore is in reach.
-func _find_shore() -> Vector3:
-	var world := _world()
-	if world == null:
-		return Vector3.INF
-	for dist: float in [10.0, 20.0, 35.0, 50.0]:
-		for i in 8:
-			var angle := TAU * i / 8.0 + randf() * 0.3
-			var probe := global_position + Vector3(cos(angle), 0, sin(angle)) * dist
-			if world.is_underwater(probe.x, probe.z):
-				var shore := global_position + (probe - global_position) * 0.85
-				shore.y = world.height_at(shore.x, shore.z)
-				return shore
-	return Vector3.INF
-
-
-func _nearest_forage_bush() -> ForageBush:
-	var best: ForageBush = null
-	var best_dist := INF
-	for b in get_tree().get_nodes_in_group("forage"):
-		var bush := b as ForageBush
-		if not is_instance_valid(bush) or not bush.has_berries():
-			continue
-		if would_drown_at(bush.global_position):
-			continue
-		var d := global_position.distance_to(bush.global_position)
-		if d < best_dist and d < village.influence_radius * 2.0:
-			best_dist = d
-			best = bush
-	return best
-
-
-func _nearest_huntable() -> Animal:
-	var best: Array = []
-	var reach := village.influence_radius * 2.0
-	for a in get_tree().get_nodes_in_group("animals"):
-		var animal := a as Animal
-		if not is_instance_valid(animal) or animal.is_queued_for_deletion():
-			continue
-		if animal.meat_yield() <= 0 or animal.tamed_by != null:
-			continue
-		if animal.spec.get("predator", false):
-			continue  # villagers hunt dinner, not death
-		if would_drown_at(animal.global_position):
-			continue
-		var d := global_position.distance_to(animal.global_position)
-		if d < reach:
-			_consider(best, animal, d)
-	return _my_pick(best) as Animal
-
-
-func _nearest_tamable() -> Animal:
-	var best: Array = []
-	var reach := village.influence_radius * 2.0
-	for a in get_tree().get_nodes_in_group("animals"):
-		var animal := a as Animal
-		if not is_instance_valid(animal) or not animal.is_tamable():
-			continue
-		# A beast standing in deep water is a beast that is drowning, and
-		# nobody is gentling it. See `would_drown_at`.
-		if would_drown_at(animal.global_position):
-			continue
-		var d := global_position.distance_to(animal.global_position)
-		if d < reach:
-			_consider(best, animal, d)
-	return _my_pick(best) as Animal
-
-
-func _nearest_corpse() -> Corpse:
-	var best: Array = []
-	var reach := village.influence_radius * 1.5
-	for c in get_tree().get_nodes_in_group("corpses"):
-		var corpse := c as Corpse
-		if not is_instance_valid(corpse) or corpse.is_queued_for_deletion():
-			continue
-		# The drowned are left where they are. Somebody who went in after the
-		# meat and did not come out is not a reason for the next one to go.
-		if would_drown_at(corpse.global_position):
-			continue
-		var d := global_position.distance_to(corpse.global_position)
-		if d < reach:
-			_consider(best, corpse, d)
-	return _my_pick(best) as Corpse
-
-
 ## A job's score: the shared floor, plus however much of the climb the town's
 ## want actually earns.
 func _wants(ceiling: float, want: float) -> float:
 	return GROWTH_FLOOR + clampf(want, 0.0, 1.0) * (ceiling - GROWTH_FLOOR)
-
-
-func _nearest_in_group(group: String, max_dist: float) -> Node3D:
-	var best: Array = []
-	for n in get_tree().get_nodes_in_group(group):
-		var node := n as Node3D
-		if not is_instance_valid(node) or node.is_queued_for_deletion():
-			continue
-		if node is WildTree and ((node as WildTree).is_felled() \
-				or (node as WildTree).is_held() or (node as WildTree).burning):
-			continue
-		if would_drown_at(node.global_position):
-			continue
-		var d := global_position.distance_to(node.global_position)
-		if d < max_dist:
-			_consider(best, node, d)
-	return _my_pick(best)
-
-
-## Keep this one if it is among the nearest few, in order. A short insertion
-## rather than a sort, because the list is eight long and the candidates can be
-## every tree in every loaded chunk.
-func _consider(best: Array, node: Node3D, d: float) -> void:
-	var at := best.size()
-	while at > 0 and d < float(best[at - 1][0]):
-		at -= 1
-	if at >= SPREAD_CHOICES:
-		return
-	best.insert(at, [d, node])
-	if best.size() > SPREAD_CHOICES:
-		best.resize(SPREAD_CHOICES)
-
-
-## This villager's own choice from the nearest few. The rank comes from its
-## instance id, which is unique, stable for its whole life, and needs asking
-## nobody.
-func _my_pick(best: Array) -> Node3D:
-	if best.is_empty():
-		return null
-	return best[int(get_instance_id()) % best.size()][1] as Node3D
 
 
 ## Riding --------------------------------------------------------------------
@@ -2366,105 +2311,7 @@ func drop(throw_velocity: Vector3, gentle := false) -> void:
 
 ## Descriptions --------------------------------------------------------------
 
+## The card the god reads when the pointer rests on them. See VillagerWords,
+## which is where all the naming lives.
 func hover_text() -> String:
-	var stage: String
-	if age < ADULT_AGE:
-		stage = "girl" if is_female else "boy"
-	elif age >= ELDER_AGE:
-		stage = "elder"
-	else:
-		stage = "woman" if is_female else "man"
-	var extra := ", pregnant" if pregnant else ""
-	if weapon != "":
-		extra += ", armed with %s" % Weapon.label(weapon)
-	if home == null:
-		extra += ", HOMELESS"
-	return "%s of %s — %s %s, age %d%s — %s\n(health %d · hunger %d · energy %d · happy %d · %s)" % [
-		villager_name, village.village_name, _morality_word(), stage, int(age), extra,
-		_status_word(), int(health), int(hunger), int(energy), int(happiness),
-		"she" if is_female else "he"]
-
-
-func _morality_word() -> String:
-	if morality > 60.0:
-		return "saintly"
-	if morality > 20.0:
-		return "decent"
-	if morality > -20.0:
-		return "coarse"
-	if morality > -60.0:
-		return "wicked"
-	return "monstrous"
-
-
-func _status_word() -> String:
-	match state:
-		State.WANDER: return "strolling"
-		State.PLAY: return "playing"
-		State.GO_EAT, State.EATING: return "eating"
-		State.GO_SLEEP, State.SLEEPING: return "sleeping" if home != null else "sleeping rough"
-		State.GO_FARM, State.FARMING: return "working the farm"
-		State.GO_HUNT, State.HUNTING: return "hunting"
-		State.MUSTERING: return "waiting on the party"
-		State.GO_BUTCHER, State.BUTCHERING: return "butchering the dead"
-		State.GO_CHOP, State.CHOPPING: return "felling timber"
-		State.GO_QUARRY, State.QUARRYING: return "quarrying stone"
-		State.GO_BUILD, State.BUILDING: return "building"
-		State.GO_TAME, State.TAMING: return "taming a beast"
-		State.GO_WORSHIP, State.WORSHIPPING: return "worshipping"
-		State.GO_PREACH, State.PREACHING: return "on a mission"
-		State.GO_FEED: return "feeding the animals"
-		State.GO_BUILD_FARM, State.BUILDING_FARM: return "breaking new ground"
-		State.GO_BUILD_EDUBBA, State.BUILDING_EDUBBA: return "raising the Edubba"
-		State.GO_FISH, State.FISHING: return "fishing"
-		State.HAULING: return "hauling to the storehouse"
-		State.GO_BUILD_NEST, State.BUILDING_NEST: return "raising the creature's nest"
-		State.GO_CIRCLE, State.CIRCLING: return "dancing the circle"
-		State.GO_BUILD_SHOP, State.BUILDING_SHOP: return "raising a workshop"
-		State.GO_WORK, State.WORKING: return "at work"
-		State.PINNED: return "DOWN — they have hold of them"
-		State.GO_ARM: return "running for a weapon"
-		State.FIGHT: return "FIGHTING for their life"
-		State.COURT: return "courting at the totem"
-		State.FOLLOW_MOM: return "following mother"
-		State.AT_SCHOOL: return "at school"
-		State.TEACH: return "teaching the children"
-		State.FLEE: return "fleeing in terror"
-		State.HELD: return "in the grip of a god"
-		State.FALLING: return "airborne"
-	return "?"
-
-
-func _status_text() -> String:
-	match state:
-		State.DYING: return "SAVE ME!"
-		State.SLEEPING: return "zzz"
-		State.EATING: return "nom"
-		State.FARMING: return "farm"
-		State.HUNTING: return "hunt"
-		State.CHOPPING: return "chop"
-		State.QUARRYING: return "mine"
-		State.BUILDING: return "build"
-		State.TAMING: return "shhh"
-		State.BUTCHERING: return "..."
-		State.WORSHIPPING: return "pray"
-		State.PREACHING: return "hear me!"
-		State.FISHING: return "fish?"
-		State.HAULING: return "haul"
-		State.GO_BUILD_NEST, State.BUILDING_NEST: return "nest"
-		State.GO_CIRCLE, State.CIRCLING: return "dance"
-		State.GO_ARM: return "arms!"
-		State.FIGHT: return "FIGHT!"
-		State.COURT: return "♥"
-		State.FOLLOW_MOM: return "mama"
-		State.AT_SCHOOL: return "abc"
-		State.TEACH: return "teach"
-		State.BUILDING_EDUBBA, State.GO_BUILD_EDUBBA: return "build"
-		State.BUILDING_SHOP, State.GO_BUILD_SHOP: return "build"
-		State.GO_WORK, State.WORKING: return "work"
-		State.PLAY: return "wheee"
-		State.FLEE, State.FALLING: return "!!!"
-		State.HELD: return "?!"
-	if pregnant:
-		return "+"
-	return ""
+	return VillagerWords.hover(self)
