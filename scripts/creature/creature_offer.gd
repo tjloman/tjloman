@@ -149,7 +149,10 @@ func walk(who: Creature, delta: float) -> void:
 ## off with it, or the creature stopped being in a state to want it. `tick`
 ## re-asks all of that from scratch every frame, so this is only ever the
 ## answer to a question that has already been decided above it.
-func _forget(who: Creature) -> void:
+func _forget(who_given: Variant) -> void:
+	# Untyped until proved alive: a freed object handed to a typed parameter
+	# is the error, raised before any check below could run. Gone is null.
+	var who: Creature = (who_given as Creature) if is_instance_valid(who_given) else null
 	_steady = 0.0
 	_walked = 0.0
 	_was = Vector3.INF

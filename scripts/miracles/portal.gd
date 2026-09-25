@@ -80,7 +80,12 @@ func _process(delta: float) -> void:
 
 ## Step a traveller out of the far gate, just clear of it so it doesn't
 ## immediately fall back through.
-func _send(body: Node3D, now: float) -> void:
+func _send(body_given: Variant, now: float) -> void:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(body_given):
+		return
+	var body := body_given as Node3D
 	if not is_instance_valid(body):
 		return
 	var id := body.get_instance_id()

@@ -2101,7 +2101,10 @@ func extinguish() -> void:
 
 ## Struck by a beast (or your creature). Remembers WHO, rouses the village, and
 ## then takes the wound. This is what turns a lone killing into a manhunt.
-func hurt_by(foe: Node3D, amount: float) -> void:
+func hurt_by(foe_given: Variant, amount: float) -> void:
+	# Untyped until proved alive: a freed object handed to a typed parameter
+	# is the error, raised before any check below could run. Gone is null.
+	var foe: Node3D = (foe_given as Node3D) if is_instance_valid(foe_given) else null
 	_last_attacker = foe
 	if village != null:
 		village.raise_alarm(

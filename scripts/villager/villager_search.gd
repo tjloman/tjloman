@@ -111,7 +111,12 @@ static func corpse(who: Villager, spare_the_eaten := false) -> Corpse:
 ## "A decent man sobbing over the man who is simultaneously being eaten.
 ## Positively awkward." It was: two unrelated jobs, each perfectly sensible on
 ## its own, pointed at the same body by two people who could not see each other.
-static func being_eaten(tree: SceneTree, body: Corpse, at_it := false) -> bool:
+static func being_eaten(tree: SceneTree, body_given: Variant, at_it := false) -> bool:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(body_given):
+		return false
+	var body := body_given as Corpse
 	if body == null or not is_instance_valid(body):
 		return false
 	for v in tree.get_nodes_in_group("villagers"):
@@ -125,7 +130,12 @@ static func being_eaten(tree: SceneTree, body: Corpse, at_it := false) -> bool:
 
 ## IS SOMEBODY STANDING OVER THIS ONE, WEEPING? Present, not on their way —
 ## what shames an eater is a face, not an intention. See VillagerFeeding.shamed.
-static func being_mourned(tree: SceneTree, body: Corpse) -> bool:
+static func being_mourned(tree: SceneTree, body_given: Variant) -> bool:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(body_given):
+		return false
+	var body := body_given as Corpse
 	if body == null or not is_instance_valid(body):
 		return false
 	for v in tree.get_nodes_in_group("villagers"):

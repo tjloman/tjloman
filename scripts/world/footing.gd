@@ -70,7 +70,12 @@ static func under(world: WorldGen, at: Vector2, half: Vector2) -> float:
 ## Called at the END of a building's own `_ready`, after its shape exists. The
 ## placer decides WHERE; the building decides how high, because the placer does
 ## not know how big it is and has guessed wrong about it for a long time.
-static func settle(what: Node3D, world: WorldGen) -> void:
+static func settle(what_given: Variant, world: WorldGen) -> void:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(what_given):
+		return
+	var what := what_given as Node3D
 	if what == null or not is_instance_valid(what) or not what.is_inside_tree():
 		return
 	var half := footprint_of(what)

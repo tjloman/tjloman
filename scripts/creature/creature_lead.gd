@@ -69,7 +69,12 @@ const HELD_LOOK := 3.2
 ## IS IT TIED UP? Not "is it on a lead" — a rope in your hand is a rope it can
 ## be led by, and it may still put its back to you. This is the far end being
 ## round SOMETHING, which is the state it cannot leave.
-static func tied_up(who: Creature) -> bool:
+static func tied_up(who_given: Variant) -> bool:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(who_given):
+		return false
+	var who := who_given as Creature
 	if who == null or not is_instance_valid(who) or not who.is_inside_tree():
 		return false
 	var rope := LeadRope.on(who, who.get_tree())
@@ -93,7 +98,12 @@ static func reach_gain(who: Creature) -> float:
 ##
 ## Lifted out of Creature.witness_god, which is where the numbers were: the file
 ## lives permanently on its line limit, and this is the lead's rule now.
-static func in_sight(who: Creature, where: Vector3) -> bool:
+static func in_sight(who_given: Variant, where: Vector3) -> bool:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(who_given):
+		return false
+	var who := who_given as Creature
 	if who == null or not is_instance_valid(who):
 		return false
 	var reach := (24.0 + who.attention * 0.3 + who.scale.x * 1.5) * reach_gain(who)
@@ -134,7 +144,12 @@ static func to_spot(who: Creature, pos: Vector3) -> void:
 
 
 ## TIE IT TO A THING. It goes and fetches it.
-static func to_thing(who: Creature, what: Node3D) -> void:
+static func to_thing(who: Creature, what_given: Variant) -> void:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(what_given):
+		return
+	var what := what_given as Node3D
 	if what == null or not is_instance_valid(what):
 		return
 	# HANDS FREE, because this one ends in picking something up — which is the

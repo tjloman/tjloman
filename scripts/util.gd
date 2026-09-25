@@ -583,7 +583,12 @@ static func _glow_texture() -> ImageTexture:
 ## Read off whatever collision shape the thing already has, so nothing had to
 ## grow a `footprint()` method, and kept in a meta because a building does not
 ## change size.
-static func bulk_of(what: Node3D) -> float:
+static func bulk_of(what_given: Variant) -> float:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(what_given):
+		return 0.0
+	var what := what_given as Node3D
 	if what == null or not is_instance_valid(what):
 		return 0.0
 	# `has_meta` AND NOT A NULL DEFAULT. Godot's `get_meta(name, default)`
@@ -616,7 +621,12 @@ static func bulk_of(what: Node3D) -> float:
 
 ## IS `at` WITHIN `reach` OF THIS THING'S EDGE? The question every blow, every
 ## flame and every furnace meant to ask and none of them did. See `bulk_of`.
-static func within(what: Node3D, at: Vector3, reach: float) -> bool:
+static func within(what_given: Variant, at: Vector3, reach: float) -> bool:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(what_given):
+		return false
+	var what := what_given as Node3D
 	if what == null or not is_instance_valid(what):
 		return false
 	return what.global_position.distance_to(at) - bulk_of(what) < reach

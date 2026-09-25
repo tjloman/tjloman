@@ -177,7 +177,12 @@ static func heave(who: Creature) -> Vector3:
 
 ## LET GO OF IT. Rigid bodies take a velocity; animals, people and trees have
 ## their own falling to do and are told to drop.
-static func send(thing: Node3D, v: Vector3, gently := false) -> void:
+static func send(thing_given: Variant, v: Vector3, gently := false) -> void:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(thing_given):
+		return
+	var thing := thing_given as Node3D
 	if thing == null or not is_instance_valid(thing):
 		return
 	# NOT A CHILD, NOT EVER, and the creature's hand is no different from the

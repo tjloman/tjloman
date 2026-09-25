@@ -124,7 +124,10 @@ static func _who_loves(child: Villager) -> Villager:
 ## Returns "" for anything that may be thrown, SET_DOWN for a child — who goes
 ## on their feet wherever the hand happens to be — and HELD_FAST for somebody
 ## standing in a child's place, who simply does not let go.
-static func throw_answer(thing: Node3D) -> String:
+static func throw_answer(thing_given: Variant) -> String:
+	# Untyped until proved alive: a freed object handed to a typed parameter
+	# is the error, raised before any check below could run. Gone is null.
+	var thing: Node3D = (thing_given as Node3D) if is_instance_valid(thing_given) else null
 	if is_child(thing):
 		return SET_DOWN
 	if is_instance_valid(thing) and thing.has_meta("shielding"):
@@ -139,7 +142,10 @@ static func throw_answer(thing: Node3D) -> String:
 ## They are on the ground and it is over. Called wherever a grip ends, so a
 ## guardian set down properly goes back to being an ordinary villager who can
 ## be picked up and thrown like anybody else.
-static func let_go(thing: Node3D) -> void:
+static func let_go(thing_given: Variant) -> void:
+	# Untyped until proved alive: a freed object handed to a typed parameter
+	# is the error, raised before any check below could run. Gone is null.
+	var thing: Node3D = (thing_given as Node3D) if is_instance_valid(thing_given) else null
 	if is_instance_valid(thing) and thing.has_meta("shielding"):
 		thing.remove_meta("shielding")
 

@@ -408,7 +408,10 @@ func load_game() -> bool:
 ## its habits, its body and everything you taught it come along; the land,
 ## the villages and their people are strangers. Stays in the same profile —
 ## it is the same creature, and its life goes on.
-func regenerate_world(creature: Creature) -> void:
+func regenerate_world(creature_given: Variant) -> void:
+	# Untyped until proved alive: a freed object handed to a typed parameter
+	# is the error, raised before any check below could run. Gone is null.
+	var creature: Creature = (creature_given as Creature) if is_instance_valid(creature_given) else null
 	pending_world = {}
 	pending_creature = creature.to_dict() if is_instance_valid(creature) else {}
 	village_memory.clear()   # none of the old towns exist in the new land

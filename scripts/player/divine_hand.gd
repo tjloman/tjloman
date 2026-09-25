@@ -1232,7 +1232,12 @@ func _compute_throw() -> Dictionary:
 
 ## Hand off a released body to physics — a thrown velocity for RigidBodies,
 ## or the object's own drop() for the custom flyers (trees, folk, beasts).
-func _release_body(body: Node3D, vel: Vector3, gentle: bool) -> void:
+func _release_body(body_given: Variant, vel: Vector3, gentle: bool) -> void:
+	# Untyped until proved alive: a freed object handed to a typed parameter
+	# is the error, raised before any check below could run. Gone is null.
+	var body: Node3D = (body_given as Node3D) if is_instance_valid(body_given) else null
+	if body == null:
+		return    # gone while it was in the hand: there is nothing to let go of
 	# MARKED AS YOUR OWN SHOT. If this one lands in a storehouse the creature
 	# learns the trick from having watched you do it — see VillageWonder.given.
 	if not gentle and is_instance_valid(body):

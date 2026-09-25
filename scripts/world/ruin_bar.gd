@@ -51,7 +51,12 @@ var _back: Sprite3D = null
 ##
 ## `share` is 0..1 of full health. At 1.0 with nothing alight the bar is taken
 ## away again, which is what keeps a healthy town clean.
-static func over(who: Node3D, share: float, high: float, alight := false) -> void:
+static func over(who_given: Variant, share: float, high: float, alight := false) -> void:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(who_given):
+		return
+	var who := who_given as Node3D
 	if not is_instance_valid(who):
 		return
 	var bar := who.get_node_or_null("ruin_bar") as RuinBar

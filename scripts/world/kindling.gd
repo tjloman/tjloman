@@ -88,7 +88,12 @@ var _fire: Node3D = null
 ## `into` is what the thing is standing in — a wet thing sheds heat as fast as
 ## it takes it, which is the old "cannot light in water" rule expressed as a
 ## quantity instead of as a refusal.
-func warm(who: Node3D, joules: float, flame_high := 2.4) -> bool:
+func warm(who_given: Variant, joules: float, flame_high := 2.4) -> bool:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(who_given):
+		return false
+	var who := who_given as Node3D
 	if alight or not is_instance_valid(who):
 		return false
 	heat += joules
@@ -113,7 +118,12 @@ func cool(delta: float) -> void:
 ##
 ## Refused on a thing already burning, and on anything standing in water — the
 ## same rule wet wood has always had.
-func light(who: Node3D, flame_high := 2.4) -> bool:
+func light(who_given: Variant, flame_high := 2.4) -> bool:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(who_given):
+		return false
+	var who := who_given as Node3D
 	if alight or not is_instance_valid(who):
 		return false
 	var world := who.get_tree().get_first_node_in_group("world_gen") as WorldGen
@@ -163,7 +173,10 @@ func smoulder(who: Node3D, delta: float, most := 100.0) -> float:
 
 
 ## Rain, a healing shower, or the last of the fuel.
-func douse(who: Node3D) -> void:
+func douse(who_given: Variant) -> void:
+	# Untyped until proved alive: a freed object handed to a typed parameter
+	# is the error, raised before any check below could run. Gone is null.
+	var who: Node3D = (who_given as Node3D) if is_instance_valid(who_given) else null
 	alight = false
 	# AND IT IS COLD AGAIN. Rain that puts a fire out and leaves the thing one
 	# spark from catching is not rain.

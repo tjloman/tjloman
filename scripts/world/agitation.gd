@@ -103,7 +103,12 @@ static func grips(burning: bool, airborne: bool, struck := false) -> bool:
 ## Applied to the VISUALS and not to the body, so nothing here can move a
 ## villager through a wall, change where they are standing, or fight the
 ## thing that is actually steering them. It is a shake and it is only a shake.
-static func flail(visuals: Node3D, force := 1.0) -> void:
+static func flail(visuals_given: Variant, force := 1.0) -> void:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(visuals_given):
+		return
+	var visuals := visuals_given as Node3D
 	if visuals == null or not is_instance_valid(visuals):
 		return
 	# One clock for the whole world, so a crowd thrashes together rather than
@@ -121,7 +126,12 @@ static func flail(visuals: Node3D, force := 1.0) -> void:
 ## straight onto the visuals' rotation and something has to own putting it back
 ## to nought — otherwise a villager who stops burning walks the rest of their
 ## life at whatever angle the last frame left them at.
-static func settle(visuals: Node3D) -> void:
+static func settle(visuals_given: Variant) -> void:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(visuals_given):
+		return
+	var visuals := visuals_given as Node3D
 	if visuals == null or not is_instance_valid(visuals):
 		return
 	visuals.rotation.x = 0.0
@@ -140,7 +150,10 @@ static func settle(visuals: Node3D) -> void:
 ##
 ## `play_on` reads res://voices/ first, so a recorded take replaces this
 ## everywhere with no further work — see voices/aDIRECTIONcoaching.md, [scream].
-static func cry(who: Node3D, last: float, human := true) -> float:
+static func cry(who_given: Variant, last: float, human := true) -> float:
+	# Untyped until proved alive: a freed object handed to a typed parameter
+	# is the error, raised before any check below could run. Gone is null.
+	var who: Node3D = (who_given as Node3D) if is_instance_valid(who_given) else null
 	var now := GameState.clock
 	if now - last < OWN_REST or now - _world_cried < WORLD_REST:
 		return last

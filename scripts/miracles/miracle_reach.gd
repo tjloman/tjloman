@@ -214,7 +214,12 @@ static func circles(tree: SceneTree) -> Array[Dictionary]:
 
 ## HOW FAR A CREATURE HOLDS. Its growth, and rather less of it while it is
 ## asleep — a god whose whole reach is a dozing animal should feel that.
-static func beast_reach(who: Creature) -> float:
+static func beast_reach(who_given: Variant) -> float:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(who_given):
+		return 0.0
+	var who := who_given as Creature
 	if who == null or not is_instance_valid(who):
 		return 0.0
 	var span := lerpf(AT_A_WHELP, AT_A_GIANT, clampf(who.growth, 0.0, 1.0))

@@ -101,7 +101,12 @@ var _was_culling := 0xFFFFF
 ## they point — so this compares the ray the finger casts against the direction
 ## each light comes FROM. A light's -Z is the way it shines, so the disk itself
 ## sits along +Z.
-static func disk_at(cam: Camera3D, screen_pos: Vector2) -> String:
+static func disk_at(cam_given: Variant, screen_pos: Vector2) -> String:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(cam_given):
+		return ""
+	var cam := cam_given as Camera3D
 	if cam == null or not is_instance_valid(cam):
 		return ""
 	var ray := cam.project_ray_normal(screen_pos)

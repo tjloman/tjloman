@@ -44,7 +44,12 @@ const APART_LEAST := 1.0
 
 
 ## How many of this there are. One, unless something said otherwise.
-static func count(what: Node) -> int:
+static func count(what_given: Variant) -> int:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(what_given):
+		return 1
+	var what := what_given as Node
 	if what == null or not is_instance_valid(what) or not what.has_meta(MARK):
 		return 1
 	return maxi(1, int(what.get_meta(MARK)))
@@ -53,7 +58,12 @@ static func count(what: Node) -> int:
 ## Say how many. Clamped to what the grammar allows, here rather than at each
 ## of the two call sites, because a volley of forty is a volley of forty
 ## whether it was drawn or caught.
-static func mark(what: Node, many: int) -> void:
+static func mark(what_given: Variant, many: int) -> void:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(what_given):
+		return
+	var what := what_given as Node
 	if what == null or not is_instance_valid(what):
 		return
 	what.set_meta(MARK, clampi(many, 1, Spellbook.VOLLEY_MOST))
@@ -66,7 +76,10 @@ static func mark(what: Node, many: int) -> void:
 ## The mark is SPENT here — the first is set back to one — so a volley fans
 ## exactly once. A ball caught out of the air and thrown again fans whatever it
 ## was marked with at the catch, and never the same volley twice.
-static func fan(first: Node3D, vel: Vector3) -> Array:
+static func fan(first_given: Variant, vel: Vector3) -> Array:
+	# Untyped until proved alive: a freed object handed to a typed parameter
+	# is the error, raised before any check below could run. Gone is null.
+	var first: Node3D = (first_given as Node3D) if is_instance_valid(first_given) else null
 	var many := count(first)
 	if many < 2 or not is_instance_valid(first) or not first.has_method("another"):
 		return []

@@ -1725,7 +1725,12 @@ func armed_count() -> int:
 
 ## Blood debt: this beast killed one of ours. Every able hand will hunt it down
 ## specifically, on top of clearing any predator inside the village bounds.
-func mark_for_death(beast: Animal) -> void:
+func mark_for_death(beast_given: Variant) -> void:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(beast_given):
+		return
+	var beast := beast_given as Animal
 	if beast == null or not is_instance_valid(beast):
 		return
 	Util.prune(vendetta)

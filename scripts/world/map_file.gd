@@ -41,7 +41,12 @@ const FORMAT := 1
 ## and every one of those chars the ground it moves. Saved as they came, a
 ## hand-made island is a BURNT island — the record of how it was made rather
 ## than the thing that was made. A map is terrain; the soot is not part of it.
-static func save_as(world: WorldGen, map_name: String, keep_scorch := false) -> String:
+static func save_as(world_given: Variant, map_name: String, keep_scorch := false) -> String:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(world_given):
+		return ""
+	var world := world_given as WorldGen
 	if world == null or not is_instance_valid(world):
 		return ""
 	var clean := _tidy(map_name)

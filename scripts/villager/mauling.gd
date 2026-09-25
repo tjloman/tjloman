@@ -71,7 +71,12 @@ var _since_cry := SCREAM_EVERY   # so the first tick screams
 ## THE JAWS CLOSE. Routed through the town because the town is what has to
 ## answer it — and because a second wolf arriving must find the mauling that is
 ## already under way rather than start a rival one.
-static func seize(prey: Villager, beast: Animal) -> void:
+static func seize(prey_given: Variant, beast: Animal) -> void:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(prey_given):
+		return
+	var prey := prey_given as Villager
 	if prey == null or not is_instance_valid(prey) or prey.is_dying():
 		return
 	if ChildSafety.spared(prey):
@@ -96,7 +101,12 @@ static func free_of(node: Node) -> void:
 
 
 ## Another mouth on the same person.
-func bite(beast: Animal) -> void:
+func bite(beast_given: Variant) -> void:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(beast_given):
+		return
+	var beast := beast_given as Animal
 	if beast == null or not is_instance_valid(beast) or jaws.has(beast):
 		return
 	jaws.append(beast)
@@ -104,8 +114,18 @@ func bite(beast: Animal) -> void:
 
 
 ## One set of jaws off — driven back, killed, or gone. The last one off ends it.
-func let_go(beast: Animal) -> void:
-	jaws.erase(beast)
+func let_go(beast_given: Variant) -> void:
+	# Untyped until proved alive: a freed object handed to a typed parameter
+	# is the error, raised before any check below could run. Gone is null.
+	var beast: Animal = (beast_given as Animal) if is_instance_valid(beast_given) else null
+	# EVERY DEAD PAIR OF JAWS GOES, not only this one. A beast that was freed
+	# arrives here as null, and erasing null would leave its stale entry behind
+	# — a mauling that could then never run out of jaws, and never finish.
+	var still: Array[Animal] = []
+	for j: Variant in jaws:
+		if is_instance_valid(j) and j != beast:
+			still.append(j as Animal)
+	jaws = still
 	if is_instance_valid(beast):
 		beast.release_hold()
 	if jaws.is_empty():

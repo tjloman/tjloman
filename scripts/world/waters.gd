@@ -107,7 +107,12 @@ static func surface_from(world: WorldGen, at: Vector3, enough := ENOUGH) -> floa
 ## WHERE THIS TOWN'S HARBOUR WOULD STAND, or INF if it has no water worth one.
 ## Dry ground at the edge of a body big enough to row on, as near the town as
 ## such a spot can be found. Remembered — see the header.
-static func harbour_for(town: Village, world: WorldGen) -> Vector3:
+static func harbour_for(town_given: Variant, world: WorldGen) -> Vector3:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(town_given):
+		return Vector3.INF
+	var town := town_given as Village
 	if town == null or not is_instance_valid(town) or world == null:
 		return Vector3.INF
 	var id := town.get_instance_id()
@@ -140,7 +145,10 @@ static func harbour_for(town: Village, world: WorldGen) -> Vector3:
 ## `harbour_for` first — this reads what that measured, and answers zero for a
 ## town that has no harbour, which is as good an answer as any for a jetty that
 ## is never going to be built.
-static func bearing_for(town: Village, world: WorldGen) -> float:
+static func bearing_for(town_given: Variant, world: WorldGen) -> float:
+	# Untyped until proved alive: a freed object handed to a typed parameter
+	# is the error, raised before any check below could run. Gone is null.
+	var town: Village = (town_given as Village) if is_instance_valid(town_given) else null
 	harbour_for(town, world)
 	if town == null or not is_instance_valid(town):
 		return 0.0
@@ -355,6 +363,9 @@ static func a_berth(world: WorldGen, centre: Vector3, which: int) -> Vector3:
 
 ## FORGET WHAT WAS MEASURED HERE. For the land actually changing under a town —
 ## a lake dug, a shore raised — where waiting out the memory is the wrong answer.
-static func forget(town: Village) -> void:
+static func forget(town_given: Variant) -> void:
+	# Untyped until proved alive: a freed object handed to a typed parameter
+	# is the error, raised before any check below could run. Gone is null.
+	var town: Village = (town_given as Village) if is_instance_valid(town_given) else null
 	if town != null and is_instance_valid(town):
 		_known.erase(town.get_instance_id())

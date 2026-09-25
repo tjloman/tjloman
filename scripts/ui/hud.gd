@@ -1219,7 +1219,10 @@ func _roster_row(vil: Village, cam: Vector3) -> Control:
 	return row
 
 
-func _snap_to_village(vil: Village) -> void:
+func _snap_to_village(vil_given: Variant) -> void:
+	# Untyped until proved alive: a freed object handed to a typed parameter
+	# is the error, raised before any check below could run. Gone is null.
+	var vil: Village = (vil_given as Village) if is_instance_valid(vil_given) else null
 	if is_instance_valid(vil) and camera_rig != null:
 		camera_rig.snap_to(vil.global_position)
 		GameState.announce("Surveying %s." % vil.village_name)

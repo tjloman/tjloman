@@ -156,7 +156,12 @@ var _last_at := Vector3.INF
 ## HANG ONE ON A THROW. `by_god` is false when the creature threw it — see
 ## YOURS_WHEN_IT_THREW. Does nothing for a body that cannot be thrown hard
 ## enough to matter, so a dropped apple costs no node.
-static func ride(thing: Node3D, by_god: bool) -> void:
+static func ride(thing_given: Variant, by_god: bool) -> void:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(thing_given):
+		return
+	var thing := thing_given as Node3D
 	if not is_instance_valid(thing) or not thing is RigidBody3D:
 		return
 	# One per flight. Catching a thing and hurling it again should not stack

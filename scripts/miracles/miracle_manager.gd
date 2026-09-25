@@ -1748,7 +1748,10 @@ func _cast_tornado(pos: Vector3, potency := 1.0, momentum := Vector3.ZERO) -> vo
 	_run_tornado(funnel, drift, life, 5.0 * potency)
 
 
-func _run_tornado(funnel: Node3D, drift: Vector3, life: float, radius: float) -> void:
+func _run_tornado(funnel_given: Variant, drift: Vector3, life: float, radius: float) -> void:
+	# Untyped until proved alive: a freed object handed to a typed parameter
+	# is the error, raised before any check below could run. Gone is null.
+	var funnel: Node3D = (funnel_given as Node3D) if is_instance_valid(funnel_given) else null
 	if life <= 0.0 or not is_instance_valid(funnel):
 		if is_instance_valid(funnel):
 			funnel.queue_free()

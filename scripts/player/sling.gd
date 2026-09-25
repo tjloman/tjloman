@@ -118,7 +118,12 @@ var _arc_due := 0.0
 
 
 ## HOW HEAVY, 0..1. Every other number in this file is a lerp on this one.
-static func heft(body: Node3D) -> float:
+static func heft(body_given: Variant) -> float:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(body_given):
+		return 0.0
+	var body := body_given as Node3D
 	if body == null or not is_instance_valid(body):
 		return 0.0
 	if body is Villager:
@@ -168,7 +173,10 @@ static func launch(sweep: Vector3, slung: Vector3, weight: float) -> Vector3:
 ## FLOATER AIR TIME, hung on the body itself so every kind of falling thing
 ## reads it the same way. Set at the moment of release; read every frame by
 ## whatever is doing the falling.
-static func loft(body: Node3D) -> void:
+static func loft(body_given: Variant) -> void:
+	# Untyped until proved alive: a freed object handed to a typed parameter
+	# is the error, raised before any check below could run. Gone is null.
+	var body: Node3D = (body_given as Node3D) if is_instance_valid(body_given) else null
 	if body != null and is_instance_valid(body):
 		body.set_meta("loft_until", GameState.clock + FLOAT_SECONDS)
 

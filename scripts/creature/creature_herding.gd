@@ -97,7 +97,12 @@ static func offer(who: Creature, opts: Dictionary) -> void:
 ## meant. A drive that scattered the herd is a bad memory of shepherding even
 ## though shepherding is a kindness, which is exactly the point: the creature
 ## has to get good at a thing before the thing starts being worth doing.
-static func go(who: Creature, verb: String, herd: Herd) -> void:
+static func go(who: Creature, verb: String, herd_given: Variant) -> void:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(herd_given):
+		return
+	var herd := herd_given as Herd
 	if herd == null or not is_instance_valid(herd):
 		return
 	var reward := 0.0

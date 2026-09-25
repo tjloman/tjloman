@@ -206,7 +206,12 @@ static func circumstances(who: Creature) -> Dictionary:
 ## Nothing here says what any of it means. A villager on fire is simply
 ## reported as hurt and afraid; whether that is pitiable, interesting or funny
 ## is decided entirely by the creature's own history (see CreatureHeart).
-static func plight_of(villager: Villager) -> Dictionary:
+static func plight_of(villager_given: Variant) -> Dictionary:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(villager_given):
+		return {}
+	var villager := villager_given as Villager
 	if not is_instance_valid(villager):
 		return {}
 	var dying := 1.0 if villager.is_dying() else 0.0

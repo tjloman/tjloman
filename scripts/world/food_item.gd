@@ -92,7 +92,12 @@ func _ready() -> void:
 ## are exactly what must never happen to it. Keeping it out of the pile is not a
 ## squeamish rule about bookkeeping; it is what makes the eating of it the
 ## separate, wretched thing it is.
-func absorb(other: FoodItem) -> bool:
+func absorb(other_given: Variant) -> bool:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(other_given):
+		return false
+	var other := other_given as FoodItem
 	if other == null or not is_instance_valid(other) or other == self:
 		return false
 	if other.food_type != food_type:

@@ -160,7 +160,10 @@ static func fight(who: Villager, delta: float) -> void:
 ## spear is sharper, but because they have done this before, they know where to
 ## stand, and they are not hesitating — which is what "with good success" means
 ## for people who have already buried somebody. See VillageFeud.wrath.
-static func strike(who: Villager, foe: Node3D) -> void:
+static func strike(who: Villager, foe_given: Variant) -> void:
+	# Untyped until proved alive: a freed object handed to a typed parameter
+	# is the error, raised before any check below could run. Gone is null.
+	var foe: Node3D = (foe_given as Node3D) if is_instance_valid(foe_given) else null
 	var town := who.village
 	var fury := 1.0
 	if not is_instance_valid(foe):

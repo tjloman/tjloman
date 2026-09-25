@@ -1128,6 +1128,11 @@ def check_late_validity_guards(files):
             hit = typed_then_guarded.match(line.split("#")[0])
             if not hit:
                 continue
+            # ALREADY GUARDED ON THE LINE ITSELF: `(x as T) if
+            # is_instance_valid(x) else null` never assigns a freed object —
+            # that is the fix this rule asks for, written on one line.
+            if "is_instance_valid(" in line.split("=", 1)[-1]:
+                continue
             name = hit.group(1)
             guard = re.compile(r"is_instance_valid\(\s*%s\s*\)" % re.escape(name))
             for ahead in lines[i + 1:i + 5]:
@@ -1150,62 +1155,7 @@ VALUE_TYPES = {"int", "float", "bool", "String", "StringName", "Vector2", "Vecto
 # Each wants the same fix (take it untyped, guard it, type it), and each needs
 # the body read, because this project builds an inferred Variant as an error and
 # untyping a parameter can break every line below it. Work it down to nothing.
-KNOWN_TYPED_GUARDS = {
-    "scripts/animals/herd.gd:absorb:beast",
-    "scripts/creature/creature_bonds.gd:name_of:who",
-    "scripts/creature/creature_eyes.gd:plight_of:villager",
-    "scripts/creature/creature_head.gd:startled:who",
-    "scripts/creature/creature_herding.gd:go:herd",
-    "scripts/creature/creature_lead.gd:in_sight:who",
-    "scripts/creature/creature_lead.gd:tied_up:who",
-    "scripts/creature/creature_lead.gd:to_thing:what",
-    "scripts/creature/creature_offer.gd:_forget:who",
-    "scripts/creature/creature_throwing.gd:send:thing",
-    "scripts/miracles/miracle_manager.gd:_run_tornado:funnel",
-    "scripts/miracles/miracle_reach.gd:beast_reach:who",
-    "scripts/miracles/portal.gd:_send:body",
-    "scripts/miracles/volley.gd:count:what",
-    "scripts/miracles/volley.gd:fan:first",
-    "scripts/miracles/volley.gd:mark:what",
-    "scripts/player/divine_hand.gd:_release_body:body",
-    "scripts/player/hand_pose.gd:ease:thumb",
-    "scripts/player/sling.gd:heft:body",
-    "scripts/player/sling.gd:loft:body",
-    "scripts/save_game.gd:regenerate_world:creature",
-    "scripts/ui/hud.gd:_snap_to_village:vil",
-    "scripts/ui/temple.gd:disk_at:cam",
-    "scripts/util.gd:bulk_of:what",
-    "scripts/util.gd:within:what",
-    "scripts/villager/child_safety.gd:let_go:thing",
-    "scripts/villager/child_safety.gd:throw_answer:thing",
-    "scripts/villager/mauling.gd:bite:beast",
-    "scripts/villager/mauling.gd:let_go:beast",
-    "scripts/villager/mauling.gd:seize:prey",
-    "scripts/villager/militia.gd:strike:foe",
-    "scripts/villager/villager.gd:hurt_by:foe",
-    "scripts/villager/villager_search.gd:being_eaten:body",
-    "scripts/villager/villager_search.gd:being_mourned:body",
-    "scripts/villager/weapon.gd:affordable:store",
-    "scripts/villager/weapon.gd:strike:foe",
-    "scripts/world/agitation.gd:cry:who",
-    "scripts/world/agitation.gd:flail:visuals",
-    "scripts/world/agitation.gd:settle:visuals",
-    "scripts/world/blow.gd:ride:thing",
-    "scripts/world/caravan.gd:why_not:town",
-    "scripts/world/creature_nest.gd:holding:beast",
-    "scripts/world/food_item.gd:absorb:other",
-    "scripts/world/footing.gd:settle:what",
-    "scripts/world/kindling.gd:douse:who",
-    "scripts/world/kindling.gd:light:who",
-    "scripts/world/kindling.gd:warm:who",
-    "scripts/world/map_file.gd:save_as:world",
-    "scripts/world/resource_item.gd:absorb:other",
-    "scripts/world/ruin_bar.gd:over:who",
-    "scripts/world/village.gd:mark_for_death:beast",
-    "scripts/world/waters.gd:bearing_for:town",
-    "scripts/world/waters.gd:forget:town",
-    "scripts/world/waters.gd:harbour_for:town",
-}
+KNOWN_TYPED_GUARDS: set = set()
 func_head_re = re.compile(r"^(?:static\s+)?func\s+(\w+)\s*\((.*)\)")
 
 

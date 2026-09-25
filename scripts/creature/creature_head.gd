@@ -273,7 +273,12 @@ static func watching(who: Creature, delta: float) -> void:
 ## `where` is not optional on purpose: a wonder on the far side of the map is
 ## not an event in this creature's life, and every caller knows where its own
 ## deed happened.
-static func startled(who: Creature, where: Vector3) -> void:
+static func startled(who_given: Variant, where: Vector3) -> void:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(who_given):
+		return
+	var who := who_given as Creature
 	if not is_instance_valid(who):
 		return
 	if where.distance_to(who.global_position) > STARTLE_WITHIN:

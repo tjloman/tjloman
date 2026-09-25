@@ -83,7 +83,12 @@ func refresh_bundle() -> void:
 ## And a stack is still one KIND. There is no mystery ore: stone and lumber are
 ## used for different things by different people, and a pile that was either
 ## would have to be asked which.
-func absorb(other: ResourceItem) -> bool:
+func absorb(other_given: Variant) -> bool:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(other_given):
+		return false
+	var other := other_given as ResourceItem
 	if other == null or not is_instance_valid(other) or other == self:
 		return false
 	if other.kind != kind:

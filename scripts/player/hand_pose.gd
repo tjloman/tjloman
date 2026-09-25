@@ -50,7 +50,10 @@ var _drift := 0.0
 ## Take up `shape` and write it onto the knuckles. `knuckles` are the four
 ## finger pivots in order, `thumb` the thumb's pivot; either may be empty, which
 ## is the case for a rigged custom hand model that animates itself.
-func ease(shape: Dictionary, knuckles: Array, thumb: Node3D, delta: float) -> void:
+func ease(shape: Dictionary, knuckles: Array, thumb_given: Variant, delta: float) -> void:
+	# Untyped until proved alive: a freed object handed to a typed parameter
+	# is the error, raised before any check below could run. Gone is null.
+	var thumb: Node3D = (thumb_given as Node3D) if is_instance_valid(thumb_given) else null
 	var take := clampf(1.0 - exp(-EASE * delta), 0.0, 1.0)
 	var want: Array = shape["curl"]
 	for i in mini(_curl.size(), want.size()):

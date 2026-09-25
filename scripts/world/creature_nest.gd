@@ -568,7 +568,12 @@ func recarve() -> void:
 ## THE NEST THE CREATURE IS STANDING ON THE GROUNDS OF, or null.
 ## `within` defaults to the grounds — "is it HERE" — but a tired creature asking
 ## where its bed is should be able to ask from across a valley. See BED_CALL.
-static func holding(beast: Node3D, within := GROUNDS) -> CreatureNest:
+static func holding(beast_given: Variant, within := GROUNDS) -> CreatureNest:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(beast_given):
+		return null
+	var beast := beast_given as Node3D
 	if beast == null or not is_instance_valid(beast):
 		return null
 	for n in beast.get_tree().get_nodes_in_group("creature_nest"):

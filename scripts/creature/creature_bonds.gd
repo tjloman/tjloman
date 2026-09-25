@@ -48,7 +48,12 @@ var _last := ""                # who the next outcome is credited to
 ## Validity is checked FIRST: a ballot can carry a target that was freed between
 ## the creature perceiving it and choosing it, and asking a dead object what
 ## class it is throws.
-static func name_of(who: Object) -> String:
+static func name_of(who_given: Variant) -> String:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(who_given):
+		return ""
+	var who := who_given as Object
 	if who == null or not is_instance_valid(who):
 		return ""
 	if who is Villager:

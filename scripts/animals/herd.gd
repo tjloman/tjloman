@@ -2012,7 +2012,12 @@ func _cull(many: int) -> void:
 ## count stays. This is the whole of the barn's trick — a village that keeps
 ## four hundred beasts is not running four hundred bodies, it is running one
 ## herd and a budget, exactly as the wild ones do.
-func absorb(beast: Animal) -> void:
+func absorb(beast_given: Variant) -> void:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(beast_given):
+		return
+	var beast := beast_given as Animal
 	if not is_instance_valid(beast):
 		return
 	if beast.tamed_by != null:

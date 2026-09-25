@@ -53,7 +53,12 @@ static func is_ranged(kind: String) -> bool:
 
 ## The best arms this storehouse can pay for right now, or "" if it can't
 ## afford even a club. Does NOT spend — see `forge`.
-static func affordable(store: FoodStore) -> String:
+static func affordable(store_given: Variant) -> String:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(store_given):
+		return ""
+	var store := store_given as FoodStore
 	if store == null or not is_instance_valid(store):
 		return ""
 	for kind: String in BY_PREFERENCE:
@@ -82,7 +87,12 @@ static func forge(store: FoodStore) -> String:
 ## ordinary beast, more for one whose species the town has buried people to.
 ## Not a sharper spear: people who have done this before do not hesitate, and
 ## they know where to stand. See VillageFeud.wrath.
-static func strike(attacker: Node3D, foe: Node3D, kind: String, fury := 1.0) -> bool:
+static func strike(attacker: Node3D, foe_given: Variant, kind: String, fury := 1.0) -> bool:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(foe_given):
+		return false
+	var foe := foe_given as Node3D
 	if foe == null or not is_instance_valid(foe):
 		return false
 	var dmg := damage(kind) * fury

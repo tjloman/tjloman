@@ -133,7 +133,12 @@ static func create(town: Village) -> Caravan:
 ## CAN THIS TOWN SPARE ONE? Returns "" when it can, and otherwise the reason,
 ## phrased for a player rather than for a log. The village asks this; nothing
 ## else should need to.
-static func why_not(town: Village) -> String:
+static func why_not(town_given: Variant) -> String:
+	# Untyped until proved alive: a freed object handed to a typed
+	# parameter is the error, before any check here could run.
+	if not is_instance_valid(town_given):
+		return "there is no village here"
+	var town := town_given as Village
 	if town == null or not is_instance_valid(town):
 		return "there is no village here"
 	if town.homeless_count() < SOULS_SENT:
