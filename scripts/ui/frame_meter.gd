@@ -320,6 +320,9 @@ func _the_worst_frame() -> Array:
 		shown += 1
 	out.append("   %-18s %8.1f  before any script ran"
 		% ["(head of frame)", maxf(span - Ledger.worst_counted(), 0.0)])
+	# WHAT THE HEAD WAS, when it can be told: nodes torn down land there, and a
+	# worst frame that lost thousands of them was a frame spent freeing.
+	out.append("   %-18s %8d  nodes that frame" % ["(the world)", Ledger.worst_nodes()])
 	out.append("")
 	return out
 

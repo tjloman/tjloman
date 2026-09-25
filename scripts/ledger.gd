@@ -103,6 +103,13 @@ static var _span := 0
 static var _worst_page := {}
 static var _worst_rings := {}
 static var _worst_span := 0
+## HOW MANY NODES THE WORLD LOST OR GAINED OVER EACH PAGE — kept with the worst
+## one. Time spent tearing nodes down lands in the next frame's head, where no
+## row can see it; the COUNT can. A worst frame whose nodes fell by ten thousand
+## was a frame spent freeing, whatever its rows say.
+static var _nodes_then := -1
+static var _nodes_moved := 0
+static var _worst_nodes := 0
 
 
 ## OPEN A CLOCK ON THIS CLASS, and shut whatever was open.
@@ -152,6 +159,9 @@ static func turn_the_page() -> void:
 	_turned = now
 	_page = _spent
 	_rings = _rang
+	var nodes := int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))
+	_nodes_moved = nodes - _nodes_then if _nodes_then >= 0 else 0
+	_nodes_then = nodes
 	# The first page is not a record worth keeping: `_turned` was zero, so its
 	# span is zero, and the frame that loaded the scene is not a frame anybody
 	# is going to fix.
@@ -159,6 +169,7 @@ static func turn_the_page() -> void:
 		_worst_span = _span
 		_worst_page = _page.duplicate()
 		_worst_rings = _rings.duplicate()
+		_worst_nodes = _nodes_moved
 	_spent = {}
 	_rang = {}
 
@@ -222,3 +233,9 @@ static func forget_worst() -> void:
 	_worst_page = {}
 	_worst_rings = {}
 	_worst_span = 0
+	_worst_nodes = 0
+
+
+## How many nodes that worst frame's world gained (or, negative, lost).
+static func worst_nodes() -> int:
+	return _worst_nodes

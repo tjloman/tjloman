@@ -40,6 +40,17 @@ const WATER_LEVEL := 0.0
 ## hitch anybody sees, large enough that a cold fill still finishes in seconds.
 const WORLD_MILLIS := 3.0
 const CHUNKS_PER_FRAME := 1      # the floor under the budget: never fewer
+## HOW MUCH OF THE OLD GROUND IS PUT AWAY IN ONE FRAME: chunks freed, stripped
+## back to scenery, or boarded back to billboards, all counted together.
+##
+## A COUNT AND NOT A BUDGET IN MILLISECONDS, because a millisecond budget cannot
+## see what this costs. `queue_free` does nothing where it is called; the nodes
+## are torn down at the END of the frame, after every script has run — so the
+## bill lands in the next frame's head, where the frame meter reads "before any
+## script ran" and cannot say what it was. After a warp across the map this
+## put away seventy chunks at once, every tree, rock and beast on them, and the
+## player sat through five seconds of that head with nothing on screen to blame.
+const SHEDS_PER_FRAME := 2
 ## ...and the far ring only ever gets what the near ring did not want. The two
 ## do not add: `_fill_near` returning true skips `_fill_sight` outright, so the
 ## whole of a frame's world-building is WORLD_MILLIS however it is divided.
@@ -170,6 +181,9 @@ var _jungle_noise := FastNoiseLite.new()
 ## cell and a visited-then-unloaded cell are identical from outside.
 var _known := {}                  # Vector2i -> SEEN or WALKED
 var _chunks := {}                 # Vector2i -> Chunk
+## Out of sight, hidden, switched off, and waiting their turn to be freed. See
+## SHEDS_PER_FRAME.
+var _doomed: Array[Chunk] = []
 ## Where the far ring was last filled from, and whether it is complete. A full
 ## sweep of a 17x17 ring is 289 dictionary probes; doing that every frame to
 ## learn "still nothing missing" is exactly the kind of idle work the scheduler
@@ -1096,6 +1110,7 @@ func _ring_cells(center: Vector2i, ring: int) -> Array[Vector2i]:
 ## mesh cuts where 795 were due — before this line existed.
 func _shed(center: Vector2i, kept: Dictionary) -> void:
 	var coarsened := 0
+	var shed := 0
 	for cell: Vector2i in _chunks.keys():
 		var cached = _chunks[cell]
 		if not is_instance_valid(cached):
@@ -1106,23 +1121,38 @@ func _shed(center: Vector2i, kept: Dictionary) -> void:
 		var away := (cell - center).abs()
 		var out := maxi(away.x, away.y)
 		if out > sight_radius:
-			(cached as Chunk).queue_free()
+			# GONE AT ONCE, FREED LATER. Hiding it and switching it off costs
+			# nothing and stops it drawing and thinking this frame; tearing it
+			# down is what costs, and that waits its turn. See SHEDS_PER_FRAME.
+			var gone := cached as Chunk
+			gone.visible = false
+			gone.process_mode = Node.PROCESS_MODE_DISABLED
+			_doomed.append(gone)
 			_chunks.erase(cell)
 			continue
 		var chunk := cached as Chunk
 		# THE WOOD GOES BACK TO BILLBOARDS FIRST, one ring before everything
 		# else goes. A chunk that was never a place still has its trunks to
 		# put away.
-		if out > wood_radius:
+		# BOTH ARE FREES, and both share the allowance: anything that misses its
+		# turn is still out of range next frame and is picked up then.
+		if out > wood_radius and chunk.wooded and shed < SHEDS_PER_FRAME:
 			chunk.board_the_wood()
-		if out > unload_radius:
+			shed += 1
+		if out > unload_radius and not chunk.terrain_only and shed < SHEDS_PER_FRAME:
 			chunk.strip_down()
+			shed += 1
 		# A chunk left cut for walking on that nobody can walk to. This sweep
 		# runs every frame it is reached, so anything that misses its turn is
 		# simply picked up on the next one — no queue, no state.
 		if chunk.coarse_due() and not _frame_spent(coarsened):
 			chunk.coarsen()
 			coarsened += 1
+	while shed < SHEDS_PER_FRAME and not _doomed.is_empty():
+		var last: Variant = _doomed.pop_back()
+		if is_instance_valid(last):
+			(last as Chunk).queue_free()
+		shed += 1
 
 
 ## THE CELLS TO KEEP ALIVE FOR THE CREATURE, as a set. Empty when there is no
