@@ -11,13 +11,34 @@ extends StaticBody3D
 ## resource-shaped that comes to rest on the platform is absorbed back in.
 
 const PLATFORM_RADIUS := 3.4
-const MAX_SHOWN := 12  # per resource; hover for exact counts
 const WITHDRAW_BUNDLE := 10  # units pulled per grab (a whole armful)
 
 const GRAIN_COLOR := Color(0.9, 0.6, 0.2)
 const MEAT_COLOR := Color(0.72, 0.22, 0.18)
 const LUMBER_COLOR := Color(0.55, 0.4, 0.25)
 const STONE_COLOR := Color(0.55, 0.54, 0.56)
+
+## WHAT THE PILES SHOW: how full each quarter is, and nothing more exact —
+## the hover gives the count. It used to show one mesh per unit, up to twelve
+## a quarter, freed and rebuilt at fresh random spots on EVERY deposit and
+## every meal: forty-eight nodes of churn and forty-eight draws, flickering
+## all day in the middle of every town. Now each quarter is two fixed meshes
+## that only ever change scale or visibility.
+##
+## A quarter's pile grows as it fills, and at HEAP_AT of FULL the heaped mesh
+## takes over. It stays heaped until the stock falls to HEAP_UNTIL, so a town
+## eating and banking right at the line does not flick between the two.
+const FULL := 120
+const HEAP_AT := 0.5
+const HEAP_UNTIL := 0.4
+## How big the growing pile starts, as a share of its size at HEAP_AT.
+const SMALLEST := 0.3
+## Where each quarter's pile stands: grain, meat, lumber, stone — the order of
+## the palette cells, and of the counts in `_show_stock`.
+const QUARTERS: Array[Vector3] = [
+	Vector3(1, 0, 1), Vector3(-1, 0, 1), Vector3(-1, 0, -1), Vector3(1, 0, -1)]
+const PILE_FROM_MIDDLE := 1.9
+const FLOOR_TOP := 0.35
 
 
 ## WHAT IT TAKES TO PULL THIS DOWN BY FORCE, against a villager's hundred.
@@ -31,6 +52,12 @@ const STONE_COLOR := Color(0.55, 0.54, 0.56)
 ## same minute and a half as a hut. See Kindling.tick.
 const MOST_HEALTH := 700.0
 
+## ONE MATERIAL for every pile in every town: a 2x2 texture, one texel a
+## resource, and each pile's UVs pinned to its own texel. Baked once.
+static var _palette: StandardMaterial3D = null
+static var _grow_mesh: Array[Mesh] = []
+static var _heap_mesh: Array[Mesh] = []
+
 var plant_food := 14
 var meat_food := 0
 var lumber := 6
@@ -39,7 +66,9 @@ var stone := 3
 var health := MOST_HEALTH
 var kindling := Kindling.new()
 
-var _stack: Array[MeshInstance3D] = []
+var _grow: Array[MeshInstance3D] = []
+var _heap: Array[MeshInstance3D] = []
+var _heaped: Array[bool] = [false, false, false, false]
 var _intake: Area3D
 var _intake_time := 0.5
 
@@ -88,7 +117,8 @@ func _ready() -> void:
 	else:
 		_build_structure()
 
-	_refresh_stack()
+	_build_piles()
+	_show_stock()
 
 
 ## The procedural granary: a round market floor, quartering walls, a canopy
@@ -237,7 +267,7 @@ func withdraw_at(world_point: Vector3) -> RigidBody3D:
 			GameState.announce("The stone quarter is empty.")
 	if item == null:
 		return null
-	_refresh_stack()
+	_show_stock()
 	item.set_meta("no_deposit_until", GameState.clock + 2.5)
 	get_parent().add_child(item)
 	item.global_position = global_position + Vector3(0, 2.6, 0)
@@ -281,7 +311,7 @@ func top_up(item: Node) -> bool:
 			r.refresh_bundle()
 	if pulled:
 		item.set_meta("no_deposit_until", GameState.clock + 2.5)
-		_refresh_stack()
+		_show_stock()
 	return pulled
 
 
@@ -290,7 +320,7 @@ func add(type: FoodItem.FoodType, amount: int) -> void:
 		plant_food += amount
 	else:
 		meat_food += amount
-	_refresh_stack()
+	_show_stock()
 
 
 ## Takes up to `amount` food of the given type; returns how much was taken.
@@ -302,7 +332,7 @@ func take(type: FoodItem.FoodType, amount: int) -> int:
 	else:
 		taken = mini(amount, meat_food)
 		meat_food -= taken
-	_refresh_stack()
+	_show_stock()
 	return taken
 
 
@@ -330,12 +360,12 @@ func take_bundle(item: ResourceItem) -> int:
 
 func add_lumber(amount: int) -> void:
 	lumber += amount
-	_refresh_stack()
+	_show_stock()
 
 
 func add_stone(amount: int) -> void:
 	stone += amount
-	_refresh_stack()
+	_show_stock()
 
 
 ## Spends lumber and stone together (for construction); false if short.
@@ -344,39 +374,179 @@ func try_spend_materials(lumber_cost: int, stone_cost: int) -> bool:
 		return false
 	lumber -= lumber_cost
 	stone -= stone_cost
-	_refresh_stack()
+	_show_stock()
 	return true
 
 
-## A spot inside a quadrant for the i-th item of a pile (4 per layer).
-func _pile_spot(dir: Vector3, i: int) -> Vector3:
-	var layer := floorf(i / 4.0)
-	return Vector3(
-		randf_range(0.7, PLATFORM_RADIUS - 0.9) * dir.x,
-		0.5 + layer * 0.34,
-		randf_range(0.7, PLATFORM_RADIUS - 0.9) * dir.z)
+## The two meshes of each quarter, placed once and never freed.
+func _build_piles() -> void:
+	if _palette == null:
+		_bake()
+	for q in QUARTERS.size():
+		var at := QUARTERS[q].normalized() * PILE_FROM_MIDDLE + Vector3(0, FLOOR_TOP, 0)
+		_grow.append(_place_pile(_grow_mesh[q], at))
+		_heap.append(_place_pile(_heap_mesh[q], at))
 
 
-func _refresh_stack() -> void:
-	for m in _stack:
-		m.queue_free()
-	_stack.clear()
-	for i in mini(plant_food, MAX_SHOWN):
-		_show(Util.sphere(0.22, GRAIN_COLOR, _pile_spot(Vector3(1, 0, 1), i)))
-	for i in mini(meat_food, MAX_SHOWN):
-		_show(Util.box(Vector3(0.3, 0.3, 0.3), MEAT_COLOR, _pile_spot(Vector3(-1, 0, 1), i)))
-	for i in mini(lumber, MAX_SHOWN):
-		var plank := Util.box(Vector3(1.1, 0.16, 0.3), LUMBER_COLOR,
-			_pile_spot(Vector3(-1, 0, -1), i))
-		plank.rotation_degrees.y = randf_range(-15, 15)
-		_show(plank)
-	for i in mini(stone, MAX_SHOWN):
-		_show(Util.box(Vector3(0.35, 0.3, 0.35), STONE_COLOR, _pile_spot(Vector3(1, 0, -1), i)))
+func _place_pile(mesh: Mesh, at: Vector3) -> MeshInstance3D:
+	var shown := MeshInstance3D.new()
+	shown.mesh = mesh
+	shown.material_override = _palette
+	shown.position = at
+	shown.visible = false
+	add_child(shown)
+	return shown
 
 
-func _show(m: MeshInstance3D) -> void:
-	add_child(m)
-	_stack.append(m)
+## HOW FULL, SHOWN. Writes only what changed: a scale or a visibility flag,
+## never a node.
+func _show_stock() -> void:
+	if _grow.is_empty():
+		return                       # before _ready: a save loading into it
+	var counts: Array[int] = [plant_food, meat_food, lumber, stone]
+	for q in QUARTERS.size():
+		var fill := clampf(float(counts[q]) / float(FULL), 0.0, 1.0)
+		_heaped[q] = fill >= (HEAP_UNTIL if _heaped[q] else HEAP_AT)
+		var growing := counts[q] > 0 and not _heaped[q]
+		if _heap[q].visible != _heaped[q]:
+			_heap[q].visible = _heaped[q]
+		if _grow[q].visible != growing:
+			_grow[q].visible = growing
+		if growing:
+			var size := lerpf(SMALLEST, 1.0, clampf(fill / HEAP_AT, 0.0, 1.0))
+			_grow[q].scale = Vector3(size, size, size)
+
+
+## The palette and all eight meshes, for every storehouse there will ever be.
+static func _bake() -> void:
+	var img := Image.create(2, 2, false, Image.FORMAT_RGB8)
+	img.set_pixel(0, 0, GRAIN_COLOR)
+	img.set_pixel(1, 0, MEAT_COLOR)
+	img.set_pixel(0, 1, LUMBER_COLOR)
+	img.set_pixel(1, 1, STONE_COLOR)
+	var skin := StandardMaterial3D.new()
+	skin.albedo_texture = ImageTexture.create_from_image(img)
+	skin.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	_palette = Util.lit(skin)
+	_grow_mesh = _bake_grow()
+	_heap_mesh = _bake_heaps()
+
+
+## FILLING: a mound of grain, a few joints, a few planks, a few stones — each
+## drawn at its size at HEAP_AT and scaled down from there.
+static func _bake_grow() -> Array[Mesh]:
+	var mound := SphereMesh.new()
+	mound.radius = 1.0
+	mound.height = 1.0
+	mound.radial_segments = 10
+	mound.rings = 4
+	mound.is_hemisphere = true
+	var joint := BoxMesh.new()
+	joint.size = Vector3(0.45, 0.4, 0.45)
+	var plank := BoxMesh.new()
+	plank.size = Vector3(1.5, 0.18, 0.32)
+	var lump := SphereMesh.new()
+	lump.radius = 0.36
+	lump.height = 0.5
+	lump.radial_segments = 6
+	lump.rings = 3
+	var out: Array[Mesh] = []
+	out.append(_weld([[mound, _at(Vector3.ZERO, Vector3(1.0, 0.8, 1.0))]], 0))
+	out.append(_weld([[joint, _at(Vector3(-0.3, 0.2, 0.2))], [joint, _at(Vector3(0.3, 0.2, -0.1))],
+		[joint, _at(Vector3(0.0, 0.6, 0.05))]], 1))
+	out.append(_weld([[plank, _at(Vector3(0, 0.09, -0.36))], [plank, _at(Vector3(0, 0.09, 0.0))],
+		[plank, _at(Vector3(0, 0.09, 0.36))]], 2))
+	out.append(_weld([[lump, _at(Vector3(-0.35, 0.2, 0.15))], [lump, _at(Vector3(0.35, 0.2, 0.1))],
+		[lump, _at(Vector3(0.0, 0.5, -0.1))]], 3))
+	return out
+
+
+## ALL THE WAY HEAPED: one static mesh a quarter, drawn from HEAP_AT up.
+static func _bake_heaps() -> Array[Mesh]:
+	var cone := CylinderMesh.new()
+	cone.top_radius = 0.12
+	cone.bottom_radius = 1.25
+	cone.height = 1.5
+	cone.radial_segments = 10
+	cone.rings = 0
+	var sack := SphereMesh.new()
+	sack.radius = 0.3
+	sack.height = 0.6
+	sack.radial_segments = 8
+	sack.rings = 4
+	var joint := BoxMesh.new()
+	joint.size = Vector3(0.45, 0.4, 0.45)
+	var plank := BoxMesh.new()
+	plank.size = Vector3(1.5, 0.18, 0.32)
+	var lump := SphereMesh.new()
+	lump.radius = 0.36
+	lump.height = 0.5
+	lump.radial_segments = 6
+	lump.rings = 3
+	var grain: Array = [[cone, _at(Vector3(0, 0.75, 0))]]
+	for a: float in [0.4, 2.5, 4.4]:
+		grain.append([sack, _at(Vector3(cos(a), 0.3, sin(a)) * Vector3(1.1, 1.0, 1.1))])
+	var meat: Array = []
+	var cairn: Array = []
+	for spot: Vector3 in [Vector3(-0.3, 0, -0.3), Vector3(0.3, 0, -0.3), Vector3(-0.3, 0, 0.3),
+			Vector3(0.3, 0, 0.3), Vector3(0, 0.4, -0.15), Vector3(0, 0.4, 0.25), Vector3(0.05, 0.8, 0)]:
+		meat.append([joint, _at(spot * Vector3(1.4, 1.0, 1.4) + Vector3(0, 0.2, 0))])
+		cairn.append([lump, _at(spot * Vector3(1.8, 0.85, 1.8) + Vector3(0, 0.2, 0))])
+	var stack: Array = []
+	for layer in 4:
+		for row in 3:
+			var across := Vector3(0, 0.09 + layer * 0.18, (row - 1) * 0.4)
+			var turn := PI * 0.5 * float(layer % 2)
+			stack.append([plank, Transform3D(Basis(Vector3.UP, turn), Basis(Vector3.UP, turn) * across)])
+	var out: Array[Mesh] = []
+	out.append(_weld(grain, 0))
+	out.append(_weld(meat, 1))
+	out.append(_weld(stack, 2))
+	out.append(_weld(cairn, 3))
+	return out
+
+
+static func _at(pos: Vector3, stretch := Vector3.ONE) -> Transform3D:
+	return Transform3D(Basis.from_scale(stretch), pos)
+
+
+## WELD PARTS INTO ONE MESH, every vertex's UV pinned to the centre of palette
+## cell `cell` (0 grain, 1 meat, 2 lumber, 3 stone). One draw, one material.
+static func _weld(parts: Array, cell: int) -> ArrayMesh:
+	var uv := Vector2(float(cell % 2) * 0.5 + 0.25, float(cell >> 1) * 0.5 + 0.25)
+	var verts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var index := PackedInt32Array()
+	for part: Array in parts:
+		var arrays := (part[0] as Mesh).surface_get_arrays(0)
+		var place: Transform3D = part[1]
+		var bend := place.basis.inverse().transposed()
+		var base := verts.size()
+		var their: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		for v: Vector3 in their:
+			verts.append(place * v)
+			uvs.append(uv)
+		var their_normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+		for n: Vector3 in their_normals:
+			norms.append((bend * n).normalized())
+		var order = arrays[Mesh.ARRAY_INDEX]
+		if order == null:
+			for i in their.size():
+				index.append(base + i)
+		else:
+			var their_order: PackedInt32Array = order
+			for i: int in their_order:
+				index.append(base + i)
+	var welded := []
+	welded.resize(Mesh.ARRAY_MAX)
+	welded[Mesh.ARRAY_VERTEX] = verts
+	welded[Mesh.ARRAY_NORMAL] = norms
+	welded[Mesh.ARRAY_TEX_UV] = uvs
+	welded[Mesh.ARRAY_INDEX] = index
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, welded)
+	return mesh
 
 
 func hover_text() -> String:

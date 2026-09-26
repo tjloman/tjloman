@@ -495,6 +495,20 @@ HAND_BUILT = {
         tris=lambda: 2 * 8 * 8 + 8 * 8, parts=1,
         note="Quality.far_cells = 8 (6 on a budget device, which is 120 with "
              "its skirt); plus 8 per cell of skirt — see Chunk.SKIRT_DROP"),
+    # THE STOREHOUSE PILES are primitives WELDED into one mesh a quarter
+    # (FoodStore._weld), each primitive placed several times. The scanner sees
+    # each primitive once; these are the other copies. The heaps also weld
+    # five primitives into FOUR meshes, so one "part" comes back off.
+    ("scripts/world/food_store.gd", "_bake_heaps"): dict(
+        tris=lambda: 2 * sphere_tris(8, 4) + 6 * box_tris() + 11 * box_tris()
+        + 6 * sphere_tris(6, 3), parts=-1,
+        note="3 sacks, 7 joints, 12 planks, 7 stones, welded into four meshes "
+             "sharing one material; at most one heap OR one pile per quarter "
+             "is drawn"),
+    ("scripts/world/food_store.gd", "_bake_grow"): dict(
+        tris=lambda: 2 * box_tris() + 2 * box_tris() + 2 * sphere_tris(6, 3),
+        parts=0,
+        note="3 joints, 3 planks, 3 stones and a mound, four meshes"),
     ("scripts/util.gd", "blossom_mesh"): dict(
         tris=lambda: 4, parts=2,
         note="two crossed quads, welded in SurfaceTool"),
@@ -584,7 +598,8 @@ NAMES = {
     ("world/edubba.gd", "_ready"): ("BUILDINGS", "Edubba (school)"),
     ("world/workshop.gd", "_build_stand_in"): ("BUILDINGS", "Workshop"),
     ("world/food_store.gd", "_build_structure"): ("BUILDINGS", "Granary"),
-    ("world/food_store.gd", "_refresh_stack"): ("BUILDINGS", "Granary's stores, full"),
+    ("world/food_store.gd", "_bake_heaps"): ("BUILDINGS", "Granary's stores, full"),
+    ("world/food_store.gd", "_bake_grow"): ("BUILDINGS", "Granary's stores, filling"),
     ("world/farm.gd", "_ready"): ("BUILDINGS", "Farm plot"),
     ("world/creature_nest.gd", "_build_lodge"): ("BUILDINGS", "Nest lodge"),
     ("world/creature_nest.gd", "_build_wall"): ("BUILDINGS", "Nest wall, one stone"),
