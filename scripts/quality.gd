@@ -585,6 +585,21 @@ func actor_distance() -> float:
 	return [95.0, 150.0, 220.0][effective_tier()]
 
 
+## HOW NEAR A VILLAGER'S NAME AND DOINGS ARE WRITTEN over their head. A Label3D
+## is a draw call of its own — as many as the body under it — and a crowded
+## street inside thirty-eight metres was a hundred of them. Near enough to read
+## is nearer than that on a small screen anyway.
+func label_distance() -> float:
+	return [18.0, 28.0, 38.0][effective_tier()]
+
+
+## How far out a building keeps drawing. Buildings drew to the far plane, so a
+## whole second town on the horizon cost as much as the one underfoot; past
+## this the fog has them anyway.
+func building_distance() -> float:
+	return [170.0, 240.0, 330.0][effective_tier()]
+
+
 ## HOW MANY PARTICLES a burst is allowed. Reads the effective tier, so a
 ## struggling device thins the rain along with everything else — and because
 ## particles are the one thing here that can run to hundreds at once, this is

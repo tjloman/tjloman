@@ -259,6 +259,7 @@ func _collapse() -> void:
 			Vector3(randf_range(0.4, 0.9), 0.3, randf_range(0.4, 0.9)),
 			Color(0.5, 0.44, 0.38),
 			Vector3(randf_range(-1, 1), 0.15, randf_range(-1, 1))))
+	Weld.statics(self)
 	if village != null:
 		village.on_house_destroyed(self)
 	get_tree().create_timer(30.0).timeout.connect(queue_free)
@@ -311,6 +312,10 @@ func _build_visuals() -> void:
 		var pane := Util.box(Vector3(0.4, 0.4, 0.06), Color.WHITE, Vector3(x, 1.3, depth / 2.0 + 0.03))
 		pane.material_override = _window_mat
 		add_child(pane)
+	# ONE DRAW FOR THE HOUSE AND ONE FOR ITS WINDOWS, which keep their own
+	# material so they can still light up at night. See Weld.
+	Weld.statics(self, [], [_window_mat])
+	Util.apply_lod(self, Quality.building_distance())
 
 
 func _build_scaffold_visuals() -> void:
@@ -324,6 +329,8 @@ func _build_scaffold_visuals() -> void:
 		add_child(Util.box(Vector3(0.15, 1.8, 0.15), Color(0.6, 0.45, 0.3),
 			corner + Vector3(0, 0.9, 0)))
 	add_child(Util.box(Vector3(w, 0.12, 0.12), Color(0.6, 0.45, 0.3), Vector3(0, 1.85, w / 2)))
+	Weld.statics(self)
+	Util.apply_lod(self, Quality.building_distance())
 
 
 func size_name() -> String:

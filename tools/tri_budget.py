@@ -560,6 +560,57 @@ MULTI = {
 }
 
 
+# ------------------------------------------------------------ the welded
+#
+# WHAT A BUILDER COSTS IN DRAWS once Weld has been over it. The scanner counts
+# one part per primitive, which is what these used to be; after `Weld.statics`
+# the plain parts are ONE surface, and only what the owner keeps (a window that
+# lights, a lamp with a light in it, a glowing marker) stays a draw of its own.
+# Each entry names the call that earns it, and is applied only while that call
+# is really in the builder — delete the weld and the chart goes back up.
+
+WELDED = {
+    ("scripts/world/house.gd", "_build_visuals"): dict(
+        draws=2, proof="Weld.statics(self, [], [_window_mat])",
+        note="walls, roof, door, foundation; the two panes keep their glow"),
+    ("scripts/world/house.gd", "_build_scaffold_visuals"): dict(
+        draws=1, proof="Weld.statics(self)", note="posts and beam"),
+    ("scripts/world/food_store.gd", "_build_structure"): dict(
+        draws=5, proof="Weld.statics(self)", within="_ready",
+        note="floor, walls, canopy; the four glowing marker balls stay"),
+    ("scripts/world/village.gd", "_build_pen"): dict(
+        draws=1, proof="Weld.statics(pen)", note="posts, rails, trough"),
+    ("scripts/world/workshop.gd", "_build_stand_in"): dict(
+        draws=2, proof="Weld.statics(self, [_lamp, _feed])", within="_ready",
+        note="the body; a glowing finial, lamp or feed stays apart"),
+    ("scripts/world/edubba.gd", "_ready"): dict(
+        draws=1, proof="Weld.statics(self)", note="hall, roof, door, windows"),
+    ("scripts/villager/villager.gd", "_ready"): dict(
+        draws=2, proof="Weld.shared(", note="body and head one shared mesh; "
+        "the name label is the other, drawn only within Quality.label_distance"),
+    ("scripts/animals/animal.gd", "_build_body"): dict(
+        draws=1, proof="Weld.shared(", note="body, legs, neck, head: one mesh "
+        "a species"),
+    ("scripts/world/farm.gd", "_ready"): dict(
+        draws=2, proof="_crops = MultiMesh.new()",
+        note="the soil, and all twelve stalks as one MultiMesh"),
+}
+
+
+def welded_in(path, entry, func):
+    """Is the weld really there — in the builder, or in what calls it?"""
+    text = open(path).read()
+    where = entry.get("within", func)
+    m = re.search(r"^(?:static )?func %s\(" % re.escape(where), text, re.M)
+    if m is None:
+        return False
+    rest = text[m.end():]
+    nxt = re.search(r"^(?:static )?func ", rest, re.M)
+    body = rest[:nxt.start()] if nxt else rest
+    code = "\n".join(r.split("#")[0] for r in body.split("\n"))
+    return entry["proof"] in code
+
+
 # --------------------------------------------------------------- the naming
 #
 # A builder function is not a model's name. This says what each one actually
@@ -718,6 +769,10 @@ def models():
         slot["parts"] += hand["parts"]
         slot["tris"] += hand["tris"]()
         slot["notes"].append(hand["note"])
+    for key, weld in WELDED.items():
+        if key in by and welded_in(key[0], weld, key[1]):
+            by[key]["parts"] = weld["draws"]
+            by[key]["notes"].append("welded: %d draws — %s" % (weld["draws"], weld["note"]))
     for key, many in MULTI.items():
         slot = by.setdefault(key, dict(parts=0, tris=0, line=0, unsure=False,
                                        stock=0, stock_at=[], notes=[]))

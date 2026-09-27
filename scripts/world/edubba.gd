@@ -151,6 +151,8 @@ func _ready() -> void:
 			add_child(Util.box(Vector3(0.5, 0.5, 0.08), Color(0.4, 0.55, 0.6), Vector3(x, 1.3, 1.5)))
 		# A little standing tablet by the door, to read as "school".
 		add_child(Util.box(Vector3(0.5, 0.7, 0.08), Color(0.72, 0.64, 0.5), Vector3(1.5, 0.9, 1.2)))
+		Weld.statics(self)
+	Util.apply_lod(self, Quality.building_distance())
 
 	# AND THEN IT SITS DOWN ON THE GROUND THAT IS ACTUALLY DRAWN.
 	#

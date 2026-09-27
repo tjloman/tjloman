@@ -36,7 +36,6 @@ const WALK_SPEED := 3.0
 ## How near the camera's focus a villager's label is worth drawing at all. In a
 ## crowd the labels overlap into an unreadable smear long before this, so the
 ## band costs nothing anybody was getting any good out of.
-const LABEL_WITHIN := 38.0
 const FLEE_SPEED := 5.5
 ## HOW LONG ONE FRIGHT LASTS, and how long after it they are STEADIED: they
 ## have run, they know where the trouble is, and the next bang does not send
@@ -312,10 +311,16 @@ func _ready() -> void:
 		# shared materials (and meshes) the renderer can batch, instead of 25
 		# unique ones. The body mesh is only ever rotated, never recoloured, so
 		# a shared material is safe.
-		var shirt := Color.from_hsv(snappedf(randf(), 1.0 / 12.0), 0.5, 0.75)
-		_body_mesh = Util.lite_capsule(0.28, 1.0, shirt, Vector3(0, 0.55, 0))
+		# ONE MESH, body and head: a draw call a villager, not two. See Weld.
+		var hue := snappedf(randf(), 1.0 / 12.0)
+		var shirt := Color.from_hsv(hue, 0.5, 0.75)
+		var parts: Array[MeshInstance3D] = [
+			Util.lite_capsule(0.28, 1.0, shirt, Vector3(0, 0.55, 0)),
+			Util.lite_sphere(0.18, Color(0.9, 0.75, 0.6), Vector3(0, 1.25, 0))]
+		var body := MeshInstance3D.new()
+		body.mesh = Weld.shared("villager|%.3f" % hue, parts)
+		_body_mesh = body
 		_visuals.add_child(_body_mesh)
-		_visuals.add_child(Util.lite_sphere(0.18, Color(0.9, 0.75, 0.6), Vector3(0, 1.25, 0)))
 	# Distant crowds stop drawing entirely — a big village no longer renders
 	# dozens of bodies at once on a budget phone.
 	Util.apply_lod(_visuals, Quality.actor_distance())
@@ -413,7 +418,7 @@ func _physics_process(delta: float) -> void:
 	# they are not legible anyway — a town at prayer was a white smear with
 	# "pray" in it somewhere. Near enough to read, and the rest is silence.
 	var shown := GameState.camera_focus.distance_squared_to(global_position) \
-		< LABEL_WITHIN * LABEL_WITHIN
+		< Quality.label_distance() * Quality.label_distance()
 	if _label.visible != shown:
 		_label.visible = shown
 	if shown:

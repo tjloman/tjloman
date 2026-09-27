@@ -116,8 +116,10 @@ func _ready() -> void:
 		add_child(custom)
 	else:
 		_build_structure()
+		Weld.statics(self)           # the floor, walls and canopy: one draw
 
 	_build_piles()
+	Util.apply_lod(self, Quality.building_distance())
 	_show_stock()
 
 

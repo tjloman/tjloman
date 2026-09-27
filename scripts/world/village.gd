@@ -449,6 +449,8 @@ func _build_pen() -> void:
 		pen.add_child(Util.box(Vector3(0.1, 1.5, 0.1), Color(0.5, 0.38, 0.25),
 			Vector3(0.75 * side, 0.9, 0)))
 	pen.add_child(Util.prism(Vector3(2.0, 0.5, 1.0), Color(0.6, 0.45, 0.3), Vector3(0, 1.8, 0)))
+	Weld.statics(pen)                # twenty-odd posts and rails: one draw
+	Util.apply_lod(pen, Quality.building_distance())
 	add_child(pen)
 
 

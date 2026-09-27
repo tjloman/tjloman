@@ -32,6 +32,10 @@ const TILLED := 0.68
 ## instead of ending on a straight line. A field has a headland; a decal does
 ## not, and that hard edge was most of the splotch.
 const RIM_TILL := 0.42
+## How much the crop must have grown before its rows are redrawn. Growth creeps
+## on every frame; twelve transforms rewritten on every frame of every field
+## was work nobody could see.
+const REDRAW_EVERY := 0.01
 
 ## WHAT IT TAKES TO WRECK A FIELD BY FORCE, against a villager's hundred. Less
 ## than a building because it is soil and stalks rather than stone — but a
@@ -51,7 +55,12 @@ var _tended := false
 var _workable := true
 var _burn_time := 0.0
 var _fire_visual: Node3D = null
-var _crop_meshes: Array[MeshInstance3D] = []
+## THE CROP, as ONE MultiMesh: twelve rows of stalks in a single draw, where
+## they were twelve boxes and twelve draws a field. `_crop_at` is where each
+## stalk's foot stands (field-local, on the ground it was planted in).
+var _crops: MultiMesh = null
+var _crop_at := PackedVector3Array()
+var _drawn_height := -1.0
 
 
 func _ready() -> void:
@@ -76,11 +85,21 @@ func _ready() -> void:
 			var lx := -2.4 + x * 1.6
 			var lz := -1.5 + z * 1.5
 			var ground_y := _local_ground(world, lx, lz)
-			var crop := Util.box(Vector3(0.4, 1.0, 0.4), Color(0.35, 0.7, 0.25),
-				Vector3(lx, ground_y, lz))
-			crop.set_meta("base_y", ground_y)
-			add_child(crop)
-			_crop_meshes.append(crop)
+			_crop_at.append(Vector3(lx, ground_y, lz))
+	var stalk := BoxMesh.new()
+	stalk.size = Vector3(0.4, 1.0, 0.4)
+	_crops = MultiMesh.new()
+	_crops.transform_format = MultiMesh.TRANSFORM_3D
+	_crops.mesh = stalk
+	_crops.instance_count = _crop_at.size()
+	_drawn_height = 0.15 + growth * 1.1
+	for i in _crop_at.size():
+		_crops.set_instance_transform(i, _stalk(i, _drawn_height))
+	var field := MultiMeshInstance3D.new()
+	field.multimesh = _crops
+	field.material_override = Util.shared_mat(Color(0.35, 0.7, 0.25))
+	add_child(field)
+	Util.apply_lod(field, Quality.building_distance())
 
 
 ## The terrain height at a field-local offset, in the farm's local space.
@@ -156,10 +175,27 @@ func _process(delta: float) -> void:
 
 	# Crops rise straight out of the soil: bottom pinned to the ground it
 	# was planted on, growing taller with maturity.
+	_show_crop()
+
+
+## Crops rise straight out of the soil: each stalk's foot pinned to the ground
+## it was planted in, growing taller with maturity. Redrawn only once it has
+## grown enough to see.
+func _show_crop() -> void:
 	var height := 0.15 + growth * 1.1
-	for crop in _crop_meshes:
-		crop.scale.y = height              # box mesh is 1m tall, so scale == metres
-		crop.position.y = crop.get_meta("base_y") + height * 0.5
+	if _crops == null or absf(height - _drawn_height) < REDRAW_EVERY:
+		return
+	_drawn_height = height
+	for i in _crop_at.size():
+		_crops.set_instance_transform(i, _stalk(i, height))
+
+
+## One stalk, its foot on its own ground. The box is a metre tall, so its scale
+## is its height in metres.
+func _stalk(i: int, height: float) -> Transform3D:
+	var foot := _crop_at[i]
+	return Transform3D(Basis.from_scale(Vector3(1.0, height, 1.0)),
+		Vector3(foot.x, foot.y + height * 0.5, foot.z))
 
 
 func tend() -> void:
@@ -244,10 +280,7 @@ func _burn(delta: float) -> void:
 	_burn_time -= delta
 	health = maxf(health - MOST_HEALTH / BURN_SECONDS * delta, 0.0)
 	growth = maxf(growth - 0.03 * delta, 0.0)  # the crop chars away
-	var height := 0.15 + growth * 1.1
-	for crop in _crop_meshes:
-		crop.scale.y = height
-		crop.position.y = crop.get_meta("base_y") + height * 0.5
+	_show_crop()
 	if is_instance_valid(_fire_visual):
 		_fire_visual.scale.y = 1.0 + sin(Time.get_ticks_msec() / 70.0) * 0.15
 	if _burn_time <= 0.0:

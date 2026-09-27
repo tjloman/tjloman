@@ -478,6 +478,10 @@ func _ready() -> void:
 		add_child(custom)
 	else:
 		_build_stand_in(spec)
+		# The lamp and the trough's feed change with the herd; the rest is
+		# one draw. See Weld.
+		Weld.statics(self, [_lamp, _feed])
+	Util.apply_lod(self, Quality.building_distance())
 	# A JETTY POINTS AT THE WATER. Everything else a village raises may stand
 	# whichever way it likes; a harbour that lies along the beach is not a
 	# harbour. The walkway runs out along this building's +Z, so the whole thing
