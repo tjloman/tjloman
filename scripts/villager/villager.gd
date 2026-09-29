@@ -37,6 +37,9 @@ const WALK_SPEED := 3.0
 ## crowd the labels overlap into an unreadable smear long before this, so the
 ## band costs nothing anybody was getting any good out of.
 const FLEE_SPEED := 5.5
+## How quickly a rested sleeper gets up by day, as a chance a second: about a
+## second and a half on average, so a town wakes over a few seconds at dawn.
+const WAKE_RATE := 0.7
 ## HOW LONG ONE FRIGHT LASTS, and how long after it they are STEADIED: they
 ## have run, they know where the trouble is, and the next bang does not send
 ## them running again. Without it a burning town re-scared its children and
@@ -415,7 +418,9 @@ func _physics_process(delta: float) -> void:
 	# carry on into the state machine below doing what they were already doing.
 	if _decision_due and VillagerLook.may_choose(self):
 		_decision_due = false
+		var began := Time.get_ticks_usec()
 		_choose()
+		Spool.thought(Time.get_ticks_usec() - began)   # see Spool.turn_to_think
 	_tick_lifecycle(delta)
 	_tick_needs(delta)
 	_tick_watchdogs(delta)
@@ -511,8 +516,16 @@ func _physics_process(delta: float) -> void:
 			if hunger > 80.0:
 				_pitch_body(0.0)
 				_rethink()
-			elif energy >= 100.0 or (energy > 60.0 and not GameState.is_night()):
+			# THE NIGHT IS SLEPT THROUGH. This woke them the moment energy was
+			# full — ten seconds into a two-minute night — and a rested adult is
+			# allowed to potter about after dark, so a town worked through the
+			# night, crashed by mid-afternoon and lay about the streets at noon.
+			# In the dark they stay down until dawn; by day, a nap ends once they
+			# are rested, and not all on the same frame.
+			elif not GameState.is_night() and energy > 60.0 and randf() < delta * WAKE_RATE:
 				_pitch_body(0.0)
+				state = State.WANDER    # up, not lying under "zzz" while they think
+				_target = global_position
 				_rethink()
 		State.GO_FARM:
 			if _target_farm == null or not is_instance_valid(_target_farm):

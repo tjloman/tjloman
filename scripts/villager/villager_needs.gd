@@ -60,7 +60,11 @@ static func live(who: Villager, delta: float) -> void:
 			Villager.State.FARMING, Villager.State.HUNTING,
 			Villager.State.CHOPPING, Villager.State.QUARRYING,
 			Villager.State.BUILDING]
-		who.energy = maxf(who.energy - (0.5 if working else 0.25) * delta, 0.0)
+		# A DAY'S WORK IS A DAY'S ENERGY. Waking at a hundred into a day of about
+		# two hundred seconds, half a point a second had a labourer below the
+		# nap line (20) by mid-afternoon, and the whole town napped in the road.
+		# At these rates a full day's work leaves about a quarter in the tank.
+		who.energy = maxf(who.energy - (0.35 if working else 0.18) * delta, 0.0)
 	who.social = maxf(who.social - 0.3 * delta, 0.0)
 	who._breed_cooldown = maxf(who._breed_cooldown - delta, 0.0)
 	# A fed body knits itself back together — small wounds heal.

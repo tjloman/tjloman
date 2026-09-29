@@ -64,6 +64,9 @@ extends RefCounted
 ## Compact the line once the served head gets this long. Slicing a packed array
 ## is a copy, so it is done rarely rather than every frame.
 const TIDY_AT := 256
+## The most turns a frame may grant however cheap the thinking has been — a
+## ceiling on the walk as much as on the work. See `turn_to_think`.
+const MOST_A_FRAME := 48
 
 ## HOW LONG A PLACE IN THE LINE SURVIVES WITHOUT BEING ASKED FOR.
 ##
@@ -96,6 +99,8 @@ static var _head := 0              # everything before this is served or dead
 static var _frame := -1
 static var _spent := 0
 static var _served := 0            # last completed frame's count, for readouts
+## Microseconds of thinking this frame, as told by the thinkers. See `thought`.
+static var _thinking := 0
 
 
 ## MAY I THINK NOW?
@@ -113,7 +118,18 @@ static func turn_to_think(who: Node) -> bool:
 		_frame = now
 		_served = _spent
 		_spent = 0
+		_thinking = 0
+	# A COUNT IS THE FLOOR, TIME IS THE ALLOWANCE. `decisions()` a frame is what
+	# is always served; past it, turns go on being granted while the frame's
+	# thinking, as the thinkers report it, is under `think_usec()`, up to
+	# MOST_A_FRAME. The count was set when one decision could cost six hundred
+	# milliseconds (see Village.find_build_spot); decisions are cheap now, and a
+	# fixed four a tick left four hundred people standing in the road for three
+	# seconds whenever a town re-decided together: "everyone started standing
+	# still at one point."
 	var budget := Quality.decisions()
+	if _thinking < Quality.think_usec():
+		budget = MOST_A_FRAME
 	var id := who.get_instance_id()
 	if not _waiting.has(id):
 		_line.append(id)
@@ -183,6 +199,13 @@ static func _lapsed(other: int, now: int) -> bool:
 	if not is_instance_valid(instance_from_id(other)):
 		return true
 	return now - int(_waiting[other]) > GONE_QUIET
+
+
+## HOW LONG A GRANTED TURN TOOK, told by the thinker once it has thought. What
+## lets the frame grant more turns when thinking is cheap and stop when it is
+## not. A thinker that never reports is served at the floor rate, as before.
+static func thought(usec: int) -> void:
+	_thinking += usec
 
 
 ## Throw away the served head of the line. On BOTH paths out, because doing it

@@ -101,10 +101,72 @@ def model(fail):
         fail.append("the footing and drowning reads are not cut tenfold")
 
 
+def shared(fail):
+    """SHARED LAND READS: "when the villager reads the terrain, the other
+    villagers who are near enough don't make their own read — for x seconds."
+
+    The seeded land never changes, so a read is snapped to a half-metre grid
+    and kept for everybody for SHARED_FOR seconds. Two claims to hold:
+
+      1. THE DRAWN LAND DOES NOT MOVE. Every chunk corner, on every tier, near
+         and far, must already lie on the grid — or the ground would be cut
+         from snapped heights and shift under everything standing on it.
+      2. IT IS ACTUALLY SHARED. A town of three hundred milling in a sixty-metre
+         square asks the same few thousand points over and over."""
+    per = const(WORLD, "SHARED_PER_METRE")
+    keep = const(WORLD, "SHARED_FOR")
+    seeded = body(WORLD, "seeded_height_at")
+    if "_shared_heights.get(key)" not in seeded or "_shared_heights[key] = made" not in seeded:
+        fail.append("seeded_height_at no longer shares what it reads")
+    if "_shared_heights.clear()" not in body(WORLD, "_process"):
+        fail.append("the shared reads are kept forever — they must be dropped every "
+                    "SHARED_FOR seconds")
+    cells = [int(v) for v in re.search(r"func chunk_cells\(\) -> int:\s*\n\s*return \[([^\]]+)\]",
+                                       QUALITY).group(1).split(",")]
+    far = [int(v) for v in re.search(r"func far_cells\(\) -> int:\s*\n\s*return \[([^\]]+)\]",
+                                     QUALITY).group(1).split(",")]
+    size = const(WORLD, "CHUNK_SIZE")
+    for n in cells + far:
+        step = size / n
+        if abs(step * per - round(step * per)) > 1e-9:
+            fail.append("a chunk cut %d to a side puts corners %.4f m apart, off the "
+                        "shared grid — the drawn land would move" % (n, step))
+    import random
+    rng = random.Random(4)
+    asked = hits = 0
+    known = {}
+    t = 0.0
+    people = [(rng.uniform(-30, 30), rng.uniform(-30, 30)) for _ in range(300)]
+    for tick in range(30 * 20):
+        t += 1.0 / 30.0
+        if t > keep:
+            t = 0.0
+            known.clear()
+        for i, (x, z) in enumerate(people):
+            x += rng.uniform(-0.1, 0.1)
+            z += rng.uniform(-0.1, 0.1)
+            people[i] = (x, z)
+            if rng.random() < 1.0 / 15.0:          # a water check, twice a second
+                key = (round(x * per), round(z * per))
+                asked += 1
+                if key in known:
+                    hits += 1
+                else:
+                    known[key] = True
+    print()
+    print("SHARED READS: 300 people milling in 60m for 20s, a %.2fm grid kept %.0fs:"
+          % (1.0 / per, keep))
+    print("   %d asked, %d answered from the grid (%.0f%%)"
+          % (asked, hits, 100.0 * hits / max(asked, 1)))
+    if hits * 2 < asked:
+        fail.append("under half of a crowded town's land reads are shared")
+
+
 def main():
     fail = []
     source(fail)
     model(fail)
+    shared(fail)
     print()
     if fail:
         for f in fail:

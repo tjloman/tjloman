@@ -109,6 +109,8 @@ var _next := 0.0
 var _worst := 0.0
 ## Terrain samples taken in the last frame. See WorldGen.reads.
 var _land := 0
+## And the ones answered from the shared grid instead. See WorldGen.shared_reads.
+var _shared := 0
 ## Every meter's high-water mark, and how long each has left to hold it.
 var _peaks := {}
 var _peak_left := {}
@@ -249,6 +251,8 @@ func _process(delta: float) -> void:
 	_land = WorldGen.reads
 	_peak(&"land", float(_land))
 	WorldGen.reads = 0
+	_shared = WorldGen.shared_reads
+	WorldGen.shared_reads = 0
 	for row: Array in Ledger.rows():
 		_peak(StringName("row " + String(row[0])), float(row[1]))
 	if not visible:
@@ -447,8 +451,8 @@ func _readout() -> String:
 		% [elsewhere, int(_share(elsewhere)), _bar(_share(elsewhere))],
 		_seen(&"draw")))
 	rows.append("")
-	rows.append("%s land reads (peak %s)"
-		% [_thousands(_land), _thousands(int(_seen(&"land")))])
+	rows.append("%s land reads (peak %s), %s shared"
+		% [_thousands(_land), _thousands(int(_seen(&"land"))), _thousands(_shared)])
 	# AND WHOSE: the three classes that asked most.
 	var askers := Ledger.land_rows()
 	if not askers.is_empty():

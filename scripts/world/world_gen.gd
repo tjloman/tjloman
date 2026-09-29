@@ -39,6 +39,11 @@ const WATER_LEVEL := 0.0
 ## A fifth of a sixty-hertz frame. Small enough that a chunk arriving is not a
 ## hitch anybody sees, large enough that a cold fill still finishes in seconds.
 const WORLD_MILLIS := 3.0
+## THE SHARED LAND READS: how finely a question of the land is answered, how
+## long the answers are kept, and the most kept at once. See `seeded_height_at`.
+const SHARED_PER_METRE := 2.0
+const SHARED_FOR := 10.0
+const SHARED_MOST := 60000
 const CHUNKS_PER_FRAME := 1      # the floor under the budget: never fewer
 ## HOW MUCH OF THE OLD GROUND IS PUT AWAY IN ONE FRAME: chunks freed, stripped
 ## back to scenery, or boarded back to billboards, all counted together.
@@ -107,6 +112,9 @@ const RAINFOREST_WET := 0.30
 ## reset by the frame meter; counted in `seeded_height_at`, which is where the
 ## cost actually is.
 static var reads := 0
+## Land questions answered from the shared grid rather than asked again. See
+## `seeded_height_at`.
+static var shared_reads := 0
 
 ## How much world stays LIVE around the focus — collision, water, trees, herds,
 ## villagers. Set from the graphics tier at boot: a budget phone keeps a tight
@@ -181,6 +189,8 @@ var _jungle_noise := FastNoiseLite.new()
 ## cell and a visited-then-unloaded cell are identical from outside.
 var _known := {}                  # Vector2i -> SEEN or WALKED
 var _chunks := {}                 # Vector2i -> Chunk
+var _shared_heights := {}         # Vector2i on the shared grid -> seeded height
+var _shared_age := 0.0
 ## Out of sight, hidden, switched off, and waiting their turn to be freed. See
 ## SHEDS_PER_FRAME.
 var _doomed: Array[Chunk] = []
@@ -270,6 +280,10 @@ func _process(delta: float) -> void:
 			_stream_chunks()
 		return
 	_tick_burns(delta)
+	_shared_age += delta
+	if _shared_age > SHARED_FOR or _shared_heights.size() > SHARED_MOST:
+		_shared_age = 0.0
+		_shared_heights.clear()
 	if focus_node == null:
 		return
 	_stream_chunks()
@@ -334,9 +348,32 @@ func seeded_height_at(x: float, z: float) -> float:
 	#
 	# Counted only while somebody is reading the meter, which is the same
 	# bargain every clocked class in this game already makes.
+	#
+	# AND NOW IT IS ASKED ONCE A SPOT, AND SHARED. The land as the seed made it
+	# never changes, so an answer is good for everybody who asks near the same
+	# place: the question is snapped to a grid of SHARED_PER_METRE a metre, and the first to ask
+	# at a point pays for it while everyone after is handed the answer. The grid
+	# is forgotten every SHARED_FOR seconds, which bounds what it holds; nothing
+	# in it ever goes stale. A chunk's own corners lie on this grid (every tier's
+	# cut is a whole number of half-metres), so the drawn land is exactly the
+	# land it always was.
+	var key := Vector2i(roundi(x * SHARED_PER_METRE), roundi(z * SHARED_PER_METRE))
+	var known = _shared_heights.get(key)
+	if known != null:
+		if Ledger.on:
+			shared_reads += 1
+		return known
+	x = float(key.x) / SHARED_PER_METRE
+	z = float(key.y) / SHARED_PER_METRE
 	if Ledger.on:
 		reads += 1
 		Ledger.land_read()
+	var made := _seeded_height(x, z)
+	_shared_heights[key] = made
+	return made
+
+
+func _seeded_height(x: float, z: float) -> float:
 	var biome := biome_at(x, z)
 	var amp := 11.0
 	match biome:

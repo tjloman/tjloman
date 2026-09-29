@@ -526,6 +526,12 @@ func decisions() -> int:
 	return [4, 8, 14][effective_tier()]
 
 
+## HOW LONG A FRAME MAY SPEND THINKING before the queue falls back to the floor
+## of `decisions()` a frame. Microseconds of `_choose`, as Spool is told it.
+func think_usec() -> int:
+	return [2500, 3500, 5000][effective_tier()]
+
+
 ## HOW MANY TREE FRIENDS may be alive at once. Each is one billboarded quad
 ## with a shared texture, so the plates are nearly free; what this really
 ## bounds is the per-frame work of moving and startling them. Voices are
