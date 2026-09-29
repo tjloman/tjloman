@@ -229,13 +229,20 @@ func _ready() -> void:
 		add_child(start)
 
 
-## Re-apply the tier knobs that are cheap to flip mid-game (lights, glow,
-## fog, draw distance). Radius/water are baked into live chunks, so those
-## wait for a reload — the cycle() announcement says as much.
+## Re-apply the tier knobs that are cheap to flip mid-game (pixels, glow,
+## fog, draw distance, how far shadows reach). Radius/water are baked into live
+## chunks, so those wait for a reload — the cycle() announcement says as much.
+##
+## MSAA AND SHADOWS ARE WRITTEN ONLY WHEN THEY DIFFER, and they differ only when
+## the tier itself was changed (see Quality.shadows): each rebuilds every
+## pipeline in the scene, which is a multi-second freeze, and assigning the
+## same value is not guaranteed to be free.
 func _on_quality_changed() -> void:
-	get_viewport().msaa_3d = Quality.msaa_3d()
+	if get_viewport().msaa_3d != Quality.msaa_3d():
+		get_viewport().msaa_3d = Quality.msaa_3d()
 	get_viewport().scaling_3d_scale = Quality.render_scale()
-	_sun.shadow_enabled = Quality.shadows()
+	if _sun.shadow_enabled != Quality.shadows():
+		_sun.shadow_enabled = Quality.shadows()
 	_sun.directional_shadow_max_distance = Quality.shadow_distance()
 	_environment.glow_enabled = Quality.glow()
 	_environment.fog_density = Quality.fog_density()

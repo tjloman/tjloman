@@ -123,7 +123,12 @@ func look_here(where: Vector3, seconds := HOLD_LOOK) -> void:
 ## Has what it was looking at gone, died, or wandered out of range?
 func _still_worth_it(who: Creature) -> bool:
 	if subject == null:
-		return at != Vector3.INF
+		# NOTHING TO LOOK AT IS NOT A REASON TO LOOK AGAIN AT ONCE. This said
+		# "not worth it" whenever the head was on nothing, so a creature out of
+		# sight of anybody re-picked every tick — a walk of every villager and
+		# every animal in the world, thirty times a second. It waits out
+		# HOLD_LOOK like any other look.
+		return true
 	if not is_instance_valid(subject) or subject.is_queued_for_deletion():
 		return false
 	return subject.global_position.distance_to(who.global_position) < HAND_WATCH

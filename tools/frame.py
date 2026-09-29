@@ -167,7 +167,10 @@ LEDGER = (ROOT / "scripts/ledger.gd").read_text()
 clocked = []
 for path in sorted((ROOT / "scripts").rglob("*.gd")):
     text = code(path.read_text())
-    for name in re.findall(r'Ledger\.open\(&"(\w+)"', text):
+    # ONE NAME A FILE. A class may split its own row into sections
+    # (`Creature:head`) and come back to its own name after them, which is the
+    # same class and not a second one under a borrowed name.
+    for name in dict.fromkeys(re.findall(r'Ledger\.open\(&"(\w+)"', text)):
         clocked.append(name)
 print()
 print("CLOCKED BY NAME: %s" % (", ".join(sorted(clocked)) if clocked else "NOBODY"))
@@ -182,13 +185,27 @@ if len(set(clocked)) != len(clocked):
 # A CLOCK IS OPENED AT THE TOP OF THE METHOD AND NOWHERE ELSE. Opened lower
 # down, everything above it is charged to whoever ran before — which is a class
 # being billed for another class's work, and it reads as a finding.
+#
+# EXCEPT A CLASS SPLITTING ITS OWN ROW. `Creature:head` opened inside the
+# creature's own tick charges the head to the creature's section, and going
+# back to `Creature` charges the rest to the creature: the clock that ran just
+# before was always its own. Only its own name, and only once that name has
+# been opened at the top of a _process in the same file.
 for path in sorted((ROOT / "scripts").rglob("*.gd")):
     rows_here = code(path.read_text()).split("\n")
+    own = set()
     for n, row in enumerate(rows_here):
         if "Ledger.open(" not in row:
             continue
         above = rows_here[n - 1] if n else ""
-        if not re.match(r"func _(physics_)?process\(", above.strip()):
+        named = re.search(r'Ledger\.open\(&"([\w:]+)"', row)
+        name = named.group(1) if named else ""
+        if re.match(r"func _(physics_)?process\(", above.strip()):
+            own.add(name)
+            continue
+        if name in own or name.split(":")[0] in own and ":" in name:
+            continue
+        if True:
             fail.append("%s:%d opens a ledger clock somewhere other than the "
                         "first line of a _process — everything above it is "
                         "billed to whichever class ran before"

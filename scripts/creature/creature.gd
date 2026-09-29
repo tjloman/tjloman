@@ -355,9 +355,15 @@ func _physics_process(delta: float) -> void:
 	# stays a number it cannot touch. See WorldGen._creature_cells and
 	# Herd._tend_agents.
 	GameState.creature_at = global_position
+	# ITS OWN ROWS IN THE METER. The creature was one line reading seven to
+	# twelve milliseconds a call — more than three hundred villagers — and one
+	# line cannot say which part. Each section opens a clock of its own; the
+	# state machine keeps the plain name.
+	Ledger.open(&"Creature:feelings")
 	_tick_feelings(delta)
 	_tick_watchdogs(delta)
 
+	Ledger.open(&"Creature")
 	match state:
 		State.IDLE:
 			_action_time -= delta
@@ -474,6 +480,7 @@ func _physics_process(delta: float) -> void:
 	# busy or not, and a well-kept creature with attention to spare does it
 	# oftener — while a wretched or frightened one has little left over to look
 	# up with. This is the cheapest and truest statement of what welfare buys.
+	Ledger.open(&"Creature:watching")
 	welfare.weigh(delta, body.fullness(growth), body.fat, energy, mood)
 	CreatureWelfare.shed(self, delta)
 	_observe_time -= delta * welfare.watchfulness()
@@ -483,10 +490,12 @@ func _physics_process(delta: float) -> void:
 
 	# THE HEAD LOOKS AND SPEAKS FOR ITSELF, every frame, whatever state the body
 	# is in — which is the whole reason it is here and not in a state.
+	Ledger.open(&"Creature:head")
 	head.aim(self, delta)
 	# AND THE ROPE, while there is one. See CreatureStake.
 	CreatureStake.hold(self)
 
+	Ledger.open(&"Creature:hands")
 	_try_catch_throw()
 	# AND WHAT IS STILL IN YOUR HAND. A thrown thing is a catch; a held thing
 	# is an offer, and the creature has its own reach for those. See
@@ -495,10 +504,11 @@ func _physics_process(delta: float) -> void:
 
 	# Bulldoze the meadow: nearby trees lean out of the giant's way (they spring
 	# back once it passes). Throttled — the trees' own spring keeps it smooth.
+	Ledger.open(&"Creature:trees")
 	_sway_tick += 1
 	if _sway_tick >= 3:
 		_sway_tick = 0
-		_sway_trees()
+		CreatureSteering.sway_trees(self)
 
 	# Whatever the claws hold rides along, up at the shoulder.
 	if _carried != null:
@@ -508,6 +518,7 @@ func _physics_process(delta: float) -> void:
 		else:
 			_carried = null
 
+	Ledger.open(&"Creature:look")
 	if _animator != null:
 		_animator.play(_anim_state())
 	else:
@@ -1517,27 +1528,6 @@ func _throw_mark() -> Vector3:
 
 
 ## Stomp the house: heavy damage, a boom, terror for anyone watching.
-## Shove every tree within reach out of the way (they lean and spring back).
-## Reach scales with the creature's size, so a full-grown giant clears a wide
-## swathe. Only trees near enough do any work; the rest are skipped by distance.
-func _sway_trees() -> void:
-	var reach := 0.6 * scale.x + 2.5
-	var reach2 := reach * reach
-	# The lean angle grows with the creature's size: a hatchling barely nudges a
-	# tree, a full-grown giant bends it right over. (WildTree clamps to MAX_LEAN.)
-	var strength := clampf(scale.x * 0.09, 0.2, 1.1)
-	for t in get_tree().get_nodes_in_group("trees"):
-		var tree := t as WildTree
-		if not is_instance_valid(tree):
-			continue
-		var dx := tree.global_position.x - global_position.x
-		var dz := tree.global_position.z - global_position.z
-		var d2 := dx * dx + dz * dz
-		if d2 > reach2 or d2 < 0.0001:
-			continue
-		tree.sway(global_position, (1.0 - sqrt(d2) / reach) * strength)
-
-
 ## SMASH: charge the thing and hit it — anything at all. What that costs the
 ## creature's soul, and whether it ever does it again, is learned, not scripted.
 func _process_smash(delta: float) -> void:

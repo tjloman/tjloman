@@ -279,10 +279,12 @@ func settle() -> void:
 	hands_busy = false
 
 
-## THE TIER EVERY KNOB ACTUALLY READS. A struggling device is treated as a
-## lesser one for as long as it struggles, which means one line here quietly
-## turns off shadows, glow and MSAA, pulls in the draw distances and thickens
-## the fog — through exactly the paths that already existed for a budget phone.
+## THE TIER EVERY KNOB ACTUALLY READS — every knob but shadows and MSAA, which
+## rebuild the whole scene's pipelines and so follow `tier` alone (see
+## `shadows`). A struggling device is treated as a lesser one for as long as it
+## struggles: glow off, fewer pixels, shorter shadows, nearer draw distances and
+## thicker fog, through exactly the paths that already existed for a budget
+## phone.
 func effective_tier() -> int:
 	return maxi(tier - heat, Tier.LOW)
 
@@ -403,23 +405,43 @@ func glow() -> bool:
 	return effective_tier() >= Tier.MEDIUM
 
 
+## SHADOWS AND MSAA FOLLOW THE TIER, NEVER THE HEAT.
+##
+## Both are baked into the render pipeline of every material in the scene:
+## turn either one over and the GPU has to rebuild all of them before it can
+## draw again. They used to follow `effective_tier`, so the thermostat easing
+## off a struggling device flipped both mid-game — and the device froze for
+## two seconds, twenty-five once, rebuilding pipelines, which read to the
+## thermostat as more struggling. "The moment I try to change camera angle, it
+## hangs 3 seconds then the world eases off." The heat still has every cheap
+## knob — how many pixels, how far the shadows reach, fog, draw distances,
+## glow, the simulation — and these two change only when the tier itself is
+## changed on purpose.
 func shadows() -> bool:
-	return effective_tier() >= Tier.MEDIUM
+	return tier >= Tier.MEDIUM
 
 
 func shadow_distance() -> float:
+	# The heat's handle on shadows, now that it may not switch them off: a hot
+	# device draws them over a much smaller patch of ground.
+	if heat == Heat.HOT:
+		return 35.0
 	return 120.0 if effective_tier() == Tier.HIGH else 70.0
 
 
 func water_alpha() -> bool:
-	return effective_tier() >= Tier.MEDIUM
+	# The tier, not the heat: see flipping `shadows`. Clear water and opaque
+	# water are two different shaders, and a chunk built while the device was
+	# struggling would show the one the rest of the world was not using.
+	return tier >= Tier.MEDIUM
 
 
 ## MSAA multiplies the per-pixel cost of the opaque pass. Budget GPUs that
 ## already flirt with a frame timeout get none; capable devices get a cheap
 ## 2x to smooth our hard primitive edges.
 func msaa_3d() -> Viewport.MSAA:
-	return Viewport.MSAA_2X if effective_tier() >= Tier.MEDIUM else Viewport.MSAA_DISABLED
+	# The tier, not the heat — see `shadows`.
+	return Viewport.MSAA_2X if tier >= Tier.MEDIUM else Viewport.MSAA_DISABLED
 
 
 ## HOW MANY PIXELS THE 3D PASS ACTUALLY DRAWS, as a share of the panel's.

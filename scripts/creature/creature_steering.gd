@@ -110,7 +110,7 @@ func advance(who: Creature, target: Vector3, speed: float, delta: float) -> bool
 	# radius tracks the creature's ACTUAL size (its collider is 0.6 * scale) so
 	# a grown beast swerves wide around groves instead of ramming the trunks.
 	# skip_trees: the creature wades straight THROUGH groves (shoving them
-	# aside, see Creature._sway_trees), steering only around solid rock.
+	# aside, see CreatureSteering.sway_trees), steering only around solid rock.
 	dir = NavField.steer(who.global_position, dir, 0.6 * who.scale.x + 0.4, target, true)
 	# The creature WADES: water is passable but slow — half speed with its legs
 	# in the lake. (The Walk-on-Water miracle lifts that.)
@@ -324,3 +324,24 @@ func watch_for_pit(who: Creature, delta: float) -> void:
 	GameState.announce(
 		"%s is at the bottom of a pit and cannot climb out. Draw CALM and SKY to lift it."
 		% who.called())
+
+
+## Shove every tree within reach out of the way (they lean and spring back).
+## Reach scales with the creature's size, so a full-grown giant clears a wide
+## swathe. Only trees near enough do any work; the rest are skipped by distance.
+static func sway_trees(who: Creature) -> void:
+	var reach := 0.6 * who.scale.x + 2.5
+	var reach2 := reach * reach
+	# The lean angle grows with the creature's size: a hatchling barely nudges a
+	# tree, a full-grown giant bends it right over. (WildTree clamps to MAX_LEAN.)
+	var strength := clampf(who.scale.x * 0.09, 0.2, 1.1)
+	for t in who.get_tree().get_nodes_in_group("trees"):
+		var tree := t as WildTree
+		if not is_instance_valid(tree):
+			continue
+		var dx := tree.global_position.x - who.global_position.x
+		var dz := tree.global_position.z - who.global_position.z
+		var d2 := dx * dx + dz * dz
+		if d2 > reach2 or d2 < 0.0001:
+			continue
+		tree.sway(who.global_position, (1.0 - sqrt(d2) / reach) * strength)
