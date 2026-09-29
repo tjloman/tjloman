@@ -173,6 +173,9 @@ const COHORT_JITTER := 4.0
 const BUILD_NEAREST := 7.5
 const BUILD_BAND := 3.5
 const BUILD_ANGLES := 24
+## How long the ring a building was last placed on is trusted to be the first
+## with room. See `find_build_spot`.
+const BAND_REMEMBERED := 120.0
 
 ## Clear ground kept round a dwelling, on top of its own footprint — and round
 ## the other things a village raises, which have no footprint table of their own.
@@ -282,6 +285,9 @@ var resolve := RESOLVE_START
 
 ## The town's own numbers, kept between tallies. See TALLY_EVERY.
 var _roster: Array[Villager] = []
+## The ring each size of building was last placed on, and when: own_room ->
+## [band, clock]. See `find_build_spot`.
+var _full_to := {}
 ## HOW MANY SOULS, kept rather than counted. `population()` is asked by the
 ## influence ring, the job board, the barn's stalls, the field cap, the housing
 ## and (through `at_capacity`) by every woman at prayer every frame — and it
@@ -509,7 +515,14 @@ func _farm_position(preferred: Vector3) -> Vector3:
 		return grounded
 	for i in 24:
 		var a := TAU * i / 24.0
-		var cand := _grounded(Vector3(cos(a), 0, sin(a)) * randf_range(7.0, 16.0), 3.6)
+		var flat := Vector3(cos(a), 0, sin(a)) * randf_range(7.0, 16.0)
+		# TAKEN IS CHEAPER TO ASK THAN WET. Grounding a spot is a twenty-five
+		# point dry check and, if it is wet, a spiral of up to forty-eight more
+		# of them — asked of all twenty-four spots before asking whether a house
+		# was standing on it. See find_build_spot, which had the same order.
+		if not _spot_clear(global_position.x + flat.x, global_position.z + flat.z, FARM_HALF):
+			continue
+		var cand := _grounded(flat, 3.6)
 		if _farm_spot_ok(world, cand):
 			return cand
 	return grounded  # give up gracefully; at least it sits on the ground
@@ -1344,6 +1357,7 @@ func on_house_completed(house: House) -> void:
 
 func on_house_destroyed(house: House) -> void:
 	houses.erase(house)
+	_full_to.clear()    # a ring may have room again: see find_build_spot
 	if construction_site == house:
 		construction_site = null
 	_assign_housing()
@@ -1365,9 +1379,27 @@ func on_house_destroyed(house: House) -> void:
 ## the first legal one, which is what stops a row of buildings bunching into one
 ## arc while the other side of the town stays bare — the first-legal rule always
 ## put the next thing next to the last thing.
+##
+## CHEAPEST QUESTION FIRST, AND NEVER THE SAME RING TWICE FOR NOTHING. A town of
+## two hundred has every inner ring built over, and this asked the LAND about
+## every spot on every one of them — slope, twenty-five points of footprint, a
+## dry line home, the settled height, about forty land reads a spot — before
+## asking whether a house was already standing on it. Four hundred spots at
+## forty reads is the 10,938 land reads and the 640ms single villager call the
+## meter caught: one villager deciding to build, freezing the game.
+##
+## So a spot is first checked against what the town has built (distances, no
+## land), and the search starts at the ring where the last one for a building
+## of this size was found: rings only fill as a town grows, so a ring that had
+## no room then has none now. The memory is dropped when anything comes down.
 func find_build_spot(world: WorldGen, own_room := 0.0) -> Vector3:
 	var reach := maxf(influence_radius * 0.8, 12.0)
 	var band := BUILD_NEAREST
+	# Forgotten after a couple of minutes all the same: a field that burned or
+	# a well that fell frees an inner ring without passing through here.
+	var known: Array = _full_to.get(own_room, [])
+	if not known.is_empty() and GameState.clock - float(known[1]) < BAND_REMEMBERED:
+		band = maxf(BUILD_NEAREST, float(known[0]))
 	# The whole sweep is turned by a random amount per call so a town does not
 	# end up with every building it ever raises on the same handful of bearings.
 	var turn := randf() * TAU
@@ -1377,6 +1409,10 @@ func find_build_spot(world: WorldGen, own_room := 0.0) -> Vector3:
 		for step in BUILD_ANGLES:
 			var angle := turn + TAU * float(step) / float(BUILD_ANGLES)
 			var pos := global_position + Vector3(cos(angle) * band, 0, sin(angle) * band)
+			# Taken? Asked at the town's own height, which is what the settled
+			# height below will be near on ground gentle enough to build on.
+			if _spot_blocked(pos, own_room):
+				continue
 			if world != null:
 				if world.slope_at(pos.x, pos.z) > 0.9:
 					continue
@@ -1394,6 +1430,7 @@ func find_build_spot(world: WorldGen, own_room := 0.0) -> Vector3:
 				best_room = room
 				best = pos
 		if best != Vector3.INF:
+			_full_to[own_room] = [band, GameState.clock]
 			return best
 		band += BUILD_BAND
 	return Vector3.INF
