@@ -60,6 +60,7 @@ func _process(_delta: float) -> void:
 
 func _on_follow_toggled(pressed: bool) -> void:
 	if pressed and is_instance_valid(creature):
+		BootTrail.mark("following the creature")
 		camera_rig.follow_target = creature
 	else:
 		camera_rig.follow_target = null

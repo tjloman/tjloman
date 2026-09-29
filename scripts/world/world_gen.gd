@@ -1253,6 +1253,7 @@ func _make_whole(cell: Vector2i) -> bool:
 			return false
 		# THE GROUND IS ALREADY THERE AND IS NOT TOUCHED. It was cut when this
 		# cell first came into view; all that arrives now is what lives on it.
+		BootTrail.mark("filling in the land at %d,%d" % [cell.x, cell.y])
 		chunk.flesh_out()
 		_maybe_found_village(cell)
 		return true
@@ -1348,6 +1349,7 @@ func _shed(center: Vector2i, kept: Dictionary) -> void:
 			# A WHOLE CHUNK DROPPED AT ONCE — a warp across the map skips the strip —
 			# still says what was living on it.
 			if not gone.terrain_only:
+				BootTrail.mark("letting go of the land at %d,%d" % [cell.x, cell.y])
 				remember_herds(cell, gone.herd_rows())
 			gone.visible = false
 			gone.process_mode = Node.PROCESS_MODE_DISABLED
@@ -1401,6 +1403,7 @@ func _creature_cells() -> Dictionary:
 ## chunk founds no village: that waits until the cell is a place people could
 ## actually be living in, which is exactly when it used to happen.
 func _spawn_chunk(cell: Vector2i, bare := false) -> void:
+	BootTrail.mark("building the land at %d,%d%s" % [cell.x, cell.y, " (far)" if bare else ""])
 	var chunk := Chunk.new()
 	chunk.terrain_only = bare
 	# PAUSABLE, EXPLICITLY. This node runs even while the tree is paused so the

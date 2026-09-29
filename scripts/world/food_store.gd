@@ -421,7 +421,10 @@ func _show_stock() -> void:
 
 ## The palette and all eight meshes, for every storehouse there will ever be.
 static func _bake() -> void:
-	var img := Image.create(2, 2, false, Image.FORMAT_RGB8)
+	# RGBA8, LIKE EVERY OTHER TEXTURE THIS GAME MAKES. Three-channel RGB8 is not
+	# a format phone GPUs are required to sample, and this one is built during
+	# loading, the moment the home village raises its storehouse.
+	var img := Image.create(2, 2, false, Image.FORMAT_RGBA8)
 	img.set_pixel(0, 0, GRAIN_COLOR)
 	img.set_pixel(1, 0, MEAT_COLOR)
 	img.set_pixel(0, 1, LUMBER_COLOR)

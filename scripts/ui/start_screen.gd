@@ -71,11 +71,19 @@ var _begun := false
 var _caches_warm := false
 var _waited := 0.0
 var _warm_jobs: Array[Callable] = []
+## What each warming job is, for the boot trail. See BootTrail.
+var _warm_names: Array[String] = []
+## Where the last launch died, if it did — said on the screen. See BootTrail.
+var _stopped_at := PackedStringArray()
 
 
 func _ready() -> void:
 	layer = 12          # under the profile menu, which is its own modal
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# READ BEFORE ANYTHING IS MARKED, or this launch overwrites what the last
+	# one left behind.
+	_stopped_at = BootTrail.where_last_stopped()
+	BootTrail.mark("building the start screen")
 	_build()
 	_fill_warm_jobs()
 	# THE FIRST RUN NAMES THE CREATURE FIRST. ProfileMenu opens itself when
@@ -113,6 +121,7 @@ func _process(delta: float) -> void:
 ## to say, all in the first ten seconds, together.
 func _fill_warm_jobs() -> void:
 	_warm_jobs.append(func() -> bool: return SoundBank.warm_next())
+	_warm_names.append("synthesizing sounds")
 	var names: Array = ModelBank.KNOWN.duplicate()
 	names.append_array(Animal.SPECIES.keys())
 	_warm_jobs.append(func() -> bool:
@@ -120,10 +129,12 @@ func _fill_warm_jobs() -> void:
 			return false
 		ModelBank.has(names.pop_back())
 		return true)
+	_warm_names.append("looking for models")
 	# One pose table for the whole world, built once and then only refreshed.
 	_warm_jobs.append(func() -> bool:
 		HerdMotion.refresh(0.0)
 		return false)
+	_warm_names.append("building the herd poses")
 	# THE REST OF THE LAZY CACHES, each of which builds itself the first time
 	# anything asks and every one of which was landing mid-game: the two
 	# procedural textures every flame, torch and mark in the world is drawn
@@ -143,8 +154,10 @@ func _fill_warm_jobs() -> void:
 	_warm_jobs.append(func() -> bool:
 		if once.is_empty():
 			return false
+		BootTrail.mark("making texture %d of 9" % once.size())
 		(once.pop_back() as Callable).call()
 		return true)
+	_warm_names.append("making textures")
 
 
 ## WARM UNTIL THE FRAME'S SHARE IS SPENT. A budget rather than a count, because
@@ -154,8 +167,9 @@ func _warm() -> void:
 	var until := Time.get_ticks_msec() + WARM_MILLIS
 	while not _caches_warm and Time.get_ticks_msec() < until:
 		var busy := false
-		for job in _warm_jobs:
-			if job.call():
+		for i in _warm_jobs.size():
+			BootTrail.mark(_warm_names[i])
+			if _warm_jobs[i].call():
 				busy = true
 				break
 		_caches_warm = not busy
@@ -173,10 +187,24 @@ func _where_we_are() -> String:
 		# The sound bank is by far the bulk of the caches — twenty-six
 		# waveforms — so its share is a fair reading of that quarter.
 		share = CACHES_WORTH * SoundBank.warmth()
+	var said := ""
 	if _ready_to_begin():
-		return "Ready."
-	var what := "Laying out the land" if _caches_warm else "Making ready"
-	return "%s... %d%%" % [what, int(share * 100.0)]
+		BootTrail.finish()
+		said = "Ready."
+	else:
+		var what := "Laying out the land" if _caches_warm else "Making ready"
+		if _caches_warm:
+			BootTrail.mark("laying out the land, %d%%" % (int(_land() * 10.0) * 10))
+		said = "%s... %d%%" % [what, int(share * 100.0)]
+	if not _stopped_at.is_empty():
+		var last := _stopped_at[_stopped_at.size() - 1]
+		var before := _stopped_at.slice(maxi(_stopped_at.size() - 4, 0), _stopped_at.size() - 1)
+		said += "\n(The last launch stopped while %s." % last
+		if not before.is_empty():
+			said += "\n Before that: %s.)" % ", ".join(before)
+		else:
+			said += ")"
+	return said
 
 
 func _land() -> float:
@@ -324,6 +352,7 @@ func _on_begin() -> void:
 	if not _ready_to_begin():
 		return
 	_begun = true
+	BootTrail.mark("playing")
 	_panel.visible = false
 	_backdrop.visible = false
 	get_tree().paused = false

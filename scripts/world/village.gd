@@ -327,6 +327,7 @@ var _flicker_beat := 0.0
 
 
 func _ready() -> void:
+	BootTrail.mark("founding the village of %s" % village_name)
 	add_to_group("village")
 	if is_player_home:
 		converted = true
@@ -428,6 +429,7 @@ func _found_in_stages() -> void:
 				return
 	_assign_housing()
 	_update_influence()
+	BootTrail.mark("raising the houses of %s" % village_name)
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	var beds_wanted := int(float(_founding_count()) * FOUNDING_HOUSED)
 	var beds := 0

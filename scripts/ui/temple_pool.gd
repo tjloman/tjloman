@@ -101,7 +101,8 @@ var _dragging := false
 
 func _ready() -> void:
 	custom_minimum_size = Vector2(220, 220)
-	_img = Image.create(GRID, GRID, false, Image.FORMAT_RGB8)
+	# RGBA8: RGB8 is not a format phone GPUs are required to sample.
+	_img = Image.create(GRID, GRID, false, Image.FORMAT_RGBA8)
 	_img.fill(DEEP)
 	_tex = ImageTexture.create_from_image(_img)
 	set_process(true)

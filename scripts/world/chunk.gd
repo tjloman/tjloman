@@ -256,6 +256,7 @@ func board_the_wood() -> void:
 func strip_down() -> void:
 	if terrain_only:
 		return
+	BootTrail.mark("clearing the land at %d,%d" % [cell.x, cell.y])
 	# WHAT IS LIVING HERE, before it is freed — so the herds come back as they
 	# were left and not as the seed rolled them. See WorldGen._herds_known.
 	world.remember_herds(cell, herd_rows())
@@ -1117,6 +1118,7 @@ func herd_rows() -> Array:
 ## STOCKED FROM WHAT WAS LEFT: any wild herd standing here goes, and the
 ## remembered ones are set back where they were, as many as there were.
 func restock(rows: Array) -> void:
+	BootTrail.mark("bringing back the herds at %d,%d" % [cell.x, cell.y])
 	for node in get_children():
 		var herd := node as Herd
 		if herd != null and herd.keeper == null:

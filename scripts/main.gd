@@ -250,6 +250,16 @@ func _on_quality_changed() -> void:
 		camera_rig.camera.far = Quality.camera_far()
 
 
+## PUT AWAY, NOT CRASHED. A phone may end a game sitting in the background
+## without it having gone wrong; the trail says it was left, so the next launch
+## does not report a crash that never happened. See BootTrail.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED:
+		BootTrail.left()
+	elif what == NOTIFICATION_APPLICATION_RESUMED:
+		BootTrail.mark("playing")
+
+
 func _process(_delta: float) -> void:
 	Ledger.open(&"Main")
 	_update_daylight()
@@ -494,6 +504,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			GameState.hint("His nest, from the front. Hold the stone wall to read it."
 				+ " C again to follow him instead.")
 		else:
+			BootTrail.mark("following the creature")
 			camera_rig.follow_target = creature
 			camera_rig.framed = false
 			# Frame the whole beast — the lock-on distance scales with its size,

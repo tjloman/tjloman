@@ -314,6 +314,7 @@ func _yaw_around_focus(angle: float) -> void:
 ## any follow, centres on the point, and pulls back to a comfortable survey
 ## height so the whole settlement sits in frame.
 func snap_to(world_pos: Vector3) -> void:
+	BootTrail.mark("going to %d,%d" % [int(world_pos.x), int(world_pos.z)])
 	follow_target = null
 	framed = false
 	global_position.x = world_pos.x

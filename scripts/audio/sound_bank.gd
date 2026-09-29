@@ -57,10 +57,12 @@ func warm_next() -> bool:
 	# called that shadows it.
 	for sound: String in ONE_SHOTS:
 		if not _bank.has(sound):
+			BootTrail.mark("synthesizing the sound '%s'" % sound)
 			_bank[sound] = call("_make_" + sound)
 			return true
 	for sound: String in VOICES:
 		if not _loops.has(sound):
+			BootTrail.mark("synthesizing the sound '%s'" % sound)
 			_loops[sound] = call("_make_" + sound)
 			return true
 	return false
