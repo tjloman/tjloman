@@ -480,6 +480,9 @@ var shown := -1
 var species := ""
 var world: WorldGen = null
 var head := 0
+## What the land bore this herd as, when it is brought back smaller than that.
+## Zero for a herd born here now. See Chunk.restock.
+var remembered_born := 0
 
 ## WHOSE THEY ARE. A herd with a keeper is a BARN'S herd: village livestock,
 ## not wildlife. It does not flee, it does not stalk, nothing hunts it into the
@@ -606,7 +609,9 @@ func _ready() -> void:
 	_home = global_position
 	_target = _home
 	_spread = maxf(SPACING * sqrt(float(head)), SPREAD_LEAST)
-	_born_head = head
+	# A HERD BROUGHT BACK FROM MEMORY was born bigger than it is now, and the
+	# land's worth is what it grows back toward. See Chunk.restock.
+	_born_head = remembered_born if remembered_born > 0 else head
 	_season_left = randf() * SEASON     # herds do not all reckon on the same frame
 	_build_members()
 	_build_multimesh()

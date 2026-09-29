@@ -190,6 +190,12 @@ var _jungle_noise := FastNoiseLite.new()
 var _known := {}                  # Vector2i -> SEEN or WALKED
 var _chunks := {}                 # Vector2i -> Chunk
 var _shared_heights := {}         # Vector2i on the shared grid -> seeded height
+## THE HERDS AS THEY WERE LEFT, by chunk: cell -> Array of rows (see
+## Chunk.herd_rows). A chunk's herds used to be rolled from the seed every time
+## it came back into the near ring, so every kill was undone the moment the
+## camera moved away and back. Present means "this is what lives here now",
+## including an empty list for a herd hunted out.
+var _herds_known := {}
 var _shared_age := 0.0
 ## Out of sight, hidden, switched off, and waiting their turn to be freed. See
 ## SHEDS_PER_FRAME.
@@ -752,6 +758,42 @@ func _show_pond(pond: Dictionary) -> void:
 	pond["node"] = disc
 
 
+func remember_herds(cell: Vector2i, rows: Array) -> void:
+	_herds_known[cell] = rows
+
+
+## What was left living here, or null if nobody has ever been here to see.
+func herds_remembered(cell: Vector2i) -> Variant:
+	return _herds_known.get(cell)
+
+
+## THE HERDS FOR THE SAVE: what is remembered, and what is standing now — a
+## chunk the player is in has not been asked yet, and it is the one most likely
+## to have been hunted.
+func herds_to_save() -> Array:
+	var all := _herds_known.duplicate()
+	for cell: Vector2i in _chunks:
+		var cached = _chunks[cell]
+		if is_instance_valid(cached) and not (cached as Chunk).terrain_only:
+			all[cell] = (cached as Chunk).herd_rows()
+	var out := []
+	for cell: Vector2i in all:
+		out.append({"x": cell.x, "z": cell.y, "herds": all[cell]})
+	return out
+
+
+func herds_from_save(data: Array) -> void:
+	for entry in data:
+		var row := entry as Dictionary
+		var cell := Vector2i(int(row.get("x", 0)), int(row.get("z", 0)))
+		_herds_known[cell] = row.get("herds", []) as Array
+		# A chunk already standing was stocked from the seed before the save was
+		# read; it is stocked again from what the save remembers.
+		var cached = _chunks.get(cell)
+		if cached != null and is_instance_valid(cached) and not (cached as Chunk).terrain_only:
+			(cached as Chunk).restock(_herds_known[cell])
+
+
 func ponds_to_save() -> Array:
 	var out := []
 	for pond in _ponds:
@@ -1303,6 +1345,10 @@ func _shed(center: Vector2i, kept: Dictionary) -> void:
 			# nothing and stops it drawing and thinking this frame; tearing it
 			# down is what costs, and that waits its turn. See SHEDS_PER_FRAME.
 			var gone := cached as Chunk
+			# A WHOLE CHUNK DROPPED AT ONCE — a warp across the map skips the strip —
+			# still says what was living on it.
+			if not gone.terrain_only:
+				remember_herds(cell, gone.herd_rows())
 			gone.visible = false
 			gone.process_mode = Node.PROCESS_MODE_DISABLED
 			_doomed.append(gone)

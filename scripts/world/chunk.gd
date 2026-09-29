@@ -256,6 +256,9 @@ func board_the_wood() -> void:
 func strip_down() -> void:
 	if terrain_only:
 		return
+	# WHAT IS LIVING HERE, before it is freed — so the herds come back as they
+	# were left and not as the seed rolled them. See WorldGen._herds_known.
+	world.remember_herds(cell, herd_rows())
 	# BOARD THE WOOD AS IT ACTUALLY STANDS, before a line of it is freed —
 	# while `_standing` still holds real trees and `terrain_only` is still
 	# false, which is what makes this read the survivors rather than the seed.
@@ -1067,16 +1070,59 @@ func _scatter_flowers(rng: RandomNumberGenerator, count: int) -> void:
 ## is ANIMALS, and that is bounded globally by Quality.herd_agents() rather than
 ## locally by how many bodies one patch of grass may hold.
 func _scatter_animals(rng: RandomNumberGenerator, table: Dictionary) -> void:
+	# THE SEED'S HERDS, OR THE ONES LEFT HERE. Every roll is still drawn when the
+	# chunk remembers its herds, in the same order and stopping at the same place
+	# — the stream carries on into the great stone after this, and one roll fewer
+	# would move it. Only the making is skipped.
+	var known = world.herds_remembered(cell)
 	var herds := 0
+	var full := false
 	for species: String in table:
+		if full:
+			break
 		var chance: float = table[species]
 		var many := int(chance) + (1 if rng.randf() < fmod(chance, 1.0) else 0)
 		for i in many:
 			if herds >= 2:
-				return          # two herds to a chunk; the world is wide
+				full = true      # two herds to a chunk; the world is wide
+				break
 			var spot := _random_spot(rng)
 			if not _spot_ok(spot):
 				continue
-			var herd := Herd.create(species, Herd.roll_for(species, rng), world)
-			_place(herd, spot, 0.0)
+			var count := Herd.roll_for(species, rng)
+			if known == null:
+				_place(Herd.create(species, count, world), spot, 0.0)
 			herds += 1
+	if known != null:
+		restock(known)
+
+
+## THE WILD HERDS LIVING HERE NOW, as rows a chunk can be restocked from: kind,
+## how many are left, how many the land bore, and where the herd had got to.
+## Kept stock (a barn's) is the village's, not the ground's, and is left out.
+func herd_rows() -> Array:
+	var rows := []
+	for node in get_children():
+		var herd := node as Herd
+		if herd == null or herd.is_queued_for_deletion() or herd.keeper != null:
+			continue
+		var left := herd.alive()
+		if left <= 0:
+			continue
+		rows.append({"species": herd.species, "alive": left, "born": herd.born_head(),
+			"x": herd.position.x, "z": herd.position.z})
+	return rows
+
+
+## STOCKED FROM WHAT WAS LEFT: any wild herd standing here goes, and the
+## remembered ones are set back where they were, as many as there were.
+func restock(rows: Array) -> void:
+	for node in get_children():
+		var herd := node as Herd
+		if herd != null and herd.keeper == null:
+			herd.queue_free()
+	for entry in rows:
+		var row := entry as Dictionary
+		var herd := Herd.create(String(row["species"]), int(row["alive"]), world)
+		herd.remembered_born = int(row.get("born", row["alive"]))
+		_place(herd, Vector3(float(row["x"]), 0.0, float(row["z"])), 0.0)
