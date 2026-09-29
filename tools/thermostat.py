@@ -33,6 +33,7 @@ Each is simulated below against the session it exists for, and against the
 session it must NOT interfere with.
 """
 import pathlib
+import random
 import re
 import sys
 
@@ -223,8 +224,7 @@ else:
 # be WARM, it must not be HOT. And a device that WAS turned down and is now
 # comfortably quick must come back: the old line to ease off was sixty frames,
 # which a thirty-frame machine never sees, so it stayed down all session.
-import random as _random
-_rng = _random.Random(5)
+_rng = random.Random(5)
 town = [0.040 * _rng.uniform(0.8, 1.25) for _ in range(60 * 300)]
 busy = run(town)
 names = ["EASY", "WARM", "HOT"]

@@ -31,6 +31,7 @@ it gets out is the spill level. This file:
 Numbers are read off the source. This is arithmetic on a model of the ground,
 not a playtest.
 """
+import heapq
 import math
 import pathlib
 import random
@@ -192,7 +193,6 @@ def measure_basin(g, nx, nz, count):
             h = g.seeded(*p) + dug
             if h < floor_y:
                 floor_y, low = h, p
-    import heapq
     heights, reached, undug = {}, {(0, 0)}, set()
     heap = [(floor_y, (0, 0))]
     rim = floor_y

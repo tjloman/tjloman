@@ -23,6 +23,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
+import tri_budget  # noqa: E402 — a sibling in tools/, found by the line above
 WELD = (ROOT / "scripts/weld.gd").read_text()
 HOUSE = (ROOT / "scripts/world/house.gd").read_text()
 SHOP = (ROOT / "scripts/world/workshop.gd").read_text()
@@ -88,7 +89,6 @@ def source(fail):
     if "REDRAW_EVERY" not in body(FARM, "_show_crop"):
         fail.append("the crop rewrites twelve transforms every frame again")
     # And every weld the draw chart credits must still be there.
-    import tri_budget
     for (path, func), entry in tri_budget.WELDED.items():
         if not tri_budget.welded_in(str(ROOT / path), entry, func):
             fail.append("tri_budget credits %s:%s with %d draws, and the weld is gone"

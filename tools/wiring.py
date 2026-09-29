@@ -18,7 +18,9 @@ None of these is automatically a bug — an interface can be for the player's
 hand, a group can be a marker — so this REPORTS rather than fails. Read it after
 building something and check the new names are not in it.
 """
-import os, re, sys
+import os
+import re
+import sys
 
 SKIP_METHODS = {
     # Godot's own entry points and virtuals: the engine calls them.

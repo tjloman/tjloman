@@ -18,6 +18,7 @@ This reports both from the numbers in wild_tree.gd: how long one tree lasts, how
 long before it takes its neighbour, and how long a stand of trees burns through.
 """
 import argparse
+import ast
 import math
 import pathlib
 import random
@@ -38,7 +39,6 @@ def const(name):
 # A TREE BURNS FOR WHAT IT IS WORTH, in seconds — the running Fibonacci sum in
 # TIMBER, which this game already reckons a tree's value in. BURN_SECONDS is
 # only the middle of that range and is what the spread is reasoned about.
-import ast
 TIMBER = ast.literal_eval(
     re.search(r"const TIMBER: Array\[int\] = (\[[^\]]*\])", TEXT).group(1))
 BURN = const("BURN_SECONDS")

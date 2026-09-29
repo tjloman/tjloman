@@ -19,6 +19,7 @@ building costs, before and after. Arithmetic, not a frame capture.
 """
 import math
 import pathlib
+import random
 import re
 import sys
 
@@ -60,7 +61,6 @@ MOST_INFLUENCE = 80.0
 
 
 def grow(new, buildings=220, seed=3):
-    import random
     rng = random.Random(seed)
     placed = []
     full_to = None

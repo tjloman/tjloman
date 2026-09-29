@@ -19,6 +19,7 @@ rest of the reads come from instead of leaving it to a guess.
 Arithmetic on the source and the screenshot's town. Not a frame capture.
 """
 import pathlib
+import random
 import re
 import sys
 
@@ -131,7 +132,6 @@ def shared(fail):
         if abs(step * per - round(step * per)) > 1e-9:
             fail.append("a chunk cut %d to a side puts corners %.4f m apart, off the "
                         "shared grid — the drawn land would move" % (n, step))
-    import random
     rng = random.Random(4)
     asked = hits = 0
     known = {}

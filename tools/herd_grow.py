@@ -21,6 +21,7 @@ count end up. Every number is read off scripts/animals/herd.gd.
 import argparse
 import math
 import pathlib
+import random
 import re
 import sys
 
@@ -101,7 +102,6 @@ def evening(hours, stray_inherits, place_cap, rng, meadow=1):
 
 
 def main():
-    import random
     ap = argparse.ArgumentParser()
     ap.add_argument("--hours", type=float, default=4.0)
     args = ap.parse_args()
