@@ -456,6 +456,13 @@ func _readout() -> String:
 		for row: Array in askers.slice(0, 3):
 			who.append("%s %s" % [row[0], _thousands(int(row[1]))])
 		rows.append("   by " + ", ".join(who))
+	# THE SLOWEST SINGLE CALL, now and since the meter opened: one thing taking
+	# a second, or many things a millisecond each, and what it was doing.
+	for ever: bool in [false, true]:
+		var slow := Ledger.slowest_call(ever)
+		if not slow.is_empty():
+			rows.append("%s %s %.1f ms%s" % ["   slowest ever:" if ever else "slowest call:",
+				slow[0], slow[2], _doing(slow[0], slow[1])])
 	rows.append("%d draw calls (peak %d), %s primitives"
 		% [int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
 			int(_seen(&"calls")),
@@ -579,3 +586,16 @@ func _thousands(n: int) -> String:
 			out += ","
 		out += digits[i]
 	return out
+
+
+## What a clocked thing was in the middle of, from the tag it opened with.
+func _doing(who: String, tag: Variant) -> String:
+	if tag == null or typeof(tag) != TYPE_INT:
+		return ""
+	var names: Array = []
+	if who == "Villager":
+		names = Villager.State.keys()
+	elif who.begins_with("Creature"):
+		names = Creature.State.keys()
+	var i := int(tag)
+	return " (%s)" % names[i] if i >= 0 and i < names.size() else ""

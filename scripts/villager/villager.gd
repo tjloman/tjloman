@@ -351,7 +351,7 @@ func _rethink() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	Ledger.open(&"Villager")
+	Ledger.open(&"Villager", state)
 	# ALIGHT, OR IN THE AIR — before the LOD below, because a scream arriving
 	# every fourth frame would not be a scream. See Agitation.
 	_agitation.judder(self, _visuals, burning,

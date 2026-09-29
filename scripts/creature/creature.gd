@@ -363,7 +363,7 @@ func _physics_process(delta: float) -> void:
 	_tick_feelings(delta)
 	_tick_watchdogs(delta)
 
-	Ledger.open(&"Creature")
+	Ledger.open(&"Creature", state)
 	match state:
 		State.IDLE:
 			_action_time -= delta

@@ -114,6 +114,15 @@ static var _worst_nodes := 0
 ## whose; every read is charged to whichever class has the clock open.
 static var _asked := {}
 static var _asked_page := {}
+## THE SLOWEST SINGLE CALL: this page's, last page's, and the dearest since the
+## meter opened — [class, tag] and microseconds. See `open`.
+static var _tag: Variant = null
+static var _slowest := []
+static var _slowest_took := 0
+static var _slowest_page := []
+static var _slowest_page_took := 0
+static var _slowest_ever := []
+static var _slowest_ever_took := 0
 
 
 ## OPEN A CLOCK ON THIS CLASS, and shut whatever was open.
@@ -134,15 +143,30 @@ static var _asked_page := {}
 ## own `open` to whoever opens next, which is the time spent in its `_process`
 ## plus a sliver of the engine's own dispatch — and that sliver belongs to it
 ## anyway. The last one of the frame is closed when the page turns.
-static func open(what: StringName) -> void:
+##
+## `tag` is what the thing was doing (a villager passes its state), kept with the
+## SLOWEST SINGLE CALL of each class. A row can say the villagers cost 1,306ms
+## in one frame and still not say whether that was one villager for a second or
+## eight hundred for a millisecond each; the slowest call says which, and what
+## it was in the middle of.
+static func open(what: StringName, tag: Variant = null) -> void:
 	if not on:
 		return
 	var now := Time.get_ticks_usec()
 	if _open != &"":
-		_spent[_open] = int(_spent.get(_open, 0)) + (now - _since)
+		_close(now)
 	_open = what
 	_since = now
+	_tag = tag
 	_rang[what] = int(_rang.get(what, 0)) + 1
+
+
+static func _close(now: int) -> void:
+	var took := now - _since
+	_spent[_open] = int(_spent.get(_open, 0)) + took
+	if took > _slowest_took:
+		_slowest_took = took
+		_slowest = [String(_open), _tag]
 
 
 ## SHUT WHATEVER IS OPEN. Called when the page turns, and by anything that
@@ -150,7 +174,7 @@ static func open(what: StringName) -> void:
 static func shut() -> void:
 	if not on or _open == &"":
 		return
-	_spent[_open] = int(_spent.get(_open, 0)) + (Time.get_ticks_usec() - _since)
+	_close(Time.get_ticks_usec())
 	_open = &""
 
 
@@ -178,11 +202,28 @@ static func turn_the_page() -> void:
 	_rang = {}
 	_asked_page = _asked
 	_asked = {}
+	_slowest_page = _slowest
+	_slowest_page_took = _slowest_took
+	if _slowest_took > _slowest_ever_took:
+		_slowest_ever = _slowest
+		_slowest_ever_took = _slowest_took
+	_slowest = []
+	_slowest_took = 0
 
 
 ## One read of the land, charged to whoever has the clock. Only while `on`.
 static func land_read() -> void:
 	_asked[_open] = int(_asked.get(_open, 0)) + 1
+
+
+## The slowest single call: [class, tag, milliseconds], last page's or the
+## dearest since the meter opened. Empty before anything has run.
+static func slowest_call(ever := false) -> Array:
+	var which: Array = _slowest_ever if ever else _slowest_page
+	if which.is_empty():
+		return []
+	var took := _slowest_ever_took if ever else _slowest_page_took
+	return [which[0], which[1], float(took) / 1000.0]
 
 
 ## Last frame's land reads by class, most first: [name, reads].

@@ -282,7 +282,9 @@ if not healed:
 # and sixty villagers between one beast and the next.
 for who, path in (("Animal", "scripts/animals/animal.gd"),
                   ("Villager", "scripts/villager/villager.gd")):
-    if 'Ledger.open(&"%s")' % who not in code((ROOT / path).read_text()):
+    # With or without a tag — see Ledger.open.
+    if not re.search(r'Ledger\.open\(&"%s"(, \w+)?\)' % re.escape(who),
+                     code((ROOT / path).read_text())):
         fail.append("%s runs on the physics tick in its hundreds and is not "
                     "clocked, so whichever clocked class it is interleaved with "
                     "is billed for it" % who)

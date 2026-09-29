@@ -70,7 +70,8 @@ for path in sorted(SRC.glob("**/*.gd")):
         if head is None:
             continue
         after = text[head.end():head.end() + 220]
-        opens = re.search(r"Ledger\.open\(&\"(\w+)\"\)", after)
+        # With or without a tag — see Ledger.open.
+        opens = re.search(r"Ledger\.open\(&\"(\w+)\"(?:, \w+)?\)", after)
         if opens:
             clocked.append((short, cb, opens.group(1)))
         elif short in EXCUSED:
