@@ -27,26 +27,28 @@ enum Heat { EASY, WARM, HOT }
 
 const SAVE_PATH := "user://quality.cfg"
 
-## Sustained frame times, in seconds. WARM is about 45fps, HOT about 30, and it
-## must fall back well under WARM before easing off again so the game does not
-## oscillate between two looks every few seconds.
-const FRAME_WARM := 0.022
-const FRAME_HOT := 0.033
-## AND IT MUST BE GENUINELY FINE BEFORE IT EASES OFF AGAIN.
+## Sustained frame times, in seconds. WARM is 30fps and HOT 20.
 ##
-## This was 0.019 — three milliseconds under the WARM line. That is not
-## hysteresis, it is a hair, and any machine sitting anywhere near 45fps drifts
-## straight through it: four seconds over, announce; four seconds under,
-## announce; forever. On a desktop that was perfectly healthy the world spent
-## the whole session breathing out and working hard by turns.
+## THEY WERE 45 AND 30, and a town of five hundred on a desktop sat at 15 to 25
+## frames whatever the graphics did — the bill in a town is the villagers'
+## thinking, not the drawing — so the world dropped to LOW within seconds of
+## arriving and bought almost nothing by it: "it still popped into low mode
+## quite easily." A game that holds thirty is a game that is working. The heat
+## is for a device that is actually sinking.
+const FRAME_WARM := 0.033
+const FRAME_HOT := 0.05
+## AND IT MUST BE GENUINELY FINE BEFORE IT EASES OFF AGAIN — well clear of WARM,
+## so the world does not breathe out and in again every few seconds.
 ##
-## Sixteen and a half milliseconds is sixty frames a second. If it is easing
-## off, it is because the device is actually keeping up.
-const FRAME_COOL := 0.0165
+## IT WAS SIXTY FRAMES A SECOND, which a machine that holds thirty in a town
+## never reaches: once turned down it stayed down for the rest of the session,
+## however well it was doing. Forty-two is comfortably under the thirty it takes
+## to turn it down again, and within reach of the device it is judging.
+const FRAME_COOL := 0.024
 ## How long a condition must hold before anything changes. A chunk streaming in,
 ## a scene reload or a tornado is a HITCH, not a hot phone, and must never be
 ## mistaken for one.
-const HEAT_HOLD := 4.0
+const HEAT_HOLD := 6.0
 ## AND EASING OFF IS SLOWER THAN CLAMPING DOWN, on purpose. Protecting the frame
 ## should be quick; believing the trouble has passed should take real evidence.
 const COOL_HOLD := 14.0

@@ -151,6 +151,9 @@ const FOUNDING_SIZES: Array[int] = [
 	House.Size.LONGHOUSE, House.Size.HOUSE, House.Size.HUT, House.Size.HOUSE,
 ]
 const FOUNDING_MOST := 24
+## How many founders a town founded over the horizon raises a frame. See
+## `_found_in_stages`.
+const FOUNDERS_A_FRAME := 4
 
 ## THE GENERATIONS A TOWN IS FOUNDED WITH.
 ##
@@ -368,14 +371,30 @@ func _ready() -> void:
 	farms.append(farm)
 
 	_build_influence_ring()
+	GameState.alignment_changed.connect(_on_alignment_changed)
+	# A TOWN FOUNDED OVER THE HORIZON IS FOUNDED A FEW AT A TIME. Thirty-odd
+	# people and twenty-odd houses in one frame is four hundred nodes, and the
+	# frame a new cell was reached — dragging the camera across the land — froze
+	# for two seconds while a village nobody could see yet was raised. See
+	# `_found_in_stages`. The player's own town is founded whole, before the
+	# first frame, as it always was — and so is a colony (`founding` set), which
+	# is raised in front of the player and handed its wagon's stock and its faith
+	# the moment it stands.
+	#
 	# PEOPLE, THEN ROOFS. The builder lays out within the town's reach, and the
 	# reach is worked out from how many people there are — so founding the
 	# houses first meant laying out a town of fifty inside the ring of a hamlet.
-	# _build_starting_houses hands out the beds when it is done.
-	_spawn_villagers(_founding_count())
-	_update_influence()
-	_build_starting_houses()
-	GameState.alignment_changed.connect(_on_alignment_changed)
+	if is_player_home or founding > 0:
+		_spawn_villagers(_founding_count())
+		_update_influence()
+		_build_starting_houses()
+		_open_for_business()
+	else:
+		_found_in_stages()
+
+
+## The town's business, once it has its people and its roofs.
+func _open_for_business() -> void:
 	# AND EVERYBODY IS PUT TO WORK BEFORE THE FIRST FRAME RUNS.
 	#
 	# Founded without this, fifty people with no job all ask the board what the
@@ -389,6 +408,42 @@ func _ready() -> void:
 	# If a saved game remembers a town that stood here, this IS that town —
 	# take back its name, its faith, its stocks and its people.
 	SaveGame.recall(self)
+
+
+## THE SAME FOUNDING, SPREAD OVER FRAMES: FOUNDERS_A_FRAME people a frame, then
+## a house a frame. THE TOWN IS HELD STILL UNTIL IT IS DONE — every villager is
+## put to work by the charter before any of them runs (see `_open_for_business`),
+## and a half-founded town has no charter yet — so it is switched off, and
+## switched back on the frame it is whole. It is a hundred metres out, past the
+## edge of the ground you can walk; nobody sees it standing still.
+func _found_in_stages() -> void:
+	var was := process_mode
+	process_mode = Node.PROCESS_MODE_DISABLED
+	var count := _founding_count()
+	for i in count:
+		_spawn_founder(i, count)
+		if i % FOUNDERS_A_FRAME == FOUNDERS_A_FRAME - 1:
+			await get_tree().process_frame
+			if not is_inside_tree():
+				return
+	_assign_housing()
+	_update_influence()
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	var beds_wanted := int(float(_founding_count()) * FOUNDING_HOUSED)
+	var beds := 0
+	var raised := 0
+	while beds < beds_wanted and raised < FOUNDING_MOST:
+		var got := _raise_founding_house(world, raised)
+		if got < 0:
+			break
+		beds += got
+		raised += 1
+		await get_tree().process_frame     # a house a frame
+		if not is_inside_tree():
+			return
+	_assign_housing()
+	_open_for_business()
+	process_mode = was
 
 
 func _build_totem() -> void:
@@ -674,28 +729,36 @@ func _build_starting_houses() -> void:
 	var beds := 0
 	var raised := 0
 	while beds < beds_wanted and raised < FOUNDING_MOST:
-		# THE SAME RULE THE TOWN WILL USE FOREVER AFTER. A village founded by one
-		# set of rules and extended by another is a village with a seam in it,
-		# and the founding rings had exactly that seam: they packed tight and
-		# neat, and then the first thing anybody built went forty metres out.
-		var size: int = FOUNDING_SIZES[raised % FOUNDING_SIZES.size()]
-		var spot := find_build_spot(world, ROOM_ROUND_A_HOUSE
-			+ float(House.SPECS[size]["width"]))
-		if spot == Vector3.INF:
+		var got := _raise_founding_house(world, raised)
+		if got < 0:
 			break          # the ground round here will not take another one
-		var house := House.new()
-		house.size = size as House.Size
-		house.village = self
-		house.age = randf_range(5.0, 20.0)
-		house.position = to_local(spot)
-		# Face the totem — computed off-tree, so no look_at here.
-		house.basis = Basis.looking_at(
-			-Vector3(house.position.x, 0, house.position.z), Vector3.UP)
-		add_child(house)
-		houses.append(house)
-		beds += int(House.SPECS[size]["capacity"])
+		beds += got
 		raised += 1
 	_assign_housing()
+
+
+## ONE FOUNDING HOUSE: the beds it adds, or -1 when there is nowhere left.
+## THE SAME RULE THE TOWN WILL USE FOREVER AFTER. A village founded by one set of
+## rules and extended by another is a village with a seam in it, and the
+## founding rings had exactly that seam: they packed tight and neat, and then
+## the first thing anybody built went forty metres out.
+func _raise_founding_house(world: WorldGen, raised: int) -> int:
+	var size: int = FOUNDING_SIZES[raised % FOUNDING_SIZES.size()]
+	var spot := find_build_spot(world, ROOM_ROUND_A_HOUSE
+		+ float(House.SPECS[size]["width"]))
+	if spot == Vector3.INF:
+		return -1
+	var house := House.new()
+	house.size = size as House.Size
+	house.village = self
+	house.age = randf_range(5.0, 20.0)
+	house.position = to_local(spot)
+	# Face the totem — computed off-tree, so no look_at here.
+	house.basis = Basis.looking_at(
+		-Vector3(house.position.x, 0, house.position.z), Vector3.UP)
+	add_child(house)
+	houses.append(house)
+	return int(House.SPECS[size]["capacity"])
 
 
 
@@ -788,16 +851,20 @@ func _spot_blocked(pos: Vector3, own_room := 0.0) -> bool:
 
 func _spawn_villagers(count: int) -> void:
 	for i in count:
-		var v := _make_villager(_founding_age(i, count))
-		# NOBODY DIES ON THE FIRST MORNING. A lifespan is rolled between sixty
-		# and eighty-five without reference to the age it is handed, so a
-		# seventy-year-old founder had a fair chance of being born already past
-		# their own end.
-		v.lifespan = maxf(v.lifespan, v.age + randf_range(5.0, 22.0))
-		var spot := _grounded(Vector3(randf_range(-5, 5), 0, randf_range(-5, 5)), 0.5)
-		v.position = spot + Vector3(0, 0.6, 0)
-		add_child(v)
+		_spawn_founder(i, count)
 	_assign_housing()
+
+
+func _spawn_founder(i: int, count: int) -> void:
+	var v := _make_villager(_founding_age(i, count))
+	# NOBODY DIES ON THE FIRST MORNING. A lifespan is rolled between sixty
+	# and eighty-five without reference to the age it is handed, so a
+	# seventy-year-old founder had a fair chance of being born already past
+	# their own end.
+	v.lifespan = maxf(v.lifespan, v.age + randf_range(5.0, 22.0))
+	var spot := _grounded(Vector3(randf_range(-5, 5), 0, randf_range(-5, 5)), 0.5)
+	v.position = spot + Vector3(0, 0.6, 0)
+	add_child(v)
 
 
 ## THE AGE OF THE i-TH FOUNDING SOUL: the generations first, oldest rung last,

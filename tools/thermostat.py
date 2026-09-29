@@ -114,7 +114,11 @@ def run(frames, resist=True):
     return t
 
 
-GOOD, SLOW, STALL = 0.0166, 0.040, 0.30
+# THE SESSIONS ARE PITCHED AGAINST THE LINES, not written in milliseconds: a
+# "slow" device is one past HOT, a "middling" one between WARM and HOT. Fixed
+# numbers went on testing the old lines after the lines moved.
+GOOD, STALL = 0.0166, 0.30
+SLOW = C["FRAME_HOT"] * 1.2
 
 # -- THE SESSION THIS EXISTS FOR ---------------------------------------------
 #
@@ -171,7 +175,7 @@ if sunk.stalls:
 # So: frames that are middling-bad (over WARM, under HOT) until the world is
 # turned down once, and then WORSE rather than better — the shape of a device
 # whose trouble is not in anything the tier controls.
-MIDDLING, WORSE = 0.026, 0.037
+MIDDLING, WORSE = (C["FRAME_WARM"] + C["FRAME_HOT"]) / 2.0, C["FRAME_HOT"] * 1.12
 
 
 def stubborn_session(resist):
@@ -209,6 +213,43 @@ else:
                     "%.0fs without the resistance — a downgrade that bought "
                     "nothing is supposed to make the next one wait and it is "
                     "barely waiting" % (after_gap, before_gap))
+
+# -- A TOWN AT TWENTY-FIVE FRAMES, AND A DEVICE THAT RECOVERS ----------------
+#
+# "It still popped into low mode quite easily." A desktop in a town of five
+# hundred sat between twenty and thirty frames, with the villagers' thinking,
+# not the drawing, setting the pace — and was HOT within seconds. Twenty-five
+# frames a second with the ordinary jitter of a town is a game working; it may
+# be WARM, it must not be HOT. And a device that WAS turned down and is now
+# comfortably quick must come back: the old line to ease off was sixty frames,
+# which a thirty-frame machine never sees, so it stayed down all session.
+import random as _random
+_rng = _random.Random(5)
+town = [0.040 * _rng.uniform(0.8, 1.25) for _ in range(60 * 300)]
+busy = run(town)
+names = ["EASY", "WARM", "HOT"]
+print()
+print("A TOWN AT ABOUT 25 FRAMES A SECOND, five minutes of it:")
+print("   ends %s" % names[busy.heat])
+if busy.heat == HOT:
+    fail.append("a town holding twenty-five frames a second is turned all the way "
+                "down — the thermostat is punishing a working game")
+back = Thermostat()
+for f in [C["FRAME_HOT"] * 1.3] * (30 * 30):
+    back.tick(f)
+was_hot = back.heat
+clock = 0.0
+for f in [0.021] * (48 * 120):
+    back.tick(f)
+    clock += f
+    if back.heat == EASY:
+        break
+print("A DEVICE TURNED DOWN, then running at 48 frames a second:")
+print("   was %s, eased back to %s after %.0fs" % (names[was_hot], names[back.heat], clock))
+if was_hot != HOT or back.heat != EASY:
+    fail.append("a device that recovers to forty-eight frames a second is never "
+                "given its world back (ends %s)" % names[back.heat])
+
 
 # -- AND THE GAME SAYS IT THE WAY THIS FILE ASSUMES --------------------------
 #

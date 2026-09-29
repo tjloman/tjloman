@@ -113,9 +113,33 @@ def source(fail):
         fail.append("_farm_position grounds (and spirals for dry land) before asking if taken")
 
 
+def founding(fail):
+    """A TOWN OVER THE HORIZON IS FOUNDED A FEW AT A TIME.
+
+    The one two-second hang left came when the camera was dragged across the
+    land, on the frame "Scouts speak of a village called Thornbury" — thirty-odd
+    people and up to twenty-four houses, four hundred nodes, in one frame."""
+    ready = body(VILLAGE, "_ready")
+    if not re.search(r"if is_player_home or founding > 0:[\s\S]*?else:\s*\n\s*_found_in_stages\(\)", ready):
+        fail.append("a village found over the horizon is raised whole in one frame again")
+    staged = body(VILLAGE, "_found_in_stages")
+    if "process_mode = Node.PROCESS_MODE_DISABLED" not in staged \
+            or not staged.rstrip().endswith("process_mode = was"):
+        fail.append("a half-founded town is left running before it has a charter")
+    if staged.count("await get_tree().process_frame") < 2:
+        fail.append("the founders or the houses are no longer spread over frames")
+    if "_open_for_business()" not in staged:
+        fail.append("a staged town is never dealt its charter")
+    if "FOUNDERS_A_FRAME" not in staged:
+        fail.append("the founders a frame are not bounded")
+    per = int(const("FOUNDERS_A_FRAME"))
+    print("A town over the horizon: %d founders a frame, then one house a frame." % per)
+
+
 def main():
     fail = []
     source(fail)
+    founding(fail)
     before, after = grow(False), grow(True)
     print("A town grown one building at a time on flat dry ground:")
     print("  %-22s %10s %10s" % ("", "before", "after"))
