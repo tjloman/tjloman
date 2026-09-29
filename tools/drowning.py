@@ -184,7 +184,10 @@ for said in wrong:
 
 # -- ONE DEPTH, ONE ANSWER ---------------------------------------------------
 hazard = body_of(MAN, "_tick_hazards")
-kills_at = any("DROWN_DEPTH" in r for r in hazard)
+# The depth that kills is asked in Wading.drown now, which the hazard tick calls.
+kills_at = any("Wading.drown(self" in r for r in hazard) and any(
+    "Villager.DROWN_DEPTH" in r for r in body_of(
+        (ROOT / "scripts/villager/wading.gd").read_text(), "drown"))
 refuses_at = any("DROWN_DEPTH" in r for r in body_of(MAN, "would_drown_at"))
 print("THE DEPTH THAT KILLS AND THE DEPTH THAT REFUSES ARE %s."
       % ("the same number" if kills_at and refuses_at else "TWO NUMBERS"))
@@ -200,8 +203,9 @@ if not kills_at or not refuses_at:
 # it over them. Routing keeps a walker out of water; a crowd standing at prayer
 # is not walking, and asked nothing. Drowning must get them moving, shoreward,
 # at once — not when the line for a turn to think reaches them.
-wades = [r for r in hazard if "Wading.out(self" in r]
-guard = [r for r in hazard if "state != State.FLEE" in r]
+wades = [r for r in body_of((ROOT / "scripts/villager/wading.gd").read_text(), "drown") if "out(who, world)" in r]
+hazard_calls = [r for r in hazard if "Wading.drown(self" in r]
+guard = [r for r in body_of((ROOT / "scripts/villager/wading.gd").read_text(), "drown") if "state != Villager.State.FLEE" in r] if hazard_calls else []
 WADING = (ROOT / "scripts/villager/wading.gd").read_text()
 out = "\n".join(body_of(WADING, "out"))
 print()

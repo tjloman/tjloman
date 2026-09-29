@@ -98,9 +98,14 @@ def doors(fail):
                     "Dying ANNOUNCES itself.")
     first_statement(fail, V, "die", spared,
                     "Death brings mourning, karma, grief and a lesson.")
+    # The drowning itself lives in Wading.drown now; the hazard tick must hand
+    # over to it, and it must turn a child away before the water does harm.
     hazards = body(V, "_tick_hazards") or ""
-    before(fail, hazards, "ChildSafety.spared(self)", "health -= HAZARD_RATE",
-           "drowning")
+    if "Wading.drown(self" not in hazards:
+        fail.append("drowning: the hazard tick no longer asks Wading.drown")
+    wading = (ROOT / "scripts/villager/wading.gd").read_text()
+    before(fail, body(wading, "drown") or "", "ChildSafety.spared(who)",
+           "who.health -= Villager.HAZARD_RATE", "drowning")
     before(fail, bare(NEEDS), "ChildSafety.spared(who)", "who.health -= 2.0",
            "starving")
     before(fail, bare(NEEDS), "ChildSafety.spared(who)", "GameState.announce",

@@ -219,6 +219,13 @@ var _build_site: House = null
 var _mount: Animal = null
 var _flee_from := Vector3.ZERO
 var _steady_until := -INF
+## The water's surface where they stand if it is deep enough to drown in, or
+## -INF; and when to ask again. Staggered so a town does not ask all at once.
+## See Wading.drown.
+@warning_ignore("unused_private_class_variable")
+var _water_surface := -INF
+@warning_ignore("unused_private_class_variable")
+var _water_check := randf() * Wading.WATER_EVERY
 var _fall_speed := 0.0
 var _burn_visual: Node3D = null
 ## ALIGHT, OR IN THE AIR — neither is a thing fear can help with. See Agitation.
@@ -920,6 +927,12 @@ func _stick_to_ground() -> void:
 		return
 	var world := _world()
 	if world == null:
+		return
+	# STANDING ON REAL GROUND needs no rescue. The collision is the drawn land,
+	# so a body the solver has on the floor is exactly where it should be; the
+	# read is only for the ones with nothing under them — far out, where the
+	# collision has not streamed in. It was a land read a villager a tick.
+	if is_on_floor():
 		return
 	var h := world.height_at(global_position.x, global_position.z)
 	if global_position.y < h - 0.3:  # tolerance clears resting offsets/mesh dips
@@ -2029,28 +2042,8 @@ func _tick_hazards(delta: float) -> void:
 	if state == State.HELD or state == State.FALLING:
 		return
 	var world := _world()
-	if world != null:
-		# Against whatever water is ACTUALLY here — the sea, or a pond standing
-		# in a flooded crater. This read the sea's constant, so a pond was
-		# "underwater" for farming, pathing and catching fire, but not for
-		# drowning: one rule for the ground, another for the people on it.
-		var surface := world.water_level_at(global_position.x, global_position.z)
-		var depth := surface - world.height_at(global_position.x, global_position.z)
-		if depth > DROWN_DEPTH and global_position.y < surface + 0.4:
-			if ChildSafety.spared(self):
-				return    # out of the water and away home: no slow drowning to watch
-			if burning:
-				extinguish()  # water douses the flames, but the drowning goes on
-			# THE WATER CAME TO THEM. Walking INTO water is routed round (see
-			# NavField.water_route), but only a body that is walking asks: a
-			# crowd stood praying in a dry pit when a deluge filled it, and
-			# prayed on up to their necks until they were nearly dead.
-			if state != State.FLEE:
-				Wading.out(self, world)
-			health -= HAZARD_RATE * delta
-			if health <= 0.0:
-				enter_dying()
-				return
+	if world != null and Wading.drown(self, world, delta):
+		return        # spared, or gone under: nothing more this tick
 	if burning:
 		health -= HAZARD_RATE * delta
 		if health <= 0.0:

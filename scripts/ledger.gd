@@ -110,6 +110,10 @@ static var _worst_span := 0
 static var _nodes_then := -1
 static var _nodes_moved := 0
 static var _worst_nodes := 0
+## WHO ASKED FOR THE LAND. The meter could say "10,717 land reads" and not
+## whose; every read is charged to whichever class has the clock open.
+static var _asked := {}
+static var _asked_page := {}
 
 
 ## OPEN A CLOCK ON THIS CLASS, and shut whatever was open.
@@ -172,6 +176,22 @@ static func turn_the_page() -> void:
 		_worst_nodes = _nodes_moved
 	_spent = {}
 	_rang = {}
+	_asked_page = _asked
+	_asked = {}
+
+
+## One read of the land, charged to whoever has the clock. Only while `on`.
+static func land_read() -> void:
+	_asked[_open] = int(_asked.get(_open, 0)) + 1
+
+
+## Last frame's land reads by class, most first: [name, reads].
+static func land_rows() -> Array:
+	var out := []
+	for what: StringName in _asked_page:
+		out.append([String(what) if what != &"" else "(no clock)", int(_asked_page[what])])
+	out.sort_custom(func(a, b): return a[1] > b[1])
+	return out
 
 
 ## THE BILL, dearest first: [name, milliseconds, how many of them ran].

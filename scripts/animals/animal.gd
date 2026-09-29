@@ -659,6 +659,8 @@ func _stick_to_ground() -> void:
 	var world := _world()
 	if world == null:
 		return
+	if is_on_floor():
+		return          # on the collision, which IS the drawn land: see Villager
 	var h := world.height_at(global_position.x, global_position.z)
 	if global_position.y < h - 0.3:
 		global_position.y = h

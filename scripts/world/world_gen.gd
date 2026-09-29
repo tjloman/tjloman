@@ -336,6 +336,7 @@ func seeded_height_at(x: float, z: float) -> float:
 	# bargain every clocked class in this game already makes.
 	if Ledger.on:
 		reads += 1
+		Ledger.land_read()
 	var biome := biome_at(x, z)
 	var amp := 11.0
 	match biome:

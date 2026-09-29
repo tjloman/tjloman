@@ -558,15 +558,19 @@ func wood_beyond() -> int:
 ##
 ## SIZED FROM `camera_far` AND NOTHING ELSE. A chunk is 48m and the camera may
 ## be standing on the far edge of its own cell, so covering D metres in the
-## worst case needs ceil(D / 48) rings: 220 -> 5, 300 -> 7, 380 -> 8. Fog does
+## worst case needs ceil(D / 48) rings: 180 -> 4, 300 -> 7, 380 -> 8. Fog does
 ## not let us stop short of that — at these densities the land is still a sixth
 ## visible at the far plane on every tier (see `fog_density`).
 func sight_radius() -> int:
-	return [5, 7, 8][effective_tier()]
+	return [4, 7, 8][effective_tier()]
 
 
+## LOW WAS 220, which is five rings of land — a hundred and twenty-one chunks
+## held for a device that is already struggling. 180 is four rings, eighty-one
+## chunks, a third less land drawn and kept, with the fog pulled in to match.
+## See `sight_radius` and `fog_density`.
 func camera_far() -> float:
-	return [220.0, 300.0, 380.0][effective_tier()]
+	return [180.0, 300.0, 380.0][effective_tier()]
 
 
 ## How far out the scattered wilderness clutter (trees, bushes, rocks,
@@ -616,7 +620,7 @@ func particles(most: int) -> int:
 
 func fog_density() -> float:
 	# A leaner world (LOW) needs thicker fog to hide the near horizon.
-	return [0.008, 0.006, 0.004][effective_tier()]
+	return [0.011, 0.006, 0.004][effective_tier()]
 
 
 ## HOW MANY REAL LIGHTS the night is allowed on the ground, over and above the

@@ -449,6 +449,13 @@ func _readout() -> String:
 	rows.append("")
 	rows.append("%s land reads (peak %s)"
 		% [_thousands(_land), _thousands(int(_seen(&"land")))])
+	# AND WHOSE: the three classes that asked most.
+	var askers := Ledger.land_rows()
+	if not askers.is_empty():
+		var who := PackedStringArray()
+		for row: Array in askers.slice(0, 3):
+			who.append("%s %s" % [row[0], _thousands(int(row[1]))])
+		rows.append("   by " + ", ".join(who))
 	rows.append("%d draw calls (peak %d), %s primitives"
 		% [int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
 			int(_seen(&"calls")),
