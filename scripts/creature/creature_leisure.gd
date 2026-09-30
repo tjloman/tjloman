@@ -23,6 +23,11 @@ const BED_SETTLE := 1.1
 ## lying down as a share of its standing half-height. See `_lie_down`.
 const LIE_ROLL := 80.0
 const LIE_THICK := 0.30
+## How often the audience at a communing is counted, in seconds.
+const AUDIENCE_EVERY := 0.5
+
+static var _audience := 0
+static var _audience_in := 0.0
 
 static func lounge(who: Creature, delta: float) -> void:
 	# IF HE HAS A BED, HE USES IT. Lounging used to happen wherever he was
@@ -158,7 +163,7 @@ static func commune(who: Creature, delta: float) -> void:
 	who._apply_gravity_only(delta)
 	who._action_time -= delta
 	village.hive.invite("commune", who, who.global_position, 0.8)
-	var audience: int = CreatureEyes.audience(who, 20.0)
+	var audience := _audience_of(who, delta)
 	if audience > 0:
 		village.change_belief(0.3 * delta * minf(audience, 6))
 		village.notice(0.4 * delta)
@@ -173,6 +178,16 @@ static func commune(who: Creature, delta: float) -> void:
 	if who._action_time <= 0.0:
 		who._last_deed = "commune"
 		who._finish_choice(0.4 + audience * 0.3)
+
+
+## WHO IS WATCHING, counted twice a second rather than every tick: it is a walk
+## of every villager in the world, and a crowd does not come and go that fast.
+static func _audience_of(who: Creature, delta: float) -> int:
+	_audience_in -= delta
+	if _audience_in <= 0.0:
+		_audience_in = AUDIENCE_EVERY
+		_audience = CreatureEyes.audience(who, 20.0)
+	return _audience
 
 
 ## IT LOOKS UP AT YOU, AND STOPS.

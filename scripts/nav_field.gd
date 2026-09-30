@@ -448,13 +448,19 @@ func route(from: Vector3, to: Vector3, wade := 2.0, shun := {}) -> PackedVector3
 
 	var came := {}                          # cell -> cell it was reached from
 	var best := {start: 0.0}                # cell -> cheapest cost known to it
-	# The frontier, kept in cost order by insertion. Re-sorting the whole thing
-	# on every pop is what turns a cheap search into a frame hitch.
-	var open: Array = [[_octile(start, goal), start]]
+	# THE FRONTIER, AS A HEAP. It was a sorted Array of [priority, cell] pairs:
+	# every pop took the front and shifted everything behind it, and every push
+	# allocated a new pair and shifted half the list to slot it in — thousands of
+	# shifts and allocations a search, which is the creature's eleven- and
+	# thirteen-millisecond calls on the meter. A binary heap in two packed
+	# arrays does both in a handful of steps and allocates nothing.
+	var open_cost := PackedFloat64Array([_octile(start, goal)])
+	var open_cell := PackedVector2Array([Vector2(start)])
 	var found := false
 	var expanded := 0
-	while not open.is_empty() and expanded < ROUTE_BUDGET:
-		var here: Vector2i = open.pop_front()[1]
+	while not open_cost.is_empty() and expanded < ROUTE_BUDGET:
+		var here := Vector2i(open_cell[0])
+		_heap_pop(open_cost, open_cell)
 		if here == goal:
 			found = true
 			break
@@ -472,7 +478,7 @@ func route(from: Vector3, to: Vector3, wade := 2.0, shun := {}) -> PackedVector3
 				continue
 			best[there] = cost
 			came[there] = here
-			_enqueue(open, cost + _octile(there, goal), there)
+			_heap_push(open_cost, open_cell, cost + _octile(there, goal), there)
 	if not found:
 		last_cost = INF
 		_routes_failed += 1
@@ -521,18 +527,50 @@ func portals_open() -> Array:
 	return live
 
 
-## Slot a cell into the frontier so the cheapest is always at the front.
-func _enqueue(open: Array, priority: float, cell: Vector2i) -> void:
-	var lo := 0
-	var hi := open.size()
-	while lo < hi:
-		@warning_ignore("integer_division")
-		var mid := (lo + hi) / 2
-		if float(open[mid][0]) < priority:
-			lo = mid + 1
-		else:
-			hi = mid
-	open.insert(lo, [priority, cell])
+## Into the frontier: appended, then lifted while it is cheaper than its parent.
+static func _heap_push(costs: PackedFloat64Array, cells: PackedVector2Array,
+		priority: float, cell: Vector2i) -> void:
+	costs.append(priority)
+	cells.append(Vector2(cell))
+	var i := costs.size() - 1
+	while i > 0:
+		var up := (i - 1) >> 1
+		if costs[up] <= costs[i]:
+			break
+		var c := costs[up]
+		costs[up] = costs[i]
+		costs[i] = c
+		var v := cells[up]
+		cells[up] = cells[i]
+		cells[i] = v
+		i = up
+
+
+## Out of the frontier: the cheapest goes, the last takes its place and sinks.
+static func _heap_pop(costs: PackedFloat64Array, cells: PackedVector2Array) -> void:
+	var last := costs.size() - 1
+	costs[0] = costs[last]
+	cells[0] = cells[last]
+	costs.resize(last)
+	cells.resize(last)
+	var i := 0
+	while true:
+		var least := i
+		var a := i * 2 + 1
+		var b := a + 1
+		if a < last and costs[a] < costs[least]:
+			least = a
+		if b < last and costs[b] < costs[least]:
+			least = b
+		if least == i:
+			return
+		var c := costs[least]
+		costs[least] = costs[i]
+		costs[i] = c
+		var v := cells[least]
+		cells[least] = cells[i]
+		cells[i] = v
+		i = least
 
 
 ## How costly it is to step between two neighbouring cells, or -1 for a step

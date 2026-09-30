@@ -1726,9 +1726,13 @@ func _pick_guard_waypoint() -> void:
 	if village == null:
 		_target = global_position
 		return
-	var angle := randf() * TAU
-	_target = village.global_position \
-		+ Vector3(cos(angle), 0, sin(angle)) * village.influence_radius * 0.8
+	# ROUND THE RING IN HOPS, not across it: a hop inside CreatureSteering.DIRECT
+	# needs no route planned, and a patrol across the ring planned one per post.
+	var radius := village.influence_radius * 0.8
+	var from := global_position - village.global_position
+	var angle := atan2(from.z, from.x) \
+		+ 2.0 * asin(minf((CreatureSteering.DIRECT - 1.0) / (2.0 * radius), 1.0))
+	_target = village.global_position + Vector3(cos(angle), 0, sin(angle)) * radius
 
 
 ## Deeds of appetite and malice ----------------------------------------------
