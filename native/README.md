@@ -118,9 +118,16 @@ handful of files here are recompiled.
 
 ### Once, on any machine
 
-1. **Python 3.8+** and **SCons**:
+1. **Python 3.8+** and **SCons**. Take SCons from your system's package
+   manager where it has one. Arch, Debian 12+, Ubuntu 23.04+ and Fedora protect
+   their system Python from `pip` (PEP 668: "externally-managed-environment"):
    ```
-   python -m pip install scons
+   sudo pacman -S scons            # Arch, Manjaro, shanios
+   sudo apt install scons          # Debian, Ubuntu
+   sudo dnf install scons          # Fedora
+   brew install scons              # macOS
+   pipx install scons              # anywhere, in its own environment
+   python -m pip install scons     # Windows, where pip is yours to use
    ```
 2. **The godot-cpp source.** It is a git submodule of this repository at
    `native/godot-cpp`:
@@ -195,7 +202,7 @@ The phone build happens on your desktop with Android's C++ compiler, the **NDK**
 ### Linux
 
 ```
-sudo apt install build-essential scons     # or your distribution's equivalent
+sudo pacman -S base-devel scons            # Arch; Debian/Ubuntu: sudo apt install build-essential scons
 cd native
 scons platform=linux target=template_debug
 scons platform=linux target=template_release
