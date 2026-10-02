@@ -9,7 +9,7 @@ this reads scripts/quality.gd (and the one tier table that lives elsewhere,
 Crowd.AT_FULL) and prints what LOW, MEDIUM and HIGH each get, whether the
 thermostat may turn it down mid-game ("heat": it follows effective_tier) or
 only a deliberate change of tier may ("fixed": it rebuilds every material's
-pipeline, see Quality.shadows), and how many places in the game ask for it.
+pipeline, see the note above Quality.shadow_reach), and how many places in the game ask for it.
 
 It fails only if it cannot read a knob it knows is there — a table that
 silently drops a row is worse than no table.
@@ -72,8 +72,6 @@ def knobs():
             else:
                 vals = ["off" if i < at else "on" for i in range(3)]
             how = "heat" if cmp.group(1).startswith("effective") else "fixed"
-            if name == "shadow_distance":
-                how = "heat"
         uses = len(re.findall(r"Quality\.%s\(" % name, ALL))
         rows.append((name, vals, how, uses))
     full = re.search(r"^const AT_FULL: Array\[int\] = \[([^\]]+)\]", CROWD, re.M)
