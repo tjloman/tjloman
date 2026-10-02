@@ -341,7 +341,7 @@ func _ready() -> void:
 	BootTrail.mark("founding the village of %s" % village_name)
 	# Founding is nobody's _process — see Ledger.swap. Its own row, so a town
 	# raised mid-frame is not billed to whatever ran before it.
-	var clock := Ledger.swap(&"Village:founding")
+	var clock := Ledger.swap(&"Village:founding", "raising the square")
 	_found()
 	Ledger.resume(clock)
 
@@ -418,7 +418,7 @@ func _found() -> void:
 
 ## The town's business, once it has its people and its roofs.
 func _open_for_business() -> void:
-	var clock := Ledger.swap(&"Village:founding")
+	var clock := Ledger.swap(&"Village:founding", "charter and memory")
 	_deal_the_work()
 	Ledger.resume(clock)
 
@@ -452,7 +452,7 @@ func _found_in_stages() -> void:
 	var rock := _build_search(world, ROOM_ROUND_THE_QUARRY)
 	if not await _search_slowly(rock):
 		return
-	var clock := Ledger.swap(&"Village:founding")
+	var clock := Ledger.swap(&"Village:founding", "placing the rock")
 	_place_quarry(_searched(rock))
 	Ledger.resume(clock)
 	var count := _founding_count()
@@ -490,7 +490,7 @@ func _found_in_stages() -> void:
 ## done. False if the town was taken out of the world while it waited.
 func _search_slowly(search: BuildSearch) -> bool:
 	while true:
-		var clock := Ledger.swap(&"Village:founding")
+		var clock := Ledger.swap(&"Village:founding", "looking for ground")
 		var done := search.run(FOUNDING_SLICE_USEC)
 		Ledger.resume(clock)
 		if done:
@@ -810,7 +810,7 @@ func _house_room(size: House.Size) -> float:
 ## founding rings had exactly that seam: they packed tight and neat, and then
 ## the first thing anybody built went forty metres out.
 func _raise_founding_house(spot: Vector3, size: House.Size) -> int:
-	var clock := Ledger.swap(&"Village:founding")
+	var clock := Ledger.swap(&"Village:founding", "a house")
 	var beds := _raise_house_for_founding(spot, size)
 	Ledger.resume(clock)
 	return beds
@@ -930,7 +930,7 @@ func _spawn_villagers(count: int) -> void:
 
 
 func _spawn_founder(i: int, count: int) -> void:
-	var clock := Ledger.swap(&"Village:founding")
+	var clock := Ledger.swap(&"Village:founding", "a founder")
 	_raise_founder(i, count)
 	Ledger.resume(clock)
 

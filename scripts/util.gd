@@ -1,5 +1,5 @@
 class_name Util
-## Static helpers for building ugly-but-honest placeholder visuals from primitives.
+## Static helpers for building lean, honest placeholder visuals from primitives.
 ##
 ## Two families of builders:
 ##   mat/box/sphere/...   – a FRESH mesh + material each call. Use when the

@@ -5,8 +5,13 @@ divine hand over a living world: villagers with real needs and desires, a
 creature that learns, belief as your currency, and miracles cast with mouse
 gestures.
 
-This is the **ugly proof of concept** stage. Everything is primitive shapes on
-purpose — we are building *systems first, art later*.
+This is the **lean and mean proof of concept** stage. Everything is primitive
+shapes on purpose — *systems first, art later* — and plain is not the same as
+clumsy: every cycle the game spends has to earn its place. A smooth, steady
+15 fps on an old phone beats a faster game that hitches. Efficient, clever code
+over brute force; cut or rework a feature before letting it cost a frame it
+does not pay back. `python3 tools/tiers.py` lists every knob the quality tiers
+turn.
 
 ## Requirements
 

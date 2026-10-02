@@ -594,6 +594,9 @@ func _thousands(n: int) -> String:
 
 ## What a clocked thing was in the middle of, from the tag it opened with.
 func _doing(who: String, tag: Variant) -> String:
+	# A word is its own name: which part of the work it was (see Ledger.swap).
+	if typeof(tag) == TYPE_STRING:
+		return " (%s)" % tag
 	if tag == null or typeof(tag) != TYPE_INT:
 		return ""
 	var names: Array = []

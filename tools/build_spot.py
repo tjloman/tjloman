@@ -179,7 +179,7 @@ def founding(fail):
                     % (opened, staged.count("await _search_slowly(")))
     slow = body(VILLAGE, "_search_slowly")
     if "search.run(FOUNDING_SLICE_USEC)" not in slow or "await get_tree().process_frame" not in slow \
-            or 'Ledger.swap(&"Village:founding")' not in slow:
+            or 'Ledger.swap(&"Village:founding", "looking for ground")' not in slow:
         fail.append("_search_slowly does not run a budgeted slice a frame on the founding clock")
     run = body(SEARCH, "run")
     loop = run[run.find("while not done:"):]
@@ -201,7 +201,8 @@ def founding(fail):
     for step in ("_ready", "_spawn_founder", "_raise_founding_house", "_open_for_business",
                  "_search_slowly"):
         text = body(VILLAGE, step)
-        if 'Ledger.swap(&"Village:founding")' not in text or "Ledger.resume(clock)" not in text:
+        if not re.search(r'Ledger\.swap\(&"Village:founding", "[^"]+"\)', text) \
+                or "Ledger.resume(clock)" not in text:
             fail.append("%s runs without its own clock: the meter bills it to whoever "
                         "ran before" % step)
     per = int(const("FOUNDERS_A_FRAME"))

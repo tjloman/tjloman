@@ -165,10 +165,11 @@ static func open(what: StringName, tag: Variant = null) -> void:
 ## node's _ready. It runs between the clocks and was billed to whoever ran last —
 ## usually "(the solver)", which is how a village founded while zipping across
 ## the map could read as a 3.6-second physics step. Open a clock for the work and
-## get back the one that was running; hand that to `resume` when done.
-static func swap(what: StringName) -> StringName:
+## get back the one that was running; hand that to `resume` when done. `tag`
+## says which part of the work, for the slowest-call line (see `open`).
+static func swap(what: StringName, tag: Variant = null) -> StringName:
 	var was := _open
-	open(what)
+	open(what, tag)
 	return was
 
 
