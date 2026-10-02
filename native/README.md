@@ -199,6 +199,36 @@ The phone build happens on your desktop with Android's C++ compiler, the **NDK**
    `libshade.android.template_*.arm64.so` from `bin/shade/` and packs it into
    the APK by itself. No Gradle or custom build template is needed.
 
+### Immutable Linux (Shanios, Fedora Silverblue, SteamOS, Bazzite…)
+
+The root filesystem is read-only, so `pacman`/`dnf` cannot install the
+compilers on the host. Build inside a **Distrobox** container instead: it
+shares your home folder, so the repository and the built library are the same
+files the host's Godot sees.
+
+```
+distrobox create --name godot-build --image debian:12
+distrobox enter godot-build
+sudo apt update && sudo apt install -y build-essential scons git python3
+cd ~/path/to/repo/native
+scons platform=linux target=template_debug -j$(nproc)
+scons platform=linux target=template_release -j$(nproc)
+```
+
+**Why Debian 12 and not Arch, on an Arch-based system:** a Linux library only
+loads under a C library (glibc) at least as new as the one it was built
+against. Debian 12's is older than Arch's, Fedora's or the Flatpak Godot's, so
+what it builds loads everywhere: in the official Godot binary, in Godot from
+Flathub, and on the host. An `archlinux:latest` box works too, but only for a
+Godot running on an equally new glibc; a Flatpak Godot then refuses the
+library with `GLIBC_2.xx not found`.
+
+The Android build can run in the same box. The NDK brings its own compiler,
+so glibc does not matter there. Point `ANDROID_HOME` at the SDK in your home
+folder (the one Godot's Android export already uses) and follow **Android**
+below. If your Godot is the Flatpak, the headless check is
+`flatpak run org.godotengine.Godot --headless --path . --script native/tests/shade_live.gd`.
+
 ### Linux
 
 ```
