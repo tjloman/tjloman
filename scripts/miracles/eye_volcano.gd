@@ -102,13 +102,7 @@ static func holding(who: Creature) -> EyeVolcano:
 
 func _ready() -> void:
 	for side in 2:
-		var lamp := OmniLight3D.new()
-		lamp.light_color = EMBER
-		lamp.light_energy = 1.6
-		lamp.omni_range = 5.0
-		lamp.shadow_enabled = false
-		add_child(lamp)
-		_glow.append(lamp)
+		_glow.append(Shade.light(self, EMBER, 1.6, 5.0))
 
 
 func _physics_process(delta: float) -> void:

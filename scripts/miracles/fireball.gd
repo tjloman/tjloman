@@ -183,11 +183,7 @@ func _ready() -> void:
 	add_child(Util.sphere(0.35 * grew, Color(1.0, 0.45, 0.1), Vector3.ZERO, true))
 	add_child(Util.sphere(0.22 * grew, Color(1.0, 0.85, 0.3), Vector3.ZERO, true))
 
-	var light := OmniLight3D.new()
-	light.light_color = Color(1.0, 0.55, 0.15)
-	light.light_energy = 2.5 * grew
-	light.omni_range = 9.0 * grew
-	add_child(light)
+	Shade.light(self, Color(1.0, 0.55, 0.15), 2.5 * grew, 9.0 * grew)
 
 	var embers := CPUParticles3D.new()
 	embers.amount = Quality.particles(40)
@@ -605,12 +601,8 @@ func _blast_visuals(pos: Vector3, size: float) -> void:
 	# The flash is sized off the same number, so a gout guttering out is a warm
 	# flicker and a blast is still the thing that lights up the valley.
 	var lit := clampf(size / 6.0, 0.2, 1.0)
-	var flash := OmniLight3D.new()
-	flash.light_color = Color(1.0, 0.6, 0.2)
-	flash.light_energy = 7.0 * lit
-	flash.omni_range = 22.0 * lit
-	flash.position = pos + Vector3(0, 2, 0)
-	scene.add_child(flash)
+	var flash := Shade.light(scene, Color(1.0, 0.6, 0.2), 7.0 * lit, 22.0 * lit,
+		pos + Vector3(0, 2, 0))
 	# There used to be a black disc laid on the ground here, faded out after
 	# twenty-five seconds. It is gone: the scorch is now cut into the terrain
 	# itself (see `_gouge`), so it is a real feature of the world rather than a

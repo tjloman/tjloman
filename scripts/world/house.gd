@@ -314,7 +314,8 @@ func _build_visuals() -> void:
 		add_child(pane)
 	# ONE DRAW FOR THE HOUSE AND ONE FOR ITS WINDOWS, which keep their own
 	# material so they can still light up at night. See Weld.
-	Weld.statics(self, [], [_window_mat])
+	Shade.cast(Weld.statics(self, [], [_window_mat]),
+		Quality.shadow_reach() * Shade.BUILDING_REACH)
 	Util.apply_lod(self, Quality.building_distance())
 
 

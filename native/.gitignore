@@ -1,0 +1,9 @@
+# scons and compiler leftovers
+.sconsign.dblite
+*.o
+*.os
+*.obj
+*.lib
+*.exp
+*.pdb
+src/*.gen.cpp

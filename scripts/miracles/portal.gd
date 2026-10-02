@@ -41,12 +41,7 @@ func _ready() -> void:
 	shimmer.rotation_degrees.x = 90.0
 	add_child(shimmer)
 
-	var light := OmniLight3D.new()
-	light.light_color = Color(0.5, 0.75, 1.0)
-	light.light_energy = 2.0
-	light.omni_range = 9.0
-	light.position = Vector3(0, RADIUS, 0)
-	add_child(light)
+	Shade.light(self, Color(0.5, 0.75, 1.0), 2.0, 9.0, Vector3(0, RADIUS, 0))
 
 	# Anything that can walk or be thrown may travel: units and props alike.
 	_area = Area3D.new()

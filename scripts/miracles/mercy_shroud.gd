@@ -114,12 +114,7 @@ func _build() -> void:
 	_motes.gravity = Vector3(0, -0.8, 0)
 	add_child(_motes)
 
-	_lamp = OmniLight3D.new()
-	_lamp.light_color = GOLD
-	_lamp.light_energy = 2.2
-	_lamp.omni_range = SHROUD * 2.4
-	_lamp.shadow_enabled = false
-	add_child(_lamp)
+	_lamp = Shade.light(self, GOLD, 2.2, SHROUD * 2.4)
 
 
 func _physics_process(delta: float) -> void:

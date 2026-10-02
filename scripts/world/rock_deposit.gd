@@ -579,12 +579,9 @@ func _build_flames() -> void:
 			Vector3(randf_range(-0.4, 0.4) * wide, wide * 1.4,
 				randf_range(-0.4, 0.4) * wide), true)
 		_flames.add_child(flame)
-	var light := OmniLight3D.new()
-	light.light_color = Color(1.0, 0.45, 0.12)
-	light.light_energy = 2.5
-	light.omni_range = wide + WARMS_WITHIN + 2.0
-	light.position = Vector3(0, wide, 0)
-	_flames.add_child(light)
+	# A miracle's fire, so a miracle's light: see Shade.light.
+	Shade.light(_flames, Color(1.0, 0.45, 0.12), 2.5, wide + WARMS_WITHIN + 2.0,
+		Vector3(0, wide, 0))
 	add_child(_flames)
 
 

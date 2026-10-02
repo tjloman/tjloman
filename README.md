@@ -23,6 +23,14 @@ turn.
 No other dependencies. No plugins, no assets to download — the whole world is
 generated from code.
 
+**Optional: the baked shadows (C++).** Shadows are baked into the models and
+laid by a small GDExtension in `native/`, built into `bin/shade/` with SCons
+(and, for the phone, the Android NDK). Clone with `--recursive` (or run
+`git submodule update --init`) to get its `godot-cpp`, then follow
+[`native/README.md`](native/README.md) — a walkthrough of how it works and how
+to build it for Windows, Android, Linux, macOS and iOS. Without it the game
+runs exactly the same, minus those shadows.
+
 ### Validating changes without running the game
 
 ```
@@ -38,6 +46,7 @@ python3 tools/blow.py            # a town can be wrecked by hand, and slowly
 python3 tools/kindle.py          # several cores to light a house; fire still spreads
 python3 tools/skip.py            # a flat pebble walks, a lobbed one sinks
 python3 tools/forest_fire.py     # a tree burns long enough to carry; a wood creeps
+python3 tools/shade.py           # baked shadows: C++, shader and GDScript agree
 ```
 
 That last one matters: `gdparse` only checks syntax and `gdlint` only checks

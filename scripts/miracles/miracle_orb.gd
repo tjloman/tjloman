@@ -58,11 +58,7 @@ func _ready() -> void:
 	add_child(Util.lite_sphere(0.35, color, Vector3.ZERO, 8, true))
 	add_child(Util.lite_sphere(0.20, color.lightened(0.4), Vector3.ZERO, 6, true))
 
-	var light := OmniLight3D.new()
-	light.light_color = color
-	light.light_energy = 2.0
-	light.omni_range = 7.0
-	add_child(light)
+	Shade.light(self, color, 2.0, 7.0)
 
 	body_entered.connect(_on_body_entered)
 

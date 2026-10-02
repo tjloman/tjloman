@@ -324,16 +324,13 @@ func _ready() -> void:
 			arm.rotation_degrees.z = 25 * side
 			_body.add_child(arm)
 
-	# Its own light, at chest height, dark until dusk. Never shadowed: one
-	# shadowed point light costs more than every other light in the night put
-	# together, and this one moves constantly.
-	_halo = OmniLight3D.new()
-	_halo.position = Vector3(0, 1.6, 0)
-	_halo.light_energy = 0.0
+	# The beast's own baked shadow: one, so it is baked from its parts as built.
+	Shade.cast_parts(_body, Quality.shadow_reach() * 2.0)
+	# Its own light, at chest height, dark until dusk — and through Shade, so at
+	# night the villagers round it throw their shadows away from it.
+	_halo = Shade.light(self, Color.WHITE, 0.0, 5.0, Vector3(0, 1.6, 0))
 	_halo.light_specular = 0.2
-	_halo.shadow_enabled = false
 	_halo.visible = false
-	add_child(_halo)
 
 	_label = Util.status_label()
 	_label.position = Vector3(0, 3.0, 0)

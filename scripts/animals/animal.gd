@@ -211,6 +211,7 @@ func _build_body(body: Vector3, leg_h: float) -> void:
 	var whole := MeshInstance3D.new()
 	whole.mesh = Weld.shared("beast|" + species, parts)
 	add_child(whole)
+	Shade.cast(whole, Quality.shadow_reach(), "beast|" + species)
 	# Distant beasts stop drawing (they already freeze physics far off).
 	Util.apply_lod(self, Quality.actor_distance())
 

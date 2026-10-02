@@ -116,7 +116,8 @@ func _ready() -> void:
 		add_child(custom)
 	else:
 		_build_structure()
-		Weld.statics(self)           # the floor, walls and canopy: one draw
+		# The floor, walls and canopy: one draw, and one baked shadow.
+		Shade.cast(Weld.statics(self), Quality.shadow_reach() * Shade.BUILDING_REACH)
 
 	_build_piles()
 	Util.apply_lod(self, Quality.building_distance())

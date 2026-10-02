@@ -54,6 +54,10 @@ func _ready() -> void:
 	get_tree().paused = false
 	_setup_input()
 	_build_environment()
+	# BEFORE ANYTHING IS BUILT, so every house, tree and soul raised from here on
+	# is given its baked shadow as it is made. False — and no baked shadows, and
+	# nothing else different — when the C++ library is not built; see Shade.
+	Shade.start(self)
 
 	world_gen = WorldGen.new()
 	# A reload may be carrying a world seed over from a save, a "new game", or
@@ -234,16 +238,13 @@ func _ready() -> void:
 ## chunks, so those wait for a reload — the cycle() announcement says as much.
 ##
 ## MSAA AND SHADOWS ARE WRITTEN ONLY WHEN THEY DIFFER, and they differ only when
-## the tier itself was changed (see Quality.shadows): each rebuilds every
+## the tier itself was changed (see Quality.shadow_reach): each rebuilds every
 ## pipeline in the scene, which is a multi-second freeze, and assigning the
 ## same value is not guaranteed to be free.
 func _on_quality_changed() -> void:
 	if get_viewport().msaa_3d != Quality.msaa_3d():
 		get_viewport().msaa_3d = Quality.msaa_3d()
 	get_viewport().scaling_3d_scale = Quality.render_scale()
-	if _sun.shadow_enabled != Quality.shadows():
-		_sun.shadow_enabled = Quality.shadows()
-	_sun.directional_shadow_max_distance = Quality.shadow_distance()
 	_environment.glow_enabled = Quality.glow()
 	_environment.fog_density = Quality.fog_density()
 	if is_instance_valid(camera_rig) and camera_rig.camera != null:
@@ -271,7 +272,8 @@ func _update_daylight() -> void:
 	var df := GameState.day_fraction()
 	var elev := GameState.sun_elevation()   # -1 midnight .. +1 noon
 
-	_sun.rotation_degrees = Vector3(-(df * 360.0 - 90.0), 20.0, 0)
+	_sun.rotation_degrees = Vector3(-(df * 360.0 - 90.0), Shade.SUN_YAW, 0)
+	Shade.day(df)        # the baked shadows read the same sun, a step at a time
 	_sun.light_energy = maxf(elev, 0.0) * 1.2 + 0.02
 	_sun.light_color = Color(1.0, 0.75 + 0.25 * clampf(elev, 0, 1), 0.6 + 0.4 * clampf(elev, 0, 1))
 
@@ -416,8 +418,9 @@ func _build_environment() -> void:
 	get_viewport().scaling_3d_scale = Quality.render_scale()
 
 	_sun = DirectionalLight3D.new()
-	_sun.shadow_enabled = Quality.shadows()
-	_sun.directional_shadow_max_distance = Quality.shadow_distance()
+	# NO SHADOW MAP. Shadows are baked into the models and laid by the C++
+	# ShadowSky along a sun that moves every few seconds — see Shade.
+	_sun.shadow_enabled = false
 	_sun.light_specular = 0.25  # matte, plain — no plastic glints
 	# THE DOORWAY TO THE TEMPLE IS THE DISK ITSELF. Neither light is a body and
 	# neither can be raycast, so Temple.disk_at walks this group and compares
@@ -1050,8 +1053,8 @@ func _run_smoke_test() -> void:
 	var knobs := PackedStringArray()
 	for level: int in [Quality.Heat.EASY, Quality.Heat.WARM, Quality.Heat.HOT]:
 		Quality.heat = level
-		knobs.append("%s: tier %d, shadows %s, actors %.0fm, sight %.0f/%.0fm, sim x%d" % [
-			Quality.heat_word(), Quality.effective_tier(), Quality.shadows(),
+		knobs.append("%s: tier %d, shadows to %.0fm, actors %.0fm, sight %.0f/%.0fm, sim x%d" % [
+			Quality.heat_word(), Quality.effective_tier(), Quality.shadow_reach(),
 			Quality.actor_distance(),
 			Quality.sight_radius() * WorldGen.CHUNK_SIZE, Quality.camera_far(),
 			Quality.sim_relief()])
@@ -1762,6 +1765,11 @@ func _run_smoke_test() -> void:
 		GameState.day_fraction(),
 		GameState.is_night(),
 	])
+	# THE BAKED SHADOWS ARE LAID, or the library is not built: either is said.
+	var shadows := get_tree().root.find_children("Shadow", "MeshInstance3D", true, false).size()
+	print("SMOKE TEST: baked shadows — library %s, %d laid, lights %s" % [
+		"loaded" if Shade.on() else "NOT BUILT", shadows, Shade.lights()])
+	assert(not Shade.on() or shadows > 0, "the library is loaded and nothing casts a shadow")
 
 	# NIGHT MUST BE LEGIBLE. Not a look at the screen — a check that the four
 	# sources of light in the dark are actually there and actually bounded: the

@@ -1,0 +1,5 @@
+# Built libraries are made on each machine from native/ (see native/README.md);
+# only the manifest is kept.
+*
+!.gitignore
+!shade.gdextension

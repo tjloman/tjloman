@@ -240,6 +240,11 @@ func _ready() -> void:
 			# Conifer cone (top radius 0).
 			add_child(Util.lite_cylinder(1.6, 2.8, leaf_color, Vector3(0, h + 1.2, 0), 0.0))
 
+	# Baked once per kind of tree, to the half metre of trunk: a wood is a
+	# handful of shapes, not one bake a tree.
+	Shade.cast_parts(self, Quality.shadow_reach(), "tree|%s|%s|%.1f"
+		% [style, custom != null, snappedf(h, 0.5)])
+
 	# A random facing so a stand doesn't look stamped from one mould. Seeded,
 	# so the same tree faces the same way every time the world loads; kept in
 	# _plant_yaw so an uprooted tree replants at its own angle, not due north.
@@ -888,12 +893,10 @@ func _build_fire_visual() -> void:
 			Color(1.0, randf_range(0.4, 0.7), 0.12), Vector3(0, 0, 0), true)
 		flame.position = Vector3(randf_range(-0.4, 0.4), top * 0.5 + i * 0.4, randf_range(-0.4, 0.4))
 		_fire_visual.add_child(flame)
-	var light := OmniLight3D.new()
-	light.light_color = Color(1.0, 0.5, 0.15)
-	light.light_energy = 3.0
-	light.omni_range = SPREAD_RADIUS + 2.0
-	light.position = Vector3(0, top * 0.6, 0)
-	_fire_visual.add_child(light)
+	# A fire a miracle started is a miracle's light: through Shade, so what
+	# stands round a burning tree throws its shadow away from the blaze.
+	Shade.light(_fire_visual, Color(1.0, 0.5, 0.15), 3.0, SPREAD_RADIUS + 2.0,
+		Vector3(0, top * 0.6, 0))
 	add_child(_fire_visual)
 
 

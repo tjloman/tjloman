@@ -50,3 +50,32 @@ anti_aliasing/quality/msaa_3d=1
 ; with the square, so this is 72% of the shading and bandwidth for a blur our
 ; untextured, flat-coloured primitives have nothing to lose to.
 scaling_3d/scale=0.85
+
+[shader_globals]
+
+; THE BAKED SHADOWS' ONE CONVERSATION WITH THE C++. ShadowSky (native/) writes
+; these; shaders/baked_shadow.gdshader reads them. See native/README.md.
+shade_sun={
+"type": "vec4",
+"value": Vector4(0, -1, 0, 0)
+}
+shade_light_0={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+shade_light_1={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+shade_light_2={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+shade_light_3={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+shade_light_power={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}

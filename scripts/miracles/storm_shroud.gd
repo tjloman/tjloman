@@ -125,12 +125,7 @@ func _build() -> void:
 	_drops.mesh = Util.speck_mesh(0.05, 0.55, Color(0.7, 0.8, 1.0, 0.6))
 	add_child(_drops)
 
-	_flash = OmniLight3D.new()
-	_flash.light_color = GLOW
-	_flash.light_energy = 0.0
-	_flash.omni_range = 40.0
-	_flash.shadow_enabled = false
-	add_child(_flash)
+	_flash = Shade.light(self, GLOW, 0.0, 40.0)
 
 
 func _physics_process(delta: float) -> void:

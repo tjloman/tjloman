@@ -1,7 +1,7 @@
 extends Node
 ## Autoload `Quality`: a per-device graphics tier, the way every shipping
-## mobile title scales — a flagship gets shadows, glow, and reflective
-## water; a budget Adreno gets a plain-but-solid look that actually runs.
+## mobile title scales — a flagship gets glow, clear water and long draw
+## distances; a budget Adreno gets a plain-but-solid look that actually runs.
 ## Auto-detected from the GPU at boot, with a persisted manual override
 ## (cycle with F2) so it can be forced for testing or preference.
 ##
@@ -207,8 +207,8 @@ func _process(delta: float) -> void:
 	# How MANY of them are bad, as against how bad the average is. See MOSTLY.
 	_over = lerpf(_over, 1.0 if real > FRAME_WARM else 0.0, SHARE_BLEND)
 	# Climbing is immediate to the band the frames deserve; EASING OFF is one
-	# band at a time, so a device that recovers does not have shadows, glow,
-	# MSAA and every draw distance all snap back in the same frame.
+	# band at a time, so a device that recovers does not have glow, pixels and
+	# every draw distance all snap back in the same frame.
 	var want := heat
 	if _frame > FRAME_HOT:
 		want = Heat.HOT
@@ -281,9 +281,9 @@ func settle() -> void:
 	hands_busy = false
 
 
-## THE TIER EVERY KNOB ACTUALLY READS — every knob but shadows and MSAA, which
-## rebuild the whole scene's pipelines and so follow `tier` alone (see
-## `shadows`). A struggling device is treated as a lesser one for as long as it
+## THE TIER EVERY KNOB ACTUALLY READS — every knob but MSAA and clear water,
+## which rebuild the whole scene's pipelines and so follow `tier` alone (see
+## the note above `shadow_reach`). A struggling device is treated as a lesser one for as long as it
 ## struggles: glow off, fewer pixels, shorter shadows, nearer draw distances and
 ## thicker fog, through exactly the paths that already existed for a budget
 ## phone.
@@ -407,32 +407,28 @@ func glow() -> bool:
 	return effective_tier() >= Tier.MEDIUM
 
 
-## SHADOWS AND MSAA FOLLOW THE TIER, NEVER THE HEAT.
+## NO REAL-TIME SHADOWS, ON ANY TIER. The sun's shadow map drew the whole scene
+## a second time every frame — the most expensive thing a phone GPU did for this
+## game, and it looked bad besides. Shadows are BAKED now: every model carries
+## its hull, flattened along a sun that moves every few seconds (see Shade and
+## native/). What a tier still decides is how far out they are drawn.
 ##
-## Both are baked into the render pipeline of every material in the scene:
-## turn either one over and the GPU has to rebuild all of them before it can
-## draw again. They used to follow `effective_tier`, so the thermostat easing
-## off a struggling device flipped both mid-game — and the device froze for
-## two seconds, twenty-five once, rebuilding pipelines, which read to the
-## thermostat as more struggling. "The moment I try to change camera angle, it
-## hangs 3 seconds then the world eases off." The heat still has every cheap
-## knob — how many pixels, how far the shadows reach, fog, draw distances,
-## glow, the simulation — and these two change only when the tier itself is
-## changed on purpose.
-func shadows() -> bool:
-	return tier >= Tier.MEDIUM
+## MSAA (and clear water, below) still FOLLOW THE TIER, NEVER THE HEAT: each is
+## baked into the render pipeline of every material in the scene, and the
+## thermostat flipping one mid-game froze the device for seconds rebuilding
+## them. "The moment I try to change camera angle, it hangs 3 seconds then the
+## world eases off." The heat keeps every cheap knob.
 
 
-func shadow_distance() -> float:
-	# The heat's handle on shadows, now that it may not switch them off: a hot
-	# device draws them over a much smaller patch of ground.
-	if heat == Heat.HOT:
-		return 35.0
-	return 120.0 if effective_tier() == Tier.HIGH else 70.0
+## HOW FAR OUT A BAKED SHADOW IS DRAWN, for something you watch walk about. A
+## building's reaches further (see Shade.BUILDING_REACH). One small, dark draw
+## each — cheap, but a crowd is hundreds of them.
+func shadow_reach() -> float:
+	return [30.0, 45.0, 70.0][effective_tier()]
 
 
 func water_alpha() -> bool:
-	# The tier, not the heat: see flipping `shadows`. Clear water and opaque
+	# The tier, not the heat: see the note above `shadow_reach`. Clear water and opaque
 	# water are two different shaders, and a chunk built while the device was
 	# struggling would show the one the rest of the world was not using.
 	return tier >= Tier.MEDIUM
@@ -442,7 +438,7 @@ func water_alpha() -> bool:
 ## already flirt with a frame timeout get none; capable devices get a cheap
 ## 2x to smooth our hard primitive edges.
 func msaa_3d() -> Viewport.MSAA:
-	# The tier, not the heat — see `shadows`.
+	# The tier, not the heat — see the note above `shadow_reach`.
 	return Viewport.MSAA_2X if tier >= Tier.MEDIUM else Viewport.MSAA_DISABLED
 
 

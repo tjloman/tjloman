@@ -6,8 +6,9 @@ camera angle, it hangs 3 seconds then 'the world eases off' and the AI
 simplifies." The worst frames that session were 2,253ms and 24,885ms, all but
 a sliver of them BEFORE any script ran — which is the renderer.
 
-Shadows and MSAA are baked into the render pipeline of every material: switch
-either and the GPU rebuilds all of them before it can draw again. Both used to
+MSAA is baked into the render pipeline of every material (and real-time
+shadows were, before shadows were baked into the models — see Shade): switch
+it and the GPU rebuilds all of them before it can draw again. Both used to
 follow `effective_tier`, the tier minus the heat, so the thermostat easing a
 struggling device down switched both mid-game, froze it, and read the freeze
 as more struggling. Clear-versus-opaque water is the same kind of switch, one
@@ -49,20 +50,26 @@ def body(text, name):
 
 def main():
     fail = []
-    for knob in ("shadows", "msaa_3d", "water_alpha"):
+    for knob in ("msaa_3d", "water_alpha"):
         text = body(QUALITY, knob)
         if "effective_tier()" in text or "heat" in text or "tier >=" not in text:
             fail.append("Quality.%s follows the heat: the thermostat would rebuild every "
                         "pipeline in the scene" % knob)
-    if "heat == Heat.HOT" not in body(QUALITY, "shadow_distance"):
+    # THE SUN CASTS NO SHADOW MAP AT ALL NOW — shadows are baked (Shade), so
+    # there is no pipeline switch left to flip, and the heat's handle on them
+    # is how far out they are drawn.
+    if "effective_tier()" not in body(QUALITY, "shadow_reach"):
         fail.append("a hot device has no handle on shadows at all now")
+    if re.search(r"Quality\.shadows\(|func shadows\(", MAIN + QUALITY):
+        fail.append("the real-time shadow switch is back")
     changed = body(MAIN, "_on_quality_changed")
     if "if get_viewport().msaa_3d != Quality.msaa_3d():" not in changed:
         fail.append("MSAA is re-assigned on every quality change, not only when it differs")
-    if "if _sun.shadow_enabled != Quality.shadows():" not in changed:
-        fail.append("shadows are re-assigned on every quality change, not only when they differ")
-    for cheap in ("scaling_3d_scale", "directional_shadow_max_distance", "fog_density",
-                  "camera.far"):
+    if "_sun.shadow_enabled = false" not in body(MAIN, "_build_environment") \
+            or "shadow_enabled" in changed:
+        fail.append("the sun casts a real-time shadow again, or a quality change can turn "
+                    "one on and rebuild every pipeline in the scene")
+    for cheap in ("scaling_3d_scale", "fog_density", "camera.far"):
         if cheap not in changed:
             fail.append("the heat lost its %s knob" % cheap)
     phys = body(CREATURE, "_physics_process")
@@ -74,8 +81,8 @@ def main():
     if re.search(r"if subject == null:\s*\n\s*return at != Vector3\.INF", worth):
         fail.append("a creature looking at nothing re-picks every tick again — a walk "
                     "of every villager and animal thirty times a second")
-    print("shadows, MSAA and clear water follow the tier; the heat keeps pixels, "
-          "shadow reach, fog, far plane and glow.")
+    print("MSAA and clear water follow the tier; the sun casts no shadow map; the heat "
+          "keeps pixels, baked-shadow reach, fog, far plane and glow.")
     print()
     if fail:
         for f in fail:

@@ -26,7 +26,7 @@ ALL = "\n".join(p.read_text() for p in SOURCES)
 
 # Where each knob is spent: the GPU, the CPU, or both. Judgement, not source.
 SPENT = {
-    "glow": "GPU", "shadows": "GPU", "shadow_distance": "GPU", "water_alpha": "GPU",
+    "glow": "GPU", "shadow_reach": "GPU", "water_alpha": "GPU",
     "msaa_3d": "GPU", "render_scale": "GPU", "chunk_cells": "CPU+GPU",
     "far_cells": "CPU+GPU", "decisions": "CPU", "think_usec": "CPU",
     "critters": "CPU", "herd_agents": "CPU", "load_radius": "CPU+GPU",
@@ -86,8 +86,8 @@ def knobs():
 def main():
     verbose = "-v" in sys.argv
     rows = knobs()
-    want = {"render_scale", "chunk_cells", "decisions", "shadows", "msaa_3d",
-            "glow", "camera_far", "AT_FULL", "shadow_distance"}
+    want = {"render_scale", "chunk_cells", "decisions", "msaa_3d",
+            "glow", "camera_far", "AT_FULL", "shadow_reach"}
     missing = want - {r[0] for r in rows}
     print("%-18s %-8s %-8s %-8s %-6s %-8s %s" % ("knob", "LOW", "MEDIUM", "HIGH",
                                                   "turns", "spends", "asked by"))

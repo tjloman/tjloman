@@ -351,6 +351,9 @@ func _ready() -> void:
 	# Distant crowds stop drawing entirely — a big village no longer renders
 	# dozens of bodies at once on a budget phone.
 	Util.apply_lod(_visuals, Quality.actor_distance())
+	# One baked shape for the whole crowd (Shade): every body is the same capsule.
+	Shade.cast_parts(_visuals, Quality.shadow_reach(),
+		"villager" if custom == null else "villager|" + _sex_model())
 
 	_label = Util.status_label()
 	_label.position = Vector3(0, 1.8, 0)

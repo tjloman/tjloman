@@ -771,11 +771,7 @@ func _cast_lightning(pos: Vector3) -> void:
 	var scorch := Util.cylinder(1.6, 0.06, Color(0.12, 0.1, 0.08), pos + Vector3(0, 0.03, 0))
 	add_child(scorch)
 
-	var flash := OmniLight3D.new()
-	flash.light_energy = 8.0
-	flash.omni_range = 25.0
-	flash.position = pos + Vector3(0, 5, 0)
-	add_child(flash)
+	var flash := Shade.light(self, Color.WHITE, 8.0, 25.0, pos + Vector3(0, 5, 0))
 
 	get_tree().create_timer(0.25).timeout.connect(bolt.queue_free)
 	get_tree().create_timer(0.25).timeout.connect(flash.queue_free)
@@ -1228,13 +1224,8 @@ func _pour_lava(pos: Vector3, rise: float, reach: float, loud := false) -> void:
 
 ## The look of a load landing: a brief spatter and a glow that cools.
 func _lava_splash(pos: Vector3, reach: float, loud: bool) -> void:
-	var glow := OmniLight3D.new()
-	glow.light_color = Color(1.0, 0.4, 0.1)
-	glow.light_energy = 3.0 if not loud else 4.5
-	glow.omni_range = reach * 3.0
-	glow.shadow_enabled = false
-	glow.position = pos + Vector3(0, 1.2, 0)
-	add_child(glow)
+	var glow := Shade.light(self, Color(1.0, 0.4, 0.1), 3.0 if not loud else 4.5,
+		reach * 3.0, pos + Vector3(0, 1.2, 0))
 	var spatter := CPUParticles3D.new()
 	spatter.amount = Quality.particles(34)
 	spatter.lifetime = 1.3
@@ -1381,14 +1372,7 @@ func pour_lava_at(pos: Vector3, rise: float, reach: float) -> void:
 
 
 func _lava_glare(at: Vector3, reach: float) -> OmniLight3D:
-	var glare := OmniLight3D.new()
-	glare.light_color = Color(1.0, 0.42, 0.12)
-	glare.light_energy = 5.0
-	glare.omni_range = reach * 3.0
-	glare.shadow_enabled = false
-	glare.position = at + Vector3(0, 3.0, 0)
-	add_child(glare)
-	return glare
+	return Shade.light(self, Color(1.0, 0.42, 0.12), 5.0, reach * 3.0, at + Vector3(0, 3.0, 0))
 
 
 ## Everything within reach catches, called now and then as the mountain climbs.

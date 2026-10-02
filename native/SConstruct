@@ -1,0 +1,41 @@
+#!/usr/bin/env python
+# BUILDS THE SHADE EXTENSION — the baked shadows, in C++.
+#
+#     cd native
+#     scons platform=<windows|linux|macos|android|ios> target=<template_debug|template_release>
+#
+# The library lands in ../bin/shade/, next to shade.gdextension, which is where
+# Godot looks for it. README.md in this folder walks through every platform,
+# the Android NDK and the release builds an export needs.
+#
+# godot-cpp is the git submodule beside this file (native/godot-cpp); point the
+# GODOT_CPP environment variable at another checkout to use that instead. The
+# API version is pinned to the engine this game is built with (see README.md
+# at the top of the repository): change both together.
+import os
+
+godot_cpp = os.environ.get("GODOT_CPP", "godot-cpp")
+env = SConscript(os.path.join(godot_cpp, "SConstruct"), {"api_version": "4.7"})
+
+env.Append(CPPPATH=["src/"])
+sources = Glob("src/*.cpp")
+out = "../bin/shade/"
+
+if env["platform"] == "macos":
+    # A macOS library is a framework folder with the dylib inside.
+    name = "libshade.{}.{}".format(env["platform"], env["target"])
+    library = env.SharedLibrary(out + name + ".framework/" + name, source=sources)
+elif env["platform"] == "ios":
+    # iOS links statically; see README.md for wrapping it in an xcframework.
+    library = env.StaticLibrary(
+        out + "libshade.{}.{}{}.a".format(
+            env["platform"], env["target"], ".simulator" if env["ios_simulator"] else ""),
+        source=sources,
+    )
+else:
+    # windows .dll, linux .so, android .so: e.g. libshade.android.template_release.arm64.so
+    library = env.SharedLibrary(
+        out + "libshade{}{}".format(env["suffix"], env["SHLIBSUFFIX"]), source=sources)
+
+env.NoCache(library)
+Default(library)

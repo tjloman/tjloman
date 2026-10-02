@@ -1,0 +1,34 @@
+; THE BAKED SHADOWS, in C++ — see native/README.md to build the libraries
+; this file names. Godot reads it at startup and loads the one for the platform
+; it is running on. A library that has not been built is reported once in the
+; output and the game runs on without baked shadows (Shade.on() is false).
+
+[configuration]
+
+entry_symbol = "shade_library_init"
+compatibility_minimum = "4.7"
+reloadable = true
+
+[libraries]
+
+windows.debug.x86_64 = "res://bin/shade/libshade.windows.template_debug.x86_64.dll"
+windows.release.x86_64 = "res://bin/shade/libshade.windows.template_release.x86_64.dll"
+linux.debug.x86_64 = "res://bin/shade/libshade.linux.template_debug.x86_64.so"
+linux.release.x86_64 = "res://bin/shade/libshade.linux.template_release.x86_64.so"
+macos.debug = "res://bin/shade/libshade.macos.template_debug.framework"
+macos.release = "res://bin/shade/libshade.macos.template_release.framework"
+android.debug.arm64 = "res://bin/shade/libshade.android.template_debug.arm64.so"
+android.release.arm64 = "res://bin/shade/libshade.android.template_release.arm64.so"
+android.debug.x86_64 = "res://bin/shade/libshade.android.template_debug.x86_64.so"
+android.release.x86_64 = "res://bin/shade/libshade.android.template_release.x86_64.so"
+ios.debug = "res://bin/shade/libshade.ios.template_debug.xcframework"
+ios.release = "res://bin/shade/libshade.ios.template_release.xcframework"
+
+[dependencies]
+
+ios.debug = {
+  "res://bin/shade/libgodot-cpp.ios.template_debug.xcframework": ""
+}
+ios.release = {
+  "res://bin/shade/libgodot-cpp.ios.template_release.xcframework": ""
+}
