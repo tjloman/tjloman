@@ -18,6 +18,7 @@ rest of the reads come from instead of leaving it to a guess.
 
 Arithmetic on the source and the screenshot's town. Not a frame capture.
 """
+import math
 import pathlib
 import random
 import re
@@ -123,13 +124,28 @@ def shared(fail):
       2. IT IS ACTUALLY SHARED. A town of three hundred milling in a sixty-metre
          square asks the same few thousand points over and over."""
     per = const(WORLD, "SHARED_PER_METRE")
-    keep = const(WORLD, "SHARED_FOR")
+    tile = int(const(WORLD, "SHARED_TILE"))
+    most = int(const(WORLD, "SHARED_TILES_MOST"))
     seeded = body(WORLD, "seeded_height_at")
-    if "_shared_heights.get(key)" not in seeded or "_shared_heights[key] = made" not in seeded:
+    if "_shared_tiles.get(tile_key)" not in seeded or "tile.h[i] = made" not in seeded \
+            or "if not is_nan(known):" not in seeded:
         fail.append("seeded_height_at no longer shares what it reads")
-    if "_shared_heights.clear()" not in body(WORLD, "_process"):
-        fail.append("the shared reads are kept forever — they must be dropped every "
-                    "SHARED_FOR seconds")
+    # KEPT UNTIL THERE ARE TOO MANY, NOT ON A TIMER: the seeded land never
+    # changes, and a timer threw away the ground a town was halfway through
+    # searching. Bounded by tiles instead, the far ones let go first.
+    proc = body(WORLD, "_process")
+    if "_shared_tiles.size() > SHARED_TILES_MOST" not in proc or "_forget_far_tiles()" not in proc:
+        fail.append("the shared land is never let go — it must be bounded")
+    if re.search(r"_shared_\w+\.clear\(\)", proc) or "SHARED_FOR" in proc:
+        fail.append("the shared land is thrown away on a clock again")
+    if "class LandTile:" not in WORLD or "PackedFloat64Array" not in WORLD:
+        fail.append("the shared land is not kept at full precision in tiles")
+    megabytes = most * tile * tile * 8 / 1e6
+    side = tile / per
+    print("SHARED LAND: %d tiles of %.0fm, at most %.1f MB, about %.0fm square of ground"
+          % (most, side, megabytes, math.sqrt(most) * side))
+    if megabytes > 16.0:
+        fail.append("the shared land may hold %.0f MB — too much for a phone" % megabytes)
     cells = [int(v) for v in re.search(r"func chunk_cells\(\) -> int:\s*\n\s*return \[([^\]]+)\]",
                                        QUALITY).group(1).split(",")]
     far = [int(v) for v in re.search(r"func far_cells\(\) -> int:\s*\n\s*return \[([^\]]+)\]",
@@ -147,9 +163,6 @@ def shared(fail):
     people = [(rng.uniform(-30, 30), rng.uniform(-30, 30)) for _ in range(300)]
     for tick in range(30 * 20):
         t += 1.0 / 30.0
-        if t > keep:
-            t = 0.0
-            known.clear()
         for i, (x, z) in enumerate(people):
             x += rng.uniform(-0.1, 0.1)
             z += rng.uniform(-0.1, 0.1)
@@ -162,8 +175,7 @@ def shared(fail):
                 else:
                     known[key] = True
     print()
-    print("SHARED READS: 300 people milling in 60m for 20s, a %.2fm grid kept %.0fs:"
-          % (1.0 / per, keep))
+    print("SHARED READS: 300 people milling in 60m for 20s, a %.2fm grid:" % (1.0 / per))
     print("   %d asked, %d answered from the grid (%.0f%%)"
           % (asked, hits, 100.0 * hits / max(asked, 1)))
     if hits * 2 < asked:

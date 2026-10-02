@@ -154,6 +154,9 @@ const FOUNDING_MOST := 24
 ## How many founders a town founded over the horizon raises a frame. See
 ## `_found_in_stages`.
 const FOUNDERS_A_FRAME := 4
+## AND HOW LONG A FRAME IT MAY SPEND LOOKING FOR GROUND, in microseconds. One
+## search for room was the whole 3.6-second frame; see BuildSearch.
+const FOUNDING_SLICE_USEC := 4000
 
 ## THE GENERATIONS A TOWN IS FOUNDED WITH.
 ##
@@ -179,6 +182,9 @@ const BUILD_ANGLES := 24
 ## How long the ring a building was last placed on is trusted to be the first
 ## with room. See `find_build_spot`.
 const BAND_REMEMBERED := 120.0
+## The grid a building's spot is snapped to, in metres, so what the land said
+## about a spot can be used again. See `_ground_for_building`.
+const GROUND_CELL := 2.0
 
 ## Clear ground kept round a dwelling, on top of its own footprint — and round
 ## the other things a village raises, which have no footprint table of their own.
@@ -291,6 +297,11 @@ var _roster: Array[Villager] = []
 ## The ring each size of building was last placed on, and when: own_room ->
 ## [band, clock]. See `find_build_spot`.
 var _full_to := {}
+## WHAT THE LAND SAID ABOUT EACH SPOT A SEARCH STOOD ON: GROUND_CELL cell ->
+## the height a building settles at, or NAN for "nothing goes here", and the
+## land's edition it was read in. See `_ground_for_building`.
+var _ground_known := {}
+var _ground_edition := -1
 ## HOW MANY SOULS, kept rather than counted. `population()` is asked by the
 ## influence ring, the job board, the barn's stalls, the field cap, the housing
 ## and (through `at_capacity`) by every woman at prayer every frame — and it
@@ -356,7 +367,10 @@ func _found() -> void:
 		# three stone and a nest is cut from ten.
 		store.add_lumber(CreatureNest.LUMBER)
 		store.add_stone(CreatureNest.STONE)
-	_raise_quarry()
+	# The town's rock is looked for with the rest of a staged founding, a slice
+	# a frame — an empty town's first ring is a thousand land reads on its own.
+	if is_player_home or founding > 0:
+		_raise_quarry()
 	# ENOUGH IN THE GRANARY THAT EVERYONE CAN GET ONE MEAL.
 	#
 	# NOT A CHANGE TO STARVATION. Hunger climbs as it always did, a famine
@@ -434,6 +448,13 @@ func _deal_the_work() -> void:
 func _found_in_stages() -> void:
 	var was := process_mode
 	process_mode = Node.PROCESS_MODE_DISABLED
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	var rock := _build_search(world, ROOM_ROUND_THE_QUARRY)
+	if not await _search_slowly(rock):
+		return
+	var clock := Ledger.swap(&"Village:founding")
+	_place_quarry(_searched(rock))
+	Ledger.resume(clock)
 	var count := _founding_count()
 	for i in count:
 		_spawn_founder(i, count)
@@ -444,12 +465,15 @@ func _found_in_stages() -> void:
 	_assign_housing()
 	_update_influence()
 	BootTrail.mark("raising the houses of %s" % village_name)
-	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 	var beds_wanted := int(float(_founding_count()) * FOUNDING_HOUSED)
 	var beds := 0
 	var raised := 0
 	while beds < beds_wanted and raised < FOUNDING_MOST:
-		var got := _raise_founding_house(world, raised)
+		var size := _founding_size(raised)
+		var search := _build_search(world, _house_room(size))
+		if not await _search_slowly(search):
+			return
+		var got := _raise_founding_house(_searched(search), size)
 		if got < 0:
 			break
 		beds += got
@@ -460,6 +484,21 @@ func _found_in_stages() -> void:
 	_assign_housing()
 	_open_for_business()
 	process_mode = was
+
+
+## LOOK FOR GROUND A SLICE A FRAME, on the founding clock, until the search is
+## done. False if the town was taken out of the world while it waited.
+func _search_slowly(search: BuildSearch) -> bool:
+	while true:
+		var clock := Ledger.swap(&"Village:founding")
+		var done := search.run(FOUNDING_SLICE_USEC)
+		Ledger.resume(clock)
+		if done:
+			return true
+		await get_tree().process_frame
+		if not is_inside_tree():
+			return false
+	return false
 
 
 func _build_totem() -> void:
@@ -745,7 +784,8 @@ func _build_starting_houses() -> void:
 	var beds := 0
 	var raised := 0
 	while beds < beds_wanted and raised < FOUNDING_MOST:
-		var got := _raise_founding_house(world, raised)
+		var size := _founding_size(raised)
+		var got := _raise_founding_house(find_build_spot(world, _house_room(size)), size)
 		if got < 0:
 			break          # the ground round here will not take another one
 		beds += got
@@ -753,26 +793,34 @@ func _build_starting_houses() -> void:
 	_assign_housing()
 
 
-## ONE FOUNDING HOUSE: the beds it adds, or -1 when there is nowhere left.
+## The sizes are cycled; see FOUNDING_SIZES.
+func _founding_size(raised: int) -> House.Size:
+	return FOUNDING_SIZES[raised % FOUNDING_SIZES.size()] as House.Size
+
+
+## The room a house of this size keeps round itself.
+func _house_room(size: House.Size) -> float:
+	return ROOM_ROUND_A_HOUSE + float(House.SPECS[size]["width"])
+
+
+## ONE FOUNDING HOUSE ON THE GROUND FOUND FOR IT: the beds it adds, or -1 when
+## there was nowhere (`spot` INF).
 ## THE SAME RULE THE TOWN WILL USE FOREVER AFTER. A village founded by one set of
 ## rules and extended by another is a village with a seam in it, and the
 ## founding rings had exactly that seam: they packed tight and neat, and then
 ## the first thing anybody built went forty metres out.
-func _raise_founding_house(world: WorldGen, raised: int) -> int:
+func _raise_founding_house(spot: Vector3, size: House.Size) -> int:
 	var clock := Ledger.swap(&"Village:founding")
-	var beds := _raise_house_for_founding(world, raised)
+	var beds := _raise_house_for_founding(spot, size)
 	Ledger.resume(clock)
 	return beds
 
 
-func _raise_house_for_founding(world: WorldGen, raised: int) -> int:
-	var size: int = FOUNDING_SIZES[raised % FOUNDING_SIZES.size()]
-	var spot := find_build_spot(world, ROOM_ROUND_A_HOUSE
-		+ float(House.SPECS[size]["width"]))
+func _raise_house_for_founding(spot: Vector3, size: House.Size) -> int:
 	if spot == Vector3.INF:
 		return -1
 	var house := House.new()
-	house.size = size as House.Size
+	house.size = size
 	house.village = self
 	house.age = randf_range(5.0, 20.0)
 	house.position = to_local(spot)
@@ -800,7 +848,10 @@ func _raise_house_for_founding(world: WorldGen, raised: int) -> int:
 ## can reach without a god's help.
 func _raise_quarry() -> void:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-	var spot := find_build_spot(world, ROOM_ROUND_THE_QUARRY)
+	_place_quarry(find_build_spot(world, ROOM_ROUND_THE_QUARRY))
+
+
+func _place_quarry(spot: Vector3) -> void:
 	quarry = RockDeposit.new()
 	quarry.vein = true
 	# GROUND THAT WOULD TAKE NOTHING ELSE STILL TAKES THIS. A village hemmed in
@@ -1489,6 +1540,15 @@ func on_house_destroyed(house: House) -> void:
 ## of this size was found: rings only fill as a town grows, so a ring that had
 ## no room then has none now. The memory is dropped when anything comes down.
 func find_build_spot(world: WorldGen, own_room := 0.0) -> Vector3:
+	var search := _build_search(world, own_room)
+	search.run()
+	return _searched(search)
+
+
+## A SEARCH FOR GROUND, ready to `run` — to the end, or a slice at a time (see
+## `_search_slowly`). Starts at the ring the last one for a building this size
+## stopped at: rings only fill as a town grows.
+func _build_search(world: WorldGen, own_room := 0.0) -> BuildSearch:
 	var reach := maxf(influence_radius * 0.8, 12.0)
 	var band := BUILD_NEAREST
 	# Forgotten after a couple of minutes all the same: a field that burned or
@@ -1496,40 +1556,44 @@ func find_build_spot(world: WorldGen, own_room := 0.0) -> Vector3:
 	var known: Array = _full_to.get(own_room, [])
 	if not known.is_empty() and GameState.clock - float(known[1]) < BAND_REMEMBERED:
 		band = maxf(BUILD_NEAREST, float(known[0]))
-	# The whole sweep is turned by a random amount per call so a town does not
-	# end up with every building it ever raises on the same handful of bearings.
-	var turn := randf() * TAU
-	while band <= reach:
-		var best := Vector3.INF
-		var best_room := -1.0
-		for step in BUILD_ANGLES:
-			var angle := turn + TAU * float(step) / float(BUILD_ANGLES)
-			var pos := global_position + Vector3(cos(angle) * band, 0, sin(angle) * band)
-			# Taken? Asked at the town's own height, which is what the settled
-			# height below will be near on ground gentle enough to build on.
-			if _spot_blocked(pos, own_room):
-				continue
-			if world != null:
-				if world.slope_at(pos.x, pos.z) > 0.9:
-					continue
-				# The WHOLE footprint must be dry — no floating over an inlet.
-				if not world.footprint_dry(pos.x, pos.z, 2.2):
-					continue
-				# And the way there must stay on land — never build across a lake.
-				if not world.line_dry(global_position.x, global_position.z, pos.x, pos.z):
-					continue
-				pos.y = world.settle_height(pos.x, pos.z, 2.2)
-			if _spot_blocked(pos, own_room):
-				continue
-			var room := _room_at(pos)
-			if room > best_room:
-				best_room = room
-				best = pos
-		if best != Vector3.INF:
-			_full_to[own_room] = [band, GameState.clock]
-			return best
-		band += BUILD_BAND
-	return Vector3.INF
+	return BuildSearch.new(self, world, own_room, band, reach)
+
+
+## WHAT A FINISHED SEARCH FOUND, and the ring it stopped on remembered — EVEN
+## WHEN IT FOUND NOTHING. A search that fails has swept every ring to the edge
+## of the town's reach, fifteen thousand land reads; it stops past the reach,
+## so the next one for this size starts there and is over at once, unless the
+## town has grown (a wider reach) or something has come down (forgotten).
+## Every villager who decided to build in a full town used to pay it again.
+func _searched(search: BuildSearch) -> Vector3:
+	_full_to[search.own_room] = [search.band, GameState.clock]
+	return search.found
+
+
+## WHERE A BUILDING ON THIS SPOT WOULD SETTLE, or NAN if nothing can go here:
+## too steep, a wet footprint, or no dry way home. About forty land reads the
+## first time a spot is asked about, and one dictionary lookup every time after
+## — until a miracle changes the land (WorldGen.land_edition), when everything
+## is asked again. Who has BUILT on a spot is not the land's question and is
+## never kept here; see `_spot_blocked`.
+func _ground_for_building(world: WorldGen, pos: Vector3) -> float:
+	var edition := world.land_edition()
+	if edition != _ground_edition:
+		_ground_known.clear()
+		_ground_edition = edition
+	var key := Vector2i(roundi(pos.x / GROUND_CELL), roundi(pos.z / GROUND_CELL))
+	var known = _ground_known.get(key)
+	if known != null:
+		return known
+	var settled := NAN
+	# The WHOLE footprint must be dry — no floating over an inlet — and the way
+	# there must stay on land: never build across a lake.
+	if world.slope_at(pos.x, pos.z) <= 0.9 \
+			and world.footprint_dry(pos.x, pos.z, 2.2) \
+			and world.line_dry(global_position.x, global_position.z, pos.x, pos.z):
+		settled = world.settle_height(pos.x, pos.z, 2.2)
+	_ground_known[key] = settled
+	return settled
 
 
 ## HOW OPEN A PIECE OF GROUND IS: the distance to the nearest thing the town has

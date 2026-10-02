@@ -94,6 +94,9 @@ const SCRUB_WEIGHT := 0.72
 var clock := 0.0
 
 ## Every scar cut into the world, and the buckets that index them.
+## How many times the scars have changed: added, reshaped or loaded. Part of
+## WorldGen.land_edition.
+var edition := 0
 var _scars: Array[Dictionary] = []
 var _buckets := {}
 ## The union of every scar's footprint, for the early-out.
@@ -126,6 +129,7 @@ func add(kind: int, at: Vector2, radius: float, amount: float, rings := 3.0,
 		"burned": clock,
 	}
 	_scars.append(scar)
+	edition += 1
 	_index(scar)
 	_grow_bounds(at, radius)
 	return scar
@@ -356,6 +360,7 @@ func deposit(kind: int, at: Vector2, radius: float, amount: float,
 ## The height is capped here rather than at the call site, so no caller can
 ## reach past the ceiling by accident.
 func reshape(scar: Dictionary, amount: float, radius := -1.0) -> void:
+	edition += 1
 	if radius > 0.0:
 		# Re-filed under its new footprint, since a wider scar touches more
 		# buckets than it did.
@@ -442,6 +447,7 @@ func to_save() -> Dictionary:
 
 
 func from_save(data: Variant) -> void:
+	edition += 1
 	_scars.clear()
 	_buckets.clear()
 	# An older save is a bare Array of scars with no clock and no burn times;

@@ -39,11 +39,14 @@ const WATER_LEVEL := 0.0
 ## A fifth of a sixty-hertz frame. Small enough that a chunk arriving is not a
 ## hitch anybody sees, large enough that a cold fill still finishes in seconds.
 const WORLD_MILLIS := 3.0
-## THE SHARED LAND READS: how finely a question of the land is answered, how
-## long the answers are kept, and the most kept at once. See `seeded_height_at`.
+## THE SHARED LAND READS: how finely a question of the land is answered, the
+## tiles the answers are kept in (SHARED_TILE points a side, sixteen metres),
+## how many tiles are kept, and how far from the camera a tile is worth keeping
+## once there are too many. See `seeded_height_at`.
 const SHARED_PER_METRE := 2.0
-const SHARED_FOR := 10.0
-const SHARED_MOST := 60000
+const SHARED_TILE := 32
+const SHARED_TILES_MOST := 1024
+const SHARED_KEEP := 320.0
 const CHUNKS_PER_FRAME := 1      # the floor under the budget: never fewer
 ## HOW MUCH OF THE OLD GROUND IS PUT AWAY IN ONE FRAME: chunks freed, stripped
 ## back to scenery, or boarded back to billboards, all counted together.
@@ -189,14 +192,17 @@ var _jungle_noise := FastNoiseLite.new()
 ## cell and a visited-then-unloaded cell are identical from outside.
 var _known := {}                  # Vector2i -> SEEN or WALKED
 var _chunks := {}                 # Vector2i -> Chunk
-var _shared_heights := {}         # Vector2i on the shared grid -> seeded height
+var _shared_tiles := {}           # Vector2i tile -> LandTile; see seeded_height_at
+## How many times the land has been changed by a miracle: a crater, a mound, a
+## pond. Anything that keeps an answer about the land beyond a frame keeps this
+## with it and asks again when it moves. See `land_edition`.
+var _pond_edition := 0
 ## THE HERDS AS THEY WERE LEFT, by chunk: cell -> Array of rows (see
 ## Chunk.herd_rows). A chunk's herds used to be rolled from the seed every time
 ## it came back into the near ring, so every kill was undone the moment the
 ## camera moved away and back. Present means "this is what lives here now",
 ## including an empty list for a herd hunted out.
 var _herds_known := {}
-var _shared_age := 0.0
 ## Out of sight, hidden, switched off, and waiting their turn to be freed. See
 ## SHEDS_PER_FRAME.
 var _doomed: Array[Chunk] = []
@@ -286,10 +292,8 @@ func _process(delta: float) -> void:
 			_stream_chunks()
 		return
 	_tick_burns(delta)
-	_shared_age += delta
-	if _shared_age > SHARED_FOR or _shared_heights.size() > SHARED_MOST:
-		_shared_age = 0.0
-		_shared_heights.clear()
+	if _shared_tiles.size() > SHARED_TILES_MOST:
+		_forget_far_tiles()
 	if focus_node == null:
 		return
 	_stream_chunks()
@@ -357,26 +361,62 @@ func seeded_height_at(x: float, z: float) -> float:
 	#
 	# AND NOW IT IS ASKED ONCE A SPOT, AND SHARED. The land as the seed made it
 	# never changes, so an answer is good for everybody who asks near the same
-	# place: the question is snapped to a grid of SHARED_PER_METRE a metre, and the first to ask
-	# at a point pays for it while everyone after is handed the answer. The grid
-	# is forgotten every SHARED_FOR seconds, which bounds what it holds; nothing
-	# in it ever goes stale. A chunk's own corners lie on this grid (every tier's
-	# cut is a whole number of half-metres), so the drawn land is exactly the
-	# land it always was.
-	var key := Vector2i(roundi(x * SHARED_PER_METRE), roundi(z * SHARED_PER_METRE))
-	var known = _shared_heights.get(key)
-	if known != null:
+	# place: the question is snapped to a grid of SHARED_PER_METRE a metre, and
+	# the first to ask at a point pays for it while everyone after is handed the
+	# answer. A chunk's own corners lie on this grid (every tier's cut is a whole
+	# number of half-metres), so the drawn land is exactly the land it always was.
+	#
+	# KEPT, NOT THROWN AWAY EVERY TEN SECONDS. Nothing in it ever goes stale, but
+	# it was a dictionary entry a point, so it was cleared every ten seconds (or
+	# at sixty thousand points, a hundred and twenty metres square) to bound it —
+	# and the same ground was read again, and again: a town looking for room
+	# sweeps more ground than that in one search. Now the answers live in tiles
+	# of sixteen metres, eight kilobytes each, and are let go only when there
+	# are more than SHARED_TILES_MOST — and then only the ones far from the camera.
+	var kx := roundi(x * SHARED_PER_METRE)
+	var kz := roundi(z * SHARED_PER_METRE)
+	var tile_key := Vector2i(floori(float(kx) / SHARED_TILE), floori(float(kz) / SHARED_TILE))
+	var tile: LandTile = _shared_tiles.get(tile_key)
+	if tile == null:
+		tile = LandTile.new()
+		_shared_tiles[tile_key] = tile
+	var i := posmod(kx, SHARED_TILE) + posmod(kz, SHARED_TILE) * SHARED_TILE
+	var known := tile.h[i]
+	if not is_nan(known):
 		if Ledger.on:
 			shared_reads += 1
 		return known
-	x = float(key.x) / SHARED_PER_METRE
-	z = float(key.y) / SHARED_PER_METRE
+	x = float(kx) / SHARED_PER_METRE
+	z = float(kz) / SHARED_PER_METRE
 	if Ledger.on:
 		reads += 1
 		Ledger.land_read()
 	var made := _seeded_height(x, z)
-	_shared_heights[key] = made
+	tile.h[i] = made
 	return made
+
+
+## TOO MANY TILES KEPT: let go of the ones far from the camera, which is where
+## nobody is asking. All of them, if that was not enough — they are only ever
+## answers, and the land will give them again.
+func _forget_far_tiles() -> void:
+	var here := Vector2.ZERO
+	if focus_node != null and is_instance_valid(focus_node):
+		here = Vector2(focus_node.global_position.x, focus_node.global_position.z)
+	var side := float(SHARED_TILE) / SHARED_PER_METRE
+	for key: Vector2i in _shared_tiles.keys():
+		var centre := (Vector2(key) + Vector2(0.5, 0.5)) * side
+		if centre.distance_to(here) > SHARED_KEEP:
+			_shared_tiles.erase(key)
+	if _shared_tiles.size() > SHARED_TILES_MOST:
+		_shared_tiles.clear()
+
+
+## THE LAND'S EDITION: changes whenever a miracle changes the ground or the
+## water on it. An answer about the land kept past a frame is good while this
+## has not moved. See Village._ground_known.
+func land_edition() -> int:
+	return scars.edition + _pond_edition
 
 
 func _seeded_height(x: float, z: float) -> float:
@@ -742,6 +782,7 @@ func flood(at: Vector2, radius: float, level: float) -> void:
 
 ## The water itself: one thin disc, flat, at the pond's surface.
 func _show_pond(pond: Dictionary) -> void:
+	_pond_edition += 1        # every pond that rises, spreads or is loaded
 	var old = pond.get("node")
 	if old != null and is_instance_valid(old):
 		(old as Node3D).queue_free()
@@ -1619,3 +1660,15 @@ func _tick_wolf_raids(delta: float) -> void:
 		SoundBank.play_at("howl", pos, -4.0)
 		GameState.announce("Wolves circle %s in the dark. Wickedness has a smell."
 			% village.village_name)
+
+
+## SIXTEEN METRES OF THE SEEDED LAND, at the shared grid: NAN where nobody has
+## asked yet. An object rather than a bare array in the dictionary because a
+## packed array held in two places is copied when it is written to, and this is
+## written to on every first read.
+class LandTile:
+	var h := PackedFloat64Array()
+
+	func _init() -> void:
+		h.resize(SHARED_TILE * SHARED_TILE)
+		h.fill(NAN)

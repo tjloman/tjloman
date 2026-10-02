@@ -330,10 +330,18 @@ def source(fail):
 
     burden = body(BODY, "burden")
     ready = body(VILLAGE, "_found")   # the founding, run from _ready
-    quarry = body(VILLAGE, "_raise_quarry")
-    if ready.count("_raise_quarry()") != 1:
-        fail.append("a village raises its own rock %d times — it is meant to be "
-                    "exactly one" % ready.count("_raise_quarry()"))
+    # ONE ROCK, BY ONE OF TWO ROADS: a town founded whole raises it in _found;
+    # one founded over the horizon looks for its ground a slice a frame in
+    # _found_in_stages. Both put it down through _place_quarry.
+    quarry = body(VILLAGE, "_place_quarry")
+    staged = body(VILLAGE, "_found_in_stages")
+    whole = ready.count("_raise_quarry()")
+    if whole != 1 or "if is_player_home or founding > 0:\n\t\t_raise_quarry()" not in ready \
+            or staged.count("_place_quarry(") != 1 \
+            or "_place_quarry(" not in body(VILLAGE, "_raise_quarry"):
+        fail.append("a village is not raised exactly one rock on each road to "
+                    "founding (whole: %d in _found; staged: %d in _found_in_stages)"
+                    % (whole, staged.count("_place_quarry(")))
     elif "quarry.vein = true" not in quarry:
         fail.append("a village's own rock is not an outcrop, so it can be "
                     "picked up and carried off")
