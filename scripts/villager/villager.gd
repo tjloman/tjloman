@@ -221,6 +221,11 @@ var _target_deposit: RockDeposit = null
 var _build_site: House = null
 var _mount: Animal = null
 var _flee_from := Vector3.ZERO
+## Where they were last set on the ground, and when to look again. Driven by
+## VillagerFeet.
+var _placed_xz := Vector2.INF
+@warning_ignore("unused_private_class_variable")
+var _reseat_in := 0.0
 var _steady_until := -INF
 ## The water's surface where they stand if it is deep enough to drown in, or
 ## -INF; and when to ask again. Staggered so a town does not ask all at once.
@@ -938,20 +943,11 @@ func _physics_process(delta: float) -> void:
 func _stick_to_ground() -> void:
 	if state == State.FALLING or state == State.HELD:
 		return
-	var world := _world()
-	if world == null:
-		return
-	# STANDING ON REAL GROUND needs no rescue. The collision is the drawn land,
-	# so a body the solver has on the floor is exactly where it should be; the
-	# read is only for the ones with nothing under them — far out, where the
-	# collision has not streamed in. It was a land read a villager a tick.
-	if is_on_floor():
-		return
-	var h := world.height_at(global_position.x, global_position.z)
-	if global_position.y < h - 0.3:  # tolerance clears resting offsets/mesh dips
-		global_position.y = h
-		if velocity.y < 0.0:
-			velocity.y = 0.0
+	# THEY PUT THEMSELVES ON THE GROUND NOW (see `_step_by`), so this only
+	# catches a villager something else moved — a mount, a wade, a door — and
+	# costs nothing for one that is where it was left.
+	if Vector2(global_position.x, global_position.z) != _placed_xz:
+		VillagerFeet.settle(self)
 
 
 ## True while the villager is en route somewhere (as opposed to working,
@@ -1009,7 +1005,7 @@ func _tick_watchdogs(delta: float) -> void:
 		_ground_check_time = 3.0
 		var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
 		if world != null:
-			var h := world.height_at(global_position.x, global_position.z)
+			var h := world.drawn_height_at(global_position.x, global_position.z)
 			if global_position.y < h - 1.0:
 				global_position.y = h + 0.4
 				velocity = Vector3.ZERO
@@ -1976,49 +1972,11 @@ func _process_at_school(delta: float) -> void:
 ## Movement ------------------------------------------------------------------
 
 ## WALK THERE. `placed` is the caller saying "this is somewhere the town put",
-## which is the only claim that earns the shortcut past the water guard.
+## which is the only claim that earns the shortcut past the water guard. The
+## walking itself is VillagerFeet's.
 func _move_toward(target: Vector3, speed: float, delta: float,
 		arrive := ARRIVE_DIST, placed := false) -> bool:
-	var to_target := target - global_position
-	to_target.y = 0
-	if to_target.length() < arrive:
-		_apply_gravity_only(delta)
-		return true
-	var dir := to_target.normalized()
-	# Steer around trees and rocks (but not the one we're walking to).
-	dir = NavField.steer(global_position, dir, 0.4, target)
-	# Villagers cannot swim: route ALONG the shore around open water rather than
-	# stepping in — probing as far as THIS step will carry them, since velocity
-	# is scaled by `_sim_scale` and a body on a coarse clock can stride clean
-	# over a fixed 1.7m probe.
-	#
-	# NOT INSIDE THEIR OWN VILLAGE, THOUGH — see `_both_ends_at_home`.
-	#
-	# AND THE SHORTCUT IS ONLY GOOD FOR GROUND THE TOWN PROVED — which is why
-	# the caller has to say what it is walking to. `at_home` skips the water
-	# probe on the grounds that a village builds on nothing but dry, gently
-	# sloped ground with a dry way to it. That is true of a well, a workshop, a
-	# granary and a build site. It is not true of an animal, a corpse, a joint
-	# of meat or a person, because none of those was PLACED — they are wherever
-	# they ended up, and a drowned animal ends up at the bottom of the water.
-	#
-	# Inside its own circle the town took the shortcut to the meat and walked
-	# in after it, one soul at a time, each drowning leaving another corpse and
-	# another armful of joints in the water to draw the next.
-	if not placed or not VillagerLook.at_home(self, target):
-		dir = NavField.water_route(self, global_position, dir, _world(),
-			maxf(1.7, speed * _sim_scale * 0.05))
-	if dir == Vector3.ZERO:
-		_apply_gravity_only(delta)
-		return false
-	velocity.x = dir.x * speed * _sim_scale
-	velocity.z = dir.z * speed * _sim_scale
-	velocity.y -= GRAVITY * delta
-	move_and_slide()
-	# Bodies are modeled facing +Z, and look_at aims -Z — so look away
-	# from the direction of travel to face it. (Yes, everyone used to moonwalk.)
-	look_at(global_position - Vector3(dir.x, 0, dir.z), Vector3.UP)
-	return false
+	return VillagerFeet.walk(self, target, speed, delta, arrive, placed)
 
 
 ## WOULD WE DROWN STANDING THERE? The same depth the hazard tick kills us at,
@@ -2032,11 +1990,9 @@ func would_drown_at(at: Vector3) -> bool:
 		> DROWN_DEPTH
 
 
+## STANDING, on the ground as it is drawn. See VillagerFeet.
 func _apply_gravity_only(delta: float) -> void:
-	velocity.x = 0
-	velocity.z = 0
-	velocity.y -= GRAVITY * delta
-	move_and_slide()
+	VillagerFeet.stand(self, delta)
 
 
 func _world() -> WorldGen:

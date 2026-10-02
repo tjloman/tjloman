@@ -131,7 +131,10 @@ if len(pickers) < 8:
                 "finds nothing passes" % len(pickers))
 
 # -- THE SHORTCUT ASKS TOO ---------------------------------------------------
-walking = body_of(MAN, "_move_toward")
+# The walking lives in VillagerFeet now; Villager._move_toward hands it on.
+FEET = (ROOT / "scripts/villager/villager_feet.gd").read_text()
+walking = body_of(FEET, "walk") \
+    if any("VillagerFeet.walk(" in r for r in body_of(MAN, "_move_toward")) else []
 guarded = [r for r in walking if "at_home(" in r]
 by_subject = any("not placed" in r for r in guarded)
 opt_in = re.search(r"placed := (\w+)", code(MAN))

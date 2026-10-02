@@ -59,12 +59,20 @@ def const(text, name):
 
 
 def source(fail):
-    for who, text in (("villager", MAN), ("beast", BEAST)):
-        stick = body(text, "_stick_to_ground")
-        floor = stick.find("if is_on_floor():")
-        read = stick.find("height_at(")
-        if floor < 0 or read < 0 or floor > read:
-            fail.append("a %s on the floor still reads the land to find the floor" % who)
+    stick = body(BEAST, "_stick_to_ground")
+    floor = stick.find("if is_on_floor():")
+    read = stick.find("height_at(")
+    if floor < 0 or read < 0 or floor > read:
+        fail.append("a beast on the floor still reads the land to find the floor")
+    # A VILLAGER IS NOT ON THE SOLVER'S FLOOR AT ALL NOW — it sets itself on the
+    # ground as drawn (VillagerFeet), which is a lookup in the chunk's own grid,
+    # not a land read. Nothing on its footing path may ask the seed.
+    feet = (ROOT / "scripts/villager/villager_feet.gd").read_text()
+    for where, text in (("Villager._stick_to_ground", body(MAN, "_stick_to_ground")),
+                        ("VillagerFeet.step_by", body(feet, "step_by")),
+                        ("VillagerFeet.settle", body(feet, "settle"))):
+        if re.search(r"(?<!drawn_)height_at\(", text):
+            fail.append("%s reads the land to find the floor" % where)
     if "Wading.drown(self" not in body(MAN, "_tick_hazards"):
         fail.append("the hazard tick no longer goes through Wading.drown")
     drown = body(WADING, "drown")
