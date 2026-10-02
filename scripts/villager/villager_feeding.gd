@@ -5,24 +5,30 @@ extends RefCounted
 ## Lifted out of Villager, which lives permanently on its line cap, and which
 ## had no room left for the one thing this file is actually about.
 ##
-## There are five places a villager can eat, and they are asked about in an
+## There are six places a villager can eat, and they are asked about in an
 ## order that is itself the character of the town:
 ##
 ##   1. FOOD ON THE GROUND. A bundle somebody dropped, or a god did.
-##   2. A BODY, if they would rather. See `_a_body` — this one comes before the
-##      granary for the wicked and after it for the starving, which is the
-##      whole difference between appetite and desperation.
+##   2. A BODY, for the MONSTROUS, who would rather. Nobody else, ever, while
+##      there is anything else.
 ##   3. THE GRANARY, which is what a village is for.
-##   4. A BODY, if there is nothing else left.
+##   4. A BODY, for the WICKED, when the granary has nothing they will eat.
 ##   5. A BUSH, foraging like anyone's ancestors.
+##   6. A BODY, for anybody else — only starving, and only with nothing left.
 ##
+## Morality decides it, and it decides it hard: a decent or merely coarse
+## villager passes a body by for wheat, for berries, for anything. See `plan`.
+
 ## Most of this is moved code and reads as it always did. The body is new.
 
-## HOW WICKED IS WICKED ENOUGH. Below this a villager will eat human flesh
-## because they would rather; above it, only when starving. One number, read in
-## both places that ask, so "would they?" and "would they FIRST?" can never
-## drift apart.
-const WICKED := 30.0
+## HOW WICKED IS WICKED ENOUGH. Below this a villager will eat human flesh when
+## the granary is bare; above it, only starving with nothing else in the world.
+##
+## The same number the word "wicked" is drawn at (VillagerWords). It used to sit
+## at 30 — above where "decent" begins — so every coarse villager and some decent
+## ones went to a body BEFORE the granary, and a town of three hundred with a
+## glut in the storehouse knelt down round one dead man instead of burying him.
+const WICKED := -20.0
 ## AND HOW FAR PAST IT A SOUL HAS TO BE TO DO IT IN FRONT OF THE MOURNERS.
 ##
 ## Somebody standing over the dead is the one thing between that body and the
@@ -43,6 +49,13 @@ const BODY_FILLS := 0.0
 ## Good souls refuse human flesh — until they are starving.
 static func will_eat_flesh(who: Villager) -> bool:
 	return who.morality < WICKED or who.hunger > Villager.STARVING_HUNGER
+
+
+## WHO STANDS OVER THE DEAD. Everybody short of monstrous — the wicked too, who
+## would eat a body if the granary were bare but still knew the man. Not gated
+## on hunger: a hungry mourner is fed by `plan` first, and weeps after.
+static func will_mourn(who: Villager) -> bool:
+	return who.morality >= MONSTROUS
 
 
 ## WHOSE BODY THEY WILL EAT, AND WHY IT IS STILL THERE AFTERWARDS.
@@ -86,11 +99,10 @@ static func plan(who: Villager) -> bool:
 	if who.target_food != null:
 		who.state = Villager.State.GO_EAT
 		return true
-	# BEFORE THE GRANARY, for somebody who would rather. A villager this far
-	# gone is not choosing the body because there is nothing else; the granary
-	# may be full. They are choosing it.
+	# BEFORE THE GRANARY, for somebody who would rather — and only the monstrous
+	# would. The granary may be full. They are choosing it.
 	var body := _a_body(who)
-	if body != null and who.morality < WICKED:
+	if body != null and who.morality < MONSTROUS:
 		return _go_to(who, body)
 	for type: FoodItem.FoodType in who.village.allowed_food_types():
 		if who.village.store.has(type):
@@ -98,15 +110,20 @@ static func plan(who: Villager) -> bool:
 			who.state = Villager.State.GO_EAT
 			who._target = who.village.store.global_position
 			return true
-	# And after it, for somebody who has nothing else. The same act, and a
-	# different person doing it.
-	if body != null:
+	# AFTER IT, for the wicked: the storehouse has nothing they may eat, and
+	# they will not go out to the bushes while a body is lying in town.
+	if body != null and who.morality < WICKED:
 		return _go_to(who, body)
 	# The granary is bare: go foraging in the wild like anyone's ancestors.
 	who.target_bush = VillagerSearch.forage(who)
 	if who.target_bush != null:
 		who.state = Villager.State.GO_EAT
 		return true
+	# AND LAST OF ALL, for anybody — starving (see `will_eat_flesh`), with
+	# nothing on the ground, nothing in the store and nothing on the bushes. The
+	# same act, and a different person doing it.
+	if body != null:
+		return _go_to(who, body)
 	return false
 
 

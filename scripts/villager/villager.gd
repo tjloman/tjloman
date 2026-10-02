@@ -1545,9 +1545,9 @@ func _pick_job() -> bool:
 	# carcass nobody comes for falls apart into loose joints by itself.
 	if eats_meat and watch.carcass != null and store.meat_food < 8:
 		scores["skin"] = _wants(FOOD_CEIL - 4.0, want_food)
-	# AND THE DEAD ARE WEPT OVER. Not by a town that eats its dead — for those
-	# a body is a job, and the one thing this must never be is queued behind
-	# dinner. Everybody else goes and stands over them for a while.
+	# AND THE DEAD ARE WEPT OVER, by everybody short of monstrous — the wicked
+	# included (VillagerFeeding.will_mourn). To the monstrous a body is meat,
+	# and the one thing grief must never be is queued behind their dinner.
 	#
 	# It scores like a need rather than like work, which is what makes it
 	# interrupt a harvest: a neighbour lying in the road outranks the stone that
@@ -1558,7 +1558,7 @@ func _pick_job() -> bool:
 	# handful of beaters, not the whole town round it.
 	if Firefight.ablaze(watch.blaze) and Firefight.can_beat(self):
 		scores["beat"] = 40.0
-	if watch.corpse != null and not VillagerFeeding.will_eat_flesh(self) \
+	if watch.corpse != null and VillagerFeeding.will_mourn(self) \
 			and not VillagerSearch.being_eaten(get_tree(), watch.corpse):
 		scores["mourn"] = 34.0
 	if eats_meat and store.meat_food < 5:

@@ -24,7 +24,7 @@ const MOURN_SECONDS := 14.0
 ##
 ## HIGH ON THE SCALE AND NOT OFF IT. `witness_horror` takes MORALITY, because in
 ## this game atrocity hardens whoever sees it — and a villager under
-## VillagerFeeding.WICKED eats bodies before the granary. A weight big enough to
+## VillagerFeeding.WICKED eats bodies when the granary is bare. A weight big enough to
 ## tip a decent mourner under that line in one sighting would send them from
 ## weeping over the dead to eating them, which is a spiral nobody asked for.
 ## Six sits beside the worst things a village already sees (see Village).

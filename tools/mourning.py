@@ -155,14 +155,18 @@ def grief(fail):
             break
         cond.insert(0, ln)
     before = " ".join(c.strip() for c in cond)
-    if "will_eat_flesh" not in before:
-        # A town that eats its dead must not queue grief behind dinner, and the
-        # gate is on the VILLAGER because a decent soul in a cannibal town is
-        # still a decent soul.
-        fail.append("mourning is no longer gated on the villager not eating "
-                    "flesh: `%s`" % before.strip())
+    if "VillagerFeeding.will_mourn(self)" not in before:
+        # The monstrous must not queue grief behind dinner, and the gate is on
+        # the VILLAGER because a decent soul in a cannibal town is still a
+        # decent soul. NOT on hunger or on "would eat flesh": that gate kept
+        # every wicked soul, and every starving one, away from their dead.
+        fail.append("mourning is no longer gated on the villager's own "
+                    "morality (will_mourn): `%s`" % before.strip())
     else:
-        print("  a flesh-eater does not weep over the meat ...... yes")
+        print("  all but the monstrous weep over the dead ....... yes")
+    wm = body(FEEDING, "will_mourn")
+    if not re.search(r"return who\.morality >= MONSTROUS$", wm.strip()):
+        fail.append("will_mourn is not the monstrous line: `%s`" % wm.strip())
     grieving = body(GRIEF, "mourn")
     if "VillagerGrief.mourn(self, delta)" not in body(V, "_physics_process"):
         fail.append("the MOURNING state no longer runs the mourning")
