@@ -329,7 +329,7 @@ def source(fail):
         print("  quarriers work outcrops, not field stones ....... yes")
 
     burden = body(BODY, "burden")
-    ready = body(VILLAGE, "_ready")
+    ready = body(VILLAGE, "_found")   # the founding, run from _ready
     quarry = body(VILLAGE, "_raise_quarry")
     if ready.count("_raise_quarry()") != 1:
         fail.append("a village raises its own rock %d times — it is meant to be "

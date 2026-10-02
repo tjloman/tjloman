@@ -328,6 +328,14 @@ var _flicker_beat := 0.0
 
 func _ready() -> void:
 	BootTrail.mark("founding the village of %s" % village_name)
+	# Founding is nobody's _process — see Ledger.swap. Its own row, so a town
+	# raised mid-frame is not billed to whatever ran before it.
+	var clock := Ledger.swap(&"Village:founding")
+	_found()
+	Ledger.resume(clock)
+
+
+func _found() -> void:
 	add_to_group("village")
 	if is_player_home:
 		converted = true
@@ -396,6 +404,12 @@ func _ready() -> void:
 
 ## The town's business, once it has its people and its roofs.
 func _open_for_business() -> void:
+	var clock := Ledger.swap(&"Village:founding")
+	_deal_the_work()
+	Ledger.resume(clock)
+
+
+func _deal_the_work() -> void:
 	# AND EVERYBODY IS PUT TO WORK BEFORE THE FIRST FRAME RUNS.
 	#
 	# Founded without this, fifty people with no job all ask the board what the
@@ -745,6 +759,13 @@ func _build_starting_houses() -> void:
 ## founding rings had exactly that seam: they packed tight and neat, and then
 ## the first thing anybody built went forty metres out.
 func _raise_founding_house(world: WorldGen, raised: int) -> int:
+	var clock := Ledger.swap(&"Village:founding")
+	var beds := _raise_house_for_founding(world, raised)
+	Ledger.resume(clock)
+	return beds
+
+
+func _raise_house_for_founding(world: WorldGen, raised: int) -> int:
 	var size: int = FOUNDING_SIZES[raised % FOUNDING_SIZES.size()]
 	var spot := find_build_spot(world, ROOM_ROUND_A_HOUSE
 		+ float(House.SPECS[size]["width"]))
@@ -858,6 +879,12 @@ func _spawn_villagers(count: int) -> void:
 
 
 func _spawn_founder(i: int, count: int) -> void:
+	var clock := Ledger.swap(&"Village:founding")
+	_raise_founder(i, count)
+	Ledger.resume(clock)
+
+
+func _raise_founder(i: int, count: int) -> void:
 	var v := _make_villager(_founding_age(i, count))
 	# NOBODY DIES ON THE FIRST MORNING. A lifespan is rolled between sixty
 	# and eighty-five without reference to the age it is handed, so a

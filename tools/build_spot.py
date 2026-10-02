@@ -119,7 +119,7 @@ def founding(fail):
     The one two-second hang left came when the camera was dragged across the
     land, on the frame "Scouts speak of a village called Thornbury" — thirty-odd
     people and up to twenty-four houses, four hundred nodes, in one frame."""
-    ready = body(VILLAGE, "_ready")
+    ready = body(VILLAGE, "_found")
     if not re.search(r"if is_player_home or founding > 0:[\s\S]*?else:\s*\n\s*_found_in_stages\(\)", ready):
         fail.append("a village found over the horizon is raised whole in one frame again")
     staged = body(VILLAGE, "_found_in_stages")
@@ -132,6 +132,14 @@ def founding(fail):
         fail.append("a staged town is never dealt its charter")
     if "FOUNDERS_A_FRAME" not in staged:
         fail.append("the founders a frame are not bounded")
+    # AND IT IS BILLED TO ITSELF. Founding runs in _ready (a deferred add) and
+    # in a coroutine resuming each frame — nobody's _process — so without its
+    # own clock it was charged to whatever ran last, usually the physics row.
+    for step in ("_ready", "_spawn_founder", "_raise_founding_house", "_open_for_business"):
+        text = body(VILLAGE, step)
+        if 'Ledger.swap(&"Village:founding")' not in text or "Ledger.resume(clock)" not in text:
+            fail.append("%s runs without its own clock: the meter bills it to whoever "
+                        "ran before" % step)
     per = int(const("FOUNDERS_A_FRAME"))
     print("A town over the horizon: %d founders a frame, then one house a frame." % per)
 

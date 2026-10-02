@@ -161,6 +161,29 @@ static func open(what: StringName, tag: Variant = null) -> void:
 	_rang[what] = int(_rang.get(what, 0)) + 1
 
 
+## WORK THAT IS NOBODY'S _process: a deferred call, a coroutine resuming, a
+## node's _ready. It runs between the clocks and was billed to whoever ran last —
+## usually "(the solver)", which is how a village founded while zipping across
+## the map could read as a 3.6-second physics step. Open a clock for the work and
+## get back the one that was running; hand that to `resume` when done.
+static func swap(what: StringName) -> StringName:
+	var was := _open
+	open(what)
+	return was
+
+
+## And give the clock back to whoever had it, without counting it as a call.
+static func resume(was: StringName) -> void:
+	if not on:
+		return
+	var now := Time.get_ticks_usec()
+	if _open != &"":
+		_close(now)
+	_open = was
+	_since = now
+	_tag = null
+
+
 static func _close(now: int) -> void:
 	var took := now - _since
 	_spent[_open] = int(_spent.get(_open, 0)) + took
