@@ -37,6 +37,8 @@ const WALK_SPEED := 3.0
 ## crowd the labels overlap into an unreadable smear long before this, so the
 ## band costs nothing anybody was getting any good out of.
 const FLEE_SPEED := 5.5
+## How many physics ticks a villager near the camera goes between thoughts.
+const BRAIN_TICKS := 3
 ## How quickly a rested sleeper gets up by day, as a chance a second: about a
 ## second and a half on average, so a town wakes over a few seconds at dawn.
 const WAKE_RATE := 0.7
@@ -221,6 +223,16 @@ var _target_deposit: RockDeposit = null
 var _build_site: House = null
 var _mount: Animal = null
 var _flee_from := Vector3.ZERO
+## THINKING AND COASTING: ticks until the next thought, the time owed to it, and
+## — driven by VillagerFeet — where the feet are carrying them between thoughts,
+## how near counts as there, and how far they have already coasted.
+var _brain_left := randi_range(1, BRAIN_TICKS)
+var _brain_owed := 0.0
+var _coast_to := Vector3.INF
+@warning_ignore("unused_private_class_variable")
+var _coast_arrive := 1.0
+@warning_ignore("unused_private_class_variable")
+var _coasted := 0.0
 ## Where they were last set on the ground, and when to look again. Driven by
 ## VillagerFeet.
 var _placed_xz := Vector2.INF
@@ -396,6 +408,25 @@ func _physics_process(delta: float) -> void:
 	# multiplied it into delta AND into the velocity scale, and threw it across
 	# the field. See Scheduler.MOST_OWED.
 	_sim_last = Scheduler.now()
+	# THINK SLOWER THAN YOU MOVE. Needs, hazards, timers, the watchdog, the label
+	# and the state machine ran on every physics tick — two a frame on a slow
+	# device — for people who mostly stand at a field for a minute at a time. A
+	# villager near the camera now thinks every BRAIN_TICKS ticks (staggered, so
+	# a town does not think on one tick) with the time between folded into
+	# delta, and in between only its feet move: see VillagerFeet.coast. Far
+	# villagers already think only on their turns, and think on every one.
+	if state != State.HELD and state != State.FALLING:
+		_brain_owed += delta
+		_brain_left -= 1
+		if _brain_left > 0:
+			VillagerFeet.coast(self, delta)
+			return
+		_brain_left = BRAIN_TICKS if _sim_scale <= 1.0 else 1
+		delta = _brain_owed
+		_brain_owed = 0.0
+		_coast_to = Vector3.INF      # walking sets it again, if they still walk
+	else:
+		_coast_to = Vector3.INF      # in a hand or in the air: nothing to coast on
 	# PINNED suspends everything, and for the same reason DYING does: they are
 	# not doing anything, they are being done to. No hunger, no ageing, no
 	# watchdog — the ONLY clock that runs is the Mauling's, and the village

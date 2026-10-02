@@ -29,7 +29,11 @@ const MOURN_SECONDS := 14.0
 ## weeping over the dead to eating them, which is a spiral nobody asked for.
 ## Six sits beside the worst things a village already sees (see Village).
 const HORROR_OF_IT := 6.0
-const HORROR_EVERY := 12
+## How often a mourner looks up to see whether the body is being eaten: a TIME,
+## not a count of physics ticks — a villager thinks only every few ticks now
+## (Villager.BRAIN_TICKS), and a tick count that is a multiple of that never
+## lands on some of them at all.
+const HORROR_EVERY := 0.4
 ## How long a beast takes to cut up where it fell.
 const SKIN_SECONDS := 4.0
 
@@ -51,7 +55,9 @@ static func mourn(who: Villager, delta: float) -> bool:
 	# on sobbing. Asked a few times a second rather than every tick — there are
 	# only ever a few mourners, but two hundred villagers to ask about. They
 	# run, and running is its own plan: this does not ask for another.
-	if Engine.get_physics_frames() % HORROR_EVERY == 0 \
+	var look_in: float = float(who.get_meta(&"horror_in", 0.0)) - delta
+	who.set_meta(&"horror_in", look_in if look_in > 0.0 else HORROR_EVERY)
+	if look_in <= 0.0 \
 			and VillagerSearch.being_eaten(who.get_tree(), who._target_corpse, true):
 		who.witness_horror(HORROR_OF_IT)
 		who.scare(who._target_corpse.global_position)

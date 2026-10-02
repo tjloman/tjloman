@@ -48,10 +48,17 @@ static func walk(who: Villager, target: Vector3, speed: float, delta: float,
 	if dir == Vector3.ZERO:
 		stand(who, delta)
 		return false
-	# THE STEP IS TAKEN, NOT SIMULATED. See `step_by`. `velocity` is still set
-	# because the pose reads it to tell walking from standing; nothing moves by it.
+	# THE STEP IS TAKEN, NOT SIMULATED. See `step_by`. `velocity` is what the
+	# feet coast on until the next thought, and what the pose reads.
 	who.velocity = Vector3(dir.x * speed, 0.0, dir.z * speed)
-	if not step_by(who, dir * speed * delta):
+	who._coast_to = target
+	who._coast_arrive = arrive
+	# The ground already covered since the last thought is not walked again:
+	# `delta` is everything since then (see Villager.BRAIN_TICKS), and the feet
+	# carried them through all but the last tick of it.
+	var walked := maxf(delta - who._coasted, 0.0)
+	who._coasted = 0.0
+	if not step_by(who, dir * speed * walked):
 		who.velocity = Vector3.ZERO  # too steep: stand, and let the watchdog re-decide
 		return false
 	# Bodies are modeled facing +Z, and look_at aims -Z — so look away
@@ -64,10 +71,33 @@ static func walk(who: Villager, target: Vector3, speed: float, delta: float,
 ## moved them, or every GROUND_RECHECK seconds in case the ground moved instead.
 static func stand(who: Villager, delta: float) -> void:
 	who.velocity = Vector3.ZERO
+	who._coasted = 0.0
 	who._reseat_in -= delta
 	if who._reseat_in <= 0.0 \
 			or Vector2(who.global_position.x, who.global_position.z) != who._placed_xz:
 		settle(who)
+
+
+## BETWEEN THOUGHTS: on the way they were going, at the pace they were going,
+## until they are there or the ground stops them. Nothing is asked — no steering,
+## no water, no decisions; that is all for the next thought, at most a few ticks
+## off, and a step this short cannot reach past the water probe it made. A
+## villager standing still costs nothing at all here.
+static func coast(who: Villager, delta: float) -> void:
+	var v := who.velocity
+	# ONLY A WALK THEY STARTED. A velocity left over from being thrown is not
+	# somewhere they were going; see where Villager clears `_coast_to`.
+	if (v.x == 0.0 and v.z == 0.0) or not who._coast_to.is_finite():
+		return
+	var gap := Vector2(who._coast_to.x - who.global_position.x,
+		who._coast_to.z - who.global_position.z)
+	if gap.length() < who._coast_arrive:
+		who.velocity = Vector3.ZERO
+		return
+	if step_by(who, Vector3(v.x, 0.0, v.z) * delta):
+		who._coasted += delta
+	else:
+		who.velocity = Vector3.ZERO
 
 
 ## A STEP ON FOOT, WITHOUT THE PHYSICS ENGINE. Every villager in the world asked
