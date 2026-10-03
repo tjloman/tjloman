@@ -176,6 +176,23 @@ That gives `bin\shade\libshade.windows.template_debug.x86_64.dll` and its releas
 twin. No Visual Studio? Install **MinGW-w64** (e.g. via MSYS2), put its `bin` on
 `PATH` and add `use_mingw=yes` to each command.
 
+### Windows, built from Linux (MinGW)
+
+Exporting a Windows build from a Linux editor still needs the Windows `.dll`,
+and MinGW-w64 cross-compiles it. Install the **posix** threading variant:
+godot-cpp uses `std::mutex`, which the win32 variant lacks. In Debian 12 (or
+the `godot-build` Distrobox above):
+
+```
+sudo apt install -y g++-mingw-w64-x86-64-posix
+scons platform=windows target=template_debug use_mingw=yes
+scons platform=windows target=template_release use_mingw=yes
+```
+
+(Arch: `mingw-w64-gcc`. Fedora: `mingw64-gcc-c++`.) The editor's export
+copies `template_debug` when *Export With Debug* is ticked, and
+`template_release` otherwise. Build both.
+
 ### Android (your phone)
 
 The phone build happens on your desktop with Android's C++ compiler, the **NDK**.
