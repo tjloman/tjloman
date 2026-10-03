@@ -188,7 +188,19 @@ The phone build happens on your desktop with Android's C++ compiler, the **NDK**
    - Linux / macOS: `export ANDROID_HOME=$HOME/Android/Sdk` (macOS: `$HOME/Library/Android/sdk`)
 
    Already have a different NDK? Add `ndk_version=<the folder name under ndk/>`
-   to the commands. Or set `ANDROID_NDK_ROOT` to the NDK folder itself.
+   to the commands.
+
+   **No SDK, or one without `cmdline-tools`?** The build needs only the NDK.
+   Download it on its own (r28b is 28.1.13356709), unpack it, and point
+   `ANDROID_NDK_ROOT` at it. Then pass `ANDROID_HOME=` **empty** on every scons
+   command: godot-cpp reads `ANDROID_HOME` before `ANDROID_NDK_ROOT`, and
+   crashes (`KeyError: 'ANDROID_HOME'`) if it isn't there at all.
+   ```
+   curl -LO https://dl.google.com/android/repository/android-ndk-r28b-linux.zip
+   unzip -q android-ndk-r28b-linux.zip
+   export ANDROID_NDK_ROOT=$PWD/android-ndk-r28b     # fish: set -x ANDROID_NDK_ROOT $PWD/android-ndk-r28b
+   scons platform=android arch=arm64 target=template_debug ANDROID_HOME=
+   ```
 3. Build for 64-bit ARM, which is every phone from the last decade:
    ```
    scons platform=android arch=arm64 target=template_debug
