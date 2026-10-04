@@ -80,3 +80,11 @@ shade_light_power={
 "type": "vec4",
 "value": Vector4(0, 0, 0, 0)
 }
+shade_ground={
+"type": "sampler2D",
+"value": ""
+}
+shade_ground_area={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}

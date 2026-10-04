@@ -37,6 +37,7 @@ import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SHADE = (ROOT / "scripts/shade.gd").read_text()
+GROUND = (ROOT / "scripts/shade_ground.gd").read_text()
 SHADER = (ROOT / "shaders/baked_shadow.gdshader").read_text()
 PROJECT = (ROOT / "project.godot").read_text()
 MAIN = (ROOT / "scripts/main.gd").read_text()
@@ -89,13 +90,18 @@ def body(text, name):
 
 def conversation(fail):
     in_project = set(re.findall(r"^(shade_\w+)=\{", PROJECT, re.M))
-    in_shader = set(re.findall(r"^global uniform vec4 (shade_\w+);", SHADER, re.M))
+    in_shader = set(re.findall(r"^global uniform \w+ (shade_\w+)\b", SHADER, re.M))
     in_cpp = set(re.findall(r'"(shade_\w+)"', SKY_CPP))
-    print("  global shader values: project %d, shader %d, C++ %d"
-          % (len(in_project), len(in_shader), len(in_cpp)))
-    if not in_shader or in_project != in_shader or in_shader != in_cpp:
-        fail.append("the shader globals disagree — project.godot %s, shader %s, C++ %s"
-                    % (sorted(in_project), sorted(in_shader), sorted(in_cpp)))
+    # The ground under the shadows is read in GDScript (it is the land, which
+    # lives there): its two values are written by ShadeGround, the rest by C++.
+    in_ground = set(re.findall(r'&"(shade_\w+)"', GROUND))
+    print("  global shader values: project %d, shader %d, written by C++ %d and "
+          "ShadeGround %d" % (len(in_project), len(in_shader), len(in_cpp), len(in_ground)))
+    if not in_shader or in_project != in_shader or in_shader != in_cpp | in_ground \
+            or in_cpp & in_ground:
+        fail.append("the shader globals disagree — project.godot %s, shader %s, C++ %s, "
+                    "ShadeGround %s" % (sorted(in_project), sorted(in_shader), sorted(in_cpp),
+                                        sorted(in_ground)))
     slots = int(re.search(r"constexpr int SLOTS = (\d+);", CORE).group(1))
     lights = [n for n in in_shader if re.fullmatch(r"shade_light_\d", n)]
     if len(lights) != slots:
@@ -193,6 +199,38 @@ def casters(fail):
             fail.append("%s no longer casts its baked shadow (%s)" % (rel, call))
 
 
+def ground(fail):
+    """THE SHADOWS LIE ON THE GROUND: every vertex set down on a height map of
+    the land round the camera, read once for all of them, a few rows a frame."""
+    vertex = SHADER[SHADER.index("void vertex()"):SHADER.index("void fragment()")]
+    if "w.y = ground_at(w.xz, origin.y) + LIFT;" not in vertex:
+        fail.append("the shadows are laid on a flat plane through the foot again, not "
+                    "on the ground they fall on")
+    reads = body(GROUND, "step")
+    if "Time.get_ticks_usec() - began > BUDGET_USEC" not in reads \
+            or "world.drawn_height_at(" not in reads or "_show()" not in reads:
+        fail.append("ShadeGround reads the land without a budget, or not the drawn land")
+    if re.search(r"(?<!drawn_)height_at\(", reads):
+        fail.append("ShadeGround asks the costly land, not the drawn ground")
+    if "_ground.step(" not in body(SHADE, "day") or 'Ledger.swap(&"Shade:ground")' not in body(SHADE, "day"):
+        fail.append("nothing reads the ground under the shadows, or the meter cannot see it")
+    size = int(re.search(r"^const SIZE := (\d+)", GROUND, re.M).group(1))
+    cell = float(re.search(r"^const CELL := ([0-9.]+)", GROUND, re.M).group(1))
+    budget = int(re.search(r"^const BUDGET_USEC := (\d+)", GROUND, re.M).group(1))
+    reread = float(re.search(r"^const REREAD := ([0-9.]+)", GROUND, re.M).group(1))
+    step = float(re.search(r"^const STEP_SECONDS := ([0-9.]+)", SHADE, re.M).group(1))
+    reach = max(float(v) for v in re.search(
+        r"func shadow_reach\(\) -> float:\s*\n\s*return \[([^\]]+)\]",
+        (ROOT / "scripts/quality.gd").read_text()).group(1).split(","))
+    print("  the ground: %dx%d at %.0fm (%.0fm across), %d lookups a map at %.1fms a frame, "
+          "every %.0fs" % (size, size, cell, size * cell, size * size, budget / 1000.0, reread))
+    if size * cell / 2.0 < reach:
+        fail.append("the ground map (%.0fm each way) is narrower than the farthest shadow "
+                    "drawn (%.0fm)" % (size * cell / 2.0, reach))
+    if reread > step:
+        fail.append("the ground is read less often than the sun moves")
+
+
 def core(fail):
     cxx = shutil.which("g++") or shutil.which("clang++")
     if cxx is None:
@@ -247,6 +285,7 @@ def main():
     no_shadow_map(fail)
     miracle_lights(fail)
     casters(fail)
+    ground(fail)
     core(fail)
     live(fail)
     print()

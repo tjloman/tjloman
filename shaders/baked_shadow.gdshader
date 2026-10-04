@@ -24,14 +24,34 @@ global uniform vec4 shade_light_1;
 global uniform vec4 shade_light_2;
 global uniform vec4 shade_light_3;
 global uniform vec4 shade_light_power;  // one 0..1 per light
+// THE GROUND UNDER THE SHADOWS: heights round the camera, read a few rows a
+// frame by ShadeGround. Area: xy the world x,z of its corner, z its span in
+// metres, w 1 once there is a map at all.
+global uniform sampler2D shade_ground : filter_linear, repeat_disable;
+global uniform vec4 shade_ground_area;
 
 // No shadow longer than this many times the height of what casts it: a low
 // sun would otherwise lay a house's shadow across half the valley.
 const float LONGEST = 3.0;
-// Just above the ground the model stands on, so it is not lost in it.
-const float LIFT = 0.04;
+// Just above the ground, so it is not lost in it: the map is the drawn land
+// sampled every two metres and blended, which can sit a few centimetres under
+// the triangles it was read from.
+const float LIFT = 0.08;
 
 varying float v_dark;
+
+// The ground under a point, or `otherwise` off the edge of the map (or before
+// there is one): the plane through the caster's foot, as before.
+float ground_at(vec2 xz, float otherwise) {
+	if (shade_ground_area.w <= 0.0) {
+		return otherwise;
+	}
+	vec2 uv = (xz - shade_ground_area.xy) / shade_ground_area.z;
+	if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
+		return otherwise;
+	}
+	return textureLod(shade_ground, uv, 0.0).r;
+}
 
 // Where the ray from a light through a point `h` above the ground lands.
 vec2 thrown_from(vec4 light, vec3 w, float h) {
@@ -74,7 +94,10 @@ void vertex() {
 	dark = max(dark, k * 0.5);
 
 	w.xz += offset;
-	w.y = origin.y + LIFT;
+	// ON THE GROUND IT FALLS ON, vertex by vertex: down the slope, up the
+	// bank, across the dip — and under a villager held aloft, on the ground
+	// below rather than at its dangling feet.
+	w.y = ground_at(w.xz, origin.y) + LIFT;
 	VERTEX = (VIEW_MATRIX * vec4(w, 1.0)).xyz;
 	v_dark = dark;
 }

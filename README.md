@@ -49,6 +49,14 @@ python3 tools/forest_fire.py     # a tree burns long enough to carry; a wood cre
 python3 tools/shade.py           # baked shadows: C++, shader and GDScript agree
 ```
 
+To SEE a frame without a screen (software Vulkan under Xvfb; slow but real),
+see the header of `tools/look/look.gd`:
+
+```
+xvfb-run -a godot --path . --audio-driver Dummy --rendering-method mobile \
+    --resolution 1280x720 --script tools/look/look.gd -- out.png 0.3 40 50
+```
+
 That last one matters: `gdparse` only checks syntax and `gdlint` only checks
 style, so a call to a method that was never written passes both and then
 crashes the moment that code path runs. Every rule in `check_calls.py` is there

@@ -30,6 +30,8 @@ const SHADER := preload("res://shaders/baked_shadow.gdshader")
 static var _sky: Node = null
 static var _baker: RefCounted = null
 static var _skin: ShaderMaterial = null
+## The land under the shadows, read a few rows a frame. See ShadeGround.
+static var _ground: ShadeGround = null
 ## Hulls baked, by whatever the caller said identifies the shape: a crowd of
 ## villagers is one bake. A key that baked to nothing is kept as null.
 static var _hulls := {}
@@ -56,10 +58,19 @@ static func on() -> bool:
 	return _sky != null and is_instance_valid(_sky)
 
 
-## The time of day, 0..1. The sky decides whether the sun has moved.
+## The time of day, 0..1. The sky decides whether the sun has moved; and the
+## ground under the shadows is read on, a few rows a frame, on its own clock so
+## the meter can see it.
 static func day(fraction: float) -> void:
-	if on():
-		_sky.call(&"set_day", fraction)
+	if not on():
+		return
+	_sky.call(&"set_day", fraction)
+	if _ground == null:
+		_ground = ShadeGround.new()
+	var clock := Ledger.swap(&"Shade:ground")
+	_ground.step(_sky.get_tree().get_first_node_in_group("world_gen") as WorldGen,
+		GameState.camera_focus, _sky.get_process_delta_time())
+	Ledger.resume(clock)
 
 
 ## A SHADOW FOR ONE MESH, laid at the foot of `owner` (where its origin is).
