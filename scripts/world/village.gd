@@ -236,6 +236,12 @@ var raising := {}
 ## colony costs this file — everything else the wagon brought is poured into
 ## `store` from outside once the town is standing. See Caravan.settle.
 var founding := 0
+## TRUE ONCE THE TOWN IS WHOLE: its people, its roofs, its charter and its saved
+## past. A town founded over the horizon is raised over many frames, and until
+## then it is not the town a save should write down — it has fresh strangers in
+## it, and its real record is still waiting in SaveGame.village_memory. See
+## SaveGame.snapshot.
+var founded := false
 ## The wagon standing packed by the store, if there is one. A town keeps at most
 ## one: a second would be a town emptying itself into carts.
 var wagon: Caravan = null
@@ -420,6 +426,7 @@ func _found() -> void:
 func _open_for_business() -> void:
 	var clock := Ledger.swap(&"Village:founding", "charter and memory")
 	_deal_the_work()
+	founded = true
 	Ledger.resume(clock)
 
 

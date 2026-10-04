@@ -297,6 +297,10 @@ func _arm_active() -> void:
 func snapshot(world: WorldGen, creature: Creature) -> Dictionary:
 	var villages := []
 	for v in get_tree().get_nodes_in_group("village"):
+		# NOT A TOWN STILL BEING RAISED: it holds fresh strangers, and its real
+		# record is still in village_memory below, which carries it forward.
+		if not (v as Village).founded:
+			continue
 		villages.append((v as Village).to_dict())
 	# A town we saved but never revisited this session has never been rebuilt,
 	# so its memory is the only record of it — carry it forward.

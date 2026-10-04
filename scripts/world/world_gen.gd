@@ -1622,6 +1622,42 @@ func _maybe_found_village(cell: Vector2i) -> void:
 			% village.village_name)
 
 
+## THE TOWNS THAT BELIEVE IN YOU, RAISED AS THE GAME LOADS.
+##
+## A saved town used to come back only when its ground streamed in again, so a
+## town that believed in you a kilometre off did not exist until you went there,
+## and a COLONY — founded by a wagon wherever it stopped, on no site the world
+## would ever found a town on — never came back at all: its record waited in
+## memory forever. Every converted town in the save is founded now, at its own
+## spot, and takes back its own past the way any town does (SaveGame.recall, by
+## position). A town that does not believe yet still waits to be walked to.
+##
+## Its cell is marked, so the land streaming in later does not found it twice.
+## Returns how many were raised.
+func raise_the_faithful(memory: Array) -> int:
+	var raised := 0
+	for entry: Variant in memory:
+		var record := entry as Dictionary
+		if record == null or bool(record.get("home", false)) \
+				or not bool(record.get("converted", false)):
+			continue
+		var pos: Array = record.get("pos", [])
+		if pos.size() < 2:
+			continue
+		var x := float(pos[0])
+		var z := float(pos[1])
+		var town := Village.new()
+		town.is_player_home = false
+		town.village_name = String(record.get("name", "a town"))
+		town.position = Vector3(x, height_at(x, z), z)
+		add_sibling(town)
+		var cell := cell_of(x, z)
+		if _is_village_cell(cell):
+			_village_cells[cell] = town
+		raised += 1
+	return raised
+
+
 func _village_name(rng: RandomNumberGenerator) -> String:
 	var first := ["Ash", "Thorn", "Elm", "Wold", "Bram", "Crag", "Fen", "Gild",
 		"Hart", "Mere", "Oak", "Stone", "Wick", "Dun", "Ley"]
