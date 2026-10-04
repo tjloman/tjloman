@@ -148,6 +148,9 @@ var heat: int = Heat.EASY
 ## TRUE WHILE THE PLAYER HAS SOMETHING IN THEIR HAND. Set by DivineHand; read
 ## only by `sim_relief`. Nothing else in the game is allowed to care.
 var hands_busy := false
+## The tier this launch fell back FROM because the last launch died at it, or
+## -1. Said on the start screen. See `_ready`.
+var fell_back_from := -1
 
 var _frame := 0.016
 var _pressure := 0.0     # seconds the current condition has held
@@ -164,10 +167,18 @@ var _announced := {}
 func _ready() -> void:
 	_set_the_clock()
 	var saved := _load_override()
-	if saved >= 0:
-		tier = saved as Tier
-	else:
-		tier = _detect_tier()
+	var detected := _detect_tier()
+	tier = saved as Tier if saved >= 0 else detected
+	# A TIER ABOVE THIS DEVICE'S OWN, AND THE LAST LAUNCH DIED: start on the
+	# device's own. An Adreno 619 set to MEDIUM by hand lost its GPU within
+	# fifteen seconds of every launch, and the choice was saved — so every
+	# launch after it crashed too, with no way back to the setting. Kept: a
+	# launch that dies at a tier this device chose for itself is a different
+	# problem, and the game says so on the start screen either way.
+	if tier > detected and BootTrail.died():
+		fell_back_from = tier
+		tier = detected
+		_save_override(tier)
 	print("Quality: %s (GPU: %s)" % [Tier.keys()[tier], _adapter_name()])
 
 

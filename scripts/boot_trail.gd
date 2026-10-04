@@ -22,11 +22,18 @@ const READY := "loaded"
 const LEFT := "left the game"
 
 static var _steps := PackedStringArray()
+## THE LAST LAUNCH'S TRAIL, read once, before this launch writes a word. Read
+## lazily rather than by whoever asks first: an autoload ahead of the start screen
+## (SoundBank, synthesizing) can mark a step before anybody has looked, and that
+## mark overwrote the only record of how the last launch ended.
+static var _before := PackedStringArray()
+static var _remembered := false
 
 
 ## Starting this step. Written only when it changes, and closed at once so it is
 ## on the device whatever happens next.
 static func mark(step: String) -> void:
+	_remember()
 	if not _steps.is_empty() and _steps[_steps.size() - 1] == step:
 		return
 	_steps.append(step)
@@ -51,15 +58,32 @@ static func left() -> void:
 
 
 ## The last steps of the last launch, oldest first, if it DIED — empty if it
-## ended well or there was none. Read BEFORE this launch marks anything.
+## ended well or there was none.
 static func where_last_stopped() -> PackedStringArray:
-	if not FileAccess.file_exists(PATH):
+	_remember()
+	if _before.is_empty() or _before[_before.size() - 1] in [READY, LEFT]:
 		return PackedStringArray()
+	return _before
+
+
+## DID THE LAST LAUNCH DIE AT ANY POINT — loading or playing? A launch that is
+## left normally (closed, or put in the background) ends its trail with LEFT;
+## anything else stopped mid-step. Stricter than `where_last_stopped`, which
+## lets "loaded" pass so the start screen does not report a crash during play as
+## one during loading. See Quality._ready, which needs to know either way.
+static func died() -> bool:
+	_remember()
+	return not _before.is_empty() and _before[_before.size() - 1] != LEFT
+
+
+static func _remember() -> void:
+	if _remembered:
+		return
+	_remembered = true
+	if not FileAccess.file_exists(PATH):
+		return
 	var f := FileAccess.open(PATH, FileAccess.READ)
 	if f == null:
-		return PackedStringArray()
-	var steps := f.get_as_text().strip_edges().split("\n", false)
+		return
+	_before = f.get_as_text().strip_edges().split("\n", false)
 	f.close()
-	if steps.is_empty() or steps[steps.size() - 1] in [READY, LEFT]:
-		return PackedStringArray()
-	return steps

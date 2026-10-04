@@ -204,6 +204,10 @@ func _where_we_are() -> String:
 			said += "\n Before that: %s.)" % ", ".join(before)
 		else:
 			said += ")"
+	if Quality.fell_back_from >= 0:
+		said += "\n(Graphics are back on %s: the last launch on %s did not finish.)" % [
+			str(Quality.Tier.keys()[Quality.tier]).capitalize(),
+			str(Quality.Tier.keys()[Quality.fell_back_from]).capitalize()]
 	return said
 
 

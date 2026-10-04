@@ -51,6 +51,25 @@ def main():
         fail.append("a launch that finishes loading never says so")
     if "BootTrail.mark(_warm_names[i])" not in body(start, "_warm"):
         fail.append("the warming stages are not on the trail")
+    # THE LAST LAUNCH IS READ BEFORE THIS ONE WRITES: by the trail itself, on
+    # first touch, so an autoload marking ahead of the start screen cannot wipe
+    # the only record of how the last launch ended.
+    trail = READ("scripts/boot_trail.gd")
+    if not body(trail, "mark").lstrip().startswith("step: String) -> void:\n\t_remember()"):
+        fail.append("BootTrail.mark writes before it has read the last launch's trail")
+    for fn in ("where_last_stopped", "died"):
+        if "_remember()" not in body(trail, fn):
+            fail.append("BootTrail.%s reads a trail this launch may already have overwritten" % fn)
+    if "!= LEFT" not in body(trail, "died"):
+        fail.append("BootTrail.died does not treat everything but a clean exit as a death")
+    # AND A LAUNCH THAT DIED ABOVE THIS DEVICE'S OWN TIER DOES NOT DIE AGAIN: the
+    # choice is saved, so without this every launch after it crashed too.
+    q = body(READ("scripts/quality.gd"), "_ready")
+    if not re.search(r"if tier > detected and BootTrail\.died\(\):\n\t\tfell_back_from = tier\n"
+                     r"\t\ttier = detected\n\t\t_save_override\(tier\)", q):
+        fail.append("a device set above its own tier that crashed is put back there next launch")
+    if "Quality.fell_back_from" not in READ("scripts/ui/start_screen.gd"):
+        fail.append("falling back to the device's own tier is done silently")
     note = body(READ("scripts/main.gd"), "_notification")
     if "NOTIFICATION_APPLICATION_PAUSED" not in note or "BootTrail.left()" not in note:
         fail.append("a game sent to the background would be reported as a crash")
