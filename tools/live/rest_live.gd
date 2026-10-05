@@ -35,9 +35,13 @@ func _initialize() -> void:
 		if who == null or v.global_position.distance_to(eye) < who.global_position.distance_to(eye):
 			who = v
 	var states: Dictionary = who.State
+	who.energy = 5.0
+	who.hunger = 0.0
 	who.state = states["SLEEPING"]
-	who._pitch_body(80.0)
-	await process_frame
+	for i in 90:
+		await physics_frame
+		if who._body_mesh.rotation_degrees.x > 70.0:
+			break
 	# Out of bed by a way that does not stand them up: just a new state.
 	who.state = states["WANDER"]
 	for i in 90:
@@ -46,15 +50,14 @@ func _initialize() -> void:
 			break
 	check(is_zero_approx(who._body_mesh.rotation_degrees.x),
 		"a villager out of bed stands up (%.0f deg)" % who._body_mesh.rotation_degrees.x)
-	# Tired and fed, so they do not wake of their own accord mid-check: a day
-	# nap ends once a villager is rested, which is right, and not this check.
 	who.energy = 5.0
 	who.hunger = 0.0
 	who.state = states["SLEEPING"]
-	who._pitch_body(80.0)
-	for i in 12:
+	for i in 90:
 		await physics_frame
-	check(who._body_mesh.rotation_degrees.x > 70.0, "and one asleep stays lying down")
+		if who._body_mesh.rotation_degrees.x > 70.0:
+			break
+	check(who._body_mesh.rotation_degrees.x > 70.0, "and one asleep lies down")
 
 	print("DOWN WHEN SPENT")
 	var beast = root.get_tree().get_first_node_in_group("creature")

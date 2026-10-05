@@ -49,6 +49,7 @@ python3 tools/forest_fire.py     # a tree burns long enough to carry; a wood cre
 python3 tools/shade.py           # baked shadows: C++, shader and GDScript agree
 python3 tools/faithful.py        # towns that believe come back with the game
 python3 tools/rest.py            # up after sleep; a spent creature drops, even on the lead
+python3 tools/pose.py            # one pose at a time, by number; one writer of the body
 ```
 
 To SEE a frame without a screen (software Vulkan under Xvfb; slow but real),

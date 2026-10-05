@@ -4,8 +4,8 @@
 "People are like... crawling? After they awaken up, they go about their day
 crawling on the ground." Sleep pitches a villager's body over; only some of
 the ways out of bed stood it back up, so the rest went about the day lying
-down. Now every thinking tick stands up anyone who is neither asleep nor down
-over a meal (VillagerLook.keep_upright).
+down. Now a villager is in one pose at a time, worked out from what they are
+doing and written whole whenever it changes (VillagerPose; see tools/pose.py).
 
 "Creature having 0 energy, he should literally pass out and immediately rest.
 The leash has been making him unable to sleep." The lead decides for a creature
@@ -24,7 +24,6 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 VILLAGER = (ROOT / "scripts/villager/villager.gd").read_text()
-LOOK = (ROOT / "scripts/villager/villager_look.gd").read_text()
 CREATURE = (ROOT / "scripts/creature/creature.gd").read_text()
 LEAD = (ROOT / "scripts/creature/creature_lead.gd").read_text()
 LEISURE = (ROOT / "scripts/creature/creature_leisure.gd").read_text()
@@ -45,14 +44,8 @@ def body(text, name):
 
 
 def source(fail):
-    phys = body(VILLAGER, "_physics_process")
-    gate = phys.find("_brain_owed = 0.0")
-    stand = phys.find("VillagerLook.keep_upright(self)")
-    if stand < 0 or stand < gate:
-        fail.append("nothing stands a villager up on a thinking tick")
-    up = body(LOOK, "keep_upright")
-    if "State.SLEEPING" not in up or "State.EATING" not in up or "_pitch_body(0.0)" not in up:
-        fail.append("keep_upright does not stand up everyone but the sleeping and the eating")
+    if "VillagerPose.apply(self)" not in body(VILLAGER, "_physics_process"):
+        fail.append("nothing puts a villager's body in its pose")
     feel = body(CREATURE, "_tick_feelings")
     if "CreatureLeisure.pass_out_if_spent(self)" not in feel:
         fail.append("a spent creature does not drop where it stands")

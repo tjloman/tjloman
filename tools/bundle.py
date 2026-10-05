@@ -251,11 +251,12 @@ if not at_the_door:
 # there the way sleep does it — dropped and pitched forward — and, crucially,
 # STOOD BACK UP afterwards. A pose that puts a body on the ground and never
 # lifts it has shipped in this codebase before.
-LOOK = (ROOT / "scripts/villager/villager_look.gd").read_text()
-down = body_of(LOOK, "gone_to_carrion")
-up = body_of(LOOK, "stand_up")
-kneels = any("_pitch_body(" in r for r in down) and any("sit_down(true)" in r for r in down)
-rises = any("_pitch_body(0.0)" in r for r in up) and any("sit_down(false)" in r for r in up)
+# The pose is VillagerPose's now: FEED whenever they are EATING a person, and
+# gone the moment they are not — there is no "stand back up" to forget.
+POSE = (ROOT / "scripts/villager/villager_pose.gd").read_text()
+of = body_of(POSE, "of")
+kneels = any("return FEED" in r for r in of) and any("eating_a_person(who)" in r for r in of)
+rises = any("if code == who.pose_code:" in r for r in body_of(POSE, "apply"))
 # The FIRST `State.EATING:` is the state machine's. The later ones are the
 # status line and the word over their head, and looking at those instead is how
 # a check comes to report on a match arm that does nothing.

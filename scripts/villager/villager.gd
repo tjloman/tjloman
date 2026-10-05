@@ -199,6 +199,9 @@ var calling_left := 0
 var target_food: FoodItem = null
 var target_bush: ForageBush = null
 var feeding_on: Corpse = null
+## THE ONE POSE THIS BODY IS IN, as a byte (see VillagerPose for the codes).
+## Written only by VillagerPose.apply; -1 until the first, so it is applied.
+var pose_code := -1
 var _target := Vector3.ZERO
 var _action_time := 0.0
 ## A decision has been asked for and not yet granted. See `_rethink`.
@@ -428,9 +431,9 @@ func _physics_process(delta: float) -> void:
 		delta = _brain_owed
 		_brain_owed = 0.0
 		_coast_to = Vector3.INF      # walking sets it again, if they still walk
-		VillagerLook.keep_upright(self)
 	else:
 		_coast_to = Vector3.INF      # in a hand or in the air: nothing to coast on
+	VillagerPose.apply(self)         # one pose, from what they are doing: see VillagerPose
 	# PINNED suspends everything, and for the same reason DYING does: they are
 	# not doing anything, they are being done to. No hunger, no ageing, no
 	# watchdog — the ONLY clock that runs is the Mauling's, and the village
@@ -440,12 +443,8 @@ func _physics_process(delta: float) -> void:
 	if state == State.PINNED:
 		if pin == null:
 			state = State.WANDER   # the pin ended without going through us
-			if _animator == null and _visuals != null:
-				_visuals.rotation = Vector3.ZERO
 		else:
 			_apply_gravity_only(delta)
-			if _animator == null and _visuals != null:
-				_visuals.rotation_degrees.x = 88.0
 			_label.text = "%s — HELD DOWN (%d%%)" % [villager_name, int(pin.gone() * 100.0)]
 			return
 	# Dying suspends the whole normal life — they lie there, out of the fight,
@@ -478,7 +477,7 @@ func _physics_process(delta: float) -> void:
 		if _label.text != status:  # Label3D re-renders on every assignment
 			_label.text = status
 	if _animator != null:
-		_animator.play(VillagerLook.pose(self))
+		_animator.play(VillagerPose.clip(self))
 
 	# A SHELTERING CHILD STAYS SHELTERING, whatever else writes to them. A scare,
 	# a festival, the militia's muster — anything that sets a villager's state
@@ -543,7 +542,6 @@ func _physics_process(delta: float) -> void:
 		State.GO_SLEEP:
 			if _move_toward(_target, WALK_SPEED * _speed_factor(), delta):
 				state = State.SLEEPING
-				_pitch_body(80.0)
 		State.SLEEPING:
 			_apply_gravity_only(delta)
 			# Homeless recovery is miserable: slower sleep, sapped spirits.
@@ -554,7 +552,6 @@ func _physics_process(delta: float) -> void:
 			# Nobody starves to death IN BED: a growling stomach wakes you,
 			# and _decide puts eating before everything else.
 			if hunger > 80.0:
-				_pitch_body(0.0)
 				_rethink()
 			# THE NIGHT IS SLEPT THROUGH. This woke them the moment energy was
 			# full — ten seconds into a two-minute night — and a rested adult is
@@ -563,7 +560,6 @@ func _physics_process(delta: float) -> void:
 			# In the dark they stay down until dawn; by day, a nap ends once they
 			# are rested, and not all on the same frame.
 			elif not GameState.is_night() and energy > 60.0 and randf() < delta * WAKE_RATE:
-				_pitch_body(0.0)
 				state = State.WANDER    # up, not lying under "zzz" while they think
 				_target = global_position
 				_rethink()
@@ -1165,22 +1161,13 @@ func sex_word() -> String:
 
 ## Animation ----------------------------------------------------------------
 
-## Tilt the body forward to mime work — but only when NOT driven by a rigged
-## model, whose own clips own the pose.
-func _pitch_body(deg: float) -> void:
-	if _animator == null:
-		_body_mesh.rotation_degrees.x = deg
-
-
 ## The semantic clip a rigged model should play for the current state. Missing
 ## clips are ignored, so a model with only walk/idle still works.
 ## Down on the dirt, or back up. See VillagerLook.
 func sit_down(down: bool) -> void:
 	if _seated == down:
 		return
-	_seated = down
-	if _visuals != null and is_instance_valid(_visuals):
-		_visuals.position.y = -VillagerLook.SIT_DROP if down else 0.0
+	_seated = down          # asked for; the pose decides (VillagerPose.of)
 
 
 ## Needs ---------------------------------------------------------------------
@@ -1891,7 +1878,6 @@ func pinned_by(what: Mauling) -> void:
 	velocity = Vector3.ZERO
 	_fight_target = null
 	happiness = maxf(happiness - 40.0, 0.0)
-	_pitch_body(0.0)
 
 
 ## PULLED OUT IN TIME. How much of them is left was decided by how long they
@@ -1902,8 +1888,6 @@ func pulled_free(left: float) -> void:
 	# to be set to: somebody who went under the jaws at half health does not
 	# come out of it better off than they went in.
 	health = maxf(minf(health, left), 1.0)
-	if _animator == null and _visuals != null:
-		_visuals.rotation = Vector3.ZERO
 	if state == State.PINNED:
 		state = State.WANDER
 	happiness = maxf(happiness - 20.0, 0.0)
@@ -2058,10 +2042,6 @@ func _tick_hazards(delta: float) -> void:
 ## or a merciful hand/creature — or the end.
 func _process_dying(delta: float) -> void:
 	_apply_gravity_only(delta)
-	if _animator != null:
-		_animator.play("dying")
-	elif _visuals != null:
-		_visuals.rotation_degrees.x = 88.0  # fallen prone
 	_dying_time -= delta
 	if _dying_time <= 0.0:
 		die(false)
@@ -2090,8 +2070,6 @@ func rescue() -> void:
 	if state == State.DYING:
 		state = State.WANDER
 		_dying_time = 0.0
-		if _animator == null and _visuals != null:
-			_visuals.rotation = Vector3.ZERO
 		happiness = maxf(happiness, 30.0)
 		if village != null and village.is_player_home:
 			GameState.announce("%s was pulled back from death's door." % villager_name)
@@ -2211,7 +2189,6 @@ func set_flight_spin(angular: Vector3) -> void:
 
 func _land() -> void:
 	_spin_ang = Vector3.ZERO
-	_visuals.rotation = Vector3.ZERO
 	if _gentle_drop:
 		_gentle_drop = false
 		velocity = Vector3.ZERO
@@ -2300,7 +2277,6 @@ func scare(from_pos: Vector3) -> void:
 	# latch stands a villager still whatever their state says — so they
 	# "fled in terror" without moving a step. See Spool.
 	_decision_due = false
-	_pitch_body(0.0)
 
 
 ## THE OPPOSITE OF scare(): a fright LET GO OF rather than waited out. Never
@@ -2310,7 +2286,6 @@ func calm() -> void:
 		state = State.WANDER
 		_action_time = randf_range(1.5, 4.0)
 		_target = global_position
-		_pitch_body(0.0)
 	happiness = minf(happiness + 6.0, 100.0)
 
 
@@ -2359,7 +2334,6 @@ func pick_up() -> void:
 	Mauling.free_of(self)
 	_dismount()
 	state = State.HELD
-	_pitch_body(0.0)
 	velocity = Vector3.ZERO
 
 

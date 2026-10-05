@@ -7,16 +7,6 @@ extends RefCounted
 ## like it is doing right now.
 
 
-## How far a body drops when it sits. Until a rig ships with a sit pose there is
-## no animation to play, so the sitting is done the only way a body without one
-## can do it — the whole visual drops, and the animator is asked for "sit"
-## anyway. The ask costs nothing today (ModelAnimator.play keeps the current
-## clip when a model has no such animation) and it is the whole point: the day a
-## villager model arrives with the clip in it, this starts working with nothing
-## to wire up. This is the number to turn when a real pose replaces it.
-const SIT_DROP := 0.42
-
-
 ## HOW LONG A WAIT IS WORTH COVERING. Most are a fifth of a second and want
 ## nothing done about them — covering those would have a town twitching into a
 ## stretch and out of it constantly. It is the storms that make a pause you can
@@ -34,10 +24,8 @@ const DITHER := 0.35
 const SPEAK_ODDS := 0.06
 const SPEAK_REST := 5.0
 
-## HOW FAR FORWARD A BODY GOES OVER A CORPSE, and what the meal costs whoever
-## eats it. See `gone_to_carrion` — the pitch is the same trick sleep uses,
-## because there is no rig with a clip for this either.
-const CARRION_PITCH := 74.0
+## WHAT THE MEAL COSTS whoever eats a person. See `gone_to_carrion`; how a body
+## looks down over one is VillagerPose.FEED.
 const CARRION_COST := 25.0
 
 static var _spoke_at := -99.0
@@ -77,44 +65,9 @@ static func _pass_the_time(who: Villager) -> void:
 			SoundBank.play_at("murmur", who.global_position, -12.0)
 
 
+## The clip for a rigged model. The pose itself is VillagerPose's.
 static func pose(who: Villager) -> String:
-	# ON ALL FOURS, and this outranks everything including the sit, because it
-	# is the one meal in the game that is not a meal. See `gone_to_carrion`.
-	if who.state == Villager.State.EATING and eating_a_person(who):
-		return "feed"
-	# SITTING OUTRANKS THE STATE IT IS IN, because AT_SCHOOL covers a class on
-	# its feet and a class on the ground alike, and only the school knows which.
-	if who._seated:
-		return "sit"
-	match who.state:
-		Villager.State.PINNED: return "fall"   # prone; no rig here has a clip for this
-		Villager.State.DYING: return "dying"
-		Villager.State.FALLING: return "fall"
-		Villager.State.HAULING: return "carry"
-		Villager.State.CIRCLING: return "play"
-		Villager.State.BUILDING_NEST, Villager.State.BUILDING_SHOP, Villager.State.WORKING: return "work"
-		Villager.State.GO_ARM: return "run"
-		Villager.State.FIGHT: return "attack"
-		Villager.State.HELD: return "idle"
-		Villager.State.FLEE: return "run"
-		Villager.State.SLEEPING: return "sleep"
-		Villager.State.EATING: return "eat"
-		Villager.State.WORSHIPPING, Villager.State.PREACHING: return "pray"
-		Villager.State.PLAY: return "play"
-		Villager.State.FARMING, Villager.State.CHOPPING, Villager.State.QUARRYING, Villager.State.BUILDING, \
-		Villager.State.BUILDING_FARM, Villager.State.BUILDING_EDUBBA, Villager.State.BUTCHERING, \
-		Villager.State.TAMING, Villager.State.HUNTING, Villager.State.FISHING, Villager.State.TEACH:
-			return "work"
-	if Vector2(who.velocity.x, who.velocity.z).length() > 0.3:
-		return "walk"
-	# STANDING STILL — AND WAITING ON A THOUGHT, if the wait has gone on long
-	# enough to see. Deliberately the LAST thing asked, below every state above:
-	# a villager whose decision is late while they are still mid-haul goes on
-	# hauling, because the plan they are waiting to replace is the one they are
-	# still carrying out. Only somebody with nothing left to do stretches.
-	if Spool.stalled_for(who) >= DITHER:
-		return "stretch"
-	return "idle"
+	return VillagerPose.clip(who)
 
 
 ## IS THIS ONE DOWN OVER A BODY? Asked of what they are actually eating rather
@@ -138,8 +91,6 @@ static func eating_a_person(who: Villager) -> bool:
 ## code, because they are the same event: this is what eating a person IS.
 static func gone_to_carrion(who: Villager) -> void:
 	who.morality = maxf(who.morality - CARRION_COST, -100.0)
-	who.sit_down(true)
-	who._pitch_body(CARRION_PITCH)
 	if who.village != null and who.village.is_player_home:
 		GameState.announce("%s is down over a body, eating. Something in them "
 			% who.villager_name + "dims.")
@@ -151,21 +102,6 @@ static func gone_to_carrion(who: Villager) -> void:
 ## life, which is a bug this file has shipped once already for sleep.
 static func stand_up(who: Villager) -> void:
 	who.sit_down(false)
-	who._pitch_body(0.0)
-
-
-## NOBODY GOES ABOUT THEIR DAY LYING DOWN. Two states put a body on the ground
-## — asleep, and down over a meal — and a dozen ways out of them do not all
-## stand it back up: a decision, a scare, a job, the watchdog, a fire. Hours
-## into a game, half a town crawled on its bellies from chore to chore after
-## waking. So it is not left to each way out: every thinking tick, anyone in
-## neither state is upright.
-static func keep_upright(who: Villager) -> void:
-	if who.state == Villager.State.SLEEPING or who.state == Villager.State.EATING:
-		return
-	if who._animator == null and who._body_mesh != null \
-			and who._body_mesh.rotation_degrees.x != 0.0:
-		who._pitch_body(0.0)
 
 
 ## ARE BOTH THIS BODY AND WHERE IT IS GOING INSIDE THE TOWN?

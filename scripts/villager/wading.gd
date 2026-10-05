@@ -68,4 +68,3 @@ static func out(who: Villager, world: WorldGen) -> void:
 	who._flee_from = here - best * 5.0
 	who._action_time = Villager.FRIGHT_SECONDS
 	who._decision_due = false        # out NOW, not when the line reaches them
-	who._pitch_body(0.0)
