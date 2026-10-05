@@ -428,6 +428,7 @@ func _physics_process(delta: float) -> void:
 		delta = _brain_owed
 		_brain_owed = 0.0
 		_coast_to = Vector3.INF      # walking sets it again, if they still walk
+		VillagerLook.keep_upright(self)
 	else:
 		_coast_to = Vector3.INF      # in a hand or in the air: nothing to coast on
 	# PINNED suspends everything, and for the same reason DYING does: they are

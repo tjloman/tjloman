@@ -536,6 +536,7 @@ func _tick_feelings(delta: float) -> void:
 	hunger = body.settle_hunger(hunger, growth, delta)
 	if state != State.SLEEPING:
 		energy = maxf(energy - 0.4 * delta, 0.0)
+	CreatureLeisure.pass_out_if_spent(self)
 	if state in [State.IDLE, State.WANDER]:
 		boredom = minf(boredom + 1.2 * delta, 100.0)
 	if hunger > 80.0:
@@ -620,8 +621,10 @@ func _decide() -> void:
 		throwing.spill(self)
 	_last_deed = ""
 	_mood_before = mood
-	# YOUR COMMAND FIRST, and instantly: a leashed creature never waits.
+	# YOUR COMMAND FIRST, and instantly — unless it is too tired to stand.
 	if leash_target != Vector3.INF:
+		if CreatureLeisure.rest_before_the_lead(self):
+			return
 		state = State.LEASHED
 		_action_time = 2.0
 		return

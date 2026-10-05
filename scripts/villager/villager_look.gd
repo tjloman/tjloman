@@ -154,6 +154,20 @@ static func stand_up(who: Villager) -> void:
 	who._pitch_body(0.0)
 
 
+## NOBODY GOES ABOUT THEIR DAY LYING DOWN. Two states put a body on the ground
+## — asleep, and down over a meal — and a dozen ways out of them do not all
+## stand it back up: a decision, a scare, a job, the watchdog, a fire. Hours
+## into a game, half a town crawled on its bellies from chore to chore after
+## waking. So it is not left to each way out: every thinking tick, anyone in
+## neither state is upright.
+static func keep_upright(who: Villager) -> void:
+	if who.state == Villager.State.SLEEPING or who.state == Villager.State.EATING:
+		return
+	if who._animator == null and who._body_mesh != null \
+			and who._body_mesh.rotation_degrees.x != 0.0:
+		who._pitch_body(0.0)
+
+
 ## ARE BOTH THIS BODY AND WHERE IT IS GOING INSIDE THE TOWN?
 ##
 ## A shore probe is terrain samples — a `height_at` is five noise evaluations

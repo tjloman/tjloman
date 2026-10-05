@@ -138,6 +138,10 @@ static func to_spot(who: Creature, pos: Vector3) -> void:
 	# A ROPE IS STILL A ROPE. Pointing past it sends the creature as near as it
 	# can get rather than having it strain at the end for the rest of the day.
 	who.leash_target = CreatureStake.nearest_within(who.get_tree(), pos)
+	# ASLEEP, IT HEARS YOU AND COMES WHEN IT WAKES: the order is kept, and the
+	# sleep is not broken by every tug of a held rope. See CreatureLeisure.
+	if CreatureLeisure.lead_waits(who):
+		return
 	who.state = Creature.State.LEASHED
 	who.express("curious")
 	who.attention = minf(who.attention + STRONG_HEED, 100.0)

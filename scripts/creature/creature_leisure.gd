@@ -25,9 +25,20 @@ const LIE_ROLL := 80.0
 const LIE_THICK := 0.30
 ## How often the audience at a communing is counted, in seconds.
 const AUDIENCE_EVERY := 0.5
+## SPENT, TIRED AND RESTED, in energy. At SPENT it drops where it stands,
+## whatever it was doing and whoever holds the lead; under TIRED it rests before
+## it obeys the lead; and asleep, it is woken by a call on the lead only once it
+## is past ROUSED — short of that, the order waits for it to wake.
+const SPENT := 0.5
+const TIRED := 15.0
+const ROUSED := 40.0
+## How often the drop is said aloud, in game seconds: a spent beast struck awake
+## drops again at once, and the line would come with every blow.
+const SPENT_SAID_EVERY := 30.0
 
 static var _audience := 0
 static var _audience_in := 0.0
+static var _spent_said_at := -INF
 
 static func lounge(who: Creature, delta: float) -> void:
 	# IF HE HAS A BED, HE USES IT. Lounging used to happen wherever he was
@@ -241,6 +252,44 @@ static func sleep(who: Creature, delta: float) -> bool:
 		who.mind.dreams.wake(who)
 		who._decide()
 	return false
+
+
+## IT DROPS WHERE IT STANDS. A creature run to nothing went on hauling, juggling
+## and following the lead at zero energy, because nothing it was doing ever asked
+## — and a beast on the lead never got to choose to rest at all, since the lead
+## decides for it. Spent is not a choice: whatever is in its arms goes down,
+## whatever is in the air comes down, and it is asleep, here, now. Asked every
+## tick. True on the tick it drops.
+static func pass_out_if_spent(who: Creature) -> bool:
+	if who.energy > SPENT or who.state == Creature.State.SLEEPING:
+		return false
+	who.release_carried()
+	if who.throwing.busy():
+		who.throwing.spill(who)
+	who._target = Vector3.INF          # where it stands: no walk to a bed
+	who.state = Creature.State.SLEEPING
+	if GameState.clock - _spent_said_at > SPENT_SAID_EVERY:
+		_spent_said_at = GameState.clock
+		GameState.announce("%s drops where it stands, spent, and sleeps."
+			% GameState.creature_name)
+	return true
+
+
+## REST BEFORE THE LEAD. A tired creature that is called still lies down first
+## — it obeys when it wakes, since the order is kept. True if it lay down.
+static func rest_before_the_lead(who: Creature) -> bool:
+	if who.energy > TIRED:
+		return false
+	who._target = Vector3.INF
+	who.state = Creature.State.SLEEPING
+	return true
+
+
+## DOES A CALL ON THE LEAD WAIT? While it sleeps and is not yet rested enough to
+## be roused — a held rope tugs every second or so, and each tug used to drag it
+## out of its sleep, so a creature on the lead could never sleep at all.
+static func lead_waits(who: Creature) -> bool:
+	return who.state == Creature.State.SLEEPING and who.energy < ROUSED
 
 
 ## ON ITS SIDE, AND STILL WHERE IT WAS STANDING.
