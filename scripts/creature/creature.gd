@@ -206,6 +206,9 @@ var heart := CreatureHeart.new()
 var fear := 0.0
 
 var state := State.IDLE
+## THE ONE POSE ITS BODY IS IN, as a byte (see CreaturePose for the codes).
+## Written only by CreaturePose.apply, every frame.
+var pose_code := 0
 ## HOW IT HAS BEEN TREATED, and what that leaves it able to think with. Read by
 ## observation, sleep, learning, empathy, appetite and growth — see the file.
 var welfare := CreatureWelfare.new()
@@ -377,9 +380,7 @@ func _physics_process(delta: float) -> void:
 		State.EATING:
 			_action_time -= delta
 			_apply_gravity_only(delta)
-			_body.scale.y = 1.0 + sin(Time.get_ticks_msec() / 60.0) * 0.08
 			if _action_time <= 0.0:
-				_body.scale.y = 1.0
 				# A meal TEACHES: it filled the belly (good), but the mind also
 				# books the moral weight of what was eaten, so devouring people
 				# actually drags the creature's heart down. Without this the
@@ -417,11 +418,7 @@ func _physics_process(delta: float) -> void:
 		State.FISHING:
 			_apply_gravity_only(delta)
 			_action_time -= delta
-			if _animator == null:
-				_body.rotation_degrees.x = sin(Time.get_ticks_msec() / 300.0) * 10.0
 			if _action_time <= 0.0:
-				if _animator == null:
-					_body.rotation_degrees.x = 0
 				_land_a_fish()
 		State.GO_STORE:
 			var store := CreatureEyes.nearest_store(get_tree(), global_position)
@@ -516,10 +513,7 @@ func _physics_process(delta: float) -> void:
 			_carried = null
 
 	Ledger.open(&"Creature:look")
-	if _animator != null:
-		_animator.play(_anim_state())
-	else:
-		_animate_waddle(delta)
+	CreaturePose.apply(self, delta)      # one pose, from what it is doing
 	CreatureLook.wear(self, delta)
 	_tick_flight(delta)
 	var status := _status_text()
@@ -1691,9 +1685,7 @@ func _process_play(delta: float) -> void:
 		# No toy? Dance. Spin on the spot near whoever will watch.
 		_apply_gravity_only(delta)
 		rotate_y(delta * 4.0)
-		if _animator == null:
-			_body.position.y = absf(sin(steering.walk_phase)) * 0.3
-		steering.walk_phase += delta * 10.0
+		steering.walk_phase += delta * 10.0      # the bounce: see CreaturePose
 	if _cheer_time <= 0.0:
 		_cheer_time = 1.5
 		for v in get_tree().get_nodes_in_group("villagers"):
@@ -1907,16 +1899,6 @@ func _apply_gravity_only(delta: float) -> void:
 	velocity.z = 0
 	velocity.y -= GRAVITY * delta
 	move_and_slide()
-
-
-func _animate_waddle(_delta: float) -> void:
-	var moving := Vector2(velocity.x, velocity.z).length() > 0.5
-	if moving:
-		_body.position.y = absf(sin(steering.walk_phase)) * 0.15
-		_body.rotation_degrees.z = sin(steering.walk_phase) * 6.0
-	elif state != State.SLEEPING and state != State.PLAY:
-		_body.position.y = lerpf(_body.position.y, 0.0, 0.2)
-		_body.rotation_degrees.z = lerpf(_body.rotation_degrees.z, 0.0, 0.2)
 
 
 ## A miracle lifts the beast into the air for a while. Cast it again to top up.
@@ -2397,11 +2379,6 @@ func activity_word() -> String:
 ## The semantic clip a rigged model plays for the current state. Missing clips
 ## are ignored, so a model with only walk/idle still animates sensibly.
 ## The semantic clip a rigged model plays for the current state.
-func _anim_state() -> String:
-	return CreatureLook.anim_for(
-		state_name(), Vector2(velocity.x, velocity.z).length() > 0.3)
-
-
 func _status_word() -> String:
 	return CreatureLook.doing_word(state_name(), _carry_intent, _cargo_word())
 

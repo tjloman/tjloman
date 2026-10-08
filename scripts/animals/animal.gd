@@ -115,6 +115,9 @@ var lifespan_seconds := randf_range(12.0, 28.0) * GameState.DAY_SECONDS
 ## down, which is now the only way a predator ever kills a person — see Mauling.
 var pinning: Villager = null
 var state := State.IDLE
+## THE ONE POSE THIS BEAST IS IN, as a byte (see AnimalPose for the codes).
+## Written only by AnimalPose.apply; -1 until the first, so it is applied.
+var pose_code := -1
 var _target := Vector3.ZERO
 var _prey: Node3D = null
 var _water_target := Vector3.INF
@@ -132,6 +135,9 @@ var _fall_speed := 0.0
 var _gentle_drop := false
 var _spin_ang := Vector3.ZERO   # aftertouch spin axis*rate while thrown (rad/s)
 var _animator: ModelAnimator = null   # non-null only for a rigged custom model
+## WHAT THE BEAST LOOKS LIKE, hung apart from the body that walks and collides,
+## so a pose (or a tumble) turns the looks and never the box. See AnimalPose.
+var _figure: Node3D = null
 ## A thought is due and not yet granted — see the spool gate in _physics_process.
 var _think_due := false
 var _burn_visual: Node3D = null
@@ -170,6 +176,9 @@ func _ready() -> void:
 	col.shape = shape
 	col.position = Vector3(0, (body.y + leg_h) * 0.5, 0)
 	add_child(col)
+	_figure = Node3D.new()
+	_figure.name = "Figure"
+	add_child(_figure)
 	# A custom per-species model (e.g. sheep.glb) replaces the box-beast; if
 	# it's rigged, an animator plays its clips.
 	var custom := ModelBank.instantiate(species)
@@ -178,7 +187,7 @@ func _ready() -> void:
 		# uses, from the same place, so a beast and the herd it was promoted out
 		# of cannot stand at two different heights. See ModelBank.footing.
 		custom.position.y += ModelBank.footing(species)
-		add_child(custom)
+		_figure.add_child(custom)
 		_animator = ModelAnimator.create(custom)
 		Util.apply_lod(self, Quality.actor_distance())
 	else:
@@ -210,10 +219,12 @@ func _build_body(body: Vector3, leg_h: float) -> void:
 		Vector3(0, head_y, body.z * 0.5 + head_r * 0.5)))
 	var whole := MeshInstance3D.new()
 	whole.mesh = Weld.shared("beast|" + species, parts)
-	add_child(whole)
-	Shade.cast(whole, Quality.shadow_reach(), "beast|" + species)
+	_figure.add_child(whole)
 	# Distant beasts stop drawing (they already freeze physics far off).
 	Util.apply_lod(self, Quality.actor_distance())
+	# After the LOD, which reaches every mesh under the beast and would stretch
+	# the shadow's own, shorter reach out to the beast's.
+	Shade.cast(whole, Quality.shadow_reach(), "beast|" + species)
 
 
 func _physics_process(delta: float) -> void:
@@ -258,8 +269,7 @@ func _physics_process(delta: float) -> void:
 	# the field. See Scheduler.MOST_OWED.
 	_sim_last = Scheduler.now()
 
-	if _animator != null:
-		_animator.play(_anim_state())
+	AnimalPose.apply(self)       # one pose, from what it is doing: see AnimalPose
 
 	_tick_hazards(delta)
 
@@ -291,11 +301,12 @@ func _physics_process(delta: float) -> void:
 			_fall_speed = velocity.length()
 			velocity.y -= Sling.gravity_for(self, GRAVITY) * delta   # see Sling
 			move_and_slide()
-			if _spin_ang.length() > 0.001:  # aftertouch tumble about a 3D axis
-				global_rotate(_spin_ang.normalized(), _spin_ang.length() * delta)
+			# The aftertouch tumble turns the LOOKS, never the body that faces
+			# and collides — see AnimalPose, which stands them up again.
+			if _spin_ang.length() > 0.001 and _figure != null:
+				_figure.global_rotate(_spin_ang.normalized(), _spin_ang.length() * delta)
 			if is_on_floor():
 				_spin_ang = Vector3.ZERO
-				rotation = Vector3.ZERO
 				if _gentle_drop:
 					_gentle_drop = false
 					state = State.IDLE
@@ -973,18 +984,6 @@ func in_flight_push(dv: Vector3) -> void:
 
 func set_flight_spin(angular: Vector3) -> void:
 	_spin_ang = angular
-
-
-## The semantic clip a rigged model plays for the current state.
-func _anim_state() -> String:
-	match state:
-		State.FALLING: return "fall"
-		State.HELD: return "idle"
-		State.FLEE, State.CHASE: return "run"
-		State.MAUL: return "graze"   # head down over a body; the nearest clip there is
-		State.DRINKING: return "drink"
-		State.GRAZE: return "graze"
-	return "walk" if Vector2(velocity.x, velocity.z).length() > 0.3 else "idle"
 
 
 func hover_text() -> String:

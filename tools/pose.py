@@ -23,6 +23,13 @@ What holds that in place:
   5. With GODOT set: in a real engine, a body put to bed, taken out of it by
      any route, seated in school and moved out of it, and thrown and landed,
      is in the right pose each time (tools/live/pose_live.gd).
+
+AND THE SAME FOR THE CREATURE AND THE BEASTS (CreaturePose, AnimalPose): one
+writer each — the creature's body (but its girth, CreatureLook.wear's), a
+beast's figure (but the throw's tumble, while FALL) — whole tables, and each
+applied every tick. The creature is written whole every frame, eased into
+held poses; a beast's figure is the only part ever tipped, never the body that
+walks, faces and collides.
 """
 import os
 import pathlib
@@ -33,6 +40,10 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 POSE = (ROOT / "scripts/villager/villager_pose.gd").read_text()
 VILLAGER = (ROOT / "scripts/villager/villager.gd").read_text()
+CPOSE = (ROOT / "scripts/creature/creature_pose.gd").read_text()
+APOSE = (ROOT / "scripts/animals/animal_pose.gd").read_text()
+CREATURE = (ROOT / "scripts/creature/creature.gd").read_text()
+ANIMAL = (ROOT / "scripts/animals/animal.gd").read_text()
 BANDS = {0x0: "ON ITS FEET", 0x1: "LOW", 0x2: "LYING", 0x3: "FALLEN", 0x4: "IN THE HAND"}
 WRITES = re.compile(
     r"(_body_mesh\.rotation\w*(\.\w+)?\s*=|_visuals\.(rotation|position)\w*(\.\w+)?\s*=|"
@@ -130,12 +141,62 @@ def live(fail):
         fail.append("in Godot:\n" + "\n".join(ln for ln in checks if ln.rstrip().endswith("NO")))
 
 
+CREATURE_WRITES = re.compile(r"_body\.(rotation|position|scale)\w*(\.\w+)?\s*=|_body\.(global_)?rotate\w*\(")
+FIGURE_WRITES = re.compile(r"_figure\.(rotation|position|basis|transform)\w*(\.\w+)?\s*=|"
+                           r"_figure\.(global_)?rotate\w*\(")
+
+
+def beasts(fail):
+    """The creature's body and a beast's figure: one writer each."""
+    for path in (ROOT / "scripts").rglob("*.gd"):
+        rel = path.relative_to(ROOT).as_posix()
+        for n, line in enumerate(bare(path.read_text()).splitlines(), 1):
+            if rel.startswith("scripts/creature/") and rel != "scripts/creature/creature_pose.gd" \
+                    and CREATURE_WRITES.search(line):
+                # ITS GIRTH is not a pose: CreatureLook.wear widens it.
+                if rel == "scripts/creature/creature_look.gd" and re.search(r"_body\.scale\.[xz] =", line):
+                    continue
+                fail.append("%s:%d writes the creature's pose outside CreaturePose: %s"
+                            % (rel, n, line.strip()))
+            if rel.startswith("scripts/animals/") and rel != "scripts/animals/animal_pose.gd" \
+                    and FIGURE_WRITES.search(line):
+                if rel == "scripts/animals/animal.gd" and "_figure.global_rotate(_spin_ang" in line:
+                    continue          # the throw's tumble, while FALL
+                fail.append("%s:%d writes a beast's pose outside AnimalPose: %s"
+                            % (rel, n, line.strip()))
+            if rel.startswith("scripts/animals/") and re.search(r"(?<!_figure\.)\bglobal_rotate\(", line):
+                fail.append("%s:%d tips the beast's whole body — tumble the figure: %s"
+                            % (rel, n, line.strip()))
+    for name, text, apply_in, call in (
+            ("CreaturePose", CPOSE, CREATURE, "CreaturePose.apply(self, delta)"),
+            ("AnimalPose", APOSE, ANIMAL, "AnimalPose.apply(self)")):
+        codes = {m.group(1): int(m.group(2), 16)
+                 for m in re.finditer(r"^const ([A-Z]+) := 0x([0-9A-Fa-f]{2})$", text, re.M)}
+        rows = set(re.findall(r"\b([A-Z]+): ", text[text.index("const LOOK := {"):text.index("}", text.index("const LOOK := {"))]))
+        if set(codes) != rows:
+            fail.append("%s: codes without a row, or rows without a code: %s"
+                        % (name, sorted(set(codes) ^ rows)))
+        if len(set(codes.values())) != len(codes):
+            fail.append("%s: two poses share a code" % name)
+        if call not in apply_in:
+            fail.append("%s is never applied" % name)
+        print("  %s: %s" % (name, " ".join("%02X %s" % (c, n.lower())
+                                           for n, c in sorted(codes.items(), key=lambda kv: kv[1]))))
+    if "SLEEP := 0x2" not in CPOSE or "SLEEP: \"lie\"" not in CPOSE:
+        fail.append("the creature's sleep is not the lying pose")
+    if "FALL: [\"fall\", NAN]" not in APOSE:
+        fail.append("a beast's FALL no longer hands the figure to the throw")
+    if re.search(r"^\s*rotation = Vector3\.ZERO", bare(ANIMAL), re.M):
+        fail.append("a beast's landing throws its heading away again")
+
+
 def main():
     fail = []
     print("ONE POSE AT A TIME")
     one_writer(fail)
     table(fail)
     derived(fail)
+    beasts(fail)
     live(fail)
     print()
     if fail:

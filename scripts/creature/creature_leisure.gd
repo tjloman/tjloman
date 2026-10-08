@@ -19,10 +19,6 @@ const BED_SLOP := 1.2
 ## as an animal lying down and shuffling about; fast enough to be square before
 ## it is properly under.
 const BED_SETTLE := 1.1
-## How far a sleeping creature tips onto its side, and roughly how thick it is
-## lying down as a share of its standing half-height. See `_lie_down`.
-const LIE_ROLL := 80.0
-const LIE_THICK := 0.30
 ## How often the audience at a communing is counted, in seconds.
 const AUDIENCE_EVERY := 0.5
 ## SPENT, TIRED AND RESTED, in energy. At SPENT it drops where it stands,
@@ -72,7 +68,6 @@ static func dance(who: Creature, delta: float) -> void:
 	who._apply_gravity_only(delta)
 	who._action_time -= delta
 	who.rotation.y += delta * 2.4
-	who._body.scale.y = 1.0 + sin(Time.get_ticks_msec() / 120.0) * 0.12
 	who._cheer_time -= delta
 	if who._cheer_time <= 0.0:
 		who._cheer_time = 1.0
@@ -86,7 +81,6 @@ static func dance(who: Creature, delta: float) -> void:
 			if CreatureEyes.audience(who, 18.0) > 0:
 				village.change_belief(0.35)
 	if who._action_time <= 0.0:
-		who._body.scale.y = 1.0
 		who.body.exert(0.8, 0.4)
 		who.boredom = maxf(who.boredom - 30.0, 0.0)
 		# A FINISHED DANCE IS ONE EVENT, not only the drip while it went on. A
@@ -243,12 +237,10 @@ static func sleep(who: Creature, delta: float) -> bool:
 	# mistreatment compounds: it can never catch up.
 	var depth := who.welfare.sleep_depth()
 	who.energy = minf(who.energy + (2.0 + 5.0 * depth) * delta, 100.0)
-	_lie_down(who, true)
 	# AND HE IS DREAMING. The day is gone over while he is under, deeply or
 	# barely, according to how well he has been kept — see CreatureDreams.
 	who.mind.dreams.drift(who, delta)
 	if who.energy > lerpf(55.0, 92.0, depth):
-		_lie_down(who, false)
 		who.mind.dreams.wake(who)
 		who._decide()
 	return false
@@ -290,32 +282,6 @@ static func rest_before_the_lead(who: Creature) -> bool:
 ## out of its sleep, so a creature on the lead could never sleep at all.
 static func lead_waits(who: Creature) -> bool:
 	return who.state == Creature.State.SLEEPING and who.energy < ROUSED
-
-
-## ON ITS SIDE, AND STILL WHERE IT WAS STANDING.
-##
-## Tipping the visual over is a roll about its Z — and the visual's origin is at
-## the creature's FEET, so the roll swings the whole body out sideways by nearly
-## its own height. On a full-grown creature that is eighteen metres: it lay down
-## in its bed and its body ended up on the grass beside it, which is what
-## "doesn't line up" looked like and is nothing to do with the yaw.
-##
-## So the roll is paid for. The body is pushed back along its own X by what the
-## tip took away, leaving the middle of it over the spot it was standing on, and
-## dropped to about the thickness of a creature lying down. The lying height is
-## an estimate from CreatureBody.STANDING; a rigged model plays its own clip and
-## none of this touches it.
-static func _lie_down(who: Creature, down: bool) -> void:
-	if who._animator != null or who._body == null:
-		return
-	if not down:
-		who._body.rotation_degrees.z = 0.0
-		who._body.position = Vector3.ZERO
-		return
-	var a := deg_to_rad(LIE_ROLL)
-	var mid := CreatureBody.STANDING * 0.5
-	who._body.rotation_degrees.z = LIE_ROLL
-	who._body.position = Vector3(mid * sin(a), mid * (LIE_THICK - cos(a)), 0.0)
 
 
 ## The last metre of it: into the middle of the bed, and square to it.
