@@ -227,6 +227,11 @@ var dreams := CreatureDreams.new()
 ## ITS HEART, handed over by the creature at birth. The mind needs it for one
 ## thing only: to ask how an imagined future would FEEL (see CreatureForesight).
 var heart: CreatureHeart = null
+## WHAT HAS JUST HAPPENED TO IT, newest last: [what, GameState.clock] — the
+## handful of things it would tell you about if you asked it now. A tag of
+## `experience`, or "saw:" and a miracle. Not saved: it is "just now", and a
+## reload is not just now. See CreatureGreeting.
+var lately: Array = []
 
 ## WHAT EACH VALUE HAS EARNED THE RIGHT TO KEEP: deepest reached, and how often
 ## it has been learned. See CreatureKeeping — a thing done four hundred times
@@ -550,6 +555,7 @@ func consolidate(already: Dictionary) -> String:
 ## recent deeds brought this about.
 func experience(tag: String, reward: float) -> void:
 	beliefs.consequence(tag, reward)
+	_note(tag)
 
 
 ## IT DID THE THING. Whether it came off or not, the doing of it taught the
@@ -586,6 +592,15 @@ func skill_level(verb: String) -> int:
 ## working sees it properly; one that happened to be in the field glanced at it.
 func witness_miracle(miracle: String, step := MIRACLE_STEP) -> void:
 	familiarity[miracle] = minf(float(familiarity.get(miracle, 0.0)) + step, 1.0)
+	_note("saw:" + miracle)
+
+
+## One more thing that just happened. Eight is more than anybody is told about
+## in a greeting; the rest is what the beliefs are for.
+func _note(what: String) -> void:
+	lately.append([what, GameState.clock])
+	if lately.size() > 8:
+		lately.pop_front()
 
 
 ## A creature can only do what it has SEEN DONE. Dancing, praying, standing

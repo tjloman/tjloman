@@ -209,6 +209,8 @@ var state := State.IDLE
 ## THE ONE POSE ITS BODY IS IN, as a byte (see CreaturePose for the codes).
 ## Written only by CreaturePose.apply, every frame.
 var pose_code := 0
+## WHERE YOUR EYE IS while it stands for you (see Audience); INF when it is not.
+var greeting_eye := Vector3.INF
 ## HOW IT HAS BEEN TREATED, and what that leaves it able to think with. Read by
 ## observation, sleep, learning, empathy, appetite and growth — see the file.
 var welfare := CreatureWelfare.new()
@@ -1931,8 +1933,9 @@ func grant_water_walking(seconds: float) -> void:
 ## this is a creature you can just sit and watch.
 func _process_heed(delta: float) -> void:
 	_apply_gravity_only(delta)
-	_face(GameState.camera_focus)
-	if not Quality.hot():
+	var held := greeting_eye != Vector3.INF
+	_face(greeting_eye if held else GameState.camera_focus)
+	if not Quality.hot() and not held:
 		_decide()
 
 
@@ -1961,7 +1964,7 @@ func _tick_heat(_delta: float) -> void:
 			state = State.HEED
 			_action_time = 3.0
 			feel("wonder", 0.4, 2.0)
-	elif state == State.HEED:
+	elif state == State.HEED and greeting_eye == Vector3.INF:
 		_decide()
 
 

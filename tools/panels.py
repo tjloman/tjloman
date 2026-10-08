@@ -133,6 +133,30 @@ for path in FILES:
             fail.append("%s is anchored to the BOTTOM edge and grows %s, which "
                         "points off the screen" % (where, down))
 
+# 3. THE LEFT-HAND COLUMN DOES NOT DRAW OVER ITSELF. The Villages, Creature
+# and Frames buttons are stacked down the left edge at fixed heights, and the
+# creature panel was left at a height from before two of them existed — so the
+# buttons sat on its first two lines, which are the two you read.
+HUD = (ROOT / "scripts/ui/hud.gd").read_text()
+column = []
+for name in ("_roster_button", "_creature_button", "_frames_button", "_creature_panel"):
+    at = re.search(r"^\t%s\.position = Vector2\((\d+), (\d+)\)" % name, HUD, re.M)
+    tall = re.search(r"^\t%s\.custom_minimum_size = Vector2\(\d+, (\d+)\)" % name, HUD, re.M)
+    if not at:
+        fail.append("%s has no fixed place in the HUD's left column any more — "
+                    "this check has stopped matching how it is written" % name)
+        continue
+    column.append((name, int(at.group(2)), int(tall.group(1)) if tall else 0))
+buttons = [c for c in column if c[0] != "_creature_panel"]
+panel = [c for c in column if c[0] == "_creature_panel"]
+if buttons and panel:
+    clear = max(top + tall for _, top, tall in buttons)
+    print("The left column: buttons end at %dpx, the creature panel starts at %dpx."
+          % (clear, panel[0][1]))
+    if panel[0][1] < clear:
+        fail.append("the creature panel starts at %dpx, under buttons that run "
+                    "to %dpx — they are drawn over what it says" % (panel[0][1], clear))
+
 print()
 print("%d anchored panel(s) read." % seen)
 if seen < 8:

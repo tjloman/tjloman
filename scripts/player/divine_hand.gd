@@ -181,6 +181,9 @@ var last_thrown: Node3D = null
 ## its own, the hand is a hand again, and the landscape belongs to the camera.
 ## Everything that asks reads `has_lead`, which is this AND `in_hand`.
 var lead: LeadRope = null
+## AN AUDIENCE WITH THE CREATURE, while one is open: hold the hand on it to call
+## it, then stroke or slap. See Audience.
+var audience := Audience.new()
 
 var drag_anchor := Vector3.ZERO
 var gesture_points := PackedVector2Array()
@@ -220,6 +223,9 @@ var _carried_at := 0.0
 var _sling: Sling = null
 ## Seconds the tying hold has been down. See `_tick_tying`.
 var _tying := 0.0
+## The creature a press came down on, while the hold that calls it is filling;
+## null otherwise. See `_tick_greeting`.
+var _greeting: Creature = null
 ## How many taps in a row the last press made. See Taps.
 var _taps := Taps.new()
 
@@ -453,6 +459,7 @@ func _physics_process(delta: float) -> void:
 			_steer_body = null
 
 	_tick_press_charge(delta)
+	audience.tick(delta)
 	_tick_casting(delta)
 	_tick_beam(delta)
 
@@ -659,7 +666,9 @@ func _update_hover(mouse_pos: Vector2) -> void:
 	if hover_target == null:
 		hover_target = _nearly_under(ground_point)
 
-	hover_info_changed.emit(describe(hover_target))
+	# With the creature, its own panel is saying everything; a tooltip chasing
+	# the finger across its face would be talking over it.
+	hover_info_changed.emit("" if audience.is_open() else describe(hover_target))
 
 
 ## THE NEAREST THING WORTH TAKING HOLD OF, within a forgiving radius of where
@@ -744,9 +753,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif casting and event is InputEventKey and event.is_pressed() \
 			and (event as InputEventKey).keycode == KEY_ESCAPE:
 		_close_casting(false)   # never trapped: escape always lets you out
+	elif audience.is_open() and event is InputEventKey and event.is_pressed() \
+			and (event as InputEventKey).keycode == KEY_ESCAPE:
+		audience.close()
 
 
 func _on_pointer_button(event: InputEventMouseButton) -> void:
+	if event.button_index == MOUSE_BUTTON_RIGHT and audience.is_open():
+		if event.pressed:
+			audience.close()           # the spare button is "back", here
+		return
 	if event.button_index == MOUSE_BUTTON_RIGHT:
 		# The spare button both OPENS the session and draws in it, so the old
 		# habit — hold the right button and draw — still works exactly as it
@@ -763,6 +779,21 @@ func _on_pointer_button(event: InputEventMouseButton) -> void:
 		return
 	_pointer_down = event.pressed
 	if event.pressed:
+		# WHAT IS UNDER THE FINGER NOW, not where it last was.
+		#
+		# The hover is asked on the physics tick and on a carried drag — and a
+		# thumb does not glide there, it lands. Its press arrives before the
+		# next tick, so every grab below was reading what was under the place
+		# the finger LAST lifted from: press a sheep and the hand saw bare
+		# grass, and charged a casting or swung the land instead. A mouse never
+		# showed it, because a cursor passes over a thing before clicking it.
+		# One ray, once a press.
+		_update_hover(event.position)
+		# WITH THE CREATURE, the hand is for the creature: no grab, no pan, no
+		# casting summons. Every press is a stroke, a slap or a tap.
+		if audience.is_open():
+			audience.press(event.position)
+			return
 		# HOW MANY TIMES IN A ROW — read first and acted on last, so everything
 		# a single press already does goes on happening and the double is only
 		# ever a SECOND meaning laid over it. See Taps.
@@ -805,19 +836,27 @@ func _on_pointer_button(event: InputEventMouseButton) -> void:
 			_tying = 0.0
 			return
 		_reading = hover_target is CreatureNest and state == HandState.IDLE
+		# A HAND HELD ON THE CREATURE CALLS IT — on a mouse as on a thumb, since
+		# there is no other way to stroke it on either. Moved before it fills, it
+		# was the land you grabbed, exactly as a summons is. See Audience.
+		_greeting = (hover_target as Creature) if state == HandState.IDLE else null
 		_charging = _touch_only() and state == HandState.IDLE \
-			and not _on_something_grabbable() and not _reading
+			and not _on_something_grabbable() and not _reading and _greeting == null
 		# NOT WHILE READING. The nest is not grabbable and not a store, so
 		# _on_grab fell through to its last branch and started a LAND DRAG —
 		# press the stone wall and the world swung out from under your
 		# finger. On a mouse that is merely confusing; on a thumb, where the
 		# drag and the hold are the same gesture, it makes the stone simply
 		# unreadable. That is why it was so hard to bring up.
-		if not _charging and not _reading:
+		if not _charging and not _reading and _greeting == null:
 			_on_grab()
 		return
 	# Released.
 	_charging = false
+	_greeting = null
+	if audience.is_open():
+		audience.release(hover_target == audience.who)
+		return
 	# Let go of the sun before it opened: that was a look, not a summons.
 	if _on_disk != "":
 		_on_disk = ""
@@ -831,7 +870,15 @@ func _on_pointer_button(event: InputEventMouseButton) -> void:
 
 func _on_pointer_motion(event: InputEventMouseMotion) -> void:
 	_stirred = 0.0          # the hand is reaching, not resting. See `_tick_pose`.
-	if state == HandState.GESTURING:
+	if audience.is_open():
+		_update_hover(event.position)
+		audience.move(event.position, hover_target == audience.who,
+			get_viewport().get_visible_rect().size.y)
+	elif _greeting != null:
+		if event.position.distance_to(_press_at) > OPEN_SLOP:
+			_greeting = null
+			_on_grab()
+	elif state == HandState.GESTURING:
 		_add_stroke_point(event.position)
 	elif _on_disk != "":
 		# Slid off the disk: the sky is not the sun, and a drag up there is a
@@ -1423,6 +1470,8 @@ func cancel_touch_interaction() -> void:
 	if state != HandState.HOLDING:
 		_stow_sling()
 	_charging = false
+	_greeting = null
+	audience.cancel_press()
 	# The camera claimed the gesture, so the tap after it starts clean rather
 	# than completing a double with whatever happened before the pinch.
 	_taps.cancel()
@@ -1472,6 +1521,9 @@ func _tick_press_charge(delta: float) -> void:
 	if _on_disk != "":
 		_tick_disk(delta)
 		return
+	if _greeting != null:
+		_tick_greeting(delta)
+		return
 	if _reading:
 		if not _pointer_down or not is_instance_valid(hover_target):
 			_reading = false
@@ -1498,6 +1550,23 @@ func _tick_press_charge(delta: float) -> void:
 	if _press_time >= OPEN_HOLD:
 		_charging = false
 		_open_casting()
+
+
+## CALLING THE CREATURE: the hold on it, filling. The same feedback the stone
+## gets, for the same reason — a hold with nothing to show for it is let go of.
+func _tick_greeting(delta: float) -> void:
+	if not _pointer_down or not is_instance_valid(_greeting):
+		_greeting = null
+		return
+	_press_time += delta
+	if _press_time < Audience.HOLD:
+		hover_info_changed.emit("Calling %s... %d%%" % [_greeting.called(),
+			int(clampf(_press_time / Audience.HOLD, 0.0, 1.0) * 100.0)])
+		return
+	var called := _greeting
+	_greeting = null
+	hover_info_changed.emit("")
+	audience.open(called, camera_rig)
 
 
 ## TYING THE ROPE OFF. Hold on anything and the far end goes round it; what a

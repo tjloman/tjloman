@@ -280,7 +280,7 @@ static func hover_text(who: Creature, doing: String) -> String:
 		"bond %d · trusts you %d · attention %d\n" +
 		"hunger %d · energy %d · %s\n" +
 		"%s\n" +
-		"[P — pet   ·   L — scold   ·   C — lock camera]") % [
+		"[hold — call it   ·   P — pet   ·   L — scold   ·   C — lock camera]") % [
 		who.called(), doing, who.morality_word(), mood_word(who.mood),
 		int(who.bond), int(who.trust), int(who.attention),
 		int(who.hunger), int(who.energy), who.favorite_deed(), arm_word(who)]

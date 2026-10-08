@@ -19,6 +19,10 @@ const PAN_SPEED := 22.0
 const ROTATE_SPEED := 1.6
 ## How fast a camera shake dies away, per second (see `shake`).
 const SHAKE_FADE := 2.2
+## A GLIDE INTO A SHOT (see `glide_to`): how fast it closes, per second, and
+## how long it goes on closing before the shot is simply where it is.
+const GLIDE_EASE := 4.5
+const GLIDE_TIME := 1.6
 
 var camera: Camera3D
 var pitch_node: Node3D
@@ -41,6 +45,11 @@ var _touches := {}        # touch index -> screen position
 var _pinch_dist := 0.0
 var _world_cache: WorldGen = null
 var _shake := 0.0        # current shake amplitude, in local camera units
+## The shot being glided into, and how long is left of the glide.
+var _glide_left := 0.0
+var _glide_aim := Vector3.ZERO
+var _glide_yaw := 0.0
+var _glide_pitch := 0.0
 
 
 func _ready() -> void:
@@ -97,6 +106,8 @@ func _process(delta: float) -> void:
 	else:
 		# Ease the lock-on aim back to the rig's natural framing.
 		camera.rotation = camera.rotation.lerp(Vector3.ZERO, minf(delta * 6.0, 1.0))
+	if _glide_left > 0.0:
+		_tick_glide(delta)
 
 	var input_dir := Vector2.ZERO
 	input_dir.y = Input.get_action_strength("cam_back") - Input.get_action_strength("cam_forward")
@@ -171,8 +182,9 @@ func _update_rig_height(delta: float) -> void:
 		# ground fired this hard lift on and off every single frame. Half the
 		# judder people read as "the zoom" was the rig hopping vertically.
 		global_position.y += (floor_y - cam.y) * _ease(LIFT_EASE, delta)
-	elif cam.y > floor_y + 0.5:
-		# Comfortably clear: ease the pivot down to ride the land under it.
+	elif cam.y > floor_y + 0.5 and not framed:
+		# Comfortably clear: ease the pivot down to ride the land under it —
+		# unless it is holding a shot, whose eye is where it was put.
 		var terrain := maxf(
 			_world_cache.height_at(global_position.x, global_position.z), 0.0)
 		global_position.y = lerpf(global_position.y, terrain, _ease(5.0, delta))
@@ -195,6 +207,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenDrag and _touches.has(event.index):
 		_touches[event.index] = event.position
 		if _touches.size() >= 2:
+			framed = false          # turning it yourself gives the shot back
 			var span := _touch_span()
 			if _pinch_dist > 8.0:
 				_zoom_toward(_pinch_dist / span)
@@ -213,6 +226,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.button_index == MOUSE_BUTTON_MIDDLE:
 			_rotating = event.pressed
 	elif event is InputEventMouseMotion and _rotating:
+		framed = false
 		_yaw_around_focus(-event.relative.x * 0.005)
 		# Tilts from near-top-down to well above the horizon (+40): face
 		# the sky to arc throws, or just to watch the weather of your soul.
@@ -256,6 +270,31 @@ func frame_on(aim: Vector3, yaw: float, pitch: float, zoom: float) -> void:
 	zoom_distance = clampf(zoom, MIN_ZOOM, MAX_ZOOM)
 	camera.position.z = zoom_distance
 	camera.rotation = Vector3.ZERO
+
+
+## THE SAME, ARRIVED AT RATHER THAN CUT TO — for a shot the WORLD asked for,
+## where a cut would lose the player: the creature they were just holding their
+## hand on is still the thing in the middle of the screen the whole way in. Any
+## touch of the controls ends it where it is, like any framed shot.
+func glide_to(aim: Vector3, yaw: float, pitch: float, zoom: float) -> void:
+	follow_target = null
+	framed = true
+	_glide_aim = aim
+	_glide_yaw = yaw
+	_glide_pitch = pitch
+	zoom_distance = clampf(zoom, MIN_ZOOM, MAX_ZOOM)
+	_glide_left = GLIDE_TIME
+
+
+func _tick_glide(delta: float) -> void:
+	if not framed:
+		_glide_left = 0.0
+		return
+	var k := _ease(GLIDE_EASE, delta)
+	global_position = global_position.lerp(_glide_aim, k)
+	rotation.y = lerp_angle(rotation.y, _glide_yaw, k)
+	pitch_node.rotation_degrees.x = lerpf(pitch_node.rotation_degrees.x, _glide_pitch, k)
+	_glide_left -= delta
 
 
 ## ZOOMING PULLS THE RIG TOWARD WHAT YOU ARE LOOKING AT, and that pull used to

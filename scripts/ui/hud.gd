@@ -76,6 +76,11 @@ var _creature_panel: PanelContainer
 var _unlead_button: Button
 var _creature_label: Label
 var _praise_scold: HBoxContainer
+## WHAT THE CREATURE SAYS while you are with it (see Audience): who and how it
+## feels, what it said, and what your hand can do.
+var _audience_panel: PanelContainer
+var _audience_title: Label
+var _audience_line: Label
 var _roster_panel: PanelContainer
 var _roster_list: VBoxContainer
 var _roster_button: Button
@@ -127,6 +132,7 @@ func _ready() -> void:
 	_build_miracle_panel()
 	_build_creature_panel()
 	_build_praise_scold()
+	_build_audience_panel()
 	_build_creature_button()
 	_build_frame_meter()
 	_build_hover_label()
@@ -506,7 +512,11 @@ func _build_miracle_panel() -> void:
 ## so on a phone you never have to hunt for a hover tooltip.
 func _build_creature_panel() -> void:
 	_creature_panel = PanelContainer.new()
-	_creature_panel.position = Vector2(16, 92)
+	# UNDER THE THREE BUTTONS, not among them. It sat at 92 from before the
+	# Creature and Frames buttons were stacked down the same edge (46, 84 and
+	# 122, each 34 tall), and the buttons were drawn over its first two lines —
+	# "YOUR CREATURE" and what it is doing. tools/panels.py keeps it clear.
+	_creature_panel.position = Vector2(16, 166)
 	_creature_panel.add_theme_stylebox_override("panel", _dim_panel_style())
 	_creature_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_creature_panel.visible = false
@@ -657,6 +667,65 @@ func _build_praise_scold() -> void:
 	add_child(_praise_scold)
 
 
+## THE CREATURE'S WORDS, top and centre, over the shot of it. Click-through:
+## the creature under it is the thing you are stroking.
+##
+## Autowrapped, unlike the creature panel, and safe to be: the line is given a
+## minimum width each time it is shown, which is the one thing a wrapped label
+## on a CanvasLayer needs and the creature panel never had. See
+## `_build_creature_panel`.
+func _build_audience_panel() -> void:
+	_audience_panel = PanelContainer.new()
+	_audience_panel.set_anchors_and_offsets_preset(
+		Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, 12)
+	_audience_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_audience_panel.add_theme_stylebox_override("panel", _dim_panel_style())
+	_audience_panel.visible = false
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 6)
+	_audience_panel.add_child(column)
+	_audience_title = Label.new()
+	_audience_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_audience_title.add_theme_font_size_override("font_size", 15)
+	_audience_title.add_theme_color_override("font_color", Color(1, 0.92, 0.6))
+	column.add_child(_audience_title)
+	_audience_line = Label.new()
+	_audience_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_audience_line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_audience_line.add_theme_font_size_override("font_size", 22)
+	_audience_line.add_theme_color_override("font_color", Color.WHITE)
+	column.add_child(_audience_line)
+	var how := Label.new()
+	how.text = "stroke it to praise  ·  swipe across it to slap\n" \
+		+ "tap it to ask again  ·  tap away to leave"
+	how.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	how.add_theme_font_size_override("font_size", 13)
+	how.add_theme_color_override("font_color", Color(0.85, 0.9, 1.0, 0.75))
+	column.add_child(how)
+	add_child(_audience_panel)
+	_make_click_through(_audience_panel)
+
+
+func _update_audience_panel() -> void:
+	var with := divine_hand != null and is_instance_valid(divine_hand) \
+		and divine_hand.audience.is_open() and not divine_hand.audience.greeting.is_empty()
+	_audience_panel.visible = with
+	if not with:
+		return
+	var audience := divine_hand.audience
+	var title := "%s  —  %s" % [audience.who.called(),
+		String(audience.greeting["mood"]).to_upper()]
+	# WHAT YOUR HAND JUST DID, for a moment, so a slap that landed and a stroke
+	# that counted are told apart from a hand that only moved.
+	match audience.just_touched():
+		"slap": title += "   ·   SLAPPED"
+		"stroke": title += "   ·   STROKED"
+	_audience_title.text = title
+	_audience_line.text = "“%s”" % String(audience.greeting["line"])
+	_audience_line.custom_minimum_size.x = minf(
+		560.0, get_viewport().get_visible_rect().size.x * 0.7)
+
+
 ## Under the villages button, in the same plain style, because it is the same
 ## kind of thing: somewhere to go.
 ## THE FRAME METER, AND A BUTTON TO OPEN IT WITH.
@@ -792,6 +861,8 @@ Middle mouse (drag) ........ rotate camera
 WASD / arrows .............. pan camera
 Q / E ...................... rotate camera
 1 / 2 / 3 / 4 .............. village diet: Vegan / Omnivore / Carnivore / Cannibal
+HOLD ON YOUR CREATURE ...... it stops, turns to you and says how it feels
+  ...then STROKE it to praise, SWIPE across it to slap; tap away to leave
 P / L (hand near creature) . PET (reward) / SCOLD (discourage) its last deed
 C .......................... LOCK the camera onto your creature (again to release)
 G .......................... LEAD your creature to where your hand points
@@ -1017,6 +1088,7 @@ func _process(delta: float) -> void:
 	_hover_label.position = _hover_label.get_viewport().get_mouse_position() + Vector2(18, 18)
 
 	_update_creature_panel()
+	_update_audience_panel()
 	_update_miracle_panel(delta)
 	_update_roster(delta)
 
@@ -1059,7 +1131,8 @@ func _update_creature_panel() -> void:
 	# you are sitting in front of him watching him lie down would be perverse.
 	var locked := camera_rig != null and is_instance_valid(creature) \
 		and (camera_rig.follow_target == creature
-			or (camera_rig.framed and CreatureNest.holding(creature) != null))
+			or (camera_rig.framed and CreatureNest.holding(creature) != null)
+			or (divine_hand != null and divine_hand.audience.is_open()))
 	_creature_panel.visible = locked
 	# ONLY WHEN THERE IS A LEAD TO TAKE OFF. A button that does nothing most of
 	# the time teaches people it does nothing.
