@@ -191,6 +191,7 @@ func _ready() -> void:
 	# off empties it, with no reload either way.
 	var friends := TreeFriends.new()
 	friends.world = world_gen
+	friends.camera_rig = camera_rig
 	add_child(friends)
 
 	# THE TEMPLE. Every option, save and statistic behind one gesture aimed at

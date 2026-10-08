@@ -4,8 +4,9 @@ extends SceneTree
 ##     godot --headless --path . --script tools/live/critters_live.gd
 ##
 ## With the camera high, the wood must be still: nothing processing, no voices,
-## no census. Brought down under the trees it must wake and fill; taken back up
-## it must go still again with every critter where it was, still drawn.
+## no census. Brought down under the trees it must wait while the camera is
+## still moving, then wake and fill once it stops; taken back up it must go
+## still again with every critter where it was, still drawn.
 ## Exits non-zero on failure. Names no class of the game's (see look.gd).
 
 var fails := 0
@@ -58,6 +59,18 @@ func _initialize() -> void:
 
 	rig.zoom_distance = 4.0
 	rig.pitch_node.rotation_degrees.x = -12.0
+	# STILL MOVING, down under the trees: a slow push along the ground. The wood
+	# must not wake while the camera is on the move — only once it stops.
+	var woke_moving := false
+	var under := 0
+	for i in 150:
+		rig.position.x += 0.05
+		await process_frame
+		if wood.camera_height() < 12.0:
+			under += 1
+		woke_moving = woke_moving or wood.is_awake()
+	check(under > 100 and not woke_moving,
+		"down under the trees but still moving: the wood waits (%d frames under)" % under)
 	var woke := false
 	for i in 300:
 		await process_frame
@@ -71,8 +84,12 @@ func _initialize() -> void:
 
 	rig.zoom_distance = 60.0
 	rig.pitch_node.rotation_degrees.x = -50.0
-	for i in 120:
+	# The zoom eases out over a moment, and the wood is asked only once the
+	# camera has come to rest — so this waits for that, as a player would.
+	for i in 900:
 		await process_frame
+		if not wood.is_awake():
+			break
 	critters = root.get_tree().get_nodes_in_group("critters")
 	var drawn := 0
 	for c in critters:

@@ -11,6 +11,11 @@ Now TreeFriends reads the camera's height over the ground beneath it: below
 WAKE_BELOW the wood is alive; above STILL_ABOVE every critter stops where it
 is, still drawn, gives up its voice, and the census stops too.
 
+"Only run this check once the player lets go of the screen after moving the
+camera." Waking raises nodes, and doing it mid-swoop is a hitch: so the height
+is asked only once the camera has stood still for AT_REST (the player has let
+go and the zoom has finished drifting), or while it follows the creature.
+
 Statements here; with GODOT set, tools/live/critters_live.gd checks it in a
 real engine (high: still; low: awake and moving; high again: still, silent,
 still drawn).
@@ -51,6 +56,15 @@ def source(fail):
     if "camera_height() < (STILL_ABOVE if _awake else WAKE_BELOW)" not in proc \
             or gate < 0 or census < 0 or gate > census:
         fail.append("the wood runs its census whatever the camera's height")
+    # AND ONLY ONCE THE PLAYER HAS LET GO: the height is asked after the camera
+    # has stood still, so the wood never wakes mid-swoop.
+    if not proc.find("if _camera_settled(delta):") < proc.find("camera_height()"):
+        fail.append("the height is asked while the camera is still moving")
+    settled = body(WOOD, "_camera_settled")
+    if "eye.is_equal_approx(_eye_was)" not in settled or "_eye_still >= AT_REST" not in settled:
+        fail.append("'at rest' is not the camera standing still for a moment")
+    if "camera_rig.follow_target != null" not in settled:
+        fail.append("a camera following the creature is never at rest, so never asked")
     stir = body(WOOD, "_stir")
     if "c.set_process(awake)" not in stir or "c.listen(false)" not in stir:
         fail.append("stilling the wood does not stop every critter and silence it")

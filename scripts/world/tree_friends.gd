@@ -35,6 +35,12 @@ const CENSUS := 0.9
 ## above it a bee is a pixel nobody can see, and that is nearly always.
 const WAKE_BELOW := 12.0
 const STILL_ABOVE := 15.0
+## AND ONLY ONCE THE CAMERA HAS COME TO REST: waking the wood raises nodes, and
+## doing it mid-swoop is a hitch in the one motion that has to be seamless. So
+## the height is asked only after the camera has not moved for this long — the
+## player has let go, and the zoom has finished drifting. Watching the camera
+## rather than the fingers covers touch, mouse and keys alike.
+const AT_REST := 0.3
 
 ## WHAT LIVES WHERE, AND WHEN. `hours` is the fraction of the day it keeps
 ## (GameState.day_fraction, 0 = midnight); `voice` names its loop in SoundBank;
@@ -71,12 +77,18 @@ const KINDS := {
 }
 
 var world: WorldGen
+## The camera's rig, for whether it is following the creature: nobody's hand is
+## on it then, so it is never "at rest" and the height is asked as it goes.
+var camera_rig: CameraRig = null
 
 var _critters: Array[Critter] = []
 var _since_census := 0.0
 var _voiced: Array[Critter] = []
 ## Whether the wood is alive right now: the camera is down among it.
 var _awake := false
+## Where the camera was last frame, and how long it has stayed there.
+var _eye_was := Transform3D()
+var _eye_still := 0.0
 
 
 func _ready() -> void:
@@ -92,9 +104,10 @@ func _process(delta: float) -> void:
 	# ABOVE THE CANOPY, NOTHING. Drawn where they are and doing nothing at all:
 	# no flight, no flicker, no voices, no census, no looking about for people
 	# to bolt from. Nothing in the game reads them, so nothing misses them.
-	var low := camera_height() < (STILL_ABOVE if _awake else WAKE_BELOW)
-	if low != _awake:
-		_stir(low)
+	if _camera_settled(delta):
+		var low := camera_height() < (STILL_ABOVE if _awake else WAKE_BELOW)
+		if low != _awake:
+			_stir(low)
 	if not _awake:
 		return
 	_since_census += delta
@@ -119,6 +132,24 @@ func camera_height() -> float:
 
 func is_awake() -> bool:
 	return _awake
+
+
+## HAS THE PLAYER LET GO? True once the camera has stood still for AT_REST, and
+## always while it follows the creature (no hand on it). Asked every frame —
+## one comparison of where the camera is against where it was.
+func _camera_settled(delta: float) -> bool:
+	if camera_rig != null and is_instance_valid(camera_rig) and camera_rig.follow_target != null:
+		return true
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return false
+	var eye := camera.global_transform
+	if not eye.is_equal_approx(_eye_was):
+		_eye_was = eye
+		_eye_still = 0.0
+		return false
+	_eye_still += delta
+	return _eye_still >= AT_REST
 
 
 ## WAKE THE WOOD, or still it. Stilled, every critter stops where it is — still
