@@ -23,8 +23,10 @@ more ticks. It is not a slope, it is a hole, and the arithmetic below says how
 deep.
 """
 import math
+import os
 import pathlib
 import re
+import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -514,6 +516,36 @@ if hidden is None or tallied is None or tallied > hidden:
     fail.append("the meter only counts while it is open, so every number in it "
                 "is wrong for the first moments after it is opened — which is "
                 "when somebody holding a phone reads it")
+
+# AND THE CLOCK DOES NOT RUN WHILE THE METER IS SHUT. `shut` does nothing while
+# the ledger is off, so a clock left open when F7 closed it was billed, on the
+# first page after it opened again, for every second it had been shut: "slowest
+# ever: LeadRope 594745.1 ms" was the rope that happened to run last.
+turn = body_of(LEDGER, "turn_the_page")
+drops = next((i for i, r in enumerate(turn) if "_open = &\"\"" in r), None)
+shuts = next((i for i, r in enumerate(turn) if r.strip() == "shut()"), None)
+print("A CLOCK OPEN WHEN THE METER SHUTS is %s."
+      % ("dropped" if drops is not None and shuts is not None and drops < shuts
+         else "BILLED FOR THE WHOLE TIME IT WAS SHUT"))
+if drops is None or shuts is None or drops > shuts:
+    fail.append("a clock open when the meter is shut stays open, and is billed "
+                "for every second nobody was looking the moment it reopens")
+if "_slowest_ever_took = 0" not in "\n".join(body_of(LEDGER, "forget_worst")):
+    fail.append("the slowest call is not forgotten with the worst frame, so one "
+                "stall sits on the meter for the rest of the session")
+godot = os.environ.get("GODOT", "")
+if godot and pathlib.Path(godot).exists():
+    ran = subprocess.run([godot, "--headless", "--path", str(ROOT), "--script",
+                          "tools/live/ledger_live.gd"], capture_output=True,
+                         text=True, timeout=120)
+    checks = [ln for ln in ran.stdout.splitlines() if ln.rstrip().endswith(("yes", "NO"))]
+    print("   in Godot: %d checks, %s" % (len(checks), "all pass"
+                                         if ran.returncode == 0 else "FAILING"))
+    if ran.returncode != 0:
+        fail.append("in Godot:\n" + "\n".join(
+            ln for ln in checks if ln.rstrip().endswith("NO")))
+else:
+    print("   GODOT not set: the ledger was not run in an engine here")
 
 print()
 if fail:

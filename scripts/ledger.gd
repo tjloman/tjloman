@@ -123,6 +123,8 @@ static var _slowest_page := []
 static var _slowest_page_took := 0
 static var _slowest_ever := []
 static var _slowest_ever_took := 0
+## WHETHER IT WAS ON LAST PAGE. See `turn_the_page`.
+static var _was_on := false
 
 
 ## OPEN A CLOCK ON THIS CLASS, and shut whatever was open.
@@ -205,6 +207,19 @@ static func shut() -> void:
 ## TURN THE PAGE. Called once a frame by whoever is reading it. What was being
 ## written becomes what is read, and the next frame starts from nothing.
 static func turn_the_page() -> void:
+	# A CLOCK LEFT OPEN ACROSS THE SWITCH IS DROPPED, NOT BILLED.
+	#
+	# `shut` does nothing while the ledger is off, so whoever was open when
+	# the meter closed stayed open — and the first page after it opened again
+	# charged them every second it had been shut. That is how "slowest ever:
+	# LeadRope 594745.1 ms" came back: not a ten-minute rope, but the rope
+	# running last in the frame F7 was pressed in, and billed for the ten
+	# minutes nobody was looking. Any class could have worn it (TreeFriends
+	# did once); LeadRope only ever did because it runs late.
+	if on != _was_on:
+		_open = &""
+		_tag = null
+		_was_on = on
 	shut()
 	var now := Time.get_ticks_usec()
 	_span = now - _turned if _turned > 0 else 0
@@ -319,6 +334,9 @@ static func forget_worst() -> void:
 	_worst_rings = {}
 	_worst_span = 0
 	_worst_nodes = 0
+	# And the slowest call, for the same reason: a fresh record each sitting.
+	_slowest_ever = []
+	_slowest_ever_took = 0
 
 
 ## How many nodes that worst frame's world gained (or, negative, lost).
