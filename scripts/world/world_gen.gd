@@ -193,6 +193,8 @@ var _jungle_noise := FastNoiseLite.new()
 var _known := {}                  # Vector2i -> SEEN or WALKED
 var _chunks := {}                 # Vector2i -> Chunk
 var _shared_tiles := {}           # Vector2i tile -> LandTile; see seeded_height_at
+## This node's own frame count, which a tile is stamped with when it is asked.
+var _tile_frame := 0
 ## How many times the land has been changed by a miracle: a crater, a mound, a
 ## pond. Anything that keeps an answer about the land beyond a frame keeps this
 ## with it and asks again when it moves. See `land_edition`.
@@ -292,8 +294,9 @@ func _process(delta: float) -> void:
 			_stream_chunks()
 		return
 	_tick_burns(delta)
+	_tile_frame += 1
 	if _shared_tiles.size() > SHARED_TILES_MOST:
-		_forget_far_tiles()
+		_forget_tiles()
 	if focus_node == null:
 		return
 	_stream_chunks()
@@ -380,6 +383,7 @@ func seeded_height_at(x: float, z: float) -> float:
 	if tile == null:
 		tile = LandTile.new()
 		_shared_tiles[tile_key] = tile
+	tile.asked = _tile_frame
 	var i := posmod(kx, SHARED_TILE) + posmod(kz, SHARED_TILE) * SHARED_TILE
 	var known := tile.h[i]
 	if not is_nan(known):
@@ -396,10 +400,34 @@ func seeded_height_at(x: float, z: float) -> float:
 	return made
 
 
-## TOO MANY TILES KEPT: let go of the ones far from the camera, which is where
-## nobody is asking. All of them, if that was not enough — they are only ever
-## answers, and the land will give them again.
-func _forget_far_tiles() -> void:
+## TOO MANY TILES KEPT: let go of the ones nobody has asked about lately.
+##
+## It was the ones far from the camera, on the argument that far from the
+## camera is where nobody is asking — and that is false the moment the faith
+## spreads. Four believing towns four hundred to eleven hundred metres from
+## where you are looking are all being walked about in, all the time, and all
+## of them are past SHARED_KEEP: every time the store filled, every tile of
+## every town went at once, and seven hundred villagers started asking the
+## land again from nothing. That is a frame of 234 fresh reads, 195 of them by
+## villagers, on a desktop that had dropped to thirteen a second.
+##
+## So what goes is what has been asked LEAST LATELY, wherever it is: the older
+## half, by the frame each tile was last asked — two passes and no sort. A town
+## being walked about in is asked every frame and is never the older half; the
+## ground a chunk was cut from once and nobody has stood on since always is.
+## Then the far ones, if every tile was asked this very frame. Then all of them,
+## if that was not enough — they are only ever answers, and the land will give
+## them again.
+func _forget_tiles() -> void:
+	var oldest := _tile_frame
+	for tile: LandTile in _shared_tiles.values():
+		oldest = mini(oldest, tile.asked)
+	var cut := oldest + (_tile_frame - oldest) / 2
+	for key: Vector2i in _shared_tiles.keys():
+		if (_shared_tiles[key] as LandTile).asked < cut:
+			_shared_tiles.erase(key)
+	if _shared_tiles.size() <= SHARED_TILES_MOST:
+		return
 	var here := Vector2.ZERO
 	if focus_node != null and is_instance_valid(focus_node):
 		here = Vector2(focus_node.global_position.x, focus_node.global_position.z)
@@ -1704,6 +1732,8 @@ func _tick_wolf_raids(delta: float) -> void:
 ## written to on every first read.
 class LandTile:
 	var h := PackedFloat64Array()
+	## WorldGen's frame when this was last asked. See `_forget_tiles`.
+	var asked := 0
 
 	func _init() -> void:
 		h.resize(SHARED_TILE * SHARED_TILE)

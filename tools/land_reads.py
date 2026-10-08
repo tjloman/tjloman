@@ -19,9 +19,11 @@ rest of the reads come from instead of leaving it to a guess.
 Arithmetic on the source and the screenshot's town. Not a frame capture.
 """
 import math
+import os
 import pathlib
 import random
 import re
+import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -132,10 +134,25 @@ def shared(fail):
         fail.append("seeded_height_at no longer shares what it reads")
     # KEPT UNTIL THERE ARE TOO MANY, NOT ON A TIMER: the seeded land never
     # changes, and a timer threw away the ground a town was halfway through
-    # searching. Bounded by tiles instead, the far ones let go first.
+    # searching. Bounded by tiles instead, the ones nobody is asking about let
+    # go first — not the far ones: a believing town a kilometre off is asked
+    # about all the time, and dropping it whole each time the store filled was
+    # a frame of fresh reads by every villager in it.
     proc = body(WORLD, "_process")
-    if "_shared_tiles.size() > SHARED_TILES_MOST" not in proc or "_forget_far_tiles()" not in proc:
+    if "_shared_tiles.size() > SHARED_TILES_MOST" not in proc or "_forget_tiles()" not in proc:
         fail.append("the shared land is never let go — it must be bounded")
+    if "tile.asked = _tile_frame" not in seeded:
+        fail.append("a tile does not remember being asked, so the store cannot tell "
+                    "a town's ground from ground nobody has stood on since")
+    forget = body(WORLD, "_forget_tiles").split("\n")
+    idle = next((i for i, r in enumerate(forget) if ".asked < cut" in r), None)
+    far = next((i for i, r in enumerate(forget) if "SHARED_KEEP" in r), None)
+    print("SHARED LAND, FULL: %s goes first"
+          % ("what nobody is asking about" if idle is not None and (far is None or idle < far)
+             else "WHATEVER IS FAR FROM THE CAMERA, towns and all"))
+    if idle is None or (far is not None and far < idle):
+        fail.append("a full store forgets by distance from the camera before asking what is "
+                    "in use, so every far town's ground is dropped and read again")
     if re.search(r"_shared_\w+\.clear\(\)", proc) or "SHARED_FOR" in proc:
         fail.append("the shared land is thrown away on a clock again")
     if "class LandTile:" not in WORLD or "PackedFloat64Array" not in WORLD:
@@ -182,11 +199,30 @@ def shared(fail):
         fail.append("under half of a crowded town's land reads are shared")
 
 
+def live(fail):
+    """And with GODOT set, a full store is trimmed for real with four towns far
+    from the camera being walked in: tools/live/land_tiles_live.gd."""
+    godot = os.environ.get("GODOT", "")
+    if not godot or not pathlib.Path(godot).exists():
+        print("FAR TOWNS, FULL STORE: GODOT not set, not run in an engine here")
+        return
+    ran = subprocess.run([godot, "--headless", "--path", str(ROOT), "--script",
+                          "tools/live/land_tiles_live.gd"], capture_output=True,
+                         text=True, timeout=300)
+    said = [ln for ln in ran.stdout.splitlines() if ln.startswith("  ")]
+    print("FAR TOWNS, FULL STORE, in Godot:")
+    for ln in said:
+        print(" " + ln)
+    if ran.returncode != 0:
+        fail.append("in Godot, a full store makes far towns read their ground again")
+
+
 def main():
     fail = []
     source(fail)
     model(fail)
     shared(fail)
+    live(fail)
     print()
     if fail:
         for f in fail:
