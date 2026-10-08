@@ -28,6 +28,13 @@ const GONE := 44.0
 const VOICES := 6
 ## Seconds between census passes. Nothing here is urgent.
 const CENSUS := 0.9
+## ONLY UNDER THE CANOPY. How high the camera may be over the ground beneath it,
+## in metres, for any of this to be alive: they wake below WAKE_BELOW and go
+## still above STILL_ABOVE (the gap keeps a camera at the line from flickering
+## them on and off). A medium tree's crown begins about nine metres up; from
+## above it a bee is a pixel nobody can see, and that is nearly always.
+const WAKE_BELOW := 12.0
+const STILL_ABOVE := 15.0
 
 ## WHAT LIVES WHERE, AND WHEN. `hours` is the fraction of the day it keeps
 ## (GameState.day_fraction, 0 = midnight); `voice` names its loop in SoundBank;
@@ -68,6 +75,8 @@ var world: WorldGen
 var _critters: Array[Critter] = []
 var _since_census := 0.0
 var _voiced: Array[Critter] = []
+## Whether the wood is alive right now: the camera is down among it.
+var _awake := false
 
 
 func _ready() -> void:
@@ -76,17 +85,57 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	Ledger.open(&"TreeFriends")
-	_since_census += delta
-	if _since_census < CENSUS:
-		return
-	_since_census = 0.0
 	if not GameState.tree_friends:
 		if not _critters.is_empty():
 			clear()
 		return
+	# ABOVE THE CANOPY, NOTHING. Drawn where they are and doing nothing at all:
+	# no flight, no flicker, no voices, no census, no looking about for people
+	# to bolt from. Nothing in the game reads them, so nothing misses them.
+	var low := camera_height() < (STILL_ABOVE if _awake else WAKE_BELOW)
+	if low != _awake:
+		_stir(low)
+	if not _awake:
+		return
+	_since_census += delta
+	if _since_census < CENSUS:
+		return
+	_since_census = 0.0
 	_cull()
 	_recruit()
 	_hand_out_voices()
+
+
+## HOW HIGH THE EYE IS over the ground straight beneath it, in metres. INF
+## with no camera, which is "far above".
+func camera_height() -> float:
+	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
+	if camera == null:
+		return INF
+	var at := camera.global_position
+	var ground := world.drawn_height_at(at.x, at.z) if world != null else 0.0
+	return at.y - ground
+
+
+func is_awake() -> bool:
+	return _awake
+
+
+## WAKE THE WOOD, or still it. Stilled, every critter stops where it is — still
+## drawn — and gives up its voice; woken, they move again and the census runs
+## at once, so the wood fills the moment you are down in it.
+func _stir(awake: bool) -> void:
+	_awake = awake
+	for c in _critters:
+		if not is_instance_valid(c):
+			continue
+		c.set_process(awake)
+		if not awake:
+			c.listen(false)
+	if not awake:
+		_voiced.clear()
+	else:
+		_since_census = CENSUS
 
 
 ## Everything gone — when the setting is switched off, or the world reloads.
