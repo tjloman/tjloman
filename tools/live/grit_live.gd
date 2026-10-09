@@ -26,6 +26,9 @@ func _initialize() -> void:
 	change_scene_to_file("res://scenes/main.tscn")
 	for i in 150:
 		await process_frame
+	for n in root.find_children("*", "StartScreen", true, false):
+		n.queue_free()
+	paused = false
 	var quality: Node = root.get_node("/root/Quality")
 	var world: Node = current_scene.world_gen
 	var grit: Script = load("res://scripts/world/ground_grit.gd")
@@ -100,5 +103,76 @@ func _initialize() -> void:
 		bytes += tex.get_image().get_data().size()
 	check(bytes < 120 * 1024, "and they hold %.0f KB between them, mipmaps and all" % (bytes / 1024.0))
 
+	# 6. The ground a shade darker round what stands on it.
+	var tree: Node3D = null
+	var home: Node = null
+	for chunk in world._chunks.values():
+		if chunk.terrain_only:
+			continue
+		for child in chunk.get_children():
+			if child.get_class() == "StaticBody3D" and child.get_script() != null \
+					and String(child.get_script().get_global_name()) == "WildTree":
+				tree = child
+				home = chunk
+				break
+		if tree != null:
+			break
+	check(tree != null, "there is a tree standing on near ground")
+	if tree != null:
+		var dim := darker_by(home, Vector2(tree.global_position.x, tree.global_position.z))
+		check(dim > 0.08, "the ground at a tree's foot is a shade darker (%.0f%%)" % (dim * 100.0))
+	var house: Node3D = null
+	for h in get_nodes_in_group("houses"):
+		house = h
+		break
+	if house == null:
+		for v in get_nodes_in_group("village"):
+			for b in v.find_children("*", "", true, false):
+				if b.get_script() != null and String(b.get_script().get_global_name()) == "House":
+					house = b
+					break
+			if house != null:
+				break
+	check(house != null, "there is a house standing")
+	if house != null:
+		for i in 30:
+			await process_frame       # a standing chunk is cut again one a frame
+		var at := Vector2(house.global_position.x, house.global_position.z)
+		var dim := darker_by(world.chunk_at(at.x, at.y), at + Vector2(2.6, 0.0))
+		check(dim > 0.05, "and round a house (%.0f%%)" % (dim * 100.0))
+		# AND ONE BUILT LATER: forget the shade, cut the ground plain, and set the
+		# house down the way a new one is set down.
+		var under: Node = world.chunk_at(at.x, at.y)
+		under._shade_spots.clear()
+		under.recut()
+		var bare := darker_by(under, at + Vector2(2.6, 0.0))
+		load("res://scripts/world/footing.gd").settle(house, world)
+		for i in 30:
+			await process_frame
+		var later := darker_by(under, at + Vector2(2.6, 0.0))
+		check(bare < 0.03 and later > 0.05,
+			"a house set down later darkens the ground round it (%.0f%% -> %.0f%%)"
+			% [bare * 100.0, later * 100.0])
+
 	print("GRIT LIVE: %s" % ("all pass" if fails == 0 else "%d FAILING" % fails))
 	quit(1 if fails > 0 else 0)
+
+
+## HOW MUCH DARKER the drawn ground is at the grid corner nearest `at` than the
+## colour the land gives it — read off the mesh, against the chunk's own tint.
+func darker_by(chunk: Node, at: Vector2) -> float:
+	if chunk == null or chunk._ground == null:
+		return 0.0
+	var step: float = 48.0 / chunk._cells
+	var wide: int = chunk._cells + 1
+	var gx := clampi(roundi((at.x - chunk.position.x) / step), 0, chunk._cells)
+	var gz := clampi(roundi((at.y - chunk.position.z) / step), 0, chunk._cells)
+	var want := Vector3(gx * step, 0.0, gz * step)
+	var arrays: Array = chunk._ground.mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var colours: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+	for i in verts.size():
+		if absf(verts[i].x - want.x) < 0.01 and absf(verts[i].z - want.z) < 0.01:
+			var plain: Color = chunk._tint[gz * wide + gx]
+			return 1.0 - colours[i].get_luminance() / maxf(plain.get_luminance(), 0.001)
+	return 0.0

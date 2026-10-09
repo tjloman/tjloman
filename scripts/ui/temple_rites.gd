@@ -111,6 +111,14 @@ func _fill() -> void:
 		+ "pushed to a lower setting to cope. Applies at once.")
 	_say_cap()
 
+	var mist := CheckBox.new()
+	mist.text = "Fog"
+	mist.button_pressed = Quality.fog
+	mist.toggled.connect(_set_fog)
+	_body.add_child(mist)
+	_note("Clear near you, thickening from halfway out to the edge of the land, "
+		+ "so the land fades away instead of stopping. Off, you see where it stops.")
+
 	_heading("How far the land reaches")
 	_rings_said = Label.new()
 	_body.add_child(_rings_said)
@@ -127,8 +135,8 @@ func _fill() -> void:
 	_body.add_child(reach)
 	_note("Rings of land held round the camera, each one a band of 48-metre "
 		+ "squares all the way round: five is 121 squares, seven is 225, twelve "
-		+ "is 625. The fog closes in or draws back to match. Applies as you "
-		+ "move it.")
+		+ "is 625. The fog begins halfway out, so it draws back with the land. "
+		+ "Applies as you move it.")
 	_say_rings()
 
 	_heading("How many people the world may hold")
@@ -192,6 +200,10 @@ func _mark_tier() -> void:
 
 func _set_msaa(on: bool) -> void:
 	Quality.set_msaa(on)
+
+
+func _set_fog(on: bool) -> void:
+	Quality.set_fog(on)
 
 
 func _set_cap(notch: float) -> void:

@@ -81,8 +81,10 @@ def source(fail):
         fail.append("the rings slider is not 3-12, recommended 5, caution past 7: %s" % got)
     if "return rings" not in body(QUALITY, "sight_radius") \
             or "rings" not in body(QUALITY, "camera_far") \
-            or "camera_far()" not in body(QUALITY, "fog_density"):
+            or "camera_far()" not in body(QUALITY, "fog_begins"):
         fail.append("the land, the far plane and the fog do not follow the rings")
+    if "Quality.set_fog(" not in RITES:
+        fail.append("the fog cannot be switched off")
     if "Quality.sight_radius()" not in body(WORLD, "_stream_chunks"):
         fail.append("the rings wait for the next world instead of applying as they move")
     caps = re.search(r"^const FPS_CAPS: Array\[int\] = \[([^\]]*)\]", QUALITY, re.M)

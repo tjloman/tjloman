@@ -229,6 +229,9 @@ var _burn_tick := 0.0
 var _frame_began := 0
 ## Where the camera faces, flat, as of this frame's streaming. See `_ahead`.
 var _facing := Vector2(0.0, -1.0)
+## Chunks whose ground has a new shade on it and is waiting to be cut again —
+## one a frame. See `shade_ground`.
+var _to_recut: Array[Chunk] = []
 
 
 func _ready() -> void:
@@ -302,6 +305,7 @@ func _process(delta: float) -> void:
 		return
 	_tick_burns(delta)
 	_tile_frame += 1
+	_recut_one()
 	if _shared_tiles.size() > SHARED_TILES_MOST:
 		_forget_tiles()
 	if focus_node == null:
@@ -445,6 +449,40 @@ func _forget_tiles() -> void:
 			_shared_tiles.erase(key)
 	if _shared_tiles.size() > SHARED_TILES_MOST:
 		_shared_tiles.clear()
+
+
+## THE GROUND A SHADE DARKER ROUND SOMETHING THAT STANDS ON IT — a tree, a
+## stone, a house. Every chunk the shade reaches is told, so a thing by a chunk's
+## edge darkens the ground on both sides of it and leaves no seam. A chunk being
+## built takes it into the cut it is about to make; one already standing is cut
+## again, but one a frame (see `_recut_one`), so a town raised all at once does
+## not cut twenty chunks in one frame.
+func shade_ground(at: Vector2, reach: float) -> void:
+	var lo := cell_of(at.x - reach, at.y - reach)
+	var hi := cell_of(at.x + reach, at.y + reach)
+	for cz in range(lo.y, hi.y + 1):
+		for cx in range(lo.x, hi.x + 1):
+			var cached = _chunks.get(Vector2i(cx, cz))
+			if cached == null or not is_instance_valid(cached):
+				continue
+			var chunk := cached as Chunk
+			if chunk.shade_at(at, reach):
+				recut_later(chunk)
+
+
+## Cut this chunk's ground again on a later frame, one a frame. See `_recut_one`.
+func recut_later(chunk: Chunk) -> void:
+	if chunk not in _to_recut:
+		_to_recut.append(chunk)
+
+
+func _recut_one() -> void:
+	while not _to_recut.is_empty():
+		# Untyped until proved alive: a chunk can be freed while it waits.
+		var next = _to_recut.pop_front()
+		if is_instance_valid(next):
+			(next as Chunk).recut()
+			return
 
 
 ## THE LAND'S EDITION: changes whenever a miracle changes the ground or the
@@ -1003,8 +1041,10 @@ func reseat_over(cell: Vector2i) -> void:
 		var at := body.global_position
 		if cell_of(at.x, at.z) != cell:
 			continue
-		body.global_position.y = settle_height(
-			at.x, at.z, float(body.get_meta("seat_half", 2.5)))
+		var half := float(body.get_meta("seat_half", 2.5))
+		body.global_position.y = settle_height(at.x, at.z, half)
+		# The ground under it was cut again and does not remember the shade.
+		shade_ground(Vector2(at.x, at.z), half * 1.41 + 1.0)
 
 
 func _corner_max(x: float, z: float, half: float) -> float:

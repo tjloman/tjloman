@@ -29,6 +29,8 @@ GRIT = (ROOT / "scripts/world/ground_grit.gd").read_text()
 CHUNK = (ROOT / "scripts/world/chunk.gd").read_text()
 UTIL = (ROOT / "scripts/util.gd").read_text()
 QUALITY = (ROOT / "scripts/quality.gd").read_text()
+FOOTING = (ROOT / "scripts/world/footing.gd").read_text()
+WORLD = (ROOT / "scripts/world/world_gen.gd").read_text()
 
 
 def body(text, name):
@@ -61,6 +63,15 @@ def source(fail):
         fail.append("the ground reads its colours as linear: the whole land comes out pale")
     if "GroundGrit.grit()" not in mat:
         fail.append("the ground material carries no grain")
+    # THE GROUND A SHADE DARKER ROUND WHAT STANDS ON IT, and foam at the water.
+    if "world.shade_ground(" not in body(CHUNK, "_place"):
+        fail.append("a tree, bush or stone leaves the ground under it untouched")
+    if "world.shade_ground(" not in body(FOOTING, "settle"):
+        fail.append("a new building leaves the ground round it untouched")
+    if "shade_ground(" not in body(WORLD, "reseat_over"):
+        fail.append("ground cut again forgets the shade of the buildings on it")
+    if "FOAM" not in body(CHUNK, "water_tint"):
+        fail.append("there is no foam at the water's edge")
     detail = body(QUALITY, "ground_detail")
     print("  ground_detail: %s" % detail.strip().replace("\n", " "))
     if "[0, 1, 2][tier]" not in detail:

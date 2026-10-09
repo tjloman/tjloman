@@ -251,9 +251,16 @@ func _on_quality_changed() -> void:
 		get_viewport().msaa_3d = Quality.msaa_3d()
 	get_viewport().scaling_3d_scale = Quality.render_scale()
 	_environment.glow_enabled = Quality.glow()
-	_environment.fog_density = Quality.fog_density()
+	_fog()
 	if is_instance_valid(camera_rig) and camera_rig.camera != null:
 		camera_rig.camera.far = Quality.camera_far()
+
+
+## The fog as the player has it: on or off, and from where to where.
+func _fog() -> void:
+	_environment.fog_enabled = Quality.fog
+	_environment.fog_depth_begin = Quality.fog_begins()
+	_environment.fog_depth_end = Quality.camera_far()
 
 
 ## PUT AWAY, NOT CRASHED. A phone may end a game sitting in the background
@@ -459,9 +466,12 @@ func _build_environment() -> void:
 	_environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	# The eye's colour response rides on this; see LightMeter.colour.
 	_environment.adjustment_enabled = true
-	# Distance fog is cheap and stays on everywhere; glow scales with tier.
-	_environment.fog_enabled = true
-	_environment.fog_density = Quality.fog_density()
+	# DEPTH FOG, cheap, and the player's to switch off: clear near, closing at
+	# the edge of the land. See Quality.fog_begins. Glow scales with tier.
+	_environment.fog_mode = Environment.FOG_MODE_DEPTH
+	_environment.fog_density = 1.0
+	_environment.fog_depth_curve = 1.0
+	_fog()
 	_environment.fog_sky_affect = 0.2
 	_environment.glow_enabled = Quality.glow()
 	_environment.glow_intensity = 0.5

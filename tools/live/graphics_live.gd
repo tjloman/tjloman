@@ -49,8 +49,14 @@ func _initialize() -> void:
 	check(is_equal_approx(rig.camera.far, 9 * 48.0 - 12.0),
 		"and the far plane is at its edge (%.0f m)" % rig.camera.far)
 	var env: Environment = main._environment
-	check(is_equal_approx(env.fog_density, quality.FOG_AT_FAR / rig.camera.far),
-		"and the fog closes there (%.4f)" % env.fog_density)
+	check(env.fog_mode == Environment.FOG_MODE_DEPTH
+		and is_equal_approx(env.fog_depth_end, rig.camera.far)
+		and is_equal_approx(env.fog_depth_begin, rig.camera.far * quality.FOG_BEGINS),
+		"and the fog is clear to %.0f m and closed at the edge" % env.fog_depth_begin)
+	quality.set_fog(false)
+	check(not env.fog_enabled, "fog off: none")
+	quality.set_fog(true)
+	check(env.fog_enabled, "fog on again")
 	quality.set_rings(40)
 	check(quality.rings == quality.RINGS_MOST, "the slider stops at %d" % quality.RINGS_MOST)
 	quality.set_rings(was_rings)
@@ -168,6 +174,10 @@ func _initialize() -> void:
 	check(shallow.a < deep.a and deep.get_luminance() < shallow.get_luminance(),
 		"and on the clear tiers the shallows let more of the bottom through")
 	check(tint.water_tint(0.2, false).a == 1.0, "and LOW's water is opaque")
+	var edge: Color = tint.water_tint(0.0, true)
+	var off_shore: Color = tint.water_tint(1.0, true)
+	check(edge.get_luminance() > 0.85 and off_shore.get_luminance() < edge.get_luminance() - 0.15,
+		"foam at the water's very edge, gone a metre out")
 
 	# 6. The settings wall itself: the slider and the box, as a player uses them.
 	var wall: ScrollContainer = load("res://scripts/ui/temple_rites.gd").new()

@@ -73,7 +73,7 @@ def main():
             or "shadow_enabled" in changed:
         fail.append("the sun casts a real-time shadow again, or a quality change can turn "
                     "one on and rebuild every pipeline in the scene")
-    for cheap in ("scaling_3d_scale", "fog_density", "camera.far"):
+    for cheap in ("scaling_3d_scale", "_fog()", "camera.far"):
         if cheap not in changed:
             fail.append("the heat lost its %s knob" % cheap)
     phys = body(CREATURE, "_physics_process")

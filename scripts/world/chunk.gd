@@ -107,7 +107,22 @@ const DEEP_WATER := Color(0.05, 0.18, 0.46)
 const DEEP_AT := 3.5
 const SHALLOW_SEE := 0.55
 const DEEP_SEE := 0.92
-const WATER_CELLS := 12
+const WATER_CELLS := 24
+
+## THE FOAM: the colour at the water's very edge, and how deep the water is
+## where the foam has fully given way to the shallows, in metres. Narrow on
+## purpose: these shores shelve gently, and at 0.45 m the foam ran out for
+## metres and read as ice (rendered and seen).
+const FOAM := Color(0.86, 0.93, 0.95)
+const FOAM_DEPTH := 0.18
+const FOAM_SEE := 0.8
+## THE GROUND DARKER ROUND WHAT STANDS ON IT (see `shade_at`): how much darker
+## right at the foot of a thing, at most, and the reach of a tree's, a bush's
+## and a rock's, in metres.
+const SHADE_MOST := 0.28
+const SHADE_TREE := 2.4
+const SHADE_BUSH := 1.1
+const SHADE_ROCK := 1.5
 
 ## The one sea material — see `_water_material`.
 static var _sea: StandardMaterial3D = null
@@ -169,9 +184,23 @@ var _stand_known := false
 var _layers := 0
 var _grain_uv := PackedVector2Array()
 var _grain_uv2 := PackedVector2Array()
+## The colour the ground was last cut with, before any darkening — kept so it
+## can be cut again for a new building without asking the noise again.
+var _tint := PackedColorArray()
+## WHAT DARKENS THIS GROUND: [world x, world z, reach] for each thing standing
+## on or near it. Kept as the things, not as a grid, so a re-cut at a different
+## grid size still knows them. See `shade_at`.
+var _shade_spots: Array[Vector3] = []
+## True while the chunk is being built, so the mesh is cut once at the end
+## with everything that was placed on it, rather than once before and again.
+var _hold_cut := false
 
 
 func _ready() -> void:
+	# A PLACE IS CUT ONCE, after what stands on it: the ground darkens round its
+	# trees and stones (see `shade_at`), and they are scattered after the land is
+	# measured. Scenery has nothing standing on it and is cut straight away.
+	_hold_cut = not terrain_only
 	_build_terrain()
 	if terrain_only:
 		retally_boards()
@@ -179,6 +208,8 @@ func _ready() -> void:
 	_build_collider()
 	_build_water()
 	_scatter()
+	_hold_cut = false
+	_cut_mesh(_tint)
 	retally_boards()
 
 
@@ -196,6 +227,8 @@ func flesh_out() -> void:
 	if not terrain_only:
 		return
 	terrain_only = false
+	# Cut once, at the end, with the shade of what is about to be placed.
+	_hold_cut = true
 	# THE GROUND IS RE-CUT IF IT WAS COARSE, and this is the one place the old
 	# promise — "the mesh is left exactly as it is" — has to give way. The grid
 	# IS the collision heightmap, and a six-metre cell would have people walking
@@ -216,6 +249,8 @@ func flesh_out() -> void:
 	if _cells != world.chunk_cells:
 		rebuild_terrain()   # re-cuts fine, and lays the collider and water with it
 		_scatter(not had_wood)
+		_hold_cut = false
+		_cut_mesh(_tint)    # once, with the ground darkened round what was placed
 		retally_boards()
 		return
 	if _ground != null and is_instance_valid(_ground):
@@ -223,6 +258,12 @@ func flesh_out() -> void:
 	_build_collider()
 	_build_water()
 	_scatter(not had_wood)
+	_hold_cut = false
+	# THE GROUND IS ALREADY CUT AND STANDING, so the shade of what was just put
+	# on it can wait its turn rather than land on the same frame as everything
+	# else a flesh-out does. See WorldGen.shade_ground.
+	if not _shade_spots.is_empty():
+		world.recut_later(self)
 	retally_boards()
 
 
@@ -578,9 +619,13 @@ func _tint_grid(heights: PackedFloat32Array) -> PackedColorArray:
 ## Two triangles a cell, unindexed — six vertices a quad, because
 ## `generate_normals` without an index buffer is what gives the land its facets.
 func _cut_mesh(tint: PackedColorArray) -> void:
+	_tint = tint
+	if _hold_cut:
+		return
 	var cells := _cells
 	var wide := cells + 1
 	var step := WorldGen.CHUNK_SIZE / cells
+	tint = _shaded(tint, wide, step)
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	_layers = Quality.ground_detail()
@@ -673,6 +718,56 @@ func _grain(st: SurfaceTool, i: int) -> void:
 	st.set_uv(_grain_uv[i])
 	if _layers >= 2:
 		st.set_uv2(_grain_uv2[i])
+
+
+## THE GROUND A SHADE DARKER ROUND SOMETHING STANDING ON IT, at world `at`, out
+## to `reach` metres. Free once it is cut: it is in the ground's own colour, as
+## everything else the ground says is. Only on ground that is a place — scenery
+## is cut coarse and too far off for it to show. Re-cut now if the ground is
+## already standing and not being built; WorldGen spaces those out (see
+## WorldGen.shade_ground).
+func shade_at(at: Vector2, reach: float) -> bool:
+	if terrain_only:
+		return false
+	var spot := Vector3(at.x, at.y, reach)
+	if spot in _shade_spots:
+		return false          # already here: a building set down again
+	_shade_spots.append(spot)
+	return not _hold_cut and _ground != null and is_instance_valid(_ground)
+
+
+## Cut it again, from the colour it already has. For a new building's shade.
+func recut() -> void:
+	if not _tint.is_empty() and not _hold_cut:
+		_cut_mesh(_tint)
+
+
+## The tint grid with every shade on it: each corner darkened by the nearest
+## thing's falloff, the darkest one winning rather than piling up, so a copse is
+## dim and not black.
+func _shaded(tint: PackedColorArray, wide: int, step: float) -> PackedColorArray:
+	if _shade_spots.is_empty():
+		return tint
+	var dim := PackedFloat32Array()
+	dim.resize(wide * wide)
+	for spot: Vector3 in _shade_spots:
+		var lx := spot.x - position.x
+		var lz := spot.y - position.z
+		var x0 := maxi(0, floori((lx - spot.z) / step))
+		var x1 := mini(wide - 1, ceili((lx + spot.z) / step))
+		var z0 := maxi(0, floori((lz - spot.z) / step))
+		var z1 := mini(wide - 1, ceili((lz + spot.z) / step))
+		for gz in range(z0, z1 + 1):
+			for gx in range(x0, x1 + 1):
+				var near := Vector2(gx * step - lx, gz * step - lz).length()
+				if near < spot.z:
+					var i := gz * wide + gx
+					dim[i] = maxf(dim[i], 1.0 - near / spot.z)
+	var out := tint.duplicate()
+	for i in out.size():
+		if dim[i] > 0.0:
+			out[i] = out[i].darkened(SHADE_MOST * dim[i])
+	return out
 
 
 ## THE WOOD ON THE HORIZON ------------------------------------------------
@@ -895,6 +990,15 @@ static func water_tint(depth: float, clear: bool) -> Color:
 	var t := clampf(depth / DEEP_AT, 0.0, 1.0)
 	var tint := SHALLOW_WATER.lerp(DEEP_WATER, sqrt(t))
 	tint.a = lerpf(SHALLOW_SEE, DEEP_SEE, t) if clear else 1.0
+	# THE FOAM, at the edge: where the water is all but gone it is all but
+	# white, giving way to the shallows over the first FOAM_DEPTH. A corner on
+	# dry land is the shoreline itself, so the foam runs along the edge of the
+	# water and out into it by a cell.
+	var froth := 1.0 - clampf(depth / FOAM_DEPTH, 0.0, 1.0)
+	if froth > 0.0:
+		var a := tint.a
+		tint = tint.lerp(FOAM, froth)
+		tint.a = lerpf(a, FOAM_SEE, froth) if clear else 1.0
 	return tint
 
 
@@ -1030,6 +1134,10 @@ func _place(node: Node3D, local: Vector3, sink := 0.0) -> void:
 	local.y = world.drawn_height_at(position.x + local.x, position.z + local.z) - sink
 	node.position = local
 	add_child(node)
+	var reach := SHADE_TREE if node is WildTree else SHADE_BUSH if node is ForageBush \
+		else SHADE_ROCK if node is RockDeposit else 0.0
+	if reach > 0.0:
+		world.shade_ground(Vector2(position.x + local.x, position.z + local.z), reach)
 	# Remembered so it can be set back down if the ground under it ever moves.
 	# The sink rides along because a tree is planted slightly INTO the earth.
 	node.set_meta("sink", sink)

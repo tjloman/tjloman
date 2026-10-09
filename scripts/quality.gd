@@ -39,10 +39,10 @@ const RINGS_LEAST := 3
 const RINGS_MOST := 12
 const RINGS_ADVISED := 5
 const RINGS_CAUTION := 7
-## HOW MUCH OF THE LAND STILL SHOWS THROUGH THE FOG AT THE FAR PLANE, as the
-## exponent: fog density is this over the far plane, so whatever the rings, the
-## land fades to about a sixth just where it ends instead of stopping short.
-const FOG_AT_FAR := 1.8
+## WHERE THE FOG BEGINS, as a share of the way to the far plane — which the
+## rings set. Nearer than this the air is clear; from here it thickens to the
+## far plane, where the land ends inside it rather than at an edge.
+const FOG_BEGINS := 0.5
 ## THE FRAME CAP, a notched slider: frames a second, 0 for none. A phone held
 ## to a steady thirty runs cooler, and so stays smooth, where one let run at
 ## whatever it can manage climbs, heats and throttles — the difference for a lot
@@ -176,6 +176,8 @@ var msaa := true
 var rings := RINGS_ADVISED
 ## Frames a second the game is held to, or 0. One of FPS_CAPS. See `set_fps_cap`.
 var fps_cap := 60
+## The fog, on or off. See `fog_begins`.
+var fog := true
 ## Plain int rather than the enum's own type, so every comparison, subtraction
 ## and array index below is unambiguously legal.
 var heat: int = Heat.EASY
@@ -716,11 +718,16 @@ func particles(most: int) -> int:
 	return maxi(int(most * particle_scale()), 6)
 
 
-## THE FOG CLOSES AT THE EDGE OF THE LAND, wherever the player has put it: thin
-## for twelve rings, thick for three, so the last of the land always fades
-## rather than stops. See FOG_AT_FAR.
-func fog_density() -> float:
-	return FOG_AT_FAR / camera_far()
+## WHERE THE FOG BEGINS, in metres: FOG_BEGINS of the way to the far plane, so
+## the rings decide it — five rings is clear to 114 m and closed at 228, twelve
+## clear to 282 and closed at 564.
+##
+## It used to thicken from the camera outward (exponential fog, at a density
+## set by the far plane), which on five rings put a third of the fog on things
+## fifty metres off: the whole near picture washed toward the sky. Depth fog
+## leaves the near world alone and spends itself where the land runs out.
+func fog_begins() -> float:
+	return camera_far() * FOG_BEGINS
 
 
 ## HOW MANY REAL LIGHTS the night is allowed on the ground, over and above the
@@ -779,6 +786,15 @@ func set_fps_cap(want: int) -> void:
 	quality_changed.emit()
 
 
+## FOG ON OR OFF. Off, the land is seen to stop where the rings stop.
+func set_fog(on: bool) -> void:
+	if on == fog:
+		return
+	fog = on
+	_save_graphics()
+	quality_changed.emit()
+
+
 func set_rings(want: int) -> void:
 	want = clampi(want, RINGS_LEAST, RINGS_MOST)
 	if want == rings:
@@ -793,6 +809,7 @@ func _save_graphics() -> void:
 	cfg.set_value("graphics", "msaa", msaa)
 	cfg.set_value("graphics", "rings", rings)
 	cfg.set_value("graphics", "fps_cap", fps_cap)
+	cfg.set_value("graphics", "fog", fog)
 	cfg.save(GRAPHICS_PATH)
 
 
@@ -806,6 +823,7 @@ func _load_graphics(detected: Tier) -> void:
 	# heat and throttle, and the one that gains most from not trying to.
 	fps_cap = 30 if detected == Tier.LOW else 60
 	if cfg.load(GRAPHICS_PATH) == OK:
+		fog = bool(cfg.get_value("graphics", "fog", true))
 		var cap := int(cfg.get_value("graphics", "fps_cap", fps_cap))
 		fps_cap = cap if cap in FPS_CAPS else fps_cap
 		msaa = bool(cfg.get_value("graphics", "msaa", msaa))

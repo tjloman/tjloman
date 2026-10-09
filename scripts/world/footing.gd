@@ -91,6 +91,10 @@ static func settle(what_given: Variant, world: WorldGen) -> void:
 	var top := under(world, Vector2(here.x, here.z), half)
 	if is_finite(top):
 		what.global_position.y = top
+	# AND THE GROUND ROUND IT A SHADE DARKER, as round a tree or a stone — a
+	# building sits ON the land then, rather than on top of a picture of it.
+	if world != null:
+		world.shade_ground(Vector2(here.x, here.z), half.length() + 1.0)
 
 
 ## INSIDE THE LAND, AND PUT BACK ON TOP OF IT. True if it had to be.
