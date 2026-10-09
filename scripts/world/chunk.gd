@@ -163,6 +163,12 @@ var _boards: Array[MultiMeshInstance3D] = []
 ## answer — a clearing — rather than a question nobody has asked yet.
 var _stand_kept: Array[Dictionary] = []
 var _stand_known := false
+## The ground's grain layers for the mesh being cut, and where each grid
+## corner reads the grain and the patches — worked out once a corner per cut,
+## not once for each of the six triangles that share it. See `_grain`.
+var _layers := 0
+var _grain_uv := PackedVector2Array()
+var _grain_uv2 := PackedVector2Array()
 
 
 func _ready() -> void:
@@ -577,6 +583,15 @@ func _cut_mesh(tint: PackedColorArray) -> void:
 	var step := WorldGen.CHUNK_SIZE / cells
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_layers = Quality.ground_detail()
+	if _layers > 0:
+		_grain_uv.resize(wide * wide)
+		_grain_uv2.resize(wide * wide)
+		for gz in wide:
+			for gx in wide:
+				var spot := Vector2(position.x + gx * step, position.z + gz * step)
+				_grain_uv[gz * wide + gx] = GroundGrit.uv(spot)
+				_grain_uv2[gz * wide + gx] = GroundGrit.uv2(spot)
 	for z in cells:
 		for x in cells:
 			var x0 := x * step
@@ -591,6 +606,7 @@ func _cut_mesh(tint: PackedColorArray) -> void:
 			]
 			for idx in [0, 1, 2, 0, 2, 3]:
 				st.set_color(tint[at[idx]])
+				_grain(st, at[idx])
 				st.add_vertex(corners[idx])
 	if cells != world.chunk_cells:
 		_cut_skirt(st, tint, wide, step)
@@ -643,7 +659,20 @@ func _skirt_quad(st: SurfaceTool, tint: PackedColorArray,
 	var db := pb - Vector3(0, SKIRT_DROP, 0)
 	for v: Array in [[pa, a], [da, a], [db, b], [pa, a], [db, b], [pb, b]]:
 		st.set_color(tint[v[1]])
+		_grain(st, v[1])
 		st.add_vertex(v[0])
+
+
+## WHERE GRID CORNER `i` READS THE GROUND'S GRAIN: its place in the WORLD, not in
+## the chunk, so the grain runs on across every chunk border without a seam (a
+## skirt's dropped corner reads its top corner's). Only on the tiers that draw
+## a grain (see GroundGrit); a plain ground carries none.
+func _grain(st: SurfaceTool, i: int) -> void:
+	if _layers <= 0:
+		return
+	st.set_uv(_grain_uv[i])
+	if _layers >= 2:
+		st.set_uv2(_grain_uv2[i])
 
 
 ## THE WOOD ON THE HORIZON ------------------------------------------------

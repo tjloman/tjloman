@@ -53,7 +53,8 @@ def main():
     # NEITHER FOLLOWS THE HEAT. Clear water follows the tier; MSAA is the
     # player's own setting now — and the player flipping it is a hitch they
     # asked for, where the thermostat flipping it was a hang nobody did.
-    for knob, owner in (("msaa_3d", "if msaa"), ("water_alpha", "tier >=")):
+    for knob, owner in (("msaa_3d", "if msaa"), ("water_alpha", "tier >="),
+                        ("ground_detail", "[tier]")):
         text = body(QUALITY, knob)
         if "effective_tier()" in text or "heat" in text or owner not in text:
             fail.append("Quality.%s follows the heat: the thermostat would rebuild every "

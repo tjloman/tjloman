@@ -465,6 +465,14 @@ func shadow_reach() -> float:
 	return [30.0, 45.0, 70.0][effective_tier()]
 
 
+## THE GRAIN ON THE GROUND (see GroundGrit): 0 the plain colour it always had,
+## 1 the fine grain, 2 the grain and the broad patches with the texture kept
+## sharp at a slant. One fetch a ground pixel, then two. The tier, not the heat:
+## the ground's one material is built once with the layers it has.
+func ground_detail() -> int:
+	return [0, 1, 2][tier]
+
+
 func water_alpha() -> bool:
 	# The tier, not the heat: see the note above `shadow_reach`. Clear water and opaque
 	# water are two different shaders, and a chunk built while the device was

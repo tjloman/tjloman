@@ -401,7 +401,25 @@ static func ground_material() -> StandardMaterial3D:
 		return m
 	m = StandardMaterial3D.new()
 	m.vertex_color_use_as_albedo = true
+	# THE LAND IN THE COLOURS IT WAS GIVEN. WorldGen.ground_color writes them as
+	# they are meant to look, and a vertex colour is taken as LINEAR unless the
+	# material says otherwise — so every meadow, beach and snowfield was drawn
+	# a good deal paler than written, which is most of why the whole picture
+	# read as washed out. Rendered both ways before it was changed. The sea had
+	# the same fault, and the same fix (Chunk._water_material).
+	m.vertex_color_is_srgb = true
 	m.roughness = 1.0
+	# THE GRAIN, on the tiers that carry it, multiplied over the colour. Not
+	# lifted to make up what it takes away on average — see GroundGrit.kept.
+	var layers := Quality.ground_detail()
+	if layers >= 1:
+		m.albedo_texture = GroundGrit.grit()
+	if layers >= 2:
+		m.detail_enabled = true
+		m.detail_albedo = GroundGrit.patches()
+		m.detail_uv_layer = BaseMaterial3D.DETAIL_UV_2
+		m.detail_blend_mode = BaseMaterial3D.BLEND_MODE_MUL
+		m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	_mat_pool["ground"] = lit(m)
 	return m
 

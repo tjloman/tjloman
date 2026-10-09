@@ -34,6 +34,7 @@ SPENT = {
     "camera_far": "GPU", "clutter_distance": "GPU", "actor_distance": "GPU",
     "label_distance": "GPU", "building_distance": "GPU", "particle_scale": "CPU+GPU",
     "fog_density": "look", "night_lights": "GPU", "AT_FULL": "CPU",
+    "ground_detail": "GPU",
 }
 
 
@@ -51,10 +52,11 @@ def knobs():
     for m in re.finditer(r"^func (\w+)\(\) -> [\w.]+:\n((?:\t.*\n|\n)+?)(?=^\S)", QUALITY, re.M):
         name, text = m.group(1), m.group(2)
         code = "\n".join(ln.split("#")[0] for ln in text.splitlines())
-        table = re.search(r"return \[([^\]]+)\]\[(effective_tier|tier)\(\)\]", code)
+        # Asked of the heat (`effective_tier()`) or of the tier alone (`tier`).
+        table = re.search(r"return \[([^\]]+)\]\[(effective_tier\(\)|tier)\]", code)
         if table:
             vals = [v.strip() for v in table.group(1).split(",")]
-            how = "heat" if table.group(2) == "effective_tier" else "fixed"
+            how = "heat" if table.group(2).startswith("effective_tier") else "fixed"
         else:
             cmp = re.search(r"(effective_tier\(\)|tier) >= Tier\.(MEDIUM|HIGH)", code)
             top = re.search(r"return (\S+) if effective_tier\(\) == Tier\.HIGH else (\S+)", code)
@@ -85,7 +87,7 @@ def main():
     verbose = "-v" in sys.argv
     rows = knobs()
     want = {"render_scale", "chunk_cells", "decisions",
-            "glow", "AT_FULL", "shadow_reach"}
+            "glow", "AT_FULL", "shadow_reach", "ground_detail"}
     missing = want - {r[0] for r in rows}
     print("%-18s %-8s %-8s %-8s %-6s %-8s %s" % ("knob", "LOW", "MEDIUM", "HIGH",
                                                   "turns", "spends", "asked by"))

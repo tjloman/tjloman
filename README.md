@@ -55,6 +55,7 @@ python3 tools/audience.py        # hold on the creature: it greets you; stroke p
 python3 tools/buried.py          # nothing carried, let go of or thrown ends up under the land
 python3 tools/graphics.py        # MSAA its own switch, glow on HIGH, sea by depth, rings slider, ahead first
 python3 tools/script_warnings.py # with GODOT set: no script warnings on a debug launch
+python3 tools/grit.py            # the ground's grain: no files, world-placed, by tier, colours as written
 ```
 
 To SEE a frame without a screen (software Vulkan under Xvfb; slow but real),

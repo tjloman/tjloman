@@ -221,7 +221,8 @@ def main():
         "<- 3D renders at FULL native resolution" if proj["scale"] >= 1.0 else ""))
     print("  stretch mode        %s  (2D only; the 3D pass is native either way)"
           % proj["stretch"])
-    print("  texture assets      none — every surface is a vertex colour")
+    print("  texture assets      none on disk; the ground's grain is made at start "
+          "(GroundGrit: 256 and 128 square, one byte a texel, ~106 KB mipmapped)")
     print()
 
     screens = ({args.screen: tuple(int(v) for v in args.screen.split("x"))}
