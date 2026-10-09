@@ -84,8 +84,8 @@ def knobs():
 def main():
     verbose = "-v" in sys.argv
     rows = knobs()
-    want = {"render_scale", "chunk_cells", "decisions", "msaa_3d",
-            "glow", "camera_far", "AT_FULL", "shadow_reach"}
+    want = {"render_scale", "chunk_cells", "decisions",
+            "glow", "AT_FULL", "shadow_reach"}
     missing = want - {r[0] for r in rows}
     print("%-18s %-8s %-8s %-8s %-6s %-8s %s" % ("knob", "LOW", "MEDIUM", "HIGH",
                                                   "turns", "spends", "asked by"))
@@ -98,6 +98,24 @@ def main():
     print()
     print("turns: 'heat' = the thermostat may lower it mid-game; 'fixed' = only a "
           "change of tier does")
+    # THE PLAYER'S OWN, which no tier turns: read off Quality the same way, so
+    # a slider whose ends move is a table that moves with it.
+    print()
+    print("THE PLAYER'S OWN (no tier turns these):")
+    found = {k: re.search(r"^const RINGS_%s := (\d+)" % k, QUALITY, re.M)
+             for k in ("LEAST", "MOST", "ADVISED", "CAUTION")}
+    msaa = re.search(r"return Viewport\.MSAA_2X if msaa else", QUALITY)
+    if all(found.values()):
+        n = {k: int(v.group(1)) for k, v in found.items()}
+        print("  rings of land       %d to %d, starts and recommended at %d, warns past %d"
+              % (n["LEAST"], n["MOST"], n["ADVISED"], n["CAUTION"]))
+        print("  far plane and fog   follow the rings (Quality.camera_far, fog_density)")
+    else:
+        missing.add("the rings slider")
+    if msaa:
+        print("  2x MSAA             on or off; starts on where the tier is MEDIUM or more")
+    else:
+        missing.add("the MSAA setting")
     if missing:
         print("FAIL: could not read %s" % ", ".join(sorted(missing)))
         return 1

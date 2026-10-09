@@ -93,6 +93,25 @@ const STONE_COUNTRY: Array[String] = ["forest", "grassland", "rocky_hills",
 ## How close to the waterline counts as a shore, in metres of height above it.
 const SHORE_WITHIN := 1.6
 
+## THE SEA BY DEPTH (see `_water_mesh`): the colour over the shallows and over
+## the deeps, how deep "deep" is in metres, how much of the bottom shows through
+## at either end on the clear tiers, and how many squares a side the grid that
+## carries the colour is cut into, at most.
+##
+## DEEP IS THREE AND A HALF METRES, because that is how deep this world's water
+## is: measured across a loaded world, half of it under 0.9 m and nine tenths
+## under 3. Set at eight, nearly all of it read as shallows and the whole lake
+## came out pale.
+const SHALLOW_WATER := Color(0.50, 0.78, 0.90)
+const DEEP_WATER := Color(0.05, 0.18, 0.46)
+const DEEP_AT := 3.5
+const SHALLOW_SEE := 0.55
+const DEEP_SEE := 0.92
+const WATER_CELLS := 12
+
+## The one sea material — see `_water_material`.
+static var _sea: StandardMaterial3D = null
+
 var world: WorldGen
 var cell := Vector2i.ZERO
 ## Set before the chunk enters the tree. See the class note above.
@@ -786,26 +805,90 @@ func _build_water() -> void:
 	if _lowest_seeded >= WorldGen.WATER_LEVEL + 0.5 \
 			and not world.sea_reaches(_deepest.x, _deepest.y):
 		return
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(WorldGen.CHUNK_SIZE, WorldGen.CHUNK_SIZE)
+	var sea := _water_mesh(Quality.water_alpha())
+	if sea == null:
+		return          # low ground, but not one square of it under the water
 	var water := MeshInstance3D.new()
 	_water = water
-	water.mesh = plane
-	var mat := StandardMaterial3D.new()
-	# Transparent + reflective water is heavy overdraw on tiled mobile GPUs,
-	# so only the Medium/High tiers get the pretty version; Low tiers (budget
-	# phones) get opaque matte water that reads fine and actually runs.
-	if Quality.water_alpha():
-		mat.albedo_color = Color(0.2, 0.42, 0.65, 0.75)
-		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		mat.roughness = 0.1
-		mat.metallic = 0.3
-	else:
-		mat.albedo_color = Color(0.22, 0.44, 0.62)
-		mat.roughness = 0.6
-	water.material_override = Util.lit(mat)
-	water.position = Vector3(WorldGen.CHUNK_SIZE / 2.0, WorldGen.WATER_LEVEL, WorldGen.CHUNK_SIZE / 2.0)
+	water.mesh = sea
+	water.material_override = _water_material()
+	water.position = Vector3(0.0, WorldGen.WATER_LEVEL, 0.0)
 	add_child(water)
+
+
+## THE SEA, COLOURED BY HOW DEEP IT IS: pale over the shallows, dark over the
+## deeps — and on the clear tiers, thinner over the shallows too, so the sand
+## shows through at the edge and the bottom drops away out of sight.
+##
+## Not a depth-buffer shader. Reading the depth buffer back means a copy of it
+## every frame, which is exactly what a tiled phone GPU is worst at. The ground
+## under the water is already known — the terrain pass measured every corner of
+## it (`_heights`) — so the colour is put on the corners of a coarse grid, once,
+## when the chunk is cut, and the GPU blends it for free. One draw a chunk, as
+## the flat plane was; a few hundred triangles more, and none at all where the
+## ground under a whole square is above the water.
+func _water_mesh(clear: bool) -> ArrayMesh:
+	if _heights.is_empty():
+		return null
+	var cells := _cells
+	var wide := cells + 1
+	var every := maxi(1, cells / WATER_CELLS)
+	var step := WorldGen.CHUNK_SIZE / cells
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_normal(Vector3.UP)
+	var wet := 0
+	for gz in range(0, cells, every):
+		for gx in range(0, cells, every):
+			var x1 := mini(gx + every, cells)
+			var z1 := mini(gz + every, cells)
+			# DRY THE WHOLE WAY ACROSS: no water drawn. The drawn land is a flat
+			# triangle between samples, so a square whose every sample is above
+			# the waterline has no dip in it for the sea to show in.
+			var lowest := INF
+			for z in range(gz, z1 + 1):
+				for x in range(gx, x1 + 1):
+					lowest = minf(lowest, _heights[z * wide + x])
+			if lowest >= WorldGen.WATER_LEVEL + 0.3:
+				continue
+			wet += 1
+			var at := [Vector2i(gx, gz), Vector2i(x1, gz), Vector2i(x1, z1), Vector2i(gx, z1)]
+			for idx in [0, 1, 2, 0, 2, 3]:
+				var corner: Vector2i = at[idx]
+				st.set_color(water_tint(
+					WorldGen.WATER_LEVEL - _heights[corner.y * wide + corner.x], clear))
+				st.add_vertex(Vector3(corner.x * step, 0.0, corner.y * step))
+	return st.commit() if wet > 0 else null
+
+
+## The colour of water this deep, in metres. Public for the tools.
+static func water_tint(depth: float, clear: bool) -> Color:
+	var t := clampf(depth / DEEP_AT, 0.0, 1.0)
+	var tint := SHALLOW_WATER.lerp(DEEP_WATER, sqrt(t))
+	tint.a = lerpf(SHALLOW_SEE, DEEP_SEE, t) if clear else 1.0
+	return tint
+
+
+## ONE material for all the sea in the world, as the ground has: the colour is
+## in the mesh, so nothing about it differs from one chunk to the next.
+## Transparent and glossy on the tiers that can afford the overdraw; opaque and
+## matte on LOW, which still gets the depth in its colour.
+static func _water_material() -> StandardMaterial3D:
+	if _sea != null:
+		return _sea
+	_sea = StandardMaterial3D.new()
+	_sea.vertex_color_use_as_albedo = true
+	# THE COLOURS ARE WRITTEN AS THEY LOOK, and the engine takes a vertex
+	# colour as linear unless told otherwise — which lifted the deep blue to a
+	# pale lilac and the shallows to white. Rendered and compared to be sure.
+	_sea.vertex_color_is_srgb = true
+	if Quality.water_alpha():
+		_sea.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_sea.roughness = 0.1
+		_sea.metallic = 0.3
+	else:
+		_sea.roughness = 0.6
+	return Util.lit(_sea)
 
 
 ## Scatter --------------------------------------------------------------------

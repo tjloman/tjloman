@@ -48,6 +48,11 @@ const SHARED_TILE := 32
 const SHARED_TILES_MOST := 1024
 const SHARED_KEEP := 320.0
 const CHUNKS_PER_FRAME := 1      # the floor under the budget: never fewer
+## WHAT COUNTS AS AHEAD, for which land is built first: within this many degrees
+## either side of where the camera faces. Wider than the lens on purpose — a
+## landscape screen sees well over ninety degrees across, and a turn of the head
+## should find the land already there. See `_ahead`.
+const AHEAD_HALF := 70.0
 ## HOW MUCH OF THE OLD GROUND IS PUT AWAY IN ONE FRAME: chunks freed, stripped
 ## back to scenery, or boarded back to billboards, all counted together.
 ##
@@ -222,6 +227,8 @@ var _burn_tick := 0.0
 ## `_frame_spent` — and the pragma at the top of this file for why the wall
 ## clock is the right clock for a loader.
 var _frame_began := 0
+## Where the camera faces, flat, as of this frame's streaming. See `_ahead`.
+var _facing := Vector2(0.0, -1.0)
 
 
 func _ready() -> void:
@@ -1233,6 +1240,15 @@ func blooms_near(at: Vector3, within: float) -> Array[Vector3]:
 func _stream_chunks() -> void:
 	_frame_began = Time.get_ticks_msec()
 	var focus := focus_node.global_position
+	# THE PLAYER'S RINGS, read every frame: the slider applies as it is moved,
+	# the far ring filling out or letting go from the next frame on.
+	var rings := maxi(Quality.sight_radius(), unload_radius)
+	if rings != sight_radius:
+		sight_radius = rings
+		_sight_filled = false
+	var ahead := -focus_node.global_transform.basis.z
+	if Vector2(ahead.x, ahead.z).length_squared() > 0.0001:
+		_facing = Vector2(ahead.x, ahead.z).normalized()
 	var center := Vector2i(floori(focus.x / CHUNK_SIZE), floori(focus.z / CHUNK_SIZE))
 	# THE GROUND THE CREATURE IS STANDING ON IS NEVER UNLOADED.
 	#
@@ -1262,14 +1278,20 @@ func _fill_near(center: Vector2i, kept: Dictionary) -> bool:
 	# so the chunk arriving on the frame you needed it was as likely to be the
 	# one behind you as the one you were walking into. Rings out from the
 	# middle, exactly as the far ring has always been filled.
+	#
+	# AND WHAT YOU ARE LOOKING AT BEFORE WHAT YOU ARE NOT. Every ring is walked
+	# twice: once for the cells ahead of the camera, nearest first, and then for
+	# the rest — so the land you are facing is never waiting behind the land at
+	# your back. See `_ahead`.
 	var made := 0
-	for ring in range(0, load_radius + 1):
-		for cell: Vector2i in _ring_cells(center, ring):
-			if not _make_whole(cell):
-				continue
-			made += 1
-			if _frame_spent(made):
-				return true
+	for facing: bool in [true, false]:
+		for ring in range(0, load_radius + 1):
+			for cell: Vector2i in _ring_cells(center, ring):
+				if _ahead(center, cell) != facing or not _make_whole(cell):
+					continue
+				made += 1
+				if _frame_spent(made):
+					return true
 	for cell: Vector2i in kept:
 		if not _make_whole(cell):
 			continue
@@ -1341,16 +1363,30 @@ func _fill_sight(center: Vector2i) -> void:
 		_sight_filled = false
 	if _sight_filled:
 		return
+	# Ahead first, then the rest, as the near ring is. A turn of the camera
+	# mid-fill re-sorts the next frame, since `_facing` is read every frame.
 	var made := 0
-	for ring in range(load_radius + 1, sight_radius + 1):
-		for cell: Vector2i in _ring_cells(center, ring):
-			if _chunks.has(cell):
-				continue
-			_spawn_chunk(cell, true)
-			made += 1
-			if _frame_spent(made):
-				return
+	for facing: bool in [true, false]:
+		for ring in range(load_radius + 1, sight_radius + 1):
+			for cell: Vector2i in _ring_cells(center, ring):
+				if _chunks.has(cell) or _ahead(center, cell) != facing:
+					continue
+				_spawn_chunk(cell, true)
+				made += 1
+				if _frame_spent(made):
+					return
 	_sight_filled = true
+
+
+## IS THIS CELL IN FRONT OF THE CAMERA? Within AHEAD_HALF of where it faces —
+## or right round it, the cell itself and the eight touching it, which the
+## camera looks down over from behind its own pivot whichever way it faces.
+## A dot product a cell.
+func _ahead(center: Vector2i, cell: Vector2i) -> bool:
+	var off := Vector2(cell - center)
+	if off.length_squared() <= 2.0:
+		return true
+	return off.normalized().dot(_facing) >= cos(deg_to_rad(AHEAD_HALF))
 
 
 ## HOW MUCH OF THE WORLD IS ACTUALLY THERE, 0..1 — the far ring's cold fill,

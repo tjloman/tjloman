@@ -74,12 +74,18 @@ def quality():
         m = re.search(r"func %s\(\)[^\n]*\n\treturn \[([^\]]+)\]" % fn, text)
         return [x.strip() for x in m.group(1).split(",")] if m else None
 
+    # THE RINGS ARE THE PLAYER'S NOW, not the tier's (Quality.rings, a slider
+    # starting at RINGS_ADVISED), so every tier is modelled at the advised
+    # number, and the far plane is what Quality.camera_far makes of it.
+    advised = int(re.search(r"const RINGS_ADVISED := (\d+)", text).group(1))
+    chunk = float(re.search(r"const CHUNK_SIZE := ([\d.]+)", open(
+        os.path.join(ROOT, "scripts", "world", "world_gen.gd")).read()).group(1))
     return {
         "chunk_cells": [int(x) for x in row("chunk_cells")],
         "load_radius": [int(x) for x in row("load_radius")],
         "unload_radius": [int(x) for x in row("unload_radius")],
-        "sight_radius": [int(x) for x in row("sight_radius")],
-        "camera_far": [float(x) for x in row("camera_far")],
+        "sight_radius": [advised] * 3,
+        "camera_far": [advised * chunk - 12.0] * 3,
         "render_scale": [float(x) for x in row("render_scale")],
     }
 
@@ -227,7 +233,7 @@ def main():
         sight = qual["sight_radius"][tier]
         far = qual["camera_far"][tier]
         shadow_on = tier >= 1
-        msaa = 1 if tier >= 1 else 0        # Quality.msaa_3d: 2x on medium+
+        msaa = 1 if tier >= 1 else 0        # MSAA's default: 2x on medium+
         scale = qual["render_scale"][tier]
         print("=" * 78)
         print("%s   grid %dx%d (%.2fm cells), %dx%d chunks, 3D at %.0f%%"

@@ -53,6 +53,7 @@ python3 tools/pose.py            # one pose at a time, by number; one writer of 
 python3 tools/canopy.py          # critters are still unless the camera is under the trees
 python3 tools/audience.py        # hold on the creature: it greets you; stroke praises, slap scolds
 python3 tools/buried.py          # nothing carried, let go of or thrown ends up under the land
+python3 tools/graphics.py        # MSAA its own switch, glow on HIGH, sea by depth, rings slider, ahead first
 ```
 
 To SEE a frame without a screen (software Vulkan under Xvfb; slow but real),

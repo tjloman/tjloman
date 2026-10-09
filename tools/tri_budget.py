@@ -817,7 +817,14 @@ def knobs():
     return out
 
 
-def land(rows):
+def rings():
+    """The slider's numbers: where it starts, where it warns, where it ends."""
+    text = open("scripts/quality.gd", encoding="utf-8").read()
+    return [int(re.search(r"const RINGS_%s := (\d+)" % which, text).group(1))
+            for which in ("ADVISED", "CAUTION", "MOST")]
+
+
+def land(rows, ring=None):
     """WHAT THE LAND COSTS, which is the answer to the whole question.
 
     Every model in the chart above is a rounding error beside this. The sight
@@ -829,11 +836,13 @@ def land(rows):
     scenery: `far_cells` a side, plus a skirt of 8 per cell to cover the cracks
     where a coarse edge meets a fine one."""
     k = knobs()
+    # The player's rings, the same on every tier: the advised number unless
+    # another is asked about.
+    ring = ring if ring is not None else rings()[0]
     per_tier = []
     for tier, label in enumerate(["LOW", "MEDIUM", "HIGH"]):
         cells = int(k["chunk_cells"][tier])
         far = int(k["far_cells"][tier])
-        ring = int(k["sight_radius"][tier])
         near_ring = int(k["load_radius"][tier])
         chunks = (2 * ring + 1) ** 2
         near_lot = (2 * near_ring + 1) ** 2
@@ -914,13 +923,14 @@ def main():
     print("\n%d models, %s triangles with one of everything standing in a row."
           % (len(rows), "{:,}".format(total)))
 
-    print("\n== THE LAND, which is the budget")
+    print("\n== THE LAND, which is the budget — at %d rings (advised), %d (the "
+          "caution) and %d (the most)" % tuple(rings()))
     print("%-8s %7s %7s %8s %8s %10s %12s %12s %6s"
           % ("TIER", "NEAR", "FAR", "CHUNKS", "FAR LOT", "EACH FAR",
              "ONE BAND", "TWO BANDS", "CUT"))
-    for t in land(rows):
+    for t in [t for ring in rings() for t in land(rows, ring)]:
         print("%-8s %7s %7s %8d %8d %10s %12s %12s %5.1fx"
-              % (t["tier"], "{:,}".format(t["per_chunk"]),
+              % ("%s@%d" % (t["tier"], t["ring"]), "{:,}".format(t["per_chunk"]),
                  "%dx%d" % (t["far"], t["far"]), t["chunks"], t["far_lot"],
                  "{:,}".format(t["per_far"]), "{:,}".format(t["was"]),
                  "{:,}".format(t["tris"]), float(t["was"]) / t["tris"]))

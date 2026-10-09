@@ -54,6 +54,9 @@ const ANSWER := 1.4
 const SHOT_EYE := 0.72
 const SHOT_BACK := 1.7
 const SHOT_PITCH := -14.0
+## How far the creature may shift — settling onto the ground as it stops, a
+## sulk, a nudge — before the shot moves with it, in metres.
+const SHOT_SLACK := 0.25
 
 ## Which feeling it sounds, for each mood. See CreatureHead.SAYS.
 const VOICE := {
@@ -71,6 +74,8 @@ var touched := ""
 var touched_at := -INF
 
 var _rig: CameraRig = null
+## Where it stood when the shot was last set. See `tick`.
+var _framed_at := Vector3.INF
 var _held := false
 var _idle := 0.0
 var _answer_in := 0.0
@@ -175,6 +180,14 @@ func tick(delta: float) -> void:
 		return
 	if who.state == Creature.State.HEED and _rig != null and is_instance_valid(_rig):
 		who.greeting_eye = _rig.camera.global_position
+	# THE SHOT FOLLOWS IT, while it is still the shot. A creature stopped
+	# mid-stride settles onto the ground — the better part of a metre, full
+	# grown — and a shot set before that is a shot of its chin. Once you have
+	# turned or zoomed the camera yourself it is yours, and stays put.
+	if _rig != null and is_instance_valid(_rig) and _rig.framed \
+			and (not _framed_at.is_finite()
+				or who.global_position.distance_to(_framed_at) > SHOT_SLACK):
+		_frame()
 	_idle += delta
 	if _idle >= IDLE:
 		close()
@@ -282,6 +295,7 @@ func _frame() -> void:
 	if _rig == null or not is_instance_valid(_rig):
 		return
 	var tall := CreatureBody.STANDING * who.scale.y
+	_framed_at = who.global_position
 	var aim := who.global_position + Vector3.UP * tall * SHOT_EYE
 	_rig.glide_to(aim, _rig.rotation.y, SHOT_PITCH, tall * SHOT_BACK)
 	if _held:

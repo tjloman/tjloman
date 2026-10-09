@@ -26,6 +26,23 @@ enum Tier { LOW, MEDIUM, HIGH }
 enum Heat { EASY, WARM, HOT }
 
 const SAVE_PATH := "user://quality.cfg"
+## THE TWO THAT ARE THE PLAYER'S, NOT THE TIER'S — kept apart from the tier's
+## own file, which is a bare number older builds still read.
+const GRAPHICS_PATH := "user://graphics.cfg"
+
+## HOW MANY RINGS OF LAND ARE HELD AROUND THE CAMERA — a notched slider, from
+## RINGS_LEAST to RINGS_MOST. RINGS_ADVISED is where it starts and what the
+## slider recommends; past RINGS_CAUTION it warns. A ring is a band of 48 m
+## chunks all the way round, so the land held grows with the square: five rings
+## is 121 chunks, seven 225, twelve 625.
+const RINGS_LEAST := 3
+const RINGS_MOST := 12
+const RINGS_ADVISED := 5
+const RINGS_CAUTION := 7
+## HOW MUCH OF THE LAND STILL SHOWS THROUGH THE FOG AT THE FAR PLANE, as the
+## exponent: fog density is this over the far plane, so whatever the rings, the
+## land fades to about a sixth just where it ends instead of stopping short.
+const FOG_AT_FAR := 1.8
 
 ## Sustained frame times, in seconds. WARM is 30fps and HOT 20.
 ##
@@ -141,6 +158,11 @@ const PHYSICS_HZ := 30
 const STEPS_MOST := 2
 
 var tier := Tier.MEDIUM
+## 2x MSAA, on or off — its own setting now, not the tier's. Starts as the tier
+## would have had it (on from MEDIUM up). See `msaa_3d`.
+var msaa := true
+## Rings of land held round the camera. See RINGS_ADVISED.
+var rings := RINGS_ADVISED
 ## Plain int rather than the enum's own type, so every comparison, subtraction
 ## and array index below is unambiguously legal.
 var heat: int = Heat.EASY
@@ -179,7 +201,9 @@ func _ready() -> void:
 		fell_back_from = tier
 		tier = detected
 		_save_override(tier)
-	print("Quality: %s (GPU: %s)" % [Tier.keys()[tier], _adapter_name()])
+	_load_graphics(detected)
+	print("Quality: %s, MSAA %s, %d rings (GPU: %s)"
+		% [Tier.keys()[tier], "2x" if msaa else "off", rings, _adapter_name()])
 
 
 ## SET THE FIXED CLOCK. See the note by PHYSICS_HZ: this is the difference
@@ -414,8 +438,11 @@ func _first_number(s: String) -> int:
 
 ## Feature knobs by tier -------------------------------------------------------
 
+## GLOW IS FOR HIGH ALONE. It is a blur of the whole frame, several passes of
+## it, paid every frame whether anything on screen is bright or not — a MEDIUM
+## device has better things to spend that on.
 func glow() -> bool:
-	return effective_tier() >= Tier.MEDIUM
+	return effective_tier() >= Tier.HIGH
 
 
 ## NO REAL-TIME SHADOWS, ON ANY TIER. The sun's shadow map drew the whole scene
@@ -445,12 +472,13 @@ func water_alpha() -> bool:
 	return tier >= Tier.MEDIUM
 
 
-## MSAA multiplies the per-pixel cost of the opaque pass. Budget GPUs that
-## already flirt with a frame timeout get none; capable devices get a cheap
-## 2x to smooth our hard primitive edges.
+## MSAA multiplies the per-pixel cost of the opaque pass, and smooths the hard
+## edges of every primitive in the game. ITS OWN SETTING, NOT THE TIER'S: what
+## it costs and what it buys do not move with anything else the tier turns, and
+## a device that can hold MEDIUM may not want to pay it, or one on LOW may. Never
+## the heat — see the note above `shadow_reach`.
 func msaa_3d() -> Viewport.MSAA:
-	# The tier, not the heat — see the note above `shadow_reach`.
-	return Viewport.MSAA_2X if tier >= Tier.MEDIUM else Viewport.MSAA_DISABLED
+	return Viewport.MSAA_2X if msaa else Viewport.MSAA_DISABLED
 
 
 ## HOW MANY PIXELS THE 3D PASS ACTUALLY DRAWS, as a share of the panel's.
@@ -586,28 +614,27 @@ func wood_beyond() -> int:
 	return [0, 0, 1][effective_tier()]
 
 
-## HOW FAR THE LAND ITSELF IS HELD, in chunks — much wider than `load_radius`,
+## HOW FAR THE LAND ITSELF IS HELD, in chunks: the player's rings (see
+## RINGS_ADVISED). Much wider than `load_radius`,
 ## because these two rings answer different questions. Inside `load_radius` a
 ## chunk is a place: collision to walk on, water to drown in, trees, herds,
 ## villages. Out here it is only the shape of the ground, built once and left
 ## standing, so that the hills you can see are hills instead of a fog bank that
 ## grows a ridge the moment you turn towards it.
 ##
-## SIZED FROM `camera_far` AND NOTHING ELSE. A chunk is 48m and the camera may
-## be standing on the far edge of its own cell, so covering D metres in the
-## worst case needs ceil(D / 48) rings: 180 -> 4, 300 -> 7, 380 -> 8. Fog does
-## not let us stop short of that — at these densities the land is still a sixth
-## visible at the far plane on every tier (see `fog_density`).
+## It used to be the tier's (4, 7 and 8 rings), and `camera_far` was set first
+## and this sized to cover it. It is the other way round now: the player sets
+## the land, and the far plane and the fog follow it.
 func sight_radius() -> int:
-	return [4, 7, 8][effective_tier()]
+	return rings
 
 
-## LOW WAS 220, which is five rings of land — a hundred and twenty-one chunks
-## held for a device that is already struggling. 180 is four rings, eighty-one
-## chunks, a third less land drawn and kept, with the fog pulled in to match.
-## See `sight_radius` and `fog_density`.
+## THE FAR PLANE, AT THE EDGE OF THE LAND THAT IS HELD. Wherever the focus is
+## in its own cell, the land reaches at least rings * 48 m from it in every
+## direction; the far plane stops twelve metres inside that. Five rings is
+## 228 m, seven 324, twelve 564.
 func camera_far() -> float:
-	return [180.0, 300.0, 380.0][effective_tier()]
+	return float(rings) * WorldGen.CHUNK_SIZE - 12.0
 
 
 ## How far out the scattered wilderness clutter (trees, bushes, rocks,
@@ -655,9 +682,11 @@ func particles(most: int) -> int:
 	return maxi(int(most * particle_scale()), 6)
 
 
+## THE FOG CLOSES AT THE EDGE OF THE LAND, wherever the player has put it: thin
+## for twelve rings, thick for three, so the last of the land always fades
+## rather than stops. See FOG_AT_FAR.
 func fog_density() -> float:
-	# A leaner world (LOW) needs thicker fog to hide the near horizon.
-	return [0.011, 0.006, 0.004][effective_tier()]
+	return FOG_AT_FAR / camera_far()
 
 
 ## HOW MANY REAL LIGHTS the night is allowed on the ground, over and above the
@@ -692,6 +721,50 @@ func choose(want: Tier) -> void:
 	GameState.announce("Graphics quality: %s (some parts apply on restart)"
 		% Tier.keys()[tier].capitalize())
 	quality_changed.emit()
+
+
+## THE PLAYER'S OWN TWO. Both apply at once (main re-reads them on
+## `quality_changed`); MSAA rebuilds every pipeline in the scene when it flips,
+## which is a moment's hitch the player asked for, not one the heat inflicts.
+func set_msaa(on: bool) -> void:
+	if on == msaa:
+		return
+	msaa = on
+	_save_graphics()
+	quality_changed.emit()
+
+
+func set_rings(want: int) -> void:
+	want = clampi(want, RINGS_LEAST, RINGS_MOST)
+	if want == rings:
+		return
+	rings = want
+	_save_graphics()
+	quality_changed.emit()
+
+
+func _save_graphics() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("graphics", "msaa", msaa)
+	cfg.set_value("graphics", "rings", rings)
+	cfg.save(GRAPHICS_PATH)
+
+
+## AND THE SAME CRASH-LOOP RULE AS THE TIER. MSAA on a device whose own tier
+## would not have it, and the last launch died: off again. It was part of what
+## MEDIUM asked of an Adreno 619 that lost its GPU at MEDIUM every launch.
+func _load_graphics(detected: Tier) -> void:
+	var cfg := ConfigFile.new()
+	msaa = detected >= Tier.MEDIUM
+	if cfg.load(GRAPHICS_PATH) == OK:
+		msaa = bool(cfg.get_value("graphics", "msaa", msaa))
+		rings = clampi(int(cfg.get_value("graphics", "rings", RINGS_ADVISED)),
+			RINGS_LEAST, RINGS_MOST)
+	elif tier >= Tier.MEDIUM:
+		msaa = true               # chose MEDIUM before MSAA was its own: kept
+	if msaa and detected < Tier.MEDIUM and BootTrail.died():
+		msaa = false
+		_save_graphics()
 
 
 func _save_override(t: Tier) -> void:

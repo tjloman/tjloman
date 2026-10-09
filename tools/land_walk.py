@@ -47,7 +47,9 @@ def shipped():
 
     return dict(chunk_cells=tiers("chunk_cells"), far_cells=tiers("far_cells"),
                 load=tiers("load_radius"), unload=tiers("unload_radius"),
-                sight=tiers("sight_radius"),
+                # The player's rings now, not the tier's: modelled at the
+                # number the slider starts on and recommends.
+                sight=[int(re.search(r"const RINGS_ADVISED := (\d+)", q).group(1))] * 3,
                 chunk_size=float(re.search(r"const CHUNK_SIZE := ([\d.]+)", w).group(1)),
                 # ONE OF EACH, WHICH IS WHAT A BUDGET LEAVES.
                 #

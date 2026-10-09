@@ -50,9 +50,12 @@ def body(text, name):
 
 def main():
     fail = []
-    for knob in ("msaa_3d", "water_alpha"):
+    # NEITHER FOLLOWS THE HEAT. Clear water follows the tier; MSAA is the
+    # player's own setting now — and the player flipping it is a hitch they
+    # asked for, where the thermostat flipping it was a hang nobody did.
+    for knob, owner in (("msaa_3d", "if msaa"), ("water_alpha", "tier >=")):
         text = body(QUALITY, knob)
-        if "effective_tier()" in text or "heat" in text or "tier >=" not in text:
+        if "effective_tier()" in text or "heat" in text or owner not in text:
             fail.append("Quality.%s follows the heat: the thermostat would rebuild every "
                         "pipeline in the scene" % knob)
     # THE SUN CASTS NO SHADOW MAP AT ALL NOW — shadows are baked (Shade), so
@@ -81,7 +84,7 @@ def main():
     if re.search(r"if subject == null:\s*\n\s*return at != Vector3\.INF", worth):
         fail.append("a creature looking at nothing re-picks every tick again — a walk "
                     "of every villager and animal thirty times a second")
-    print("MSAA and clear water follow the tier; the sun casts no shadow map; the heat "
+    print("MSAA is the player's and clear water the tier's; the sun casts no shadow map; the heat "
           "keeps pixels, baked-shadow reach, fog, far plane and glow.")
     print()
     if fail:

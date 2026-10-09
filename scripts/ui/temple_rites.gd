@@ -32,9 +32,14 @@ const CEILINGS: Array[Array] = [
 	[260, "260 souls", "A phone or a tablet, kept cool."],
 ]
 
+## The ring slider's readout, which says what the number means and warns.
+const ADVISED_TINT := Color(0.7, 0.95, 0.7)
+const CAUTION_TINT := Color(1.0, 0.72, 0.35)
+
 var _body: VBoxContainer
 var _tier_row: HBoxContainer
 var _cap_row: VBoxContainer
+var _rings_said: Label
 
 
 func _ready() -> void:
@@ -62,8 +67,8 @@ func _save() -> void:
 func _fill() -> void:
 	_heading("Graphics")
 	_note("Lights, shadows, draw distance and how many pixels the world is "
-		+ "drawn at. Some of it applies the moment you choose; the streaming "
-		+ "radius and the water wait for the next world.")
+		+ "drawn at. Some of it applies the moment you choose; the water and "
+		+ "how finely the ground is cut wait for the next world.")
 	_tier_row = HBoxContainer.new()
 	_tier_row.add_theme_constant_override("separation", 6)
 	for t in Quality.Tier.values():
@@ -76,6 +81,35 @@ func _fill() -> void:
 	_mark_tier()
 	_line("Detected for this machine", Quality.heat_word())
 	_line("Frame, as measured", "%.1f ms" % Quality.frame_ms())
+
+	var smooth := CheckBox.new()
+	smooth.text = "2x MSAA"
+	smooth.button_pressed = Quality.msaa
+	smooth.toggled.connect(_set_msaa)
+	_body.add_child(smooth)
+	_note("Smooths the hard edges of everything in the world. Every pixel is "
+		+ "drawn twice over to do it, which a desktop hardly notices and an "
+		+ "older phone does. The screen may pause a moment when you change it.")
+
+	_heading("How far the land reaches")
+	_rings_said = Label.new()
+	_body.add_child(_rings_said)
+	var reach := HSlider.new()
+	reach.min_value = Quality.RINGS_LEAST
+	reach.max_value = Quality.RINGS_MOST
+	reach.step = 1.0
+	reach.tick_count = Quality.RINGS_MOST - Quality.RINGS_LEAST + 1
+	reach.ticks_on_borders = true
+	reach.value = Quality.rings
+	reach.custom_minimum_size = Vector2(160.0, 0.0)
+	reach.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	reach.value_changed.connect(_set_rings)
+	_body.add_child(reach)
+	_note("Rings of land held round the camera, each one a band of 48-metre "
+		+ "squares all the way round: five is 121 squares, seven is 225, twelve "
+		+ "is 625. The fog closes in or draws back to match. Applies as you "
+		+ "move it.")
+	_say_rings()
 
 	_heading("How many people the world may hold")
 	_note("The only setting here that bounds something GROWING. A thriving "
@@ -134,6 +168,30 @@ func _choose_tier(which: int) -> void:
 func _mark_tier() -> void:
 	for i in _tier_row.get_child_count():
 		(_tier_row.get_child(i) as Button).set_pressed_no_signal(i == Quality.tier)
+
+
+func _set_msaa(on: bool) -> void:
+	Quality.set_msaa(on)
+
+
+func _set_rings(to: float) -> void:
+	Quality.set_rings(int(to))
+	_say_rings()
+
+
+## THE NUMBER, AND WHAT IT MEANS. Five says it is the one to have; past seven
+## it says plainly what it will cost, in the colour of a warning.
+func _say_rings() -> void:
+	var n := Quality.rings
+	var said := "%d rings, %d m" % [n, int(Quality.camera_far())]
+	_rings_said.remove_theme_color_override("font_color")
+	if n == Quality.RINGS_ADVISED:
+		said += "  — recommended"
+		_rings_said.add_theme_color_override("font_color", ADVISED_TINT)
+	elif n > Quality.RINGS_CAUTION:
+		said += "  — caution: past %d, most machines lose frames" % Quality.RINGS_CAUTION
+		_rings_said.add_theme_color_override("font_color", CAUTION_TINT)
+	_rings_said.text = said
 
 
 func _choose_cap(to: int) -> void:
