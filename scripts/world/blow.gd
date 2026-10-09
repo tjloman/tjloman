@@ -47,6 +47,12 @@ const PER_MOMENTUM := 1.45
 ## Under this a thing in flight has stopped flying — used for settling and for
 ## skipping, where a speed is the right question and always was.
 const MATTERS_ABOVE := 7.0
+## How far under the smooth land a flying thing must be before it has gone
+## THROUGH it rather than landed on a ridge that is cut a little lower.
+const BURIED := 1.5
+## And how long it is watched for that after it lands: a hard landing slows it
+## enough to count as one, and it can still slip through on the ticks after.
+const SETTLES_FOR := 1.0
 
 ## And under THIS a landing is a thing being set down rather than a blow — AND
 ## IT IS MOMENTUM,
@@ -151,6 +157,8 @@ var _left := FLIGHT_MOST
 ## Where it was last frame, so a surface crossing can be spotted between two
 ## positions rather than guessed at from one.
 var _last_at := Vector3.INF
+var _land: WorldGen = null
+var _landed := false
 
 
 ## HANG ONE ON A THROW. `by_god` is false when the creature threw it — see
@@ -182,6 +190,17 @@ func _physics_process(delta: float) -> void:
 		queue_free()
 		return
 	_left -= delta
+	# THROUGH THE GROUND. A throw at full speed crosses more than a metre a
+	# tick and can pass clean through the land's one-sided skin; under it,
+	# nothing ever stops it. Put back where it went in, its fall stopped —
+	# which the next tick reads as the landing it should have been.
+	if _land == null:
+		_land = thing.get_tree().get_first_node_in_group("world_gen") as WorldGen
+	Footing.lift_out(thing, _land, BURIED)
+	if _landed:
+		if _left <= 0.0 or thing.sleeping:
+			queue_free()
+		return
 	if _skipped(thing):
 		_was = thing.linear_velocity.length()
 		_last_at = thing.global_position
@@ -193,7 +212,8 @@ func _physics_process(delta: float) -> void:
 	# then values every blow at nothing.
 	if _was > MATTERS_ABOVE and now < _was * STOPPED_BY:
 		lands(thing, thing.global_position, _was, thing.mass, _by_god)
-		queue_free()
+		_landed = true
+		_left = SETTLES_FOR
 		return
 	if _left <= 0.0 or (thing.sleeping and _was < MATTERS_ABOVE):
 		queue_free()

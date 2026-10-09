@@ -34,6 +34,12 @@ const MOST_CORNERS := 64
 ## The least a thing is treated as being, so something with no collision shape
 ## at all still settles against a cell rather than a point.
 const LEAST_HALF := 0.5
+## What a thing put back can stand on (ground and props), what counts as being
+## inside something (props: buildings, rocks, bodies), and how far above it
+## looks down from. See `lift_out`.
+const STANDS_ON := 1 | 4
+const PROPS := 4
+const LOOK_FROM := 40.0
 
 
 ## THE HIGHEST CORNER OF THE DRAWN GROUND under this footprint.
@@ -85,6 +91,79 @@ static func settle(what_given: Variant, world: WorldGen) -> void:
 	var top := under(world, Vector2(here.x, here.z), half)
 	if is_finite(top):
 		what.global_position.y = top
+
+
+## INSIDE THE LAND, AND PUT BACK ON TOP OF IT. True if it had to be.
+##
+## A frozen body in the hand goes where the hand puts it, and nothing stopped
+## that being inside a hill: a heavy carcass lags the hand in a straight line,
+## and a straight line from one side of a ridge to the other goes through it.
+## Let go there and physics takes over a body that is already underground, and
+## it falls for ever. A fast throw can tunnel the same way.
+##
+## AND INSIDE A BUILDING IS INSIDE THE LAND, one tick later. A body let go of
+## half into a house is pushed out of it the shortest way, and the shortest way
+## out of a house you are standing in is often down — through the ground's
+## one-sided skin, and away. `solid` asks that too; only a release needs it,
+## since a thing in flight that meets a wall is simply a blow.
+##
+## `slack` is how far under the land it may be before it counts as buried: a
+## thing resting on a ridge sits a little below the smooth height the land is
+## cut from (see the header), so a rescue asks for more than a release does.
+static func lift_out(what_given: Variant, world: WorldGen, slack: float,
+		solid := false) -> bool:
+	if not is_instance_valid(what_given) or world == null:
+		return false
+	var what := what_given as Node3D
+	if what == null or not what.is_inside_tree():
+		return false
+	var here := what.global_position
+	if here.y >= world.height_at(here.x, here.z) - slack \
+			and not (solid and _inside_something(what)):
+		return false
+	_set_on_top(what, world)
+	return true
+
+
+## ON TOP OF WHATEVER IS HERE — the drawn land, or a roof, or a pile — with its
+## fall stopped and its sideways way kept. Found by looking down from above, so
+## a body put back is never put back into the thing that pushed it under.
+static func _set_on_top(what: Node3D, world: WorldGen) -> void:
+	var here := what.global_position
+	var half := footprint_of(what).max(Vector2(LEAST_HALF, LEAST_HALF))
+	var top := under(world, Vector2(here.x, here.z), half)
+	var from := Vector3(here.x, maxf(top, here.y) + LOOK_FROM, here.z)
+	var ray := PhysicsRayQueryParameters3D.create(from, Vector3(here.x, top - 1.0, here.z),
+		STANDS_ON)
+	var body := what as CollisionObject3D
+	if body != null:
+		ray.exclude = [body.get_rid()]
+	var hit := what.get_world_3d().direct_space_state.intersect_ray(ray)
+	if not hit.is_empty():
+		top = maxf(top, float((hit["position"] as Vector3).y))
+	what.global_position.y = top + 0.3
+	var rb := what as RigidBody3D
+	if rb != null:
+		rb.linear_velocity.y = maxf(rb.linear_velocity.y, 0.0)
+
+
+## Is any part of it inside a building, a rock or another body? Asked of its own
+## first shape, once, at the moment it is let go of.
+static func _inside_something(what: Node3D) -> bool:
+	var body := what as CollisionObject3D
+	if body == null:
+		return false
+	for child in what.get_children():
+		var col := child as CollisionShape3D
+		if col == null or col.shape == null or col.disabled:
+			continue
+		var query := PhysicsShapeQueryParameters3D.new()
+		query.shape = col.shape
+		query.transform = col.global_transform
+		query.collision_mask = PROPS
+		query.exclude = [body.get_rid()]
+		return not what.get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
+	return false
 
 
 ## HOW WIDE THIS THING IS ON THE GROUND, as a world-axis half-extent — the

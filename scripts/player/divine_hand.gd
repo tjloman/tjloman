@@ -94,6 +94,10 @@ const BUNDLE_TOPUP := 0.06          # seconds between pulling each extra unit (h
 ## of ground and not a magnet: you gather a field of meat by dragging over it,
 ## which is the gesture you were going to make anyway. See `_gather_kindred`.
 const GATHER_REACH := 2.6
+## How far over the land a held thing is kept at the least, and how far into it
+## a released one may be before it is put back on top. See `_carry_held`.
+const CARRY_CLEAR := 0.3
+const RELEASE_SLACK := 0.2
 
 ## THE CASTING SESSION.
 ##
@@ -226,6 +230,7 @@ var _tying := 0.0
 ## The creature a press came down on, while the hold that calls it is filling;
 ## null otherwise. See `_tick_greeting`.
 var _greeting: Creature = null
+var _land: WorldGen = null
 ## How many taps in a row the last press made. See Taps.
 var _taps := Taps.new()
 
@@ -562,6 +567,17 @@ func _carry_held(delta: float) -> void:
 	var weight := Sling.heft(held_body)
 	var was := _held_at
 	_held_at = Sling.follow(_held_at, carry, weight, delta)
+	# OVER THE LAND, NEVER THROUGH IT. The held thing is frozen, so nothing
+	# else will stop it, and it got into hills two ways: a heavy body lags the
+	# hand in a straight line, which from one side of a ridge to the other runs
+	# under the crest; and a hand pointed at far ground with no collision yet
+	# rests on the sea-level plane, which under a hill is inside it. Let go
+	# there and the body was released underground and fell for ever — an
+	# ashen bison, kept alive by its own falling. Asked of the land itself,
+	# which needs no collision to answer.
+	var world := _world()
+	if world != null:
+		_held_at.y = maxf(_held_at.y, world.height_at(_held_at.x, _held_at.z) + CARRY_CLEAR)
 	# ITS OWN VELOCITY, which is the momentum a wind-up builds and the plain
 	# reason a swung ox goes further than a jabbed one.
 	var moved := (_held_at - was) / delta
@@ -1285,6 +1301,11 @@ func _release_body(body_given: Variant, vel: Vector3, gentle: bool) -> void:
 	var body: Node3D = (body_given as Node3D) if is_instance_valid(body_given) else null
 	if body == null:
 		return    # gone while it was in the hand: there is nothing to let go of
+	# NOTHING IS LET GO OF INSIDE THE LAND, OR INSIDE A HOUSE. The carry keeps
+	# it over the smooth land; this is the drawn land, which in a hollow sits a
+	# little higher — and the houses on it, which a heavy body lagging the hand
+	# can be halfway into, and is pushed out of downwards. See Footing.lift_out.
+	Footing.lift_out(body, _world(), RELEASE_SLACK, true)
 	# MARKED AS YOUR OWN SHOT. If this one lands in a storehouse the creature
 	# learns the trick from having watched you do it — see VillageWonder.given.
 	if not gentle and is_instance_valid(body):
@@ -1567,6 +1588,13 @@ func _tick_greeting(delta: float) -> void:
 	_greeting = null
 	hover_info_changed.emit("")
 	audience.open(called, camera_rig)
+
+
+## The land, found once.
+func _world() -> WorldGen:
+	if _land == null or not is_instance_valid(_land):
+		_land = get_tree().get_first_node_in_group("world_gen") as WorldGen
+	return _land
 
 
 ## TYING THE ROPE OFF. Hold on anything and the far end goes round it; what a

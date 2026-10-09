@@ -141,6 +141,12 @@ func _process(delta: float) -> void:
 	# remember to tell it.
 	if freeze or not sleeping:
 		_lying_for = 0.0
+		# AND FALLING IS NOT BEING PLAYED WITH. A body that went through the
+		# land falls for ever, never sleeps, and so never falls apart either —
+		# kept alive by its own falling. Asked only while it falls fast.
+		if linear_velocity.y < -6.0:
+			Footing.lift_out(self, get_tree().get_first_node_in_group("world_gen")
+				as WorldGen, Blow.BURIED)
 		return
 	_lying_for += delta
 	if _lying_for >= LIES_FOR:
