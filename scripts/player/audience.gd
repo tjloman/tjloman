@@ -41,8 +41,19 @@ const HOLD := 0.5
 const IDLE := 25.0
 ## Further than this and a press was not a tap, in pixels.
 const TAP_SLOP := 16.0
-## How much rubbing over it makes a stroke, in screen heights of travel.
-const PET_PATH := 0.45
+## How much rubbing over it makes a stroke, in screen heights of travel, and
+## how many times the hand has to turn back on itself in doing it. A RUB, not a
+## pass: a hand that crosses the creature once on its way somewhere else turns
+## back no times at all, and praise is too strong a lesson to hand out by
+## accident.
+const PET_PATH := 0.3
+const PET_TURNS := 2
+## And how soon another stroke counts after one has, while the hand keeps on
+## rubbing. Seconds.
+const PET_AGAIN := 2.5
+## A pause this long in the hand's moving and the next move starts afresh rather
+## than being counted from wherever the hand was before. Seconds.
+const RUB_BREAK := 0.3
 ## How fast a swipe across it makes a slap, in screen heights a second, and how
 ## long the speed is measured over. A rub is well under one; a flick is three.
 const SLAP_SPEED := 2.0
@@ -87,6 +98,13 @@ var _from := Vector2.ZERO
 var _last := Vector2.ZERO
 var _travel := 0.0
 var _rubbed := 0.0
+## Times the rub has turned back on itself, the way it was last going, and when
+## the last stroke counted. See `move`.
+var _turns := 0
+var _going := Vector2.ZERO
+var _stroked_at := -INF
+## When the hand last left it, mid-rub. See `move`.
+var _off_since := INF
 var _samples: Array = []
 var _stroked := false
 var _slapped := false
@@ -205,6 +223,8 @@ func press(at: Vector2) -> void:
 	_last = at
 	_travel = 0.0
 	_rubbed = 0.0
+	_turns = 0
+	_going = Vector2.ZERO
 	_samples = [[at, _now()]]
 	_stroked = false
 	_slapped = false
@@ -214,13 +234,26 @@ func press(at: Vector2) -> void:
 ## It moves. Every move is weighed for a slap; moves over it add to a stroke.
 ## `screen` is the height of the screen in pixels, which every distance here is
 ## measured in, so a phone and a monitor ask the same of a hand.
+##
+## A STROKE NEEDS NO BUTTON. A pointer that rubs back and forth over the
+## creature is stroking it, pressed or not — which is how a trackpad and a mouse
+## do it, and the only way they comfortably can: rubbing four hundred pixels
+## with the button held down on a trackpad did nothing anybody could tell, and
+## it read as the whole thing being broken. A thumb is always pressed when it
+## moves, so a phone is unchanged. A SLAP still needs the press: a hand flicked
+## across the screen on its way to something else has not struck anybody.
 func move(at: Vector2, on_it: bool, screen: float) -> void:
-	if not _down:
-		return
-	var step := at.distance_to(_last)
-	_travel += step
-	_last = at
 	var now := _now()
+	var fresh := _samples.is_empty() \
+		or now - float(_samples[_samples.size() - 1][1]) > RUB_BREAK
+	var way := at - _last
+	_last = at
+	if fresh:
+		_samples = [[at, now]]
+		_going = Vector2.ZERO
+		return
+	if _down:
+		_travel += way.length()
 	_samples.append([at, now])
 	while _samples.size() > 2 and now - float(_samples[0][1]) > SLAP_WINDOW:
 		_samples.pop_front()
@@ -228,13 +261,63 @@ func move(at: Vector2, on_it: bool, screen: float) -> void:
 	var speed := _speed(screen)
 	# A SLAP is a swipe ACROSS it, so it may start on the grass beside it; it
 	# only has to be fast while the hand is on it.
-	if on_it and not _slapped and speed >= SLAP_SPEED:
+	if _down and on_it and not _slapped and speed >= SLAP_SPEED:
 		_slap(speed / SLAP_SPEED)
 		return
-	if on_it and speed < SLAP_SPEED:
-		_rubbed += step / maxf(screen, 1.0)
-		if not _stroked and not _slapped and _rubbed >= PET_PATH:
-			_stroke()
+	if not on_it:
+		# OFF IT FOR A MOMENT IS A PAUSE; OFF IT FOR LONGER, THE RUB IS OVER and
+		# the next starts from nothing. A rub is not drawn inside the lines, and
+		# a hand that slips off the edge for a frame has not stopped stroking.
+		if _off_since == INF:
+			_off_since = now
+		elif now - _off_since > RUB_BREAK:
+			_rubbed = 0.0
+			_turns = 0
+			_going = Vector2.ZERO
+		return
+	_off_since = INF
+	# A press that slapped does not also stroke. Only a PRESS: a rub with no
+	# button has no press to end, and the flag would have held for good — one
+	# slap, and no stroke ever counted again.
+	if speed >= SLAP_SPEED or (_down and _slapped):
+		return
+	# BACK ON ITSELF: this step goes against the way the rub was going.
+	if way.length() > 2.0:
+		var dir := way.normalized()
+		if _going != Vector2.ZERO and dir.dot(_going) < -0.3:
+			_turns += 1
+		_going = dir
+	_rubbed += way.length() / maxf(screen, 1.0)
+	if _rubbed >= PET_PATH and _turns >= PET_TURNS and now - _stroked_at >= PET_AGAIN:
+		_stroke()
+
+
+## IS THIS POINT ON THE CREATURE AS IT IS DRAWN? Its body is a good deal wider
+## on screen than the shape it collides with, and a rub measured against the
+## collision shape kept falling off the edge of it — half the moves of a rub
+## across its middle read as off it. A circle round its middle, the width of
+## the beast, as the camera sees it.
+func covers(camera: Camera3D, at: Vector2) -> bool:
+	if not is_open() or camera == null:
+		return false
+	var tall := CreatureBody.STANDING * who.scale.y
+	var middle := who.global_position + Vector3.UP * tall * 0.5
+	if camera.is_position_behind(middle):
+		return false
+	var centre := camera.unproject_position(middle)
+	var edge := camera.unproject_position(middle + camera.global_transform.basis.x * tall * 0.42)
+	return at.distance_to(centre) <= centre.distance_to(edge)
+
+
+## HOW FAR THROUGH A STROKE THE HAND IS, 0..1, for the panel to show — the
+## rubbing and the turning back both, so a hand going round in one direction
+## sees itself stop short.
+func stroke_progress() -> float:
+	if _rubbed <= 0.0:
+		return 0.0
+	var rub := clampf(_rubbed / PET_PATH, 0.0, 1.0)
+	var turned := clampf(float(_turns) / PET_TURNS, 0.0, 1.0)
+	return minf(rub, 0.4 + 0.6 * turned)
 
 
 ## And it comes up. A press that never went anywhere was a tap: on it, it is
@@ -266,6 +349,9 @@ func _stroke() -> void:
 	_stroked = true
 	touched = "stroke"
 	touched_at = _now()
+	_stroked_at = touched_at
+	_rubbed = 0.0
+	_turns = 0
 	who.praise()
 	who.head.sound(who, "delight", -2.0)
 	_answer_in = ANSWER

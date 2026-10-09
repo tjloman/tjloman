@@ -696,7 +696,7 @@ func _build_audience_panel() -> void:
 	_audience_line.add_theme_color_override("font_color", Color.WHITE)
 	column.add_child(_audience_line)
 	var how := Label.new()
-	how.text = "stroke it to praise  ·  swipe across it to slap\n" \
+	how.text = "rub back and forth over it to praise  ·  press and swipe across it to slap\n" \
 		+ "tap it to ask again  ·  tap away to leave"
 	how.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	how.add_theme_font_size_override("font_size", 13)
@@ -720,6 +720,14 @@ func _update_audience_panel() -> void:
 	match audience.just_touched():
 		"slap": title += "   ·   SLAPPED"
 		"stroke": title += "   ·   STROKED"
+		_:
+			# THE RUB, FILLING. Without it a hand rubbing away had no way to
+			# know whether anything was happening — and nothing visibly was,
+			# until the very end.
+			var rub := audience.stroke_progress()
+			if rub > 0.0:
+				var filled := int(round(rub * 6.0))
+				title += "   ·   stroking " + "▮".repeat(filled) + "▯".repeat(6 - filled)
 	_audience_title.text = title
 	_audience_line.text = "“%s”" % String(audience.greeting["line"])
 	_audience_line.custom_minimum_size.x = minf(
@@ -1147,6 +1155,15 @@ func _update_creature_panel() -> void:
 	_praise_scold.visible = locked
 	if not locked:
 		return
+	# BESIDE THE FRAME METER, NOT UNDER IT. Both live in the top-right corner,
+	# and with the meter open the two buttons were drawn over by it — in every
+	# screenshot of the creature anybody sent with the meter up, which is every
+	# screenshot anybody sends.
+	var right := 16.0
+	if _frames != null and is_instance_valid(_frames) and _frames.visible:
+		right += _frames.size.x + 12.0
+	_praise_scold.position.x = get_viewport().get_visible_rect().size.x - right \
+		- _praise_scold.size.x
 	# THREE LINES, AND THEY ARE THE THREE YOU ACT ON.
 	#
 	# This was eighteen rows deep — nature, habits, feeling, mood, bond, fear,

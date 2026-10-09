@@ -888,7 +888,8 @@ func _on_pointer_motion(event: InputEventMouseMotion) -> void:
 	_stirred = 0.0          # the hand is reaching, not resting. See `_tick_pose`.
 	if audience.is_open():
 		_update_hover(event.position)
-		audience.move(event.position, hover_target == audience.who,
+		audience.move(event.position, hover_target == audience.who
+			or audience.covers(camera_rig.camera, event.position),
 			get_viewport().get_visible_rect().size.y)
 	elif _greeting != null:
 		if event.position.distance_to(_press_at) > OPEN_SLOP:

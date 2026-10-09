@@ -89,15 +89,29 @@ func _initialize() -> void:
 ## 1. The press reads what is under it NOW.
 func pick_up_on_the_press() -> void:
 	var home: Node = main.world_gen.player_village
-	var best: Node = null
+	var folk: Array = []
 	for v in get_nodes_in_group("villagers"):
-		if v.is_adult() and not v.is_dying() and (best == null
-				or v.global_position.distance_to(home.global_position)
-				< best.global_position.distance_to(home.global_position)):
+		# Up and about, out of doors: asleep in a house is out of reach, and
+		# which of the town that is depends on the hour the save was left at.
+		if v.is_visible_in_tree() and v.is_adult() and not v.is_dying() \
+				and v.state != v.State.SLEEPING and v.state != v.State.HELD:
+			folk.append(v)
+	folk.sort_custom(func(a, b): return a.global_position.distance_to(home.global_position) \
+		< b.global_position.distance_to(home.global_position))
+	# AND IN SIGHT. Somebody standing behind a house is behind the house: the
+	# hand rightly takes hold of the roof. The first of the town the camera can
+	# actually see, then.
+	var best: Node = null
+	for v in folk.slice(0, 12):
+		rig.snap_to(v.global_position)
+		rig.zoom_distance = 16.0
+		await frames(60)
+		if seen(v):
 			best = v
-	rig.snap_to(best.global_position)
-	rig.zoom_distance = 16.0
-	await frames(60)
+			break
+	check(best != null, "somebody in the town is in plain sight")
+	if best == null:
+		return
 	# The pointer was last somewhere else: a corner, with nothing under it.
 	motion(Vector2(30, 30), Vector2.ZERO)
 	await frames(10)
@@ -110,6 +124,15 @@ func pick_up_on_the_press() -> void:
 		% [held.name if held != null else "nothing"])
 	button(at, false)
 	await frames(10)
+
+
+## Is the first thing between the camera and this villager's chest the villager?
+func seen(who: Node3D) -> bool:
+	var from: Vector3 = rig.camera.global_position
+	var ray := PhysicsRayQueryParameters3D.create(from,
+		who.global_position + Vector3.UP * 0.9, 1 | 2 | 4 | 8)
+	var hit: Dictionary = main.get_world_3d().direct_space_state.intersect_ray(ray)
+	return not hit.is_empty() and hit["collider"] == who
 
 
 ## 2. Hold on it, and it comes to you.
@@ -145,6 +168,15 @@ func call_it() -> void:
 		and absf(rig.pitch_node.rotation_degrees.x + 14.0) < 3.0,
 		"the camera has glided to the shot (%.1fm from it, pitch %.0f)"
 		% [rig.global_position.distance_to(aim), rig.pitch_node.rotation_degrees.x])
+	# THE BUTTONS ARE NOT UNDER THE METER.
+	var hud: Node = get_first_node_in_group("hud")
+	if not hud._frames.visible:
+		hud._toggle_frames()
+	await frames(3)
+	check(hud._praise_scold.visible
+		and not hud._praise_scold.get_global_rect().intersects(hud._frames.get_global_rect()),
+		"Praise and Scold stand clear of the open frame meter")
+	hud._toggle_frames()
 	var said: Dictionary = hand.audience.greeting
 	print("    it says: %s — \"%s\"" % [said.get("mood", "?"), said.get("line", "")])
 	check(String(said.get("line", "")) != "", "it greets you")
@@ -159,7 +191,9 @@ func stroke_and_slap() -> void:
 	var x := 0.0
 	var step := 8.0
 	var went := 0.0
-	while went < tall * 0.6:
+	# Until it counts: rubbing on past it strokes again after PET_AGAIN, by
+	# design, and "once" is about the stroke, not about how long the hand went on.
+	while went < tall * 0.6 and beast.lessons == lessons:
 		x += step
 		if absf(x) > 50.0:
 			step = -step
@@ -186,6 +220,42 @@ func stroke_and_slap() -> void:
 	await wait(1.8)
 	print("    then it says: %s — \"%s\"" % [hand.audience.greeting.get("mood", "?"),
 		hand.audience.greeting.get("line", "")])
+	await wait(1.0)
+
+	# NO BUTTON: a pointer just passing over it, then one rubbing it. A trackpad
+	# strokes this way; a pass on the way somewhere else must not.
+	lessons = beast.lessons
+	mid = beast_middle()
+	# A LONG STRAIGHT PASS, all of it on the creature and longer than a whole
+	# stroke's worth of rubbing — told to the audience directly, because no
+	# creature is wide enough on screen to pass over for that far. Only the
+	# turning back is missing, and that has to be enough to refuse it.
+	for i in 80:
+		hand.audience.move(mid + Vector2(-320.0 + i * 8.0, 0.0), true, tall)
+		OS.delay_msec(20)
+	check(beast.lessons == lessons,
+		"a long pass over it, never turning back, is not a stroke")
+	check(hand.audience.covers(rig.camera, mid)
+		and not hand.audience.covers(rig.camera, Vector2(4.0, 4.0)),
+		"its drawn body counts as on it, and the corner of the screen does not")
+	await wait(0.4)
+	x = 0.0
+	step = 8.0
+	went = 0.0
+	var filling := false
+	while went < tall * 0.6 and beast.lessons == lessons:
+		x += step
+		if absf(x) > 50.0:
+			step = -step
+		motion(mid + Vector2(x, 0.0), Vector2(step, 0.0))
+		went += absf(step)
+		var rub: float = hand.audience.stroke_progress()
+		filling = filling or (rub > 0.2 and rub < 1.0)
+		OS.delay_msec(20)
+		await process_frame
+	check(beast.lessons == lessons + 1 and hand.audience.touched == "stroke",
+		"a pointer rubbing back and forth over it, no button, is a stroke")
+	check(filling, "and the panel can show the rub filling as it goes")
 
 
 ## 3b. A tap asks again; a tap away is goodbye.

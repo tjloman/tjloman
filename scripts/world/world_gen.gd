@@ -429,7 +429,7 @@ func _forget_tiles() -> void:
 	var oldest := _tile_frame
 	for tile: LandTile in _shared_tiles.values():
 		oldest = mini(oldest, tile.asked)
-	var cut := oldest + (_tile_frame - oldest) / 2
+	var cut := oldest + floori((_tile_frame - oldest) / 2.0)
 	for key: Vector2i in _shared_tiles.keys():
 		if (_shared_tiles[key] as LandTile).asked < cut:
 			_shared_tiles.erase(key)

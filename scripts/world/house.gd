@@ -350,5 +350,7 @@ func hover_text() -> String:
 			village.housing_capacity(), village.homeless_count()]
 	if under_construction:
 		return "%s under construction — %d%%%s" % [size_name(), int(progress), census]
+	# A SHARE OF FULL, which is MOST_HEALTH and not a hundred: a sound hut
+	# read "health 400%".
 	return "%s — health %d%%, age %d years, sleeps %d%s" % [
-		size_name(), int(health), int(age), capacity(), census]
+		size_name(), roundi(health / MOST_HEALTH * 100.0), int(age), capacity(), census]

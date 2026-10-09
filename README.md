@@ -54,6 +54,7 @@ python3 tools/canopy.py          # critters are still unless the camera is under
 python3 tools/audience.py        # hold on the creature: it greets you; stroke praises, slap scolds
 python3 tools/buried.py          # nothing carried, let go of or thrown ends up under the land
 python3 tools/graphics.py        # MSAA its own switch, glow on HIGH, sea by depth, rings slider, ahead first
+python3 tools/script_warnings.py # with GODOT set: no script warnings on a debug launch
 ```
 
 To SEE a frame without a screen (software Vulkan under Xvfb; slow but real),

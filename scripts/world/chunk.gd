@@ -832,7 +832,7 @@ func _water_mesh(clear: bool) -> ArrayMesh:
 		return null
 	var cells := _cells
 	var wide := cells + 1
-	var every := maxi(1, cells / WATER_CELLS)
+	var every := maxi(1, floori(float(cells) / WATER_CELLS))
 	var step := WorldGen.CHUNK_SIZE / cells
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)

@@ -78,6 +78,16 @@ def source(fail):
     slap = body(AUDIENCE, "_slap")
     if not any("who.praise()" in ln for ln in stroke) or not any("who.scold()" in ln for ln in slap):
         fail.append("a stroke or a slap teaches by its own road instead of praise and scold")
+    # A STROKE NEEDS NO BUTTON, but it does need to turn back on itself; and a
+    # slap still needs the press. On a trackpad a held-down rub "didn't seem to
+    # be doing anything".
+    move = body(AUDIENCE, "move")
+    if any(ln.strip() == "if not _down:" for ln in move[:3]):
+        fail.append("a rub only counts with the button held, which a trackpad cannot comfortably do")
+    if not any("_turns >= PET_TURNS" in ln for ln in move):
+        fail.append("a stroke no longer has to turn back on itself: one pass over it is praise")
+    if not any("_down and on_it" in ln and "SLAP_SPEED" in ln for ln in move):
+        fail.append("a slap no longer needs a press: a cursor flicked across it strikes it")
     refuse = body(AUDIENCE, "refusal")
     if not any("SLEEPING" in ln for ln in refuse):
         fail.append("the hand wakes a sleeping creature to talk to it")
