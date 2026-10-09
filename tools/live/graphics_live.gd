@@ -39,6 +39,7 @@ func _initialize() -> void:
 	var rig: Node = main.camera_rig
 	var was_rings: int = quality.rings
 	var was_msaa: bool = quality.msaa
+	var was_cap: int = quality.fps_cap
 	print("THE PLAYER'S GRAPHICS")
 
 	# 1. Rings.
@@ -61,6 +62,24 @@ func _initialize() -> void:
 	quality.set_msaa(true)
 	check(root.msaa_3d == Viewport.MSAA_2X, "MSAA on: 2x, whatever the tier")
 	quality.set_msaa(was_msaa)
+
+	# 2b. The frame cap, and a thermostat that does not mistake it for strain.
+	quality.set_fps_cap(30)
+	check(Engine.max_fps == 30, "held to 30: the engine waits out the rest of each frame")
+	var warm: float = quality._line(quality.FRAME_WARM, quality.CAPPED_WARM)
+	var cool: float = quality._line(quality.FRAME_COOL, quality.CAPPED_COOL)
+	check(warm > 1.0 / 30.0 * 1.2 and cool > 1.0 / 30.0,
+		"and a steady 33 ms is neither warm nor short of fine (warm past %.0f ms)" % (warm * 1000.0))
+	quality.set_fps_cap(20)
+	check(quality._line(quality.FRAME_HOT, quality.CAPPED_HOT) > 0.05 * 1.5,
+		"held to 20, a steady 50 ms is not called hot")
+	quality.set_fps_cap(45)
+	check(quality.fps_cap == 20, "only the four notches are taken (45 refused)")
+	quality.set_fps_cap(0)
+	check(Engine.max_fps == 0 and is_equal_approx(warm, warm) \
+		and is_equal_approx(quality._line(quality.FRAME_WARM, quality.CAPPED_WARM), quality.FRAME_WARM),
+		"uncapped: no cap, and the thermostat's own lines")
+	quality.set_fps_cap(was_cap)
 
 	# 3. Glow.
 	var tier: int = quality.tier
@@ -169,7 +188,16 @@ func _initialize() -> void:
 	box.button_pressed = not was_msaa
 	check(quality.msaa != was_msaa, "the MSAA box switches it")
 	box.button_pressed = was_msaa
+	var caps: HSlider = wall.find_children("*", "HSlider", true, false) \
+		.filter(func(n): return n.max_value == quality.FPS_CAPS.size() - 1)[0]
+	check(caps.tick_count == 4, "the frame-rate slider has four notches")
+	caps.value = 3
+	check(quality.fps_cap == 0 and wall._cap_said.text.contains("caution"),
+		"at the last notch: uncapped, and a caution (%s)" % wall._cap_said.text)
+	caps.value = 1
+	check(quality.fps_cap == 30, "at the second: 30")
 	wall.queue_free()
+	quality.set_fps_cap(was_cap)
 	quality.set_rings(was_rings)
 	quality.set_msaa(was_msaa)
 

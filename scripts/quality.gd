@@ -43,6 +43,17 @@ const RINGS_CAUTION := 7
 ## exponent: fog density is this over the far plane, so whatever the rings, the
 ## land fades to about a sixth just where it ends instead of stopping short.
 const FOG_AT_FAR := 1.8
+## THE FRAME CAP, a notched slider: frames a second, 0 for none. A phone held
+## to a steady thirty runs cooler, and so stays smooth, where one let run at
+## whatever it can manage climbs, heats and throttles — the difference for a lot
+## of devices between holding MEDIUM and being driven down to LOW. Uncapped is
+## offered and warned against.
+const FPS_CAPS: Array[int] = [20, 30, 60, 0]
+## And how far past the cap's own frame a frame has to run before the thermostat
+## counts it as warm, as hot, or as plainly fine — see `_line`.
+const CAPPED_WARM := 1.25
+const CAPPED_HOT := 1.75
+const CAPPED_COOL := 1.06
 
 ## Sustained frame times, in seconds. WARM is 30fps and HOT 20.
 ##
@@ -163,6 +174,8 @@ var tier := Tier.MEDIUM
 var msaa := true
 ## Rings of land held round the camera. See RINGS_ADVISED.
 var rings := RINGS_ADVISED
+## Frames a second the game is held to, or 0. One of FPS_CAPS. See `set_fps_cap`.
+var fps_cap := 60
 ## Plain int rather than the enum's own type, so every comparison, subtraction
 ## and array index below is unambiguously legal.
 var heat: int = Heat.EASY
@@ -239,17 +252,18 @@ func _process(delta: float) -> void:
 		_stalls += 1
 		return
 	_frame = lerpf(_frame, real, FRAME_BLEND)
+	var warm := _line(FRAME_WARM, CAPPED_WARM)
 	# How MANY of them are bad, as against how bad the average is. See MOSTLY.
-	_over = lerpf(_over, 1.0 if real > FRAME_WARM else 0.0, SHARE_BLEND)
+	_over = lerpf(_over, 1.0 if real > warm else 0.0, SHARE_BLEND)
 	# Climbing is immediate to the band the frames deserve; EASING OFF is one
 	# band at a time, so a device that recovers does not have glow, pixels and
 	# every draw distance all snap back in the same frame.
 	var want := heat
-	if _frame > FRAME_HOT:
+	if _frame > _line(FRAME_HOT, CAPPED_HOT):
 		want = Heat.HOT
-	elif _frame > FRAME_WARM:
+	elif _frame > warm:
 		want = maxi(heat, Heat.WARM)
-	elif _frame < FRAME_COOL:
+	elif _frame < _line(FRAME_COOL, CAPPED_COOL):
 		want = maxi(heat - 1, Heat.EASY)
 	if want == heat:
 		_pressure = 0.0
@@ -288,6 +302,18 @@ func _process(delta: float) -> void:
 		GameState.announce("The world eases off — your device is working hard.")
 	elif heat == Heat.EASY:
 		GameState.announce("The world breathes out again.")
+
+
+## A THERMOSTAT LINE, MOVED FOR THE CAP. Held to thirty, every frame is 33 ms
+## because it was told to be — which is FRAME_WARM to the millisecond, and a
+## device doing exactly what it was asked would have been turned down for it,
+## and at twenty, called hot. So each line is the larger of its own and the
+## cap's frame stretched by `over`: warm is missing the cap by a quarter, hot by
+## three quarters, and fine is all but meeting it.
+func _line(base: float, over: float) -> float:
+	if fps_cap <= 0:
+		return base
+	return maxf(base, over / float(fps_cap))
 
 
 ## HOW MANY FRAMES WERE THROWN OUT as stalls rather than counted as slowness,
@@ -742,6 +768,17 @@ func set_msaa(on: bool) -> void:
 	quality_changed.emit()
 
 
+## HOLD THE GAME TO A FRAME RATE (one of FPS_CAPS; 0 for none), at once and for
+## good. Nothing to rebuild: the engine simply waits out the rest of each frame.
+func set_fps_cap(want: int) -> void:
+	if want not in FPS_CAPS or want == fps_cap:
+		return
+	fps_cap = want
+	Engine.max_fps = fps_cap
+	_save_graphics()
+	quality_changed.emit()
+
+
 func set_rings(want: int) -> void:
 	want = clampi(want, RINGS_LEAST, RINGS_MOST)
 	if want == rings:
@@ -755,6 +792,7 @@ func _save_graphics() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("graphics", "msaa", msaa)
 	cfg.set_value("graphics", "rings", rings)
+	cfg.set_value("graphics", "fps_cap", fps_cap)
 	cfg.save(GRAPHICS_PATH)
 
 
@@ -764,7 +802,12 @@ func _save_graphics() -> void:
 func _load_graphics(detected: Tier) -> void:
 	var cfg := ConfigFile.new()
 	msaa = detected >= Tier.MEDIUM
+	# A DEVICE THAT CAME UP LOW STARTS AT THIRTY: it is the one most likely to
+	# heat and throttle, and the one that gains most from not trying to.
+	fps_cap = 30 if detected == Tier.LOW else 60
 	if cfg.load(GRAPHICS_PATH) == OK:
+		var cap := int(cfg.get_value("graphics", "fps_cap", fps_cap))
+		fps_cap = cap if cap in FPS_CAPS else fps_cap
 		msaa = bool(cfg.get_value("graphics", "msaa", msaa))
 		rings = clampi(int(cfg.get_value("graphics", "rings", RINGS_ADVISED)),
 			RINGS_LEAST, RINGS_MOST)
@@ -773,6 +816,7 @@ func _load_graphics(detected: Tier) -> void:
 	if msaa and detected < Tier.MEDIUM and BootTrail.died():
 		msaa = false
 		_save_graphics()
+	Engine.max_fps = fps_cap
 
 
 func _save_override(t: Tier) -> void:

@@ -40,6 +40,7 @@ var _body: VBoxContainer
 var _tier_row: HBoxContainer
 var _cap_row: VBoxContainer
 var _rings_said: Label
+var _cap_said: Label
 
 
 func _ready() -> void:
@@ -90,6 +91,25 @@ func _fill() -> void:
 	_note("Smooths the hard edges of everything in the world. Every pixel is "
 		+ "drawn twice over to do it, which a desktop hardly notices and an "
 		+ "older phone does. The screen may pause a moment when you change it.")
+
+	_heading("Frame rate")
+	_cap_said = Label.new()
+	_body.add_child(_cap_said)
+	var cap := HSlider.new()
+	cap.min_value = 0
+	cap.max_value = Quality.FPS_CAPS.size() - 1
+	cap.step = 1.0
+	cap.tick_count = Quality.FPS_CAPS.size()
+	cap.ticks_on_borders = true
+	cap.value = Quality.FPS_CAPS.find(Quality.fps_cap)
+	cap.custom_minimum_size = Vector2(160.0, 0.0)
+	cap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cap.value_changed.connect(_set_cap)
+	_body.add_child(cap)
+	_note("A device held to a steady rate runs cooler, and a cool device stays "
+		+ "smooth: one let run flat out heats up, slows itself down, and is "
+		+ "pushed to a lower setting to cope. Applies at once.")
+	_say_cap()
 
 	_heading("How far the land reaches")
 	_rings_said = Label.new()
@@ -172,6 +192,25 @@ func _mark_tier() -> void:
 
 func _set_msaa(on: bool) -> void:
 	Quality.set_msaa(on)
+
+
+func _set_cap(notch: float) -> void:
+	Quality.set_fps_cap(Quality.FPS_CAPS[clampi(int(notch), 0, Quality.FPS_CAPS.size() - 1)])
+	_say_cap()
+
+
+## WHAT EACH NOTCH IS FOR, and a plain warning on the last one.
+func _say_cap() -> void:
+	var cap := Quality.fps_cap
+	_cap_said.remove_theme_color_override("font_color")
+	if cap <= 0:
+		_cap_said.text = "Uncapped  — caution: runs the device as hot as it will go"
+		_cap_said.add_theme_color_override("font_color", CAUTION_TINT)
+		return
+	match cap:
+		20: _cap_said.text = "20 fps  — coolest, for an older phone"
+		30: _cap_said.text = "30 fps  — smooth, and kind to a phone"
+		_: _cap_said.text = "%d fps" % cap
 
 
 func _set_rings(to: float) -> void:

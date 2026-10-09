@@ -85,6 +85,17 @@ def source(fail):
         fail.append("the land, the far plane and the fog do not follow the rings")
     if "Quality.sight_radius()" not in body(WORLD, "_stream_chunks"):
         fail.append("the rings wait for the next world instead of applying as they move")
+    caps = re.search(r"^const FPS_CAPS: Array\[int\] = \[([^\]]*)\]", QUALITY, re.M)
+    print("  frame caps: %s" % (caps.group(1) if caps else "NONE"))
+    if not caps or [int(v) for v in caps.group(1).split(",")] != [20, 30, 60, 0]:
+        fail.append("the frame cap is not 20, 30, 60 and uncapped")
+    if "Engine.max_fps = fps_cap" not in body(QUALITY, "set_fps_cap"):
+        fail.append("the frame cap is not applied when it is set")
+    proc = body(QUALITY, "_process")
+    if "_line(FRAME_WARM" not in proc or "_line(FRAME_HOT" not in proc:
+        fail.append("the thermostat reads a capped frame as strain: held to 30, it turns the world down")
+    if "Quality.set_fps_cap(" not in RITES or "caution" not in body(RITES, "_say_cap"):
+        fail.append("the frame-rate slider, or its warning against uncapped, is missing")
     for need in ("tick_count", "Quality.RINGS_CAUTION", "Quality.RINGS_ADVISED", "Quality.set_rings("):
         if need not in RITES:
             fail.append("the rings slider is missing %s" % need)
