@@ -439,7 +439,8 @@ func _deal_the_work() -> void:
 	# dropping them, badly, in front of the player. See VillageCharter — the
 	# mix is rolled offline out of a hundred thousand candidates, so a village
 	# starts viable AND starts with a character of its own.
-	_retally()             # the roster, so the charter has somebody to deal to
+	_refresh_roster()      # the roster, so the charter has somebody to deal to
+	_retally()
 	charter = VillageCharter.deal(self)
 	# If a saved game remembers a town that stood here, this IS that town —
 	# take back its name, its faith, its stocks and its people.
@@ -1315,7 +1316,8 @@ func _refresh_roster() -> void:
 	_roster.clear()
 	for v in get_tree().get_nodes_in_group("villagers"):
 		var villager := v as Villager
-		if is_instance_valid(villager) and villager.village == self:
+		if is_instance_valid(villager) and villager.village == self \
+				and not villager.is_queued_for_deletion():
 			_roster.append(villager)
 	_population = _roster.size()
 
@@ -1323,8 +1325,20 @@ func _refresh_roster() -> void:
 ## AND WHAT THEY ARE DOING, counted in one pass rather than four. Everything
 ## here used to be its own walk over the town, called from inside a decision
 ## that fifty people were making at once.
+##
+## OVER THE ROSTER WE HAVE, NOT THE WHOLE WORLD'S. This walked the global
+## villagers group first, three times a second in every town — 1,448 souls
+## walked to find one town's 300 — and it does not need to: everybody who
+## arrives comes through `_assign_housing` (a birth, a founder, an adoption, a
+## load), which still walks the group. All that can go stale between is
+## somebody leaving: freed, or gone to another town (Villager._defect_to). Both
+## are dropped here, on the way past.
 func _retally() -> void:
-	_refresh_roster()
+	for i in range(_roster.size() - 1, -1, -1):
+		if not is_instance_valid(_roster[i]) or _roster[i].village != self \
+				or _roster[i].is_queued_for_deletion():
+			_roster.remove_at(i)
+	_population = _roster.size()
 	_homeless = 0
 	_children = 0
 	_teachers = 0
@@ -2293,6 +2307,7 @@ func from_dict(data: Dictionary) -> void:
 			v.queue_free()
 		for entry: Dictionary in folk:
 			_restore_villager(entry)
+		_assign_housing()    # the roster: see `_retally`, which does not walk for it
 	if converted:
 		_totem_orb.material_override = Util.mat(Color(1.0, 0.85, 0.3), true)
 	_update_influence()

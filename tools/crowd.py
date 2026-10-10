@@ -225,6 +225,28 @@ if holds_to < 200:
     fail.append("the crowd budget stops holding at %d bodies, and the town that "
                 "prompted all this had more than two hundred" % holds_to)
 
+# THE TOWN'S TALLY, three times a second in every town. tools/live/throng_live.gd
+# caught it at 9-28 ms a call in a town of 1,148: it walked the WHOLE WORLD'S
+# villagers group to find its own, and asked each of them `current_job`, a
+# forty-pattern match at six to ten microseconds a go. It walks its own roster
+# now and the job is one lookup in Villager.JOBS.
+def code(text, name):
+    return "\n".join(ln.split("#")[0] for ln in functions(text).get(name, "").splitlines())
+
+
+tally = code((SCRIPTS / "world/village.gd").read_text(), "_retally")
+job = code((SCRIPTS / "villager/villager.gd").read_text(), "current_job")
+walks_world = "_refresh_roster(" in tally or "get_nodes_in_group" in tally
+matched = re.search(r"^\s*match\b", job, re.M) is not None or "JOBS.get(state" not in job
+print()
+print("THE TOWN'S TALLY walks %s, and asks each a job %s."
+      % ("THE WHOLE WORLD" if walks_world else "its own roster",
+         "BY A MATCH" if matched else "by one lookup"))
+if walks_world:
+    fail.append("Village._retally walks every villager in the world to count one town's")
+if matched:
+    fail.append("Villager.current_job is a match again: the tally pays it for everybody")
+
 print()
 if fail:
     for line in fail:

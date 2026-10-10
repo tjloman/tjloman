@@ -123,7 +123,9 @@ def main():
         fail.append("the homeless still all sleep in the square")
     else:
         print("  the homeless sleep on doorsteps ................. yes")
-    circ = V[V.index("State.CIRCLING:"):][:900]
+    # The state machine's arm, not the first mention (Villager.JOBS names it too).
+    arm = re.search(r"^\t+State\.CIRCLING:\s*$", V, re.M)
+    circ = V[arm.start():][:900] if arm else ""
     if "_dance_mid" not in circ:
         fail.append("a dancer away from the nest still circles the nest's fire "
                     "from across the town")

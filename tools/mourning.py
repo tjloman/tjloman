@@ -74,6 +74,12 @@ def body(text, name):
     return bare(rest[:nxt.start()] if nxt else rest)
 
 
+def jobs_table():
+    """Villager.JOBS: what each state is counted as doing (see current_job)."""
+    m = re.search(r"^const JOBS := \{(.*?)^\}", V, re.M | re.S)
+    return bare(m.group(1)) if m and "JOBS.get(state" in body(V, "current_job") else ""
+
+
 def const(text, name, where):
     m = re.search(r"^const %s\s*:?=\s*(-?[0-9.]+)" % name, text, re.M)
     if not m:
@@ -182,8 +188,7 @@ def grief(fail):
         fail.append("there is no weeping sound to make")
     else:
         print("  there is a sound for it ........................ yes")
-    job = body(V, "current_job")
-    if "State.MOURNING" not in job:
+    if 'State.MOURNING: "mourn"' not in jobs_table():
         fail.append("mourners are not counted as doing a job, so the crowd "
                     "penalty cannot see them and one death empties the village")
     else:
@@ -317,7 +322,7 @@ def the_fire(fail):
     line = [ln for ln in pick.splitlines() if 'scores["beat"]' in ln]
     if not line or "Firefight.can_beat(self)" not in pick[:pick.index(line[0])].splitlines()[-1]:
         fail.append("the job board offers the fire to anybody")
-    if "State.BEATING" not in body(V, "current_job"):
+    if 'State.BEATING: "beat"' not in jobs_table():
         fail.append("beaters are not counted, so the whole town rings one house")
 
 

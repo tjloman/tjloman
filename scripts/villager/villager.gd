@@ -137,6 +137,38 @@ const FED_ENOUGH := 2.0
 ## the flock spreads across the village's needs instead of all rushing one.
 const CROWD_PENALTY := 7.0
 
+## WHAT EACH STATE IS COUNTED AS DOING, for `current_job`. A match of forty
+## patterns tried in order was six to ten microseconds a villager, and the town
+## tally asks it of everybody three times a second: in a town of 1,148 that was
+## nine of the twelve milliseconds of the stall tools/live/throng_live.gd found.
+## One lookup now. NAMED SO THE CROWD CAN SEE IT: the job board docks a job by
+## how many are already at it (CROWD_PENALTY), and that is the ONLY thing
+## keeping a death from emptying the village into a ring round one body. A
+## state missing from here is a job nobody is counted as doing. HAULING is not
+## here: what it counts as depends on what is carried.
+const JOBS := {
+	State.GO_BUILD: "build", State.BUILDING: "build",
+	State.GO_WORK: "work", State.WORKING: "work",
+	State.GO_BUILD_SHOP: "build_shop", State.BUILDING_SHOP: "build_shop",
+	State.GO_BUILD_NEST: "build_nest", State.BUILDING_NEST: "build_nest",
+	State.GO_CIRCLE: "circle", State.CIRCLING: "circle",
+	State.GO_PREACH: "preach", State.PREACHING: "preach",
+	State.GO_CHOP: "chop", State.CHOPPING: "chop",
+	State.GO_QUARRY: "quarry", State.QUARRYING: "quarry",
+	State.GO_FARM: "farm", State.FARMING: "farm",
+	State.GO_FEED: "feed",
+	State.GO_BUILD_FARM: "build_farm", State.BUILDING_FARM: "build_farm",
+	State.GO_BUILD_EDUBBA: "build_edubba", State.BUILDING_EDUBBA: "build_edubba",
+	State.GO_HUNT: "hunt", State.HUNTING: "hunt",
+	State.MUSTERING: "expedition",
+	State.GO_FISH: "fish", State.FISHING: "fish",
+	State.GO_BUTCHER: "butcher", State.BUTCHERING: "butcher",
+	State.GO_SKIN: "skin", State.SKINNING: "skin",
+	State.GO_BEAT: "beat", State.BEATING: "beat",
+	State.GO_MOURN: "mourn", State.MOURNING: "mourn",
+	State.GO_TAME: "tame", State.TAMING: "tame",
+}
+
 var village: Village
 ## The trade this one is posted to, while it is posted there. Public because a
 ## trade counts heads to know whether it still has room.
@@ -1829,35 +1861,12 @@ func _make_carry_visual(kind: String) -> void:
 
 
 ## The job this villager currently occupies, for the village's crowd tally
-## (so the flock spreads across needs). "" when idle/at home tasks.
+## (so the flock spreads across needs). "" when idle/at home tasks. LOOKED UP,
+## NOT MATCHED — see JOBS.
 func current_job() -> String:
-	match state:
-		State.GO_BUILD, State.BUILDING: return "build"
-		State.GO_WORK, State.WORKING: return "work"
-		State.GO_BUILD_SHOP, State.BUILDING_SHOP: return "build_shop"
-		State.GO_BUILD_NEST, State.BUILDING_NEST: return "build_nest"
-		State.GO_CIRCLE, State.CIRCLING: return "circle"
-		State.GO_PREACH, State.PREACHING: return "preach"
-		State.GO_CHOP, State.CHOPPING: return "chop"
-		State.GO_QUARRY, State.QUARRYING: return "quarry"
-		State.GO_FARM, State.FARMING: return "farm"
-		State.GO_FEED: return "feed"
-		State.GO_BUILD_FARM, State.BUILDING_FARM: return "build_farm"
-		State.GO_BUILD_EDUBBA, State.BUILDING_EDUBBA: return "build_edubba"
-		State.GO_HUNT, State.HUNTING: return "hunt"
-		State.MUSTERING: return "expedition"
-		State.GO_FISH, State.FISHING: return "fish"
-		State.GO_BUTCHER, State.BUTCHERING: return "butcher"
-		State.GO_SKIN, State.SKINNING: return "skin"
-		State.GO_BEAT, State.BEATING: return "beat"
-		# NAMED SO THE CROWD CAN SEE IT. The job board docks a job by how many
-		# are already at it (CROWD_PENALTY), and that is the ONLY thing keeping
-		# a death from emptying the village into a ring round one body. A state
-		# missing from this list is a job nobody is counted as doing.
-		State.GO_MOURN, State.MOURNING: return "mourn"
-		State.GO_TAME, State.TAMING: return "tame"
-		State.HAULING: return _carry_job
-	return ""
+	if state == State.HAULING:
+		return _carry_job
+	return JOBS.get(state, "")
 
 
 ## The militia -----------------------------------------------------------------
