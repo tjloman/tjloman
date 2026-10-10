@@ -12,8 +12,11 @@ extends SceneTree
 ##      stood, caught up: its people agree with the board's numbers, the ones
 ##      who lived are the ones the player knew, older by the years away, and
 ##      its history says what happened;
-##   5. and holding its totem reads the town — its people by age and sex, what
-##      they are doing, and the alibi — in the stone panel.
+##   5. holding its totem reads the town — its people by age and sex, what
+##      they are doing, what they eat, and the alibi — in the stone panel;
+##   6. and its diet is chosen there, 1 vegan to 4 cannibal: a town that
+##      believes listens, one that does not will not be told; and out of sight
+##      a town eats only what its diet allows.
 ## Exits non-zero on failure. Names no class of the game's (see look.gd).
 
 var fails := 0
@@ -232,6 +235,35 @@ func _initialize() -> void:
 	await process_frame
 	check(hud._stone_panel.visible and String(hud._stone_label.text).contains("FOLDWICK"),
 		"and holding it opens the reading (%s)" % hud._stone_label.text)
+	# 6. THE DIET, read and chosen there. A town that believes listens.
+	check(heads.has("WHAT THEY EAT"), "the reading says what they eat")
+	var buttons: Array = hud._stone_rows.find_children("*", "Button", true, false)
+	check(buttons.size() == 4 and not buttons[0].disabled and buttons[1].button_pressed,
+		"four diets to choose from, the one they keep marked (%d buttons)" % buttons.size())
+	if buttons.size() == 4:
+		buttons[0].pressed.emit()
+		await process_frame
+		var now: Array = hud._stone_rows.find_children("*", "Button", true, false)
+		check(int(back.diet) == 0 and now.size() == 4 and now[0].button_pressed,
+			"pressing '1 Vegan' makes them vegan, and the stone says so")
+	# And a town that does not believe does not listen.
+	back.converted = false
+	back.belief = 10.0
+	state.stone_read.emit(back.totem)
+	await process_frame
+	var deaf: Array = hud._stone_rows.find_children("*", "Button", true, false)
+	check(deaf.size() == 4 and deaf.all(func(b): return b.disabled),
+		"a town that does not believe in you will not be told what to eat")
+	# And out of sight, a vegan town neither hunts nor fishes.
+	var rules: Script = load("res://scripts/world/board/town_rules.gd")
+	var lake = land_script.made({"water": 100.0, "shore": 20.0, "game": 100.0, "bushes": 10.0,
+		"fields": 40.0, "room": 100.0})
+	var vegan = load("res://scripts/world/board/town_book.gd").new()
+	vegan.diet = 0
+	vegan.farms = 3
+	var kinds: Array = rules._sources(vegan, lake, 1.0, 1.0).map(func(s): return s[0])
+	check(not kinds.has("fish") and not kinds.has("hunt") and kinds.has("fields"),
+		"out of sight, a vegan town farms and gathers and neither hunts nor fishes (%s)" % [kinds])
 	_done()
 
 

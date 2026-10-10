@@ -24,6 +24,10 @@ const WORK := {
 	"meat": "hauling meat", "lumber": "hauling timber", "stone": "hauling stone",
 }
 const STAGE_WORDS: Array[String] = ["a camp", "a hamlet", "a village", "a town", "a city"]
+## The four diets in the god's order, 1 to 4 (Village.Diet), and what each eats.
+const DIET_CHOICES: Array[String] = ["1 Vegan", "2 Omnivore", "3 Carnivore", "4 Cannibal"]
+const DIET_EATS: Array[String] = ["grain and berries — no flesh", "whatever the land gives",
+	"meat alone", "meat, and their own dead"]
 
 
 static func of(town_given: Variant) -> Dictionary:
@@ -35,9 +39,32 @@ static func of(town_given: Variant) -> Dictionary:
 		{"head": "THE TOWN", "rows": _town(town, folk)},
 		{"head": "ITS PEOPLE", "rows": _people(folk)},
 		{"head": "WHAT THEY ARE DOING", "rows": _doing(folk)},
+		{"head": "WHAT THEY EAT", "rows": _eats(town)},
 		{"head": "WHILE YOU WERE AWAY", "rows": _alibi(town.board)},
 		{"head": "ITS YEARS OUT OF SIGHT", "rows": _tallies(town.board)},
-	]}
+	], "choice": _diet_choice(town)}
+
+
+## WHAT THEY LIVE ON: their diet, what it lets them eat, and what is in the
+## store of each.
+static func _eats(town: Village) -> Array:
+	var rows := [["Diet", "%d — %s" % [int(town.diet) + 1, town.diet_name()]]]
+	rows.append(["Eats", String(DIET_EATS[int(town.diet)])])
+	if is_instance_valid(town.store):
+		rows.append(["In store", "%d grain, %d meat" % [town.store.plant_food, town.store.meat_food]])
+	if town.agriculture_abandoned():
+		rows.append(["The plough", "given up: fallen too far to farm"])
+	return rows
+
+
+## THE GOD'S SAY IN IT: four choices, the one they keep marked, and whether they
+## listen at all — home always, a town that believes in you, and nobody else.
+static func _diet_choice(town: Village) -> Dictionary:
+	var listens := town.is_player_home or town.converted
+	return {"head": "THEIR DIET — YOURS TO SAY", "options": DIET_CHOICES, "chosen": int(town.diet),
+		"enabled": listens, "pick": func(i: int): town.set_diet(i as Village.Diet),
+		"note": "" if listens else "They do not listen to you yet: their faith is %d of %d." % [
+			roundi(town.belief), roundi(Village.CONVERT_BELIEF)]}
 
 
 static func _town(town: Village, folk: Array) -> Array:

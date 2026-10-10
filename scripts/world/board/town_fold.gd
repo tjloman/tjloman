@@ -41,6 +41,8 @@ static func book_of(record: Dictionary, now: float) -> TownBook:
 	book.home = bool(record.get("home", false))
 	book.converted = bool(record.get("converted", false))
 	book.belief = float(record.get("belief", 0.0))
+	book.diet = int(record.get("diet", 1))
+	book.no_plough = book.diet == 3 or bool(record.get("no_plough", false))
 	book.children = 0.0
 	book.adults = 0.0
 	book.elders = 0.0

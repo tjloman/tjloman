@@ -210,6 +210,7 @@ static func meal(who: Villager) -> void:
 		var need := clampi(int(ceil(who.hunger / FoodItem.NUTRITION)), 1,
 			maxi(who.target_food.count, 1))
 		who.hunger = maxf(who.hunger - need * FoodItem.NUTRITION, 0.0)
+		Yields.ate(need)
 		who.target_food.count -= need
 		if who.target_food.count <= 0:
 			who.target_food.queue_free()
@@ -217,6 +218,7 @@ static func meal(who: Villager) -> void:
 			who.target_food.refresh_bundle()
 	else:
 		who.hunger = maxf(who.hunger - FoodItem.NUTRITION, 0.0)
+		Yields.ate(1)
 	who.target_food = null
 
 

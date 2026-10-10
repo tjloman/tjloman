@@ -47,6 +47,13 @@ const EAT_ELDER := 0.7
 const EAT_CHILD := 0.35
 ## What a town eats a head, children, adults and elders together.
 const EAT_HEAD := 0.75
+## THE DIETS, as Village.Diet numbers them; and the meals a grown body makes for
+## a town that eats its dead. Never a child's: there are no children's bodies
+## in this game, in sight or out of it.
+const DIET_VEGAN := 0
+const DIET_OMNIVORE := 1
+const DIET_CANNIBAL := 3
+const MEALS_A_BODY := 3.0
 ## A ruin skips meals to make what it has last.
 const RUIN_EATS := 0.6
 ## What the granary loses a year, and the most it holds a head.
@@ -309,16 +316,20 @@ static func step(book: TownBook, land: TownLand, rain: float, dt: float) -> void
 static func _sources(book: TownBook, land: TownLand, rain: float, crop: float) -> Array:
 	var tools := 1.0 + book.stage * 0.12
 	var out := []
-	if not book.ruined:
+	# WHAT ITS DIET LETS IT EAT (Village.allowed_food_types): no flesh for a
+	# vegan town, nothing but flesh for a carnivore or a cannibal one.
+	var grain := book.diet <= DIET_OMNIVORE
+	var flesh := book.diet != DIET_VEGAN
+	if grain and not book.ruined and not book.no_plough:
 		out.append(["fields", FIELD_YIELD / FIELD_HANDS * crop * tools, book.farms * FIELD_HANDS])
 	var fish_room := land.water * FISH_PER_WATER + land.shore * FISH_PER_SHORE
-	if fish_room > 0.0:
+	if fish_room > 0.0 and flesh:
 		out.append(["fish", FISH_PER_HAND * book.fish_stock * (0.9 + 0.1 * rain) * tools,
 			land.shore * 0.5])
-	if land.bushes > 0.0:
+	if land.bushes > 0.0 and grain:
 		out.append(["berries", BERRIES_PER_HAND * book.berry_stock * (0.5 + 0.5 * rain),
 			land.bushes * 0.5])
-	if land.game > 0.0:
+	if land.game > 0.0 and flesh:
 		out.append(["hunt", HUNT_PER_HAND * book.game_stock * tools, land.game / 25.0])
 	return out
 
@@ -365,15 +376,19 @@ static func _spare(stock: float, rate: float, room: float, dt: float) -> float:
 static func land_feeds(book: TownBook, land: TownLand) -> float:
 	var tools := 1.0 + book.stage * 0.12
 	var meals := 0.0
-	if not book.ruined:
+	var grain := book.diet <= DIET_OMNIVORE
+	var flesh := book.diet != DIET_VEGAN
+	if grain and not book.ruined and not book.no_plough:
 		meals += fields_room(land) * FIELD_YIELD * tools
 	var kept := KEEP_STOCK * (1.0 - KEEP_STOCK)
 	var fish_room := land.water * FISH_PER_WATER + land.shore * FISH_PER_SHORE
-	meals += minf(fish_room * FISH_REGROW * kept, land.shore * 0.5 * FISH_PER_HAND * KEEP_STOCK * tools)
-	meals += minf(land.bushes * BERRIES_PER_BUSH * BERRY_REGROW * kept,
-		land.bushes * 0.5 * BERRIES_PER_HAND * KEEP_STOCK)
-	meals += minf(maxf(land.game * GAME_REGROW * kept - land.predators * book.beast_stock * BEAST_EATS, 0.0),
-		land.game / 25.0 * HUNT_PER_HAND * KEEP_STOCK * tools)
+	if flesh:
+		meals += minf(fish_room * FISH_REGROW * kept, land.shore * 0.5 * FISH_PER_HAND * KEEP_STOCK * tools)
+		meals += minf(maxf(land.game * GAME_REGROW * kept - land.predators * book.beast_stock * BEAST_EATS, 0.0),
+			land.game / 25.0 * HUNT_PER_HAND * KEEP_STOCK * tools)
+	if grain:
+		meals += minf(land.bushes * BERRIES_PER_BUSH * BERRY_REGROW * kept,
+			land.bushes * 0.5 * BERRIES_PER_HAND * KEEP_STOCK)
 	return meals / EAT_HEAD
 
 
@@ -509,6 +524,8 @@ static func _lives(book: TownBook, land: TownLand, famine: float, dt: float) -> 
 	book.adults = maxf(book.adults, 0.0)
 	book.elders = maxf(book.elders, 0.0)
 	book.born += born
+	if book.diet == DIET_CANNIBAL:
+		book.food += (starve_a + starve_e + prey_a + prey_e + aged) * scale * MEALS_A_BODY
 	book.starved += (starve_c + starve_a + starve_e) * scale
 	book.taken += (prey_c + prey_a + prey_e) * scale
 	book.aged_out += aged * scale

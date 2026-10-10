@@ -2120,6 +2120,7 @@ func to_dict() -> Dictionary:
 		# WHEN, and what the board knew: a folded town is stepped on from here.
 		"at_years": GameState.game_years, "board": board, "prayer_rate": _prayer_rate,
 		"converted": converted, "belief": belief, "diet": int(diet),
+		"no_plough": agriculture_abandoned(),
 		"resolve": resolve, "grudge": grudge, "attention": attention,
 		"hive": hive.to_dict(),
 		# The oaths, but never the maulings: a pin is thirty seconds long and

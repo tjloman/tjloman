@@ -10,6 +10,9 @@ static var on := false
 ## "fish", "hunt", "skin"), "berries" eaten at the bush, "boat" for a fishing
 ## boat's catch, "butcher" for a carcass cut up at the store.
 static var meals := {}
+## AND WHAT IS EATEN, meal by meal, where it is eaten — not worked out from the
+## store, which also feeds the beasts, the workshops and the builders.
+static var eaten := 0.0
 
 
 static func note(source: String, amount: float) -> void:
@@ -17,5 +20,11 @@ static func note(source: String, amount: float) -> void:
 		meals[source] = float(meals.get(source, 0.0)) + amount
 
 
+static func ate(many: float) -> void:
+	if on:
+		eaten += many
+
+
 static func clear() -> void:
 	meals.clear()
+	eaten = 0.0

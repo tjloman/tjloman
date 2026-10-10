@@ -35,6 +35,10 @@ func _initialize() -> void:
 	var day_years: float = state.get_script().get_script_constant_map()["DAY_YEARS"]
 	yields.clear()
 	yields.on = true
+	# The hand sets the world's speed every frame (it slows time while a rune is
+	# drawn): out of the way while this runs, or nothing speeds up.
+	var hand: Node = current_scene.divine_hand
+	hand.process_mode = Node.PROCESS_MODE_DISABLED
 	Engine.time_scale = SPEED
 	var from: float = state.game_years
 	var store0: int = town.store.total_food()
@@ -54,6 +58,7 @@ func _initialize() -> void:
 		grown += folk.filter(func(v): return v.is_adult()).size()
 		fields += town.farms.size()
 	Engine.time_scale = 1.0
+	hand.process_mode = Node.PROCESS_MODE_INHERIT
 	yields.on = false
 	var years: float = state.game_years - from
 	var bushes := _bushes_near(town.global_position, 120.0)
@@ -61,10 +66,8 @@ func _initialize() -> void:
 		town.village_name, years, years / day_years, (Time.get_ticks_msec() - t0) / 1000.0])
 	print("    on average %.0f souls, %.0f grown, %.1f fields, %d berry bushes within 120 m" % [
 		souls / samples, grown / samples, fields / samples, bushes])
-	var made := 0.0
 	for source: String in yields.meals:
 		var got: float = yields.meals[source]
-		made += got
 		var job: String = HANDS_FOR.get(source, "")
 		var at := float(hands.get(job, 0.0)) / samples
 		var line := "    %-8s %7.0f meals  %6.1f a year" % [source, got, got / years]
@@ -75,9 +78,8 @@ func _initialize() -> void:
 		if source == "berries" and bushes > 0:
 			line += "  %6.2f a bush-year" % (got / years / bushes)
 		print(line)
-	var store_change: int = town.store.total_food() - store0
-	var eaten := made - store_change
-	print("    the store went %d -> %d; eaten about %.0f meals: %.2f a grown person a year" % [
+	var eaten: float = yields.eaten
+	print("    the store went %d -> %d; %.0f meals eaten: %.2f a grown person a year" % [
 		store0, town.store.total_food(), eaten, eaten / years / maxf(grown / samples, 1.0)])
 	print("    hands at work, on average: %s" % _avg(hands, samples))
 	quit(0)

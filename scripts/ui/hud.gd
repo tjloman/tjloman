@@ -115,6 +115,9 @@ var _stone_scroll: ScrollContainer
 ## way a thumb does. See `_drag_the_stone`.
 var _stone_dragging := false
 var _stone_rows: VBoxContainer
+## Where the reading on the stone comes from, to lay it out again after a choice
+## is made on it. Empty for a reading with nothing to choose.
+var _stone_source := Callable()
 
 
 func _ready() -> void:
@@ -292,12 +295,14 @@ func _on_stone_read(read_given: Variant) -> void:
 	if wall == null and not is_instance_valid(held):
 		return
 	var town: Village = null if wall != null else held
+	_stone_source = Callable()
 	if wall != null:
 		_stone_label.text = "SCRATCHED INTO THE STONE"
 		_fill_stone(wall.reading())
 	else:
 		_stone_label.text = "%s, AS ITS TOTEM KNOWS IT" % town.village_name.to_upper()
-		_fill_stone(TownReading.of(town))
+		_stone_source = func(): return TownReading.of(town)
+		_fill_stone(_stone_source.call())
 	_stone_panel.visible = true
 	_stone_time = STONE_HOLD
 	_stone_at = (read as Node3D).global_position
@@ -344,6 +349,36 @@ func _fill_stone(part: Dictionary) -> void:
 			grid.add_child(_stone_cell(String(row[1]), wide - keyw - 22.0))
 		_stone_rows.add_child(grid)
 	_fill_stones(part.get("stones", []), wide)
+	_fill_choice(part.get("choice", {}), wide)
+
+
+## A CHOICE ON THE STONE: a row of buttons, the one kept marked, and a line if
+## nobody listens. A pick is made and the reading laid out again from its
+## source, so what it says is always what is so (`_stone_source`).
+func _fill_choice(choice: Dictionary, wide: float) -> void:
+	if choice.is_empty():
+		return
+	_stone_rows.add_child(_stone_cell(String(choice["head"]), wide, true))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	var options: Array = choice["options"]
+	for i in options.size():
+		var button := Button.new()
+		button.text = String(options[i])
+		button.toggle_mode = true
+		button.button_pressed = i == int(choice["chosen"])
+		button.disabled = not bool(choice["enabled"])
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.custom_minimum_size = Vector2(0, 40)       # a thumb, not a cursor
+		var pick: Callable = choice["pick"]
+		button.pressed.connect(func():
+			pick.call(i)
+			if _stone_source.is_valid():
+				_fill_stone(_stone_source.call()))
+		row.add_child(button)
+	_stone_rows.add_child(row)
+	if String(choice.get("note", "")) != "":
+		_stone_rows.add_child(_stone_cell(String(choice["note"]), wide))
 
 
 ## THE SIX STONES, which nobody could read because they were off the bottom of

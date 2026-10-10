@@ -17,7 +17,7 @@ const STAGE_NAMES: Array[String] = ["camp", "hamlet", "village", "town", "city"]
 ## How many lines of its own history a town keeps.
 const CHRONICLE_LINES := 16
 ## What is written down when it folds, and read back when it unfolds.
-const _KEPT: Array[String] = ["id", "name", "home", "converted", "belief",
+const _KEPT: Array[String] = ["id", "name", "home", "converted", "belief", "diet", "no_plough",
 	"children", "adults", "elders", "women", "food", "wood", "stone", "houses", "farms",
 	"building", "tilling", "fish_stock", "game_stock", "berry_stock", "beast_stock", "fed",
 	"morale", "hardiness", "stage", "stage_years", "ruined", "years", "steps",
@@ -30,6 +30,10 @@ var pos := Vector2.ZERO
 var home := false
 var converted := false
 var belief := 0.0
+## WHAT IT EATS (Village.Diet: vegan, omnivore, carnivore, cannibal), and
+## whether it has fallen too far to farm (Village.agriculture_abandoned).
+var diet := 1
+var no_plough := false
 
 var children := 0.0
 var adults := 0.0
