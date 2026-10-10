@@ -54,7 +54,7 @@ var fish_stock := 1.0   # each wild larder as a share of what the land holds
 var game_stock := 1.0
 var berry_stock := 1.0
 var beast_stock := 1.0  # the man-eaters, as a share of what the land holds
-var wood_stock := 1.0   # the trees standing, as a share of what the land grows
+var wood_stock := 1.0   # the trees standing, as a share of what the land grew: it only falls
 var kept := 0.0         # head its barns keep (Workshop.stock_kinds)
 var kept_meat := 0.0    # and a head's meat, on average over its kinds
 

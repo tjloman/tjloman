@@ -56,7 +56,7 @@ var shore := 0.0        # dry samples beside water
 var fields := 0.0       # samples a field could go on
 var room := 0.0         # samples a house or a field could stand on
 var wood := 0.0         # trees, as the chunks would grow them
-var wood_now := 0.0     # and as they stand, less what is down (WorldGen.felled_at)
+var wood_now := 0.0     # and as they stand: less what is down for good, and what was planted
 var bushes := 0.0       # berry bushes
 ## THE BEASTS: what the land holds of them — every herd as it was born, which
 ## is what it grows back to — and what is left of them now, where somebody has
@@ -190,11 +190,7 @@ func _count_chunk(world: WorldGen, cell: Vector2i, here: String, share: float, r
 	var stand: Array = Chunk.STAND.get(here, [0, 0, ""])
 	var grows := (float(stand[0]) + float(stand[1])) * 0.5
 	ring["wood"] += grows * share
-	var down := 0.0
-	for entry: Dictionary in world.felled_at(cell):
-		if GameState.game_years - float(entry["at"]) < Chunk.REGROW_YEARS:
-			down += 1.0 if entry.has("seed") else float(entry["any"])
-	ring["wood_now"] += maxf(grows - down, 0.0) * share
+	ring["wood_now"] += _wood_standing(world, cell, grows) * share
 	var bush: Array = Chunk.BUSHES.get(here, [0, 0])
 	ring["bushes"] += (float(bush[0]) + float(bush[1])) * 0.5 * share
 	var known = world.herds_remembered(cell)
@@ -286,7 +282,6 @@ static func from_dict(data: Dictionary) -> TownLand:
 static func write_back_woods(world: WorldGen, at: Vector2, wood_share: float) -> void:
 	var span := int(ceilf(REACH / WorldGen.CHUNK_SIZE))
 	var centre := WorldGen.cell_of(at.x, at.y)
-	var now := GameState.game_years
 	for dx in range(-span, span + 1):
 		for dz in range(-span, span + 1):
 			var cell := centre + Vector2i(dx, dz)
@@ -298,15 +293,20 @@ static func write_back_woods(world: WorldGen, at: Vector2, wood_share: float) ->
 				continue
 			var stand: Array = Chunk.STAND.get(world.biome_at(mid.x, mid.y), [0, 0, ""])
 			var grows := (float(stand[0]) + float(stand[1])) * 0.5
-			var down := 0.0
-			for entry: Dictionary in world.felled_at(cell):
-				if now - float(entry["at"]) < Chunk.REGROW_YEARS:
-					down += 1.0 if entry.has("seed") else float(entry["any"])
-			var more := roundi(grows * (1.0 - wood_share) - down)
+			var more := roundi(_wood_standing(world, cell, grows) - grows * wood_share)
 			if more > 0:
-				world.remember_felled(cell, {"any": more, "at": now})
+				world.remember_felled(cell, {"any": more})
 				if standing != null:
 					standing.restand()
+
+
+## THE TREES STANDING IN A CELL: what its stand grows, less what is down for
+## good, and what was planted and lives.
+static func _wood_standing(world: WorldGen, cell: Vector2i, grows: float) -> float:
+	var down := 0.0
+	for entry: Dictionary in world.felled_at(cell):
+		down += 1.0 if entry.has("seed") else float(entry["any"])
+	return maxf(grows - down, 0.0) + float(world.sown_at(cell).size())
 
 
 static func _thin(chunk: Chunk, game_share: float, beast_share: float) -> void:

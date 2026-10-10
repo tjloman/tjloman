@@ -5,12 +5,13 @@ extends SceneTree
 ##
 ##   1. a tree of a chunk's stand that is felled is remembered as down, once;
 ##   2. a save keeps it, and what a save says is down comes down from a chunk
-##      already standing;
+##      already standing; and a tree that was PLANTED is kept, growth and all;
 ##   3. its chunk shed and built again from the seed leaves out every tree that
-##      is down — and only those;
+##      is down — and only those — and the planted tree, living, still stands;
 ##   4. a wood a town out of sight felled (TownLand.write_back_woods) is built
 ##      with that many fewer trees, and a town's land reads it as cut;
-##   5. a tree down longer than its REGROW_YEARS stands again, smaller.
+##   5. A DEAD TREE STAYS DEAD: the planted one felled, its chunk built again,
+##      it is not there — and nor is any tree of the stand that is down.
 ## Exits non-zero on failure. Names no class of the game's (see look.gd).
 
 ## Where the camera goes to shed home's chunks, and to find a far wood.
@@ -40,12 +41,10 @@ func _initialize() -> void:
 	for n in root.find_children("*", "StartScreen", true, false):
 		n.queue_free()
 	paused = false
-	var state: Node = root.get_node("/root/GameState")
 	var main: Node = current_scene
 	rig = main.camera_rig
 	world = main.world_gen
-	var chunk_script: Script = load("res://scripts/world/chunk.gd")
-	var regrow: float = chunk_script.get_script_constant_map()["REGROW_YEARS"]
+	var tree_script: Script = load("res://scripts/world/wild_tree.gd")
 	var land_script: Script = load("res://scripts/world/board/town_land.gd")
 	print("THE WOODS REMEMBER")
 	await seconds(3.0)
@@ -69,7 +68,15 @@ func _initialize() -> void:
 	var b: Node = had[1]
 	var seed_a: int = a.rng_seed
 	var seed_b: int = b.rng_seed
-	var lumber_a: float = a.lumber
+	# And one PLANTED, as a grown tree's seed or the god's grove plants one.
+	var planted = tree_script.new()
+	planted.rng_seed = 424242
+	planted.lumber = 3.0
+	planted.style = "forest"
+	var at: Vector3 = b.global_position + Vector3(1.5, 0.0, 1.5)
+	check(world.sow(planted, at) and planted.get_parent() == chunk,
+		"a planted tree is taken into the chunk under it")
+	planted.lumber = 3.5                       # it has grown since
 
 	# 1. Felled: remembered, once.
 	a.fell()
@@ -78,17 +85,22 @@ func _initialize() -> void:
 	check(down.size() == 1, "a felled tree of the stand is remembered as down, once (%d)" % down.size())
 
 	# 2. Through a save, as JSON writes it; and what it says is down comes down.
-	var saved: Array = JSON.parse_string(JSON.stringify(world.woods_to_save()))
-	var row: Array = saved.filter(func(r): return Vector2i(int(r["x"]), int(r["z"])) == cell)
+	var saved: Dictionary = JSON.parse_string(JSON.stringify(world.woods_to_save()))
+	var row: Array = (saved["felled"] as Array).filter(
+		func(r): return Vector2i(int(r["x"]), int(r["z"])) == cell)
 	check(row.size() == 1, "a save keeps the woods' gaps")
 	if not row.is_empty():
-		(row[0]["gone"] as Array).append({"seed": seed_b, "at": state.game_years})
+		(row[0]["gone"] as Array).append({"seed": seed_b})
 	world._felled.clear()
+	world._sown.clear()
 	world.woods_from_save(saved)
 	await process_frame
 	await process_frame
 	check(not is_instance_valid(b) and world.felled_at(cell).size() >= 2,
 		"read back, a tree the save says is down comes down from a standing chunk")
+	var kept: Array = world.sown_at(cell).filter(func(e): return int(e["seed"]) == 424242)
+	check(kept.size() == 1 and absf(float(kept[0]["lumber"]) - 3.5) < 0.01,
+		"and the planted tree is kept, at the size it had grown to")
 
 	# 3. Shed and built again: the seed stands everything but what is down.
 	rig.global_position = Vector3(AWAY, 0.0, AWAY)
@@ -113,6 +125,9 @@ func _initialize() -> void:
 			"without the trees that are down")
 		check(seeds.size() == had.size() - gaps,
 			"and with every other tree of its stand (%d of %d, %d down)" % [seeds.size(), had.size(), gaps])
+		var living := _planted(again)
+		check(living.size() == 1 and living[0].lumber >= 3.5,
+			"and the planted tree, living, still stands (%s)" % [str(living.map(func(t): return t.lumber))])
 
 	# 4. Out of sight, a town cut half the far wood.
 	await _until(func(): return _built(far) == null, 90.0)
@@ -148,19 +163,21 @@ func _initialize() -> void:
 	check(far_now == maxi(far_had - any, 0),
 		"seen again, that wood is built that many trees fewer (%d of %d)" % [far_now, far_had])
 
-	# 5. Long enough down, it grows back: aged past its REGROW_YEARS by half
-	# as long again, it stands at about half its size.
-	for e: Dictionary in world.felled_at(cell):
-		if int(e.get("seed", -1)) == seed_a:
-			e["at"] = float(e["at"]) - regrow * 1.5
-	var grown: Node = await _rebuilt(cell)
-	var back: Array = [] if grown == null else _stand(grown).filter(func(t): return t.rng_seed == seed_a)
-	check(back.size() == 1, "a tree down past its regrowing years stands again")
-	if back.size() == 1:
-		var size: float = back[0].lumber
-		check(size < lumber_a and size <= maxf(1.0, lumber_a * 0.5) + 0.01,
-			"and smaller, growing back (%.1f, felled at %.1f)" % [size, lumber_a])
+	# 5. A DEAD TREE STAYS DEAD. The planted one felled; its chunk built again.
+	var home: Node = world.chunk_at(float(cell.x) * 48.0 + 24.0, float(cell.y) * 48.0 + 24.0)
+	if home != null and not _planted(home).is_empty():
+		_planted(home)[0].fell()
+	check(world.sown_at(cell).is_empty(), "a planted tree felled is forgotten")
+	var after: Node = await _rebuilt(cell)
+	var dead := [] if after == null else after.get_children().filter(
+		func(t): return "rng_seed" in t and (t.rng_seed == seed_a or t.rng_seed == 424242))
+	check(after != null and dead.is_empty(), "built again, no tree that died stands — planted or of the stand")
 	_done()
+
+
+## The planted trees standing in a chunk.
+func _planted(chunk: Node) -> Array:
+	return chunk.get_children().filter(func(n): return "sown" in n and n.sown)
 
 
 ## A chunk's own seed stand still standing in it.

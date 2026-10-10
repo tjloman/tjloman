@@ -1685,11 +1685,15 @@ func _cast_forest_seed(pos: Vector3, potency := 1.0) -> void:
 		tree.rng_seed = randi()
 		tree.lumber = 1.0
 		tree.set_meta("quicken_to", 4.0)   # WildTree reads this and races to 4
+		planted += 1
+		# Into the ground under it, and remembered: the god's grove stands when
+		# its chunk is built again and when the world is loaded (WorldGen.sow).
+		if world != null and world.sow(tree, spot):
+			continue
 		add_child(tree)
 		if world != null:
 			spot.y = world.height_at(spot.x, spot.z) - 0.1
 		tree.global_position = spot
-		planted += 1
 	GameState.announce("A grove of %d springs from the earth." % planted)
 
 

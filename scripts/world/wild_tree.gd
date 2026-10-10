@@ -161,9 +161,11 @@ const TREE_GRAVITY := 20.0
 var style := "forest"
 var rng_seed := 0
 ## ONE OF ITS CHUNK'S SEED STAND (Chunk._plant_stand), whose going the world
-## remembers (`_gone_from_spot`) — not a sapling it seeded, nor one set down by
-## the hand somewhere new.
+## remembers for good (`_gone_from_spot`); or one PLANTED — seeded by a grown
+## tree, raised by the god, set down by the hand — which the world remembers
+## standing, and growing (WorldGen.sow).
 var from_stand := false
+var sown := false
 var lumber := 1.0
 var burning := false
 
@@ -531,6 +533,10 @@ func _try_replant() -> void:
 	sapling.style = style
 	sapling.rng_seed = randi()
 	sapling.lumber = 1.0
+	# Planted into the ground under it, and remembered: a wood grows back from
+	# its seed and nothing else (WorldGen.sow).
+	if world.sow(sapling, spot):
+		return
 	var parent := get_parent() as Node3D
 	spot.y = world.height_at(spot.x, spot.z) - 0.1
 	sapling.position = parent.to_local(spot)
@@ -755,6 +761,8 @@ func _land(impact_speed: float, planted := false) -> void:
 			global_position.y = world.drawn_height_at(
 				global_position.x, global_position.z) - 0.1
 		collision_layer = 8  # replanted, roots take hold, growth resumes
+		if world != null:
+			world.sow(self, global_position)   # and it stands here now, remembered
 		return
 	_lie_down(world, impact_speed)
 
@@ -1012,14 +1020,16 @@ func fell() -> int:
 
 
 ## GONE FROM ITS SPOT, and the world told so, once: the seed would otherwise
-## stand it up again the next time its chunk is built. See WorldGen._felled.
+## stand it up again the next time its chunk is built, and a planted tree's
+## record would. See WorldGen._felled and _sown.
 func _gone_from_spot() -> void:
-	if not from_stand:
-		return
-	from_stand = false
 	var ground := get_parent() as Chunk
-	if ground != null:
-		ground.world.remember_felled(ground.cell, {"seed": rng_seed, "at": GameState.game_years})
+	if from_stand and ground != null:
+		ground.world.remember_felled(ground.cell, {"seed": rng_seed})
+	elif sown and ground != null:
+		ground.world.forget_sown(ground.cell, rng_seed)
+	from_stand = false
+	sown = false
 
 
 ## WHAT A TREE IS ACTUALLY WORTH: the running sum of the Fibonacci sequence up

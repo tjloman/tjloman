@@ -81,6 +81,7 @@ func _initialize() -> void:
 	var overbuilt := {}
 	var was_used := {}
 	var woods_low := {}
+	var woods_rose := {}
 	var t0 := Time.get_ticks_msec()
 	var stepped := 0
 	for kind: String in KINDS:
@@ -117,6 +118,8 @@ func _initialize() -> void:
 				var day: float = book.years / 1.8
 				rules.step(book, land, weather.rain(77, book.pos, day, land.biome), dt)
 				stepped += 1
+				if book.wood_stock > float(woods_low.get(book.id, 1.0)) + 0.000001:
+					woods_rose[book.id] = true
 				woods_low[book.id] = minf(float(woods_low.get(book.id, 1.0)), book.wood_stock)
 				if book.years >= next_year:
 					next_year += 1.0
@@ -206,11 +209,10 @@ func _initialize() -> void:
 		check(shaky == 0, "%s: every one holds steady over its last sixty years (%d swing)" % [kind, shaky])
 
 	check(overbuilt.is_empty(), "no town ever builds past the ground it has room on (%d did)" % overbuilt.size())
-	# THE WOODS: a town fells the trees round it for its timber, never past the
-	# share every larder is left at, and they grow back once it eases off.
+	# THE WOODS: a town fells the trees round it for its timber, any that stand,
+	# and out of sight a wood NEVER grows back — a felled tree is dead for good.
 	var cut := 0
 	var stripped := 0
-	var regrown := 0
 	var trees_down := 0.0
 	for kind: String in KINDS:
 		for t: Dictionary in by_kind[kind]:
@@ -218,15 +220,12 @@ func _initialize() -> void:
 			trees_down += t["book"].felled
 			if low < 0.9:
 				cut += 1
-			if low < rules.KEEP_STOCK - 0.02:
+			if low < 0.01:
 				stripped += 1
-			if t["book"].wood_stock > low + 0.05:
-				regrown += 1
-	print("  woods: %d towns cut theirs below nine tenths, %d grew back since, %.0f trees felled in all"
-		% [cut, regrown, trees_down])
-	check(cut >= TOWNS_EACH and stripped == 0,
-		"towns fell the woods round them (%d did), never past what is left standing (%d did)" % [cut, stripped])
-	check(regrown >= 1, "and a wood grows back once the felling eases (%d did)" % regrown)
+	print("  woods: %d towns cut theirs below nine tenths, %d to nothing, %.0f trees felled in all"
+		% [cut, stripped, trees_down])
+	check(cut >= TOWNS_EACH, "towns fell the woods round them (%d did)" % cut)
+	check(woods_rose.is_empty(), "and out of sight a felled wood never grows back (%d did)" % woods_rose.size())
 	# THE BARN, out of sight: a town keeping sixty head feeds them from its own
 	# grain — more than they send back as meat — and keeps them; on land that
 	# feeds nobody, they die off.

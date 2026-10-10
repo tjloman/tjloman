@@ -42,11 +42,6 @@ const STAND := {
 	"wetland": [1, 3, "wetland"],
 }
 
-## HOW LONG A TREE OF THE SEED'S STAND STAYS DOWN, in game years, once felled,
-## burned or uprooted — and it grows back to its full size over as long again.
-## Thirty years: a woodland cut in a player's grandfather's time is a young
-## wood in his own.
-const REGROW_YEARS := 30.0
 ## BERRY BUSHES BY BIOME: fewest and most to a chunk. And the BEASTS: each
 ## kind's chance of a herd on a chunk (two herds at most). Both were literals in
 ## `_scatter`'s match; they are tables now for the same reason STAND is — a town
@@ -857,7 +852,9 @@ func _standing_stand() -> Array[Dictionary]:
 		if tree.felled() or tree.lumber < TreeArt.LEAST_LUMBER:
 			continue
 		out.append({"spot": tree.position, "seed": tree.rng_seed,
-			"lumber": tree.lumber, "style": tree.style})
+			"lumber": tree.lumber, "style": tree.style, "sown": tree.sown})
+		if tree.sown:
+			world.grew(cell, tree)
 	return out
 
 
@@ -1196,16 +1193,24 @@ func _tree_stand(rng: RandomNumberGenerator) -> Array[Dictionary]:
 
 
 ## WHAT HAS BEEN CUT HERE, taken out of the stand the seed grows — AFTER every
-## draw from the stream, so not one tree that stands moves (see `_scatter`).
-## A tree down for less than REGROW_YEARS is not there; one down longer stands
-## again, small, and grows back to its size over as long again. Trees a town
-## out of sight felled are taken from those still standing, in an order fixed
-## by their seeds, so the same ones are missing every time. See WorldGen._felled.
+## draw from the stream, so not one tree that stands moves (see `_scatter`) —
+## and WHAT WAS PLANTED, added. A tree of the stand that is down is down for
+## good. Trees a town out of sight felled are taken from those still standing,
+## in an order fixed by their seeds, so the same ones are missing every time.
+## See WorldGen._felled and _sown.
 func _after_felling(stand: Array[Dictionary]) -> Array[Dictionary]:
+	var standing: Array[Dictionary] = _without_the_felled(stand)
+	for it: Dictionary in world.sown_at(cell):
+		standing.append({"spot": Vector3(float(it["x"]) - position.x, 0.0, float(it["z"]) - position.z),
+			"seed": int(it["seed"]), "lumber": float(it["lumber"]), "style": String(it["style"]),
+			"sown": true})
+	return standing
+
+
+func _without_the_felled(stand: Array[Dictionary]) -> Array[Dictionary]:
 	var gone := world.felled_at(cell)
 	if gone.is_empty():
 		return stand
-	var now := GameState.game_years
 	var by_seed := {}
 	for it: Dictionary in stand:
 		by_seed[it["seed"]] = it
@@ -1213,7 +1218,6 @@ func _after_felling(stand: Array[Dictionary]) -> Array[Dictionary]:
 	order.sort_custom(func(a, b): return hash(a["seed"]) < hash(b["seed"]))
 	var taken := {}
 	for entry: Dictionary in gone:
-		var age := now - float(entry["at"])
 		var hit: Array = []
 		if entry.has("seed"):
 			var one := int(entry["seed"])   # a float, read back from a save
@@ -1227,40 +1231,61 @@ func _after_felling(stand: Array[Dictionary]) -> Array[Dictionary]:
 					hit.append(it)
 		for it: Dictionary in hit:
 			taken[it["seed"]] = true
-			if age < REGROW_YEARS:
-				it["down"] = true
-			else:
-				it["lumber"] = maxf(1.0, float(it["lumber"]) * (age - REGROW_YEARS) / REGROW_YEARS)
 	var standing: Array[Dictionary] = []
 	for it: Dictionary in stand:
-		if not it.get("down", false):
+		if not taken.has(it["seed"]):
 			standing.append(it)
 	return standing
 
 
-## TREES STANDING HERE THAT THE WORLD REMEMBERS ARE DOWN, felled: a chunk
-## planted from the seed before a save's woods were read (WorldGen.
-## woods_from_save).
-func fell_remembered() -> void:
+## THE TREES HERE AS THE WORLD REMEMBERS THEM, for a chunk planted from the seed
+## before a save's woods were read (WorldGen.woods_from_save): what is down
+## comes down, and what was planted is planted.
+func match_the_woods() -> void:
 	var stand: Array[Dictionary] = []
 	var trees := {}
 	for node in get_children():
 		var tree := node as WildTree
-		if tree != null and tree.from_stand:
-			stand.append({"seed": tree.rng_seed, "lumber": tree.lumber})
+		if tree != null and (tree.from_stand or tree.sown):
 			trees[tree.rng_seed] = tree
+			if tree.from_stand:
+				stand.append({"seed": tree.rng_seed, "lumber": tree.lumber})
 	var left := {}
-	for it: Dictionary in _after_felling(stand):
+	for it: Dictionary in _without_the_felled(stand):
 		left[it["seed"]] = true
 	for seed_of: int in trees:
-		if not left.has(seed_of):
-			(trees[seed_of] as WildTree).from_stand = false   # already counted: not twice
-			(trees[seed_of] as WildTree).queue_free()
+		var tree := trees[seed_of] as WildTree
+		if not left.has(seed_of) and tree.from_stand:
+			tree.from_stand = false   # already counted: not twice
+			tree.queue_free()
+	var planted: Array[Dictionary] = []
+	var none: Array[Dictionary] = []
+	for it: Dictionary in _after_felling(none):
+		if not trees.has(it["seed"]):
+			planted.append(it)
+	_plant_stand(planted)
+
+
+## A PLANTED TREE TAKEN INTO THIS CHUNK where it stands (WorldGen.sow): set into
+## the ground at `at` if it is new, kept where it is if it is already standing.
+func adopt(tree: WildTree, at: Vector3) -> void:
+	if tree.get_parent() != null:
+		tree.reparent(self)
+		_standing.append(tree)
+	else:
+		_place(tree, at - position, 0.1)
+
+
+## THE PLANTED TREES' GROWTH, written back to the world before they go.
+func note_the_sown() -> void:
+	for node in _standing:
+		if is_instance_valid(node) and node is WildTree and (node as WildTree).sown:
+			world.grew(cell, node as WildTree)
 
 
 ## THE WOOD OUT HERE ASKED AGAIN, for a chunk drawn as billboards: a town out
 ## of sight has felled some of it (TownLand.write_back_woods), and the boards
-## show what it left. A chunk with real trees keeps them; see `fell_remembered`.
+## show what it left. A chunk with real trees keeps them; see `match_the_woods`.
 func restand() -> void:
 	if wooded or not terrain_only:
 		return
@@ -1272,7 +1297,10 @@ func restand() -> void:
 func _plant_stand(stand: Array[Dictionary]) -> void:
 	for it: Dictionary in stand:
 		var tree := WildTree.new()
-		tree.from_stand = true
+		if it.get("sown", false):
+			tree.sown = true
+		else:
+			tree.from_stand = true
 		tree.style = it["style"]
 		tree.rng_seed = it["seed"]
 		tree.lumber = it["lumber"]

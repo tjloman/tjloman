@@ -210,14 +210,20 @@ var _pond_edition := 0
 ## camera moved away and back. Present means "this is what lives here now",
 ## including an empty list for a herd hunted out.
 var _herds_known := {}
-## THE WOODS AS THEY STAND: which trees of each chunk's stand are down, and when
-## they came down — felled, burned, uprooted. A chunk built again leaves them
-## out (Chunk._after_felling) until they have had REGROW_YEARS to come back, and
-## stands them small for as long again while they grow. Cell -> Array of
-## {"seed": the tree's seed, "at": game years} for a tree that is known, or
-## {"any": how many, "at": ...} for trees a town out of sight felled
-## (TownLand.write_back), which takes them from those still standing.
+## THE WOODS AS THEY STAND: which trees of each chunk's stand are down —
+## felled, burned, uprooted — FOR GOOD. The seed does not grow them back: a wood
+## comes back only from what is planted, by a grown tree's seed or by the god
+## (`_sown`), so a valley logged out stays logged out. A chunk built again leaves
+## them out (Chunk._after_felling). Cell -> Array of {"seed": the tree's seed}
+## for a tree that is known, or {"any": how many} for trees a town out of sight
+## felled (TownLand.write_back_woods), taken from those still standing.
 var _felled := {}
+## AND WHAT WAS PLANTED: every tree that is not the seed's — a sapling a grown
+## tree dropped, a grove the god raised, a tree the hand set down — where it
+## stands and how big it has grown, so it is there again when its chunk is
+## built and when the world is loaded. Cell -> {seed: {"x", "z", "seed",
+## "lumber", "style"}}.
+var _sown := {}
 ## Out of sight, hidden, switched off, and waiting their turn to be freed. See
 ## SHEDS_PER_FRAME.
 var _doomed: Array[Chunk] = []
@@ -880,45 +886,88 @@ func _show_pond(pond: Dictionary) -> void:
 	pond["node"] = disc
 
 
-## A TREE OF THIS CELL'S STAND IS DOWN. See `_felled`.
+## A TREE OF THIS CELL'S STAND IS DOWN, for good. See `_felled`.
 func remember_felled(cell: Vector2i, entry: Dictionary) -> void:
 	if not _felled.has(cell):
 		_felled[cell] = []
 	(_felled[cell] as Array).append(entry)
 
 
-## WHAT IS DOWN HERE, still missing or still growing back; what has grown back
-## whole is forgotten.
+## WHAT OF THIS CELL'S STAND IS DOWN.
 func felled_at(cell: Vector2i) -> Array:
-	var gone: Array = _felled.get(cell, [])
-	if gone.is_empty():
-		return gone
-	var now := GameState.game_years
-	var growing := gone.filter(func(e): return now - float(e["at"]) < Chunk.REGROW_YEARS * 2.0)
-	if growing.size() != gone.size():
-		_felled[cell] = growing
-	return growing
+	return _felled.get(cell, [])
 
 
-func woods_to_save() -> Array:
-	var out := []
+## A TREE PLANTED WHERE IT STANDS, taken into the chunk under `at` and written
+## down. See `_sown`. False when no chunk is built there: the tree is left where
+## it is, and not remembered.
+func sow(tree: WildTree, at: Vector3) -> bool:
+	var ground := chunk_at(at.x, at.z)
+	if ground == null or ground.terrain_only:
+		return false
+	ground.adopt(tree, at)
+	tree.sown = true
+	grew(ground.cell, tree)
+	return true
+
+
+## AND WRITE A PLANTED RECORD down for a chunk that is not built: a wood a town
+## out of sight let grow back (TownLand.write_back_woods).
+func sow_record(cell: Vector2i, entry: Dictionary) -> void:
+	if not _sown.has(cell):
+		_sown[cell] = {}
+	(_sown[cell] as Dictionary)[int(entry["seed"])] = entry
+
+
+## A PLANTED TREE AS IT STANDS NOW, its growth kept. See `_sown`.
+func grew(cell: Vector2i, tree: WildTree) -> void:
+	sow_record(cell, {"x": tree.global_position.x, "z": tree.global_position.z,
+		"seed": tree.rng_seed, "lumber": tree.lumber, "style": tree.style})
+
+
+## A PLANTED TREE IS GONE: felled, burned, uprooted.
+func forget_sown(cell: Vector2i, seed_of: int) -> void:
+	if _sown.has(cell):
+		(_sown[cell] as Dictionary).erase(seed_of)
+
+
+## WHAT WAS PLANTED HERE, as records.
+func sown_at(cell: Vector2i) -> Array:
+	return (_sown.get(cell, {}) as Dictionary).values()
+
+
+func woods_to_save() -> Dictionary:
+	# The planted trees' growth as it is now, for every one standing.
+	for cell: Vector2i in _chunks:
+		var cached = _chunks[cell]
+		if cached != null and is_instance_valid(cached):
+			(cached as Chunk).note_the_sown()
+	var felled := []
 	for cell: Vector2i in _felled:
-		var gone := felled_at(cell)
-		if not gone.is_empty():
-			out.append({"x": cell.x, "z": cell.y, "gone": gone})
-	return out
+		felled.append({"x": cell.x, "z": cell.y, "gone": _felled[cell]})
+	var sown := []
+	for cell: Vector2i in _sown:
+		if not (_sown[cell] as Dictionary).is_empty():
+			sown.append({"x": cell.x, "z": cell.y, "trees": (_sown[cell] as Dictionary).values()})
+	return {"felled": felled, "sown": sown}
 
 
-func woods_from_save(data: Array) -> void:
-	for entry in data:
-		var row := entry as Dictionary
+func woods_from_save(data: Variant) -> void:
+	var woods: Dictionary = data if data is Dictionary else {"felled": data}
+	for row: Dictionary in woods.get("felled", []):
 		var cell := Vector2i(int(row.get("x", 0)), int(row.get("z", 0)))
 		_felled[cell] = (row.get("gone", []) as Array).duplicate(true)
-		# A chunk already standing was planted from the seed before the save was
-		# read; what the save says is down comes down.
-		var cached = _chunks.get(cell)
+	for row: Dictionary in woods.get("sown", []):
+		var cell := Vector2i(int(row.get("x", 0)), int(row.get("z", 0)))
+		for tree: Dictionary in row.get("trees", []):
+			sow_record(cell, tree.duplicate())
+	# A chunk already standing was planted from the seed before the save was
+	# read: what the save says is down comes down, and what it says was planted
+	# is planted.
+	for cell: Vector2i in _chunks:
+		var cached = _chunks[cell]
 		if cached != null and is_instance_valid(cached) and not (cached as Chunk).terrain_only:
-			(cached as Chunk).fell_remembered()
+			(cached as Chunk).match_the_woods()
 
 
 func remember_herds(cell: Vector2i, rows: Array) -> void:
@@ -1545,6 +1594,7 @@ func _shed(center: Vector2i, kept: Dictionary) -> void:
 			if not gone.terrain_only:
 				BootTrail.mark("letting go of the land at %d,%d" % [cell.x, cell.y])
 				remember_herds(cell, gone.herd_rows())
+				gone.note_the_sown()
 			gone.visible = false
 			gone.process_mode = Node.PROCESS_MODE_DISABLED
 			_doomed.append(gone)

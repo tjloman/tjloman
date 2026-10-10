@@ -26,18 +26,20 @@ What holds it there, in the source:
   8. A PERSON'S SPAN IS SAVED and a restored one always has years left.
   9. THE TOTEM CAN BE HELD: a hoverable body in the totem group, which the hand
      reads like the nest wall, opening TownReading in the stone panel.
- 10. THE WOODS REMEMBER: a tree of a chunk's stand that is felled, burned or
-     uprooted is written down (WorldGen._felled) and saved, and the seed
-     leaves it out until it has grown back (Chunk._after_felling); a town out
-     of sight fells timber from the land's woods, never past KEEP_STOCK, and
-     what it cut is written back to the woods when it returns.
+ 10. A DEAD TREE STAYS DEAD: a tree of a chunk's stand that is felled, burned
+     or uprooted is written down (WorldGen._felled) and saved, and the seed
+     never stands it again (Chunk._after_felling). A wood comes back only from
+     what is planted -- a grown tree's seed, the god's grove -- and a planted
+     tree is remembered while it lives (WorldGen._sown) and forgotten when it
+     dies. A town out of sight fells any tree in reach and its woods never grow
+     back; what it cut is written back to the woods when it returns.
  11. A BARN'S STOCK GOES WITH ITS TOWN: written into the record by kind, fed
      out of sight from the granary at the live barn's trough (Drove.trough) and
      dying off unfed, and put back into the barn when the town is raised again.
  12. And with GODOT set, tools/live/century_live.gd runs the rules over 320
      towns for 180 game years and judges every one, fold_live.gd folds a
      believing town, lets twenty years pass, and brings it back, and
-     woods_live.gd fells, saves, sheds and regrows a wood, and barn_live.gd
+     woods_live.gd fells, plants, saves and sheds a wood, and barn_live.gd
      stocks a barn, writes it down and fills its trough.
 """
 import os
@@ -134,10 +136,17 @@ def source(fail):
         if "_gone_from_spot()" not in body(TREE, fn):
             fail.append("a tree gone by %s is not remembered as down" % fn)
     if '"woods": world.woods_to_save()' not in body(SAVE, "snapshot") \
-            or "world.woods_from_save(" not in body(SAVE, "apply_pending"):
+            or 'world.woods_from_save(pending_world.get("woods", {}))' not in body(SAVE, "apply_pending"):
         fail.append("a save forgets which trees are down")
-    if "_spare(book.wood_stock" not in body(RULES, "_build"):
-        fail.append("a town out of sight can fell its woods bare")
+    if "_after_felling" not in body(CHUNK, "_tree_stand") or "REGROW" in CHUNK \
+            or '"at"' in body(TREE, "_gone_from_spot"):
+        fail.append("a felled tree of the stand grows back from the seed: a dead tree stays dead")
+    if "wood_stock = _regrow" in RULES or "book.wood_stock = clampf(book.wood_stock +" in RULES:
+        fail.append("out of sight, a felled wood grows back")
+    if "forget_sown(" not in body(TREE, "_gone_from_spot") or "world.sow(" not in body(TREE, "_try_replant") \
+            or "world.sow(" not in body((ROOT / "scripts/miracles/miracle_manager.gd").read_text(), "_cast_forest_seed") \
+            or '"sown":' not in body((ROOT / "scripts/world/world_gen.gd").read_text(), "woods_to_save"):
+        fail.append("a planted tree is not remembered while it lives, or not forgotten when it dies")
     if "TownLand.write_back_woods(" not in body(BOARD, "bring_up_to_date"):
         fail.append("a town's felling out of sight is not written back to the woods")
     # FISHING IS A LIVELIHOOD: a cast brings home a string, the board's rate is

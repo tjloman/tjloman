@@ -153,7 +153,7 @@ func fold(town: Village, world: WorldGen) -> void:
 	if land.predators > 0.0:
 		board["beast_stock"] = clampf(land.predators_now / land.predators, 0.02, 1.0)
 	if land.wood > 0.0:
-		board["wood_stock"] = clampf(land.wood_now / land.wood, 0.05, 1.0)
+		board["wood_stock"] = clampf(land.wood_now / land.wood, 0.0, 1.0)
 	record["board"] = board
 	SaveGame.village_memory.append(record)
 	_far.erase(town)
