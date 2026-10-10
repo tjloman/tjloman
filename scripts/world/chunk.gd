@@ -42,6 +42,30 @@ const STAND := {
 	"wetland": [1, 3, "wetland"],
 }
 
+## BERRY BUSHES BY BIOME: fewest and most to a chunk. And the BEASTS: each
+## kind's chance of a herd on a chunk (two herds at most). Both were literals in
+## `_scatter`'s match; they are tables now for the same reason STAND is — a town
+## out of sight reckons its land from them without building anything (TownLand).
+## The order inside each is load-bearing: `_scatter_animals` draws in it.
+const BUSHES := {
+	"forest": [1, 3], "grassland": [2, 3], "savanna": [1, 3], "rocky_hills": [0, 2],
+	"rainforest": [3, 5], "wetland": [2, 4],
+}
+const BEASTS := {
+	"forest": {"deer": 0.22, "elk": 0.18, "bear": 0.05, "wolf": 0.05, "tiger": 0.02},
+	"grassland": {"sheep": 0.12, "horse": 0.1, "chicken": 0.12, "pig": 0.08, "dog": 0.04,
+		"bison": 0.12},
+	"savanna": {"giraffe": 0.12, "lion": 0.06, "llama": 0.12, "ox": 0.05, "anteater": 0.1,
+		"coati": 0.12},
+	"rocky_hills": {"caribou": 0.03, "llama": 0.12, "elk": 0.1},
+	"desert": {"llama": 0.1, "giraffe": 0.06, "lion": 0.05, "dog": 0.03},
+	"tundra": {"caribou": 0.07, "bison": 0.12, "elk": 0.14, "deer": 0.12, "wolf": 0.07,
+		"bear": 0.05, "dog": 0.03},
+	"rainforest": {"coati": 0.2, "anteater": 0.16, "deer": 0.14, "frog": 0.7, "tiger": 0.05,
+		"chicken": 0.14, "pig": 0.12},
+	"wetland": {"frog": 0.9, "pig": 0.12, "anteater": 0.12, "coati": 0.1},
+}
+
 ## STONE, AT EVERY SIZE IT COMES IN. Every rock in the world used to be the
 ## same three-hundred-stone vein, two or three to a hillside — so a riverbank
 ## had no pebbles on it and the only thing anybody could do with stone was
@@ -1046,46 +1070,39 @@ func _scatter(plant_wood := true) -> void:
 	match biome:
 		"forest":
 			_scatter_deposits(rng, rng.randi_range(1, 4))
-			_scatter_bushes(rng, rng.randi_range(1, 3))
-			_scatter_animals(rng, {"deer": 0.22, "elk": 0.18, "bear": 0.05,
-				"wolf": 0.05, "tiger": 0.02})
+			_scatter_bushes(rng, _bushes(rng, biome))
+			_scatter_animals(rng, BEASTS[biome])
 		"grassland":
 			_scatter_flowers(rng, rng.randi_range(6, 12))
 			_scatter_deposits(rng, rng.randi_range(1, 4))
-			_scatter_bushes(rng, rng.randi_range(2, 3))
-			_scatter_animals(rng, {"sheep": 0.12, "horse": 0.1, "chicken": 0.12,
-				"pig": 0.08, "dog": 0.04, "bison": 0.12})
+			_scatter_bushes(rng, _bushes(rng, biome))
+			_scatter_animals(rng, BEASTS[biome])
 		"savanna":
-			_scatter_bushes(rng, rng.randi_range(1, 3))
-			_scatter_animals(rng, {"giraffe": 0.12, "lion": 0.06, "llama": 0.12,
-				"ox": 0.05, "anteater": 0.1, "coati": 0.12})
+			_scatter_bushes(rng, _bushes(rng, biome))
+			_scatter_animals(rng, BEASTS[biome])
 		"rocky_hills":
 			_scatter_deposits(rng, rng.randi_range(4, 9))
-			_scatter_bushes(rng, rng.randi_range(0, 2))
-			_scatter_animals(rng, {"caribou": 0.03, "llama": 0.12, "elk": 0.1})
+			_scatter_bushes(rng, _bushes(rng, biome))
+			_scatter_animals(rng, BEASTS[biome])
 		# THE HOT DRY COUNTRY. Almost nothing grows and almost nothing lives here,
 		# which is the point of it — a desert should be a place you cross.
 		"desert":
 			_scatter_deposits(rng, rng.randi_range(2, 5))
-			_scatter_animals(rng, {"llama": 0.1, "giraffe": 0.06, "lion": 0.05,
-				"dog": 0.03})
+			_scatter_animals(rng, BEASTS[biome])
 		# THE FAR COLD. Open, flat and full of big grazing beasts with wolves
 		# and bears working them — the meat wall at its plainest.
 		"tundra":
 			_scatter_deposits(rng, rng.randi_range(2, 5))
-			_scatter_animals(rng, {"caribou": 0.07, "bison": 0.12, "elk": 0.14,
-				"deer": 0.12, "wolf": 0.07, "bear": 0.05, "dog": 0.03})
+			_scatter_animals(rng, BEASTS[biome])
 		# WHERE WETLAND MEETS FOREST. The densest, loudest, most crowded ground
 		# in the world: everything small, everything at once, and a tiger in it.
 		"rainforest":
-			_scatter_bushes(rng, rng.randi_range(3, 5))
+			_scatter_bushes(rng, _bushes(rng, biome))
 			_scatter_flowers(rng, rng.randi_range(4, 8))
-			_scatter_animals(rng, {"coati": 0.2, "anteater": 0.16, "deer": 0.14,
-				"frog": 0.7, "tiger": 0.05, "chicken": 0.14, "pig": 0.12})
+			_scatter_animals(rng, BEASTS[biome])
 		"wetland":
-			_scatter_bushes(rng, rng.randi_range(2, 4))
-			_scatter_animals(rng, {"frog": 0.9, "pig": 0.12, "anteater": 0.12,
-				"coati": 0.1})
+			_scatter_bushes(rng, _bushes(rng, biome))
+			_scatter_animals(rng, BEASTS[biome])
 	# LAST, ALWAYS LAST. It draws from the same stream every arm above drew
 	# from, and adding a consumer anywhere but the end would move every tree,
 	# rock and beast in the world by one roll.
@@ -1181,6 +1198,12 @@ func _plant_stand(stand: Array[Dictionary]) -> void:
 		tree.lumber = it["lumber"]
 		_place(tree, it["spot"], 0.1)
 		Util.apply_lod(tree, Quality.clutter_distance())
+
+
+## How many bushes this chunk grows: one draw, as the literal it replaced made.
+func _bushes(rng: RandomNumberGenerator, biome: String) -> int:
+	var span: Array = BUSHES[biome]
+	return rng.randi_range(int(span[0]), int(span[1]))
 
 
 func _scatter_bushes(rng: RandomNumberGenerator, count: int) -> void:
