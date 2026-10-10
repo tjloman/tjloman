@@ -29,6 +29,7 @@ Grain out of the town's own store, every morning, against one hunger shared by
 the whole herd. A farm too big for its village empties the granary and then
 becomes a farm the village can feed.
 """
+import math
 import pathlib
 import re
 import sys
@@ -265,6 +266,45 @@ if not gives:
     fail.append("nothing of the herd ever reaches the storehouse, so a barn is "
                 "a building that eats grain and returns nothing")
 
+# AND A HERD IS NOT A MACHINE FOR MAKING FOOD. A fed head sends the store a
+# share of itself a day; it must eat more grain than that, of every kind, at
+# every size a town may keep -- and a big herd eats more A HEAD, because the
+# grass round a village grazes only a few dozen.
+holds = number(DROVE, "GRAZING_HOLDS")
+most = int(number(TOWN, "HEAD_AT_MOST"))
+trough = "\n".join(body_of(DROVE, "trough"))
+fills = any("Drove.trough(" in r for r in body_of(SHOP, "_fill_the_trough"))
+ANIMAL = (ROOT / "scripts/animals/animal.gd").read_text()
+tame_meat = [int(m) for m in re.findall(r'"meat": (\d+), "tame": true', ANIMAL)]
+
+
+def asked(n):
+    return math.ceil(n * feed * (1.0 + n / holds))
+
+
+richest = max(tame_meat) if tame_meat else 0
+sends = yield_share * (richest + dressed)
+leaks = [n for n in range(1, most + 1) if asked(n) / n <= sends]
+print("A FED HEAD sends %.2f meals a day at best (meat %d); the trough asks %.2f a head "
+      "of ten, %.2f a head of %d" % (sends, richest, asked(10) / 10, asked(most) / most, most))
+if holds is None or "GRAZING_HOLDS" not in trough or not fills:
+    fail.append("the trough does not grow with the herd past what the grass holds "
+                "(Drove.trough, filled by Workshop._fill_the_trough)")
+elif leaks:
+    fail.append("a herd of %d sends more meat to the store than the grain it eats: "
+                "a barn makes food out of nothing" % leaks[0])
+elif asked(most) / most < 1.5 * asked(10) / 10:
+    fail.append("a head of a big herd costs hardly more than one of a small herd")
+# THE PEN TOO: a plant a hungry beast, carried out of the store, not one plant
+# for the whole yard.
+VILLAGER = code((ROOT / "scripts/villager/villager.gd").read_text())
+pen = "\n".join(body_of(TOWN, "feed_penned"))
+if "store.take(FoodItem.FoodType.PLANT, village.penned_mouths())" not in VILLAGER \
+        or "slice(0, plants)" not in pen:
+    fail.append("feeding the pen costs one plant however many beasts are in it")
+if len(tame_meat) < 3:
+    fail.append("could not read the tame species' meat from Animal.SPECIES")
+
 # ONE HUNGER FOR THE WHOLE HERD, and not one per beast.
 shared = re.search(r"^var hunger := ", HERD, re.M) is not None
 print("HUNGER IS %s." % ("one number for the whole herd"
@@ -319,7 +359,7 @@ if gate is None or fed_at is None or fed_at > gate:
 
 print()
 print("A DAY AT A BARN of 32 head (the twelve-villager town above):")
-asks = max(int(32 * feed), 1)
+asks = asked(32)
 sent = int(32 * yield_share)
 print("   trough   %d grain out of the store" % asks)
 print("   yield    %d head in, worth %d meat plus %d dressed each"

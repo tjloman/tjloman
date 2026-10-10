@@ -315,7 +315,7 @@ var _shop_spot := Vector3.INF
 var _shop_kind := ""
 var _shift_left := 0.0
 var _target_farm: Farm = null
-var _carrying_feed := false
+var _feed_carried := 0     # plants carried to the pen, one a hungry beast
 var _carry_kind := ""            # non-empty while hauling a gathered load home
 var _carry_amount := 0
 ## The job whose place this is holding. See VillageJobs.
@@ -614,17 +614,17 @@ func take_turn(delta: float, owed: int) -> void:
 				else:
 					_rethink()
 		State.GO_FEED:
-			if not _carrying_feed:
+			if _feed_carried <= 0:
 				if _move_toward(village.store.global_position, WALK_SPEED * _speed_factor(),
 						delta, ARRIVE_DIST, true):
-					if village.store.take(FoodItem.FoodType.PLANT, 1) > 0:
-						_carrying_feed = true
-					else:
+					# A plant a mouth: the pen's hungry, out of the town's grain.
+					_feed_carried = village.store.take(FoodItem.FoodType.PLANT, village.penned_mouths())
+					if _feed_carried <= 0:
 						_rethink()
 			elif _move_toward(village.pen_position(), WALK_SPEED * _speed_factor(),
 					delta, ARRIVE_DIST, true):
-				village.feed_penned()
-				_carrying_feed = false
+				village.feed_penned(_feed_carried)
+				_feed_carried = 0
 				_rethink()
 		State.GO_FISH:
 			if _fish_spot == Vector3.INF:
@@ -638,9 +638,9 @@ func take_turn(delta: float, owed: int) -> void:
 			_action_time -= delta
 			if _action_time <= 0.0:
 				if village.is_player_home and randf() < 0.3:
-					GameState.announce("%s pulled a fish from the shallows." % villager_name)
+					GameState.announce("%s brought in a string of fish." % villager_name)
 				_fish_spot = Vector3.INF
-				_begin_haul("meat", 1, "fish")
+				_begin_haul("meat", VillageJobs.SHORE_CATCH, "fish")
 		State.GO_BUILD_FARM:
 			if _move_toward(_farm_spot, WALK_SPEED * _speed_factor(), delta,
 					ARRIVE_DIST, true):
@@ -1510,7 +1510,7 @@ func _pick_job() -> bool:
 		# than a meal, so it is scored as stock and not as supper.
 		if want_food > 0.4 and village.wants_new_farm() and store.lumber >= 4:
 			scores["build_farm"] = _wants(STOCK_CEIL, want_food)
-	if village.penned_hungry() and store.plant_food > 2:
+	if village.penned_mouths(Village.PEN_GOING_HUNGRY) > 0 and store.plant_food > 2:
 		scores["feed"] = 26.0
 	# A village with children and no school wants an Edubba raised.
 	if village.wants_edubba():
@@ -1673,7 +1673,7 @@ func _start_job(job: String) -> void:
 			state = State.GO_FARM
 			_target = _target_farm.global_position  # the field centre is dry
 		"feed":
-			_carrying_feed = false
+			_feed_carried = 0
 			state = State.GO_FEED
 		"build_farm":
 			_farm_spot = village.find_build_spot(_world(), Village.ROOM_ROUND_A_FARM)
@@ -1824,7 +1824,7 @@ func _deliver_carry() -> void:
 			"lumber": village.store.add_lumber(_carry_amount)
 			"stone": village.store.add_stone(_carry_amount)
 		if _carry_kind == "plant" or _carry_kind == "meat":
-			Yields.note(_carry_job, _carry_amount)   # see Yields: off unless measuring
+			Yields.note(_carry_job, _carry_amount, village)   # see Yields: off unless measuring
 		if _carry_announce != "" and village.is_player_home:
 			GameState.announce(_carry_announce)
 	_clear_carry()

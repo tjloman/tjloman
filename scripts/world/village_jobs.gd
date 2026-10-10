@@ -37,6 +37,15 @@ const ROOM := {
 ## built, but "one woodcutter" is not a country, it is an oversight — a village
 ## of eighty sent one. One hand per this many souls, at least one.
 const SOULS_PER_GATHERER := 12
+## THE SHORE: a cast brings home a string, not a fish. At one fish a cast a
+## fisher fed two people and a half — measured, tools/live/calibrate_live.gd in
+## a cove town: 2.2 meals a hand-year, against a farmhand's hundred and eighty —
+## so no town ever lived by the water. Ten feeds a couple of dozen, which is a
+## livelihood, and still well short of a field, which is the work of years.
+const SHORE_CATCH := 10
+## And more of them as the town grows: the shore is long, and three fishers
+## were never going to feed a harbour town of a hundred.
+const SOULS_PER_FISHER := 10
 
 ## What an idle villager is drawn to, and how strongly. Dancing outweighs the
 ## rest because a town at its leisure should LOOK like one.
@@ -59,6 +68,9 @@ static func room_for(town: Village, job: String) -> int:
 			return maxi(town.farms.size() * 2, 1)
 		"work":
 			return maxi(Workshop.posts(town), 1)
+		"fish":
+			@warning_ignore("integer_division")
+			return maxi(int(ROOM["fish"]), town.population() / SOULS_PER_FISHER)
 		"chop", "quarry":
 			@warning_ignore("integer_division")
 			var hands := maxi(town.population() / SOULS_PER_GATHERER, 1)

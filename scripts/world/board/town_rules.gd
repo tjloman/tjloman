@@ -79,7 +79,10 @@ const MATERIAL_BUILDS := 3.0
 ## hands only tend it and carry the harvest home.
 const FIELD_YIELD := 58.0        # a field, worked by FIELD_HANDS
 const FIELD_HANDS := 0.32
-const FISH_PER_HAND := 4.5
+## FISHING, MEASURED THE SAME WAY in a town founded on a shore (calibrate_live
+## -- cove): a cast brings home a string (VillageJobs.SHORE_CATCH), 32 and 22
+## meals a hand-year over two runs. Its harbour's boats land more on top.
+const FISH_PER_HAND := 27.0
 const BERRIES_PER_HAND := 3.0
 const HUNT_PER_HAND := 3.5
 ## The wild larders: meals each holds per unit of land, and how fast it refills
@@ -135,6 +138,9 @@ const WOOD_PER_HAND := 8.0
 const LUMBER_A_TREE := 51.0
 const WOOD_REGROW := 0.1
 const STONE_PER_HAND := 4.0
+## A barn's stock left unfed dies off at this share a year: a live herd unfed
+## starves in under a day, and a day is nearly two years.
+const HERD_THINS := 1.0
 ## Houses stand empty and fall when there are this many beds per soul and more.
 const EMPTY_BEDS := 1.8
 const FALL_RATE := 0.15
@@ -256,7 +262,9 @@ static func step(book: TownBook, land: TownLand, rain: float, dt: float) -> void
 	var hands := book.adults + book.elders * 0.4
 	var crop := clampf(0.4 + 0.6 * rain, 0.35, 1.25)
 	var sources := _sources(book, land, rain, crop)
-	var want := need * food_wanted(book.food / maxf(need, 0.001))
+	# AND ITS STOCK EATS, so it grows food for them too (Drove.trough).
+	var herd_eats := float(Drove.trough(roundi(book.kept))) / GameState.DAY_YEARS
+	var want := (need + herd_eats) * food_wanted(book.food / maxf(need + herd_eats, 0.001))
 	var made := 0.0
 	var at_work := {}
 	sources.sort_custom(func(a, b): return a[1] > b[1])
@@ -276,6 +284,7 @@ static func step(book: TownBook, land: TownLand, rain: float, dt: float) -> void
 	var eaten := minf(book.food, meal)
 	book.food -= eaten
 	var famine := 0.0 if meal <= 0.0 else 1.0 - eaten / meal
+	_keep_stock(book, herd_eats, dt)
 	book.food -= book.food * SPOIL * dt
 	book.food = minf(book.food, need * RESERVE_CAP_YEARS + 4.0)
 	var put_by := clampf(book.food / maxf(need * 0.5, 0.001), 0.0, 1.5)
@@ -319,6 +328,27 @@ static func step(book: TownBook, land: TownLand, rain: float, dt: float) -> void
 	elif famine < 0.05 and book.marks.get("hungry", false):
 		book.marks["hungry"] = false
 		book.note("There was enough to eat again.")
+
+
+## THE BARN'S STOCK, out of sight: it eats from the granary after the people
+## do — the live barn's trough, Drove.trough, which costs more a head the
+## bigger the herd — sends a share of itself to the store as meat when it is
+## fed, and dies off when it is not. It eats more than it sends: stock turns
+## grain into meat, at a loss.
+static func _keep_stock(book: TownBook, eats_a_year: float, dt: float) -> void:
+	if book.kept < 1.0:
+		book.kept = 0.0
+		return
+	var asks := eats_a_year * dt
+	var got := minf(book.food, asks)
+	book.food -= got
+	book.fodder += got
+	var fed := got / asks
+	var meat := book.kept * Drove.TO_THE_STORE * (book.kept_meat + Drove.DRESSED_OUT) \
+		/ GameState.DAY_YEARS * fed * dt
+	book.food += meat
+	book.herd_meat += meat
+	book.kept = maxf(book.kept * (1.0 - (1.0 - fed) * HERD_THINS * dt), 0.0)
 
 
 ## [name, meals a year per hand right now, most hands it can use]

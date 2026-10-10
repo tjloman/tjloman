@@ -65,6 +65,14 @@ static func book_of(record: Dictionary, now: float) -> TownBook:
 	book.food = float(store.get("plant", 0)) + float(store.get("meat", 0))
 	book.wood = float(store.get("lumber", 0))
 	book.stone = float(store.get("stone", 0))
+	# THE BARN'S STOCK as the live town last counted it.
+	var kept: Dictionary = record.get("kept", {})
+	book.kept = 0.0
+	var meat := 0.0
+	for kind: String in kept:
+		book.kept += float(kept[kind])
+		meat += float(kept[kind]) * float((Animal.SPECIES.get(kind, {}) as Dictionary).get("meat", 0))
+	book.kept_meat = meat / maxf(book.kept, 1.0)
 	book.years = float(record.get("at_years", now))
 	if not record.has("board"):
 		book.stage = _stage_for(book.population()) as TownBook.Stage
@@ -79,12 +87,17 @@ static func catch_up(record: Dictionary, land: TownLand, world_seed: int, now: f
 	var was_children := book.children
 	var was_adults := book.adults
 	var was_elders := book.elders
+	var was_kept := book.kept
 	var then := book.years
 	var steps := TownRules.catch_up(book, land, world_seed, now)
 	if steps == 0:
 		return 0
 	var away := book.years - then
 	_reconcile(record, book, away, [was_children, was_adults, was_elders])
+	var kept: Dictionary = (record.get("kept", {}) as Dictionary).duplicate()
+	for kind: String in kept:
+		kept[kind] = roundi(float(kept[kind]) * book.kept / maxf(was_kept, 1.0))
+	record["kept"] = kept
 	record["houses"] = book.houses.duplicate()
 	record["farms"] = book.farms
 	var store: Dictionary = (record.get("store", {}) as Dictionary).duplicate()

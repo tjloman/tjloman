@@ -754,7 +754,7 @@ func _fill_the_trough() -> void:
 	var mouths := stock_held()
 	if mouths <= 0:
 		return
-	var asks := maxi(int(float(mouths) * Drove.FEED_PER_HEAD), 1)
+	var asks := Drove.trough(mouths)
 	var got := village.store.take(FoodItem.FoodType.PLANT, asks)
 	if got <= 0:
 		return
@@ -993,12 +993,33 @@ func _take_in() -> void:
 		_herd_for(beast.species).absorb(beast)
 
 
+## A BARN STOCKED FROM A RECORD: a town brought back from a save, or from out
+## of sight (TownFold), has the head it kept — onto a barn keeping none of that
+## kind, which a town just raised again is.
+func stock_up(kind: String, many: int) -> void:
+	if trade != "barn" or many <= 0 or not Animal.SPECIES.has(kind):
+		return
+	for h in stock:
+		if is_instance_valid(h) and h.species == kind:
+			return
+	_herd_for(kind, many)
+
+
+## WHAT IT KEEPS, by kind: species -> head.
+func stock_kinds() -> Dictionary:
+	var out := {}
+	for h in stock:
+		if is_instance_valid(h) and h.alive() > 0:
+			out[h.species] = int(out.get(h.species, 0)) + h.alive()
+	return out
+
+
 ## The herd of this kind, opened if the barn has never kept one before.
-func _herd_for(kind: String) -> Herd:
+func _herd_for(kind: String, many := 0) -> Herd:
 	for h in stock:
 		if is_instance_valid(h) and h.species == kind:
 			return h
-	var made := Herd.create(kind, 0, null)
+	var made := Herd.create(kind, many, null)
 	made.keeper = village
 	made.position = Vector3(0, 0, Drove.PASTURE_OUT * 0.4)
 	add_child(made)

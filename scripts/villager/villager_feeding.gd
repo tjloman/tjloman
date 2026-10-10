@@ -144,7 +144,7 @@ static func go(who: Villager, delta: float) -> void:
 			return
 		if who._move_toward(who.target_bush.global_position, pace, delta):
 			if who.target_bush.take_berry():
-				Yields.note("berries", 1.0)
+				Yields.note("berries", 1.0, who.village)
 				who._dismount()
 				who.state = Villager.State.EATING
 				who._action_time = 2.0
@@ -210,7 +210,7 @@ static func meal(who: Villager) -> void:
 		var need := clampi(int(ceil(who.hunger / FoodItem.NUTRITION)), 1,
 			maxi(who.target_food.count, 1))
 		who.hunger = maxf(who.hunger - need * FoodItem.NUTRITION, 0.0)
-		Yields.ate(need)
+		Yields.ate(need, who.village)
 		who.target_food.count -= need
 		if who.target_food.count <= 0:
 			who.target_food.queue_free()
@@ -218,7 +218,7 @@ static func meal(who: Villager) -> void:
 			who.target_food.refresh_bundle()
 	else:
 		who.hunger = maxf(who.hunger - FoodItem.NUTRITION, 0.0)
-		Yields.ate(1)
+		Yields.ate(1, who.village)
 	who.target_food = null
 
 

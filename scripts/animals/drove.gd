@@ -72,7 +72,15 @@ const AT_THE_TROUGH := 0.4
 ## hundred and sixty head beside twelve hungry people: stock EAT now, so a herd
 ## too big for its village empties the granary and then thins itself, instead of
 ## standing there costing nothing and crowding the town out.
-const FEED_PER_HEAD := 0.09
+##
+## AND IT WAS STILL A MACHINE FOR MAKING FOOD: at 0.09 a head a fed herd sent
+## the store three meals of meat for every plant it ate. Now a head eats more
+## grain than it ever sends back as meat — keeping stock turns grain into meat,
+## at a loss, which is what it is — and A BIG HERD EATS MORE A HEAD: the grass
+## round a village grazes a few dozen, and every beast past that is fed from
+## the granary: a head of a herd of sixty eats twice what one of ten does.
+const FEED_PER_HEAD := 0.4
+const GRAZING_HOLDS := 40.0
 ## And what a full trough is worth against the herd's hunger — see Herd.hunger,
 ## which is ONE number for the whole herd and not one per beast.
 ##
@@ -181,3 +189,11 @@ static func form_up(rows: Array, many: int, heading: float) -> void:
 	# player's hand from half a street away. They are indoors. Indoors is here.
 	for i in range(walking, rows.size()):
 		rows[i]["offset"] = Vector2.ZERO
+
+
+## WHAT THE TROUGH ASKS OF THE GRANARY A DAY for a herd of `mouths`. See
+## FEED_PER_HEAD.
+static func trough(mouths: int) -> int:
+	if mouths <= 0:
+		return 0
+	return ceili(float(mouths) * FEED_PER_HEAD * (1.0 + float(mouths) / GRAZING_HOLDS))

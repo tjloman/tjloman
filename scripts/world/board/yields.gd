@@ -13,15 +13,18 @@ static var meals := {}
 ## AND WHAT IS EATEN, meal by meal, where it is eaten — not worked out from the
 ## store, which also feeds the beasts, the workshops and the builders.
 static var eaten := 0.0
+## AND WHOSE: with a town set, only what it brings in and eats is counted — two
+## towns side by side would otherwise be measured as one.
+static var town: Node = null
 
 
-static func note(source: String, amount: float) -> void:
-	if on:
+static func note(source: String, amount: float, by: Node) -> void:
+	if on and (town == null or by == town):
 		meals[source] = float(meals.get(source, 0.0)) + amount
 
 
-static func ate(many: float) -> void:
-	if on:
+static func ate(many: float, by: Node) -> void:
+	if on and (town == null or by == town):
 		eaten += many
 
 

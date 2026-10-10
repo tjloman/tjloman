@@ -19,7 +19,8 @@ const CHRONICLE_LINES := 16
 ## What is written down when it folds, and read back when it unfolds.
 const _KEPT: Array[String] = ["id", "name", "home", "converted", "belief", "diet", "no_plough",
 	"children", "adults", "elders", "women", "food", "wood", "stone", "houses", "farms",
-	"building", "tilling", "fish_stock", "game_stock", "berry_stock", "beast_stock", "wood_stock", "felled", "fed",
+	"building", "tilling", "fish_stock", "game_stock", "berry_stock", "beast_stock", "wood_stock",
+	"felled", "kept", "kept_meat", "fodder", "herd_meat", "fed",
 	"morale", "hardiness", "stage", "stage_years", "ruined", "years", "steps",
 	"leaning", "born", "starved", "taken", "aged_out", "lost_young", "left",
 	"arrived", "chronicle", "leaving", "marks"]
@@ -54,6 +55,8 @@ var game_stock := 1.0
 var berry_stock := 1.0
 var beast_stock := 1.0  # the man-eaters, as a share of what the land holds
 var wood_stock := 1.0   # the trees standing, as a share of what the land grows
+var kept := 0.0         # head its barns keep (Workshop.stock_kinds)
+var kept_meat := 0.0    # and a head's meat, on average over its kinds
 
 var fed := 1.0          # food against need, smoothed: what births listen to
 var morale := 60.0      # 0..100
@@ -73,6 +76,8 @@ var taken := 0.0        # by beasts
 var aged_out := 0.0
 var lost_young := 0.0   # children who did not live to grow up, of any cause
 var felled := 0.0       # trees cut down
+var fodder := 0.0       # grain its stock ate
+var herd_meat := 0.0    # and the meat its stock sent the store
 var left := 0.0         # walked away to somewhere else
 var arrived := 0.0
 var chronicle: Array = []   # [[year, line], ...], newest last

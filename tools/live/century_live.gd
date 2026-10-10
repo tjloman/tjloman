@@ -227,6 +227,35 @@ func _initialize() -> void:
 	check(cut >= TOWNS_EACH and stripped == 0,
 		"towns fell the woods round them (%d did), never past what is left standing (%d did)" % [cut, stripped])
 	check(regrown >= 1, "and a wood grows back once the felling eases (%d did)" % regrown)
+	# THE BARN, out of sight: a town keeping sixty head feeds them from its own
+	# grain — more than they send back as meat — and keeps them; on land that
+	# feeds nobody, they die off.
+	var keeper = book_script.new()
+	keeper.id = "the-keeper"
+	keeper.adults = 30.0
+	keeper.children = 10.0
+	keeper.elders = 3.0
+	keeper.food = 30.0
+	keeper.farms = 2
+	while keeper.beds() < 40:
+		keeper.houses.append(1)
+	keeper.kept = 60.0
+	keeper.kept_meat = 3.0
+	var pasture = land_script.made(KINDS["plains"])
+	while keeper.years < 30.0:
+		rules.step(keeper, pasture, 1.0, dt)
+	print("  a barn of sixty for thirty years: %.0f head left, %.0f grain eaten, %.0f meat sent, %.0f souls"
+		% [keeper.kept, keeper.fodder, keeper.herd_meat, keeper.population()])
+	check(keeper.kept >= 50.0 and keeper.fodder > keeper.herd_meat * 1.2,
+		"a town keeps its herd, and feeds it more grain than it gets back as meat")
+	var hungry = book_script.new()
+	hungry.id = "the-hungry-barn"
+	hungry.adults = 5.0
+	hungry.kept = 60.0
+	hungry.kept_meat = 3.0
+	while hungry.years < 10.0:
+		rules.step(hungry, land_script.made({"biome": "desert"}), 0.2, dt)
+	check(hungry.kept < 10.0, "a herd nobody can feed dies off (%.0f of sixty left)" % hungry.kept)
 	var tight: Array = by_kind["cramped"]
 	var grown_tight: int = tight.filter(func(t): return t["book"].stage >= 3).size()
 	check(grown_tight < TOWNS_EACH / 4, "rich land with little room to build stays small (%d of %d grew)"

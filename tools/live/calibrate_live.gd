@@ -2,9 +2,12 @@ extends SceneTree
 ## WHAT A LIVE TOWN ACTUALLY BRINGS IN — measured, headless, so the chessboard's
 ## rates for a town out of sight can be held to it:
 ##
-##     godot --headless --path . --script tools/live/calibrate_live.gd [-- days]
+##     godot --headless --path . --script tools/live/calibrate_live.gd [-- days [cove]]
 ##
-## Runs the home town for a few game days at four times speed with Yields
+## `cove` founds a town on a shore beside home and measures that instead: the
+## home town barely fishes, so its fishing rate is a handful of fish.
+##
+## Runs the town for a few game days at four times speed with Yields
 ## switched on, sampling how many hands are at each job, and prints, by source:
 ## meals a game year, meals a hand-year, and for the fields meals a field-year;
 ## berries a bush-year; and what a grown person actually eats a year. Those are
@@ -31,9 +34,16 @@ func _initialize() -> void:
 	var state: Node = root.get_node("/root/GameState")
 	var yields: Script = load("res://scripts/world/board/yields.gd")
 	var town: Node = current_scene.village
+	if args.size() > 1 and args[1] == "cove":
+		town = await _found_cove(current_scene.world_gen)
+		if town == null:
+			print("no shore beside home to found a cove town on")
+			quit(1)
+			return
 	await _frames(120)
 	var day_years: float = state.get_script().get_script_constant_map()["DAY_YEARS"]
 	yields.clear()
+	yields.town = town
 	yields.on = true
 	# The hand sets the world's speed every frame (it slows time while a rune is
 	# drawn): out of the way while this runs, or nothing speeds up.
@@ -104,3 +114,39 @@ func _bushes_near(at: Vector3, reach: float) -> int:
 				and bush.global_position.distance_to(at) < reach:
 			n += 1
 	return n
+
+
+## A TOWN ON A SHORE: on ground the world itself would found a town on, with
+## water a short walk off, so its people fish.
+func _found_cove(world: Node) -> Node:
+	var at := Vector2.INF
+	for ring in range(6, 40):
+		for i in 24:
+			var a := TAU * i / 24.0
+			var probe := Vector2(cos(a), sin(a)) * ring * 10.0
+			if not world.village_site_dry(probe.x, probe.y) or world.slope_at(probe.x, probe.y) > 0.8:
+				continue
+			for k in 8:
+				var b := TAU * k / 8.0
+				var wet := probe + Vector2(cos(b), sin(b)) * 28.0
+				if world.is_underwater(wet.x, wet.y):
+					at = probe
+					break
+			if at != Vector2.INF:
+				break
+		if at != Vector2.INF:
+			break
+	if at == Vector2.INF:
+		return null
+	var town = load("res://scripts/world/village.gd").new()
+	town.is_player_home = false
+	town.village_name = "Covewick"
+	town.position = Vector3(at.x, world.height_at(at.x, at.y), at.y)
+	world.add_sibling(town)
+	for i in 3000:
+		if town.founded:
+			break
+		await process_frame
+	await _frames(600)       # its founders come in stages
+	print("    Covewick founded at %.0f, %.0f with %d souls" % [at.x, at.y, town.my_villagers().size()])
+	return town

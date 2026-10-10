@@ -83,6 +83,12 @@ static func _town(town: Village, folk: Array) -> Array:
 	var need := 0.0
 	for one: Villager in folk:
 		need += TownRules.EAT_ADULT if one.is_adult() else TownRules.EAT_CHILD
+	# AND THE STOCK, whose trough comes out of the same store (Drove.trough).
+	var head := town.tamed_count()
+	var fodder := float(Drove.trough(head)) / GameState.DAY_YEARS
+	if head > 0:
+		rows.append(["Stock", "%d head, eating about %d grain a year" % [head, roundi(fodder)]])
+	need += fodder
 	var meals := town.store.total_food() if is_instance_valid(town.store) else 0
 	var lasts := "" if need <= 0.0 else " (about %.1f years)" % (meals / need)
 	rows.append(["In store", "%d meals%s, %d timber, %d stone" % [meals, lasts,

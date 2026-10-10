@@ -55,6 +55,10 @@ const CLASS_SIZE := 10
 ## stand about a pen and be watched; past that they wander off and the village
 ## cannot feed them. A BARN changes the question entirely — see `stock_room`.
 const MAX_TAMED := 8
+## A beast at the pen is fed once it is hungrier than this, and somebody is sent
+## to feed them once one is hungrier than PEN_GOING_HUNGRY.
+const PEN_FED_UNDER := 20.0
+const PEN_GOING_HUNGRY := 60.0
 ## What one barn adds — and it is now a number chosen to mean "as many as they
 ## can get" rather than one chosen to protect the frame rate.
 ##
@@ -611,19 +615,28 @@ func well_position() -> Vector3:
 	return pen_position()
 
 
-## True if any penned animal is going hungry (a villager should feed them).
-func penned_hungry() -> bool:
-	for a in tamed_animals:
-		if is_instance_valid(a) and a.hunger > 60.0:
-			return true
-	return false
+## How many at the pen are hungrier than `over`: a villager is sent once any
+## is going hungry, and carries out of the store a plant for each that wants it.
+func penned_mouths(over := PEN_FED_UNDER) -> int:
+	return _at_the_pen().filter(func(a): return a.hunger > over).size()
 
 
-## A villager arrived with feed from the store: every animal at the pen eats.
-func feed_penned() -> void:
+## A villager arrived with `plants` from the store: A PLANT A BEAST, hungriest
+## first. One plant once fed the whole pen, so a yard of forty cost the
+## granary what a yard of two did.
+func feed_penned(plants: int) -> void:
+	var hungry := _at_the_pen()
+	hungry.sort_custom(func(a, b): return a.hunger > b.hunger)
+	for a in hungry.slice(0, plants):
+		a.hunger = maxf(a.hunger - 60.0, 0.0)
+
+
+func _at_the_pen() -> Array:
+	var out := []
 	for a in tamed_animals:
 		if is_instance_valid(a) and a.global_position.distance_to(pen_position()) < 14.0:
-			a.hunger = maxf(a.hunger - 60.0, 0.0)
+			out.append(a)
+	return out
 
 
 ## The nearest of this village's fields (villagers work whichever is closest).
@@ -2146,6 +2159,8 @@ func to_dict() -> Dictionary:
 		"farms": farms.size(),
 		"edubba": has_edubba(),
 		"trades": _trade_counts(),
+		# AND THE STOCK ITS BARNS KEEP, by kind: a barn raised again is empty.
+		"kept": _kept_stock(),
 		"nest": nest != null and is_instance_valid(nest),
 		# HOW MUCH OF THE TOWN'S ROCK IS LEFT. It is raised fresh in `_ready`,
 		# so without this a village that had quarried its outcrop down to
@@ -2160,6 +2175,16 @@ func _house_sizes() -> Array:
 	for h in houses:
 		if is_instance_valid(h) and not h.under_construction:
 			out.append(int(h.size))
+	return out
+
+
+func _kept_stock() -> Dictionary:
+	var out := {}
+	for w in workshops:
+		if is_instance_valid(w) and w.trade == "barn":
+			var kinds: Dictionary = w.stock_kinds()
+			for kind: String in kinds:
+				out[kind] = int(out.get(kind, 0)) + int(kinds[kind])
 	return out
 
 
@@ -2291,6 +2316,13 @@ func _rebuild(data: Dictionary) -> void:
 			shop.position = to_local(shop_spot)
 			add_child(shop)
 			workshops.append(shop)
+	# ITS BARN'S STOCK, into the first barn it has back.
+	var kept: Dictionary = data.get("kept", {})
+	for w in workshops:
+		if is_instance_valid(w) and w.trade == "barn":
+			for kind: String in kept:
+				w.stock_up(kind, int(kept[kind]))
+			break
 	# THE TOWN'S ROCK, WORN DOWN TO WHERE IT WAS. Absent from an old save means
 	# an untouched outcrop, not a spent one — a missing key is a game that was
 	# saved before towns had rocks, and starting those towns with no stone would

@@ -31,10 +31,14 @@ What holds it there, in the source:
      leaves it out until it has grown back (Chunk._after_felling); a town out
      of sight fells timber from the land's woods, never past KEEP_STOCK, and
      what it cut is written back to the woods when it returns.
- 11. And with GODOT set, tools/live/century_live.gd runs the rules over 320
+ 11. A BARN'S STOCK GOES WITH ITS TOWN: written into the record by kind, fed
+     out of sight from the granary at the live barn's trough (Drove.trough) and
+     dying off unfed, and put back into the barn when the town is raised again.
+ 12. And with GODOT set, tools/live/century_live.gd runs the rules over 320
      towns for 180 game years and judges every one, fold_live.gd folds a
      believing town, lets twenty years pass, and brings it back, and
-     woods_live.gd fells, saves, sheds and regrows a wood.
+     woods_live.gd fells, saves, sheds and regrows a wood, and barn_live.gd
+     stocks a barn, writes it down and fills its trough.
 """
 import os
 import pathlib
@@ -136,6 +140,29 @@ def source(fail):
         fail.append("a town out of sight can fell its woods bare")
     if "TownLand.write_back_woods(" not in body(BOARD, "bring_up_to_date"):
         fail.append("a town's felling out of sight is not written back to the woods")
+    # FISHING IS A LIVELIHOOD: a cast brings home a string, the board's rate is
+    # the one measured in a cove town, and the fishers grow with the town.
+    jobs = (ROOT / "scripts/world/village_jobs.gd").read_text()
+    villager = (ROOT / "scripts/villager/villager.gd").read_text()
+    catch = re.search(r"^const SHORE_CATCH := (\d+)", jobs, re.M)
+    per_hand = const("FISH_PER_HAND")
+    print("  fishing: %s fish a cast, %s meals a hand-year out of sight"
+          % (catch.group(1) if catch else "?", per_hand))
+    if not catch or int(catch.group(1)) < 5 or '_begin_haul("meat", VillageJobs.SHORE_CATCH, "fish")' not in villager:
+        fail.append("a fisher brings home a fish a cast again: nobody can live by the water")
+    if per_hand is None or per_hand < 15.0:
+        fail.append("out of sight, a fisher brings in a fraction of what the live one does")
+    if "SOULS_PER_FISHER" not in body(jobs, "room_for"):
+        fail.append("three fishers, however big the harbour town grows")
+    step = body(RULES, "step")
+    if "_keep_stock(book, herd_eats, dt)" not in step or "Drove.trough(" not in step \
+            or "need + herd_eats" not in step:
+        fail.append("a folded town's stock eats nothing, or its town grows no food for it")
+    if '"kept": _kept_stock()' not in body(VILLAGE, "to_dict") \
+            or ".stock_up(kind" not in body(VILLAGE, "_rebuild") \
+            or 'record.get("kept"' not in body(FOLD, "book_of") \
+            or 'record["kept"] = kept' not in body(FOLD, "catch_up"):
+        fail.append("a barn's stock is lost when its town is folded, saved or raised again")
     if "Village.TOTEMS" not in body(HAND, "_readable") or "TownReading.of(" not in body(HUD, "_on_stone_read"):
         fail.append("holding a totem does not read the town")
 
@@ -145,7 +172,7 @@ def live(fail):
     if not godot or not pathlib.Path(godot).exists():
         print("  GODOT not set: not run in an engine here")
         return
-    for test in ("century_live.gd", "fold_live.gd", "woods_live.gd"):
+    for test in ("century_live.gd", "fold_live.gd", "woods_live.gd", "barn_live.gd"):
         ran = subprocess.run([godot, "--headless", "--path", str(ROOT), "--script",
                               "tools/live/" + test], capture_output=True, text=True, timeout=600)
         checks = [ln for ln in ran.stdout.splitlines() if ln.rstrip().endswith(("yes", "NO"))]
