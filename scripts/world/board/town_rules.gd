@@ -101,6 +101,21 @@ const CULLERS := 40.0
 ## take (House.SPECS effort), and the effort, timber and stone a spare pair of
 ## hands puts in a year.
 const SAMPLES_PER_FIELD := 4.0
+## ROOM, read off the ground (TownLand.room): a house takes its footprint and
+## the clear ground the live town keeps round it (Village.ROOM_ROUND_A_HOUSE),
+## a field its samples; and fields never take more than this share of the room,
+## so the town has somewhere left to sleep.
+const AROUND_A_HOUSE := 3.2
+const FIELD_SHARE := 0.6
+## A LIVE TOWN'S REACH: its ring of influence grows with its people
+## (Village._update_influence: 10 m and 1.8 m a soul, between 14 and 65), and it
+## builds within four-fifths of it (Village._build_search). The board builds
+## within the same.
+const INFLUENCE_BASE := 10.0
+const INFLUENCE_PER_SOUL := 1.8
+const INFLUENCE_LEAST := 14.0
+const INFLUENCE_MOST := 65.0
+const BUILDS_WITHIN := 0.8
 const FIELD_EFFORT := 30.0
 const EFFORT_PER_HAND := 40.0
 const WOOD_PER_HAND := 8.0
@@ -155,6 +170,36 @@ const OVERFLOW_LEAVES := 0.3
 const FAMINE_LEAVES := 0.05
 
 
+## HOW FAR OUT A TOWN OF `pop` BUILDS, in metres — the live town's own reach.
+static func build_reach(pop: float) -> float:
+	var ring := clampf(INFLUENCE_BASE + pop * INFLUENCE_PER_SOUL, INFLUENCE_LEAST, INFLUENCE_MOST)
+	return maxf(ring * BUILDS_WITHIN, 12.0)
+
+
+## THE GROUND A HOUSE OF THIS SIZE TAKES, in samples: its footprint (House.
+## SPECS width; a longhouse is longer than it is wide) and the clear ground
+## round it.
+static func house_room(size: int) -> float:
+	var wide: float = House.SPECS[size]["width"]
+	var deep := wide * (1.6 if size == House.Size.LONGHOUSE else 1.0)
+	return (wide + 2.0 * AROUND_A_HOUSE) * (deep + 2.0 * AROUND_A_HOUSE) \
+		/ (TownLand.SAMPLE * TownLand.SAMPLE)
+
+
+## THE GROUND A TOWN HAS BUILT AND FARMED OVER, in samples.
+static func room_used(book: TownBook) -> float:
+	var used := book.farms * SAMPLES_PER_FIELD
+	for size: int in book.houses:
+		used += house_room(size)
+	return used
+
+
+## How many fields the ground can take: field ground, and no more than its
+## share of the room.
+static func fields_room(land: TownLand) -> int:
+	return int(minf(land.fields, land.room * FIELD_SHARE) / SAMPLES_PER_FIELD)
+
+
 ## HOW MUCH FOOD WORK A TOWN PUTS IN, as a share of what it eats, against how
 ## many years of eating it has put by. Below the reserve: extra, to fill it over
 ## two years. From the reserve to the cap: falling away fast, to a third.
@@ -189,6 +234,7 @@ static func step(book: TownBook, land: TownLand, rain: float, dt: float) -> void
 	var pop := book.population()
 	if pop <= 0.0:
 		return                          # the hand ended it; the board does not
+	land = land.near(build_reach(pop))  # where a town this size builds and farms
 	# 2. THE HANDS, food first.
 	var need := (book.adults * EAT_ADULT + book.elders * EAT_ELDER
 		+ book.children * EAT_CHILD) * (RUIN_EATS if book.ruined else 1.0)
@@ -320,7 +366,7 @@ static func land_feeds(book: TownBook, land: TownLand) -> float:
 	var tools := 1.0 + book.stage * 0.12
 	var meals := 0.0
 	if not book.ruined:
-		meals += floorf(land.fields / SAMPLES_PER_FIELD) * FIELD_YIELD * tools
+		meals += fields_room(land) * FIELD_YIELD * tools
 	var kept := KEEP_STOCK * (1.0 - KEEP_STOCK)
 	var fish_room := land.water * FISH_PER_WATER + land.shore * FISH_PER_SHORE
 	meals += minf(fish_room * FISH_REGROW * kept, land.shore * 0.5 * FISH_PER_HAND * KEEP_STOCK * tools)
@@ -352,8 +398,9 @@ static func _build(book: TownBook, land: TownLand, hands: float, dt: float) -> v
 		return
 	var pop := book.population()
 	var cramped := pop + 2.0 > book.beds() * 0.95
-	var fields_room := int(land.fields / SAMPLES_PER_FIELD)
-	var more_fields := book.farms < fields_room and book.fed < 1.05 and not book.ruined
+	var free := land.room - room_used(book)
+	var more_fields := book.farms < fields_room(land) and free >= SAMPLES_PER_FIELD \
+		and book.fed < 1.05 and not book.ruined
 	if book.ruined and not _recover(book):
 		hands *= 0.3                    # they gather; they do not raise
 		cramped = false
@@ -375,13 +422,16 @@ static func _build(book: TownBook, land: TownLand, hands: float, dt: float) -> v
 		if book.tilling >= FIELD_EFFORT:
 			book.tilling -= FIELD_EFFORT
 			book.farms += 1
+			free -= SAMPLES_PER_FIELD   # and that ground is not there for a house
 	if cramped:
 		var size := House.Size.HUT if book.stage <= TownBook.Stage.HAMLET \
 			else (House.Size.HOUSE if book.stage == TownBook.Stage.VILLAGE else House.Size.LONGHOUSE)
 		var spec: Dictionary = House.SPECS[size]
 		book.building = minf(book.building + raise * EFFORT_PER_HAND * dt, float(spec["effort"]))
+		# NO ROOM, NO HOUSE: the ground within reach is built over. The town
+		# crowds in what it can and sends the rest out on the road (`_leave`).
 		if book.building >= float(spec["effort"]) and book.wood >= float(spec["lumber"]) \
-				and book.stone >= float(spec["stone"]):
+				and book.stone >= float(spec["stone"]) and free >= house_room(size):
 			book.building = 0.0
 			book.wood -= float(spec["lumber"])
 			book.stone -= float(spec["stone"])

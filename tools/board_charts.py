@@ -16,9 +16,10 @@ import json
 import statistics
 import sys
 
-KINDS = ["plains", "forest", "fishing", "wolves", "tundra", "desert", "ruin"]
+KINDS = ["plains", "forest", "fishing", "cramped", "wolves", "tundra", "desert", "ruin"]
 LABEL = {"plains": "Open plains", "forest": "Forest", "fishing": "Fishing cove",
          "wolves": "Wolf country", "tundra": "Tundra", "desert": "Desert",
+         "cramped": "Rich but cramped",
          "ruin": "Ruins, on any land"}
 STAGES = ["camp", "hamlet", "village", "town", "city"]
 EAT = {"children": 0.35, "adults": 0.85, "elders": 0.7}
@@ -252,7 +253,7 @@ th { color: var(--ink-2); font-weight: 600; }
   <header>
     <h1>The chessboard, a century and a half on</h1>
     <p class="lede">Every town here is a town out of sight: no people on the ground, only the numbers
-    the game steps a quarter-day at a time. Forty towns on each kind of land, every figure of the land
+    the game steps a quarter-day at a time. Forty towns on each of eight kinds of land, every figure of the land
     jittered, run for 180 game years &mdash; about 100 game days, or nine hours of play.</p>
     <div class="verdict">__CHIPS__</div>
   </header>
@@ -328,7 +329,9 @@ def verdicts(towns):
     died = over = crashed = 0
     for rows in towns.values():
         trace = [pop(r) for r in rows]
-        if any(p < min(3.0, trace[0]) - 0.01 for p in trace):
+        # The CSV rounds each of three ages to hundredths: a town on the floor
+        # can read 2.99 without having gone below it.
+        if any(p < min(3.0, trace[0]) - 0.02 for p in trace):
             died += 1
         if any(pop(r) > min(400.0, float(r["beds"]) + (14.0 if r.get("ruined") == "1" else 8.0))
                * 1.1 + 2.0 for r in rows):

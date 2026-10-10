@@ -50,7 +50,19 @@ func _initialize() -> void:
 	var town = load("res://scripts/world/village.gd").new()
 	town.is_player_home = false
 	town.village_name = "Foldwick"
-	var at := Vector2(150.0, 40.0)
+	# On ground the world itself would found a town on: dry and gentle all
+	# round, as WorldGen._maybe_found_village asks.
+	var at := Vector2.INF
+	for i in 400:
+		var probe := Vector2(130.0 + (i % 20) * 9.0, -90.0 + (i / 20) * 9.0)
+		if world.village_site_dry(probe.x, probe.y) and world.slope_at(probe.x, probe.y) < 0.8 \
+				and ["grassland", "savanna"].has(world.biome_at(probe.x, probe.y)):
+			at = probe
+			break
+	check(at != Vector2.INF, "there is good town ground beside home to found on")
+	if at == Vector2.INF:
+		_done()
+		return
 	town.position = Vector3(at.x, world.height_at(at.x, at.y), at.y)
 	world.add_sibling(town)
 	for i in 3000:
@@ -87,6 +99,9 @@ func _initialize() -> void:
 	# food put by must not bring them back still starving.
 	for one: Dictionary in record.get("folk", []):
 		one["hunger"] = 90.0
+	# And it had hunted its game hard: a third left. Twenty years of its own
+	# hunting and the land's growing back decide what stands when it returns.
+	(record["board"] as Dictionary)["game_stock"] = 0.3
 	# 2. Home stays.
 	var home: Array = get_nodes_in_group("village").filter(
 		func(v): return is_instance_valid(v) and v.is_player_home)
@@ -157,6 +172,43 @@ func _initialize() -> void:
 		% [meals, grown, hungry, glad / maxf(grown, 1), morale])
 	check(meals < need * 0.25 or hungry == 0, "with food put by, nobody comes back starving")
 	check(absf(glad / maxf(grown, 1) - morale) < 12.0, "and their spirits are the town's")
+	var wanted: int = (record.get("houses", []) as Array).size()
+	check(back.houses.size() >= wanted and back.farms.size() >= int(record.get("farms", 0)),
+		"every house and field its numbers built fits back on the ground (%d of %d houses, %d of %d fields)"
+		% [back.houses.size(), wanted, back.farms.size(), int(record.get("farms", 0))])
+	# AND THE HERDS ROUND IT ARE WHAT ITS HUNTING LEFT — remembered or standing.
+	var game_share := float(book.get("game_stock", 1.0))
+	var kinds: Dictionary = load("res://scripts/animals/animal.gd").get_script_constant_map()["SPECIES"]
+	var looked := 0
+	var over := 0
+	var span := 3
+	var centre: Vector2i = world.cell_of(at.x, at.y)
+	for dx in range(-span, span + 1):
+		for dz in range(-span, span + 1):
+			var cell := centre + Vector2i(dx, dz)
+			var mid := (Vector2(cell) + Vector2(0.5, 0.5)) * 48.0
+			var chunk = world.chunk_at(mid.x, mid.y)
+			if chunk != null and not chunk.terrain_only:
+				for n in chunk.get_children():
+					if n.get_script() != null and String(n.get_script().get_global_name()) == "Herd" \
+							and n.keeper == null and not bool((kinds.get(n.species, {}) as Dictionary)
+								.get("attacks_villagers", false)):
+						looked += 1
+						if n.alive() > roundi(n.born_head() * game_share):
+							over += 1
+	print("    hunting left %.0f%% of the game; %d herds round it looked at" % [game_share * 100.0, looked])
+	check(game_share < 1.0 and looked > 0 and over == 0,
+		"the herds round it stand at what its hunting left (%d of %d over)" % [over, looked])
+	# AND WHERE A LIVE TOWN CANNOT BUILD, NEITHER CAN ITS NUMBERS. Beside the
+	# lake at (150, 40) every way home crosses water: a live town founded there
+	# raises no house at all. The reading must find next to no room there, and
+	# plenty here.
+	var land_script: Script = load("res://scripts/world/board/town_land.gd")
+	var wet_room: float = land_script.read(world, Vector3(150.0, 0.0, 40.0)).near(52.0).room
+	var good_room: float = land_script.read(world, back.global_position).near(52.0).room
+	check(wet_room < good_room * 0.25,
+		"where a live town can build nothing, its reading finds little room (%.0f against %.0f)"
+		% [wet_room, good_room])
 	var history: Array = book.get("chronicle", [])
 	var told: bool = history.any(func(e): return String(e[1]).contains("years passed"))
 	check(told, "and its history says what happened (%d lines)" % history.size())

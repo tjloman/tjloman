@@ -89,6 +89,19 @@ def source(fail):
     for table in ("Chunk.STAND", "Chunk.BUSHES", "Chunk.BEASTS", "herds_remembered"):
         if table not in LAND:
             fail.append("TownLand does not read %s" % table)
+    LIVE_TEST = ("slope_at", "<= 0.9", "footprint_dry(", "2.2", "line_dry(")
+    land_test = body(LAND, "_buildable") + "\n" + "\n".join(
+        ln for ln in LAND.splitlines() if ln.startswith(("const BUILD_SLOPE", "const FOOTPRINT")))
+    live_test = body(VILLAGE, "_ground_for_building")
+    for part in ("slope_at", "footprint_dry(", "line_dry("):
+        if part not in land_test or part not in live_test:
+            fail.append("the room a town's numbers read is not asked the live builder's way (%s)" % part)
+    if "<= 0.9" not in live_test or "2.2" not in live_test or "BUILD_SLOPE := 0.9" not in land_test \
+            or "FOOTPRINT := 2.2" not in land_test:
+        fail.append("the room a town's numbers read uses a different slope or footprint from the live builder")
+    if "land.near(build_reach(pop))" not in body(RULES, "step") \
+            or "free >= house_room(size)" not in body(RULES, "_build"):
+        fail.append("a town's numbers build past the room their reach gives them")
     fold = body(BOARD, "fold")
     if "town.to_dict()" not in fold or "SaveGame.village_memory.append(record)" not in fold:
         fail.append("a folded town is not remembered as its own record")

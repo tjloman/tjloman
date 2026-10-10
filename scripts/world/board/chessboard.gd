@@ -27,9 +27,6 @@ const LOOK_EVERY := 1.0
 ## between the two is what stops a town folding and unfolding on a border.
 const FOLD_PAST := 1
 const FOLD_AFTER := 8.0
-## A town's land is read within its ring, but never less or more than this.
-const READ_LEAST := 40.0
-const READ_MOST := 120.0
 ## The share of a folded town's grown people at prayer at any moment, when it
 ## was never watched long enough to have a rate of its own.
 const AT_PRAYER := 0.04
@@ -74,12 +71,39 @@ static func bring_up_to_date(record: Dictionary, world: WorldGen) -> void:
 	var land: TownLand = null
 	if record.has("land"):
 		land = TownLand.from_dict(record["land"])
-	if land == null or land.edition != world.land_edition():
-		land = TownLand.read(world, spot, READ_LEAST)
+	if land == null or land.edition != world.land_edition() or land.rings.is_empty():
+		land = TownLand.read(world, spot, neighbours(world.get_tree(), Vector2(spot.x, spot.z), record))
 		record["land"] = land.to_dict()
 	var clock := Ledger.swap(&"Chessboard:alibi", String(record.get("name", "")))
 	TownFold.catch_up(record, land, world.world_seed, GameState.game_years)
+	# AND WHAT ITS HUNTING LEFT is what the herds round it are when they stand.
+	var board: Dictionary = record.get("board", {})
+	TownLand.write_back(world, Vector2(spot.x, spot.z), float(board.get("game_stock", 1.0)),
+		float(board.get("beast_stock", 1.0)))
 	Ledger.resume(clock)
+
+
+## WHERE EVERY OTHER TOWN STANDS that could share ground with one at `here`,
+## standing or out of sight — so each reads only the ground nearer itself.
+## `except` is the town itself: its node, or its record.
+static func neighbours(tree: SceneTree, here: Vector2, except: Variant) -> Array:
+	var near := TownLand.REACH * 2.0
+	var out := []
+	for node in tree.get_nodes_in_group("village"):
+		if is_same(node, except) or not is_instance_valid(node):
+			continue
+		var at := Vector2((node as Node3D).global_position.x, (node as Node3D).global_position.z)
+		if at.distance_to(here) < near:
+			out.append(at)
+	for record: Dictionary in SaveGame.village_memory:
+		if is_same(record, except):
+			continue
+		var pos: Array = record.get("pos", [])
+		if pos.size() >= 2:
+			var at := Vector2(float(pos[0]), float(pos[1]))
+			if at.distance_to(here) < near and at.distance_to(here) > 1.0:
+				out.append(at)
+	return out
 
 
 func _fold_the_far(world: WorldGen, eye: Vector2i) -> void:
@@ -117,8 +141,17 @@ func _may_fold(town: Village) -> bool:
 func fold(town: Village, world: WorldGen) -> void:
 	var clock := Ledger.swap(&"Chessboard:fold", town.village_name)
 	var record := town.to_dict()
-	var reach := clampf(town.influence_radius, READ_LEAST, READ_MOST)
-	record["land"] = TownLand.read(world, town.global_position, reach).to_dict()
+	var here := Vector2(town.global_position.x, town.global_position.z)
+	var land := TownLand.read(world, town.global_position, neighbours(get_tree(), here, town))
+	record["land"] = land.to_dict()
+	# THE LARDERS START WHERE THE WORLD IS: the share of the beasts round it
+	# still alive, hunting and all, not a land restocked by being looked away from.
+	var board: Dictionary = (record.get("board", {}) as Dictionary).duplicate(true)
+	if land.game > 0.0:
+		board["game_stock"] = clampf(land.game_now / land.game, 0.05, 1.0)
+	if land.predators > 0.0:
+		board["beast_stock"] = clampf(land.predators_now / land.predators, 0.02, 1.0)
+	record["board"] = board
 	SaveGame.village_memory.append(record)
 	_far.erase(town)
 	town.queue_free()

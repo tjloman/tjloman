@@ -28,19 +28,23 @@ extends SceneTree
 const TOWNS_EACH := 40
 const YEARS := 180.0
 const SETTLE := 30.0
+## `room` is ground a house or a field could stand on within a full-grown
+## town's reach (52 m: about 130 samples where all of it is good ground).
 const KINDS := {
-	"plains": {"fields": 250.0, "bushes": 10.0, "wood": 15.0, "game": 120.0,
+	"plains": {"fields": 250.0, "room": 130.0, "bushes": 10.0, "wood": 15.0, "game": 120.0,
 		"predators": 0.5, "biome": "grassland"},
-	"fishing": {"water": 150.0, "shore": 30.0, "fields": 10.0, "bushes": 5.0, "wood": 8.0,
-		"game": 30.0, "predators": 0.3, "biome": "grassland"},
-	"forest": {"fields": 80.0, "bushes": 14.0, "wood": 40.0, "game": 160.0,
+	"fishing": {"water": 150.0, "shore": 30.0, "fields": 10.0, "room": 55.0, "bushes": 5.0,
+		"wood": 8.0, "game": 30.0, "predators": 0.3, "biome": "grassland"},
+	"forest": {"fields": 80.0, "room": 110.0, "bushes": 14.0, "wood": 40.0, "game": 160.0,
 		"predators": 3.0, "biome": "forest"},
-	"wolves": {"fields": 20.0, "bushes": 4.0, "wood": 20.0, "game": 60.0,
+	"wolves": {"fields": 20.0, "room": 80.0, "bushes": 4.0, "wood": 20.0, "game": 60.0,
 		"predators": 12.0, "biome": "forest"},
-	"desert": {"fields": 5.0, "bushes": 0.0, "wood": 2.0, "game": 25.0,
+	"desert": {"fields": 5.0, "room": 120.0, "bushes": 0.0, "wood": 2.0, "game": 25.0,
 		"predators": 1.5, "biome": "desert"},
-	"tundra": {"fields": 10.0, "bushes": 0.0, "wood": 6.0, "game": 250.0,
+	"tundra": {"fields": 10.0, "room": 120.0, "bushes": 0.0, "wood": 6.0, "game": 250.0,
 		"predators": 8.0, "biome": "tundra"},
+	"cramped": {"fields": 250.0, "room": 24.0, "bushes": 10.0, "wood": 15.0, "game": 120.0,
+		"predators": 0.5, "biome": "grassland"},
 	"ruin": {},
 }
 ## Where a town may honestly do no better than hang on at the floor: land too
@@ -71,13 +75,15 @@ func _initialize() -> void:
 		+ "fed,morale,hardiness,leaning,born,starved,taken,aged_out,lost_young,left,ruined"])
 	var by_kind := {}
 	var over_ever := {}
+	var overbuilt := {}
+	var was_used := {}
 	var t0 := Time.get_ticks_msec()
 	var stepped := 0
 	for kind: String in KINDS:
 		by_kind[kind] = []
 		for n in TOWNS_EACH:
 			# A ruin can be anywhere: on any land but its own.
-			var lands: Array = KINDS.keys().filter(func(k): return k != "ruin")
+			var lands: Array = KINDS.keys().filter(func(k): return k != "ruin" and k != "cramped")
 			var on: String = kind if kind != "ruin" else lands[n % lands.size()]
 			var spec: Dictionary = (KINDS[on] as Dictionary).duplicate()
 			for key: String in spec:
@@ -117,6 +123,13 @@ func _initialize() -> void:
 						book.aged_out, book.lost_young, book.left, int(book.ruined)])
 					if book.population() > room_of(rules, book) * 1.1 + 2.0:
 						over_ever[book.id] = true
+					# Built PAST its room: more ground used than there is, and more
+					# than a year ago — a town founded cramped is not the board's doing.
+					var here = land.near(rules.build_reach(book.population()))
+					var used: float = rules.room_used(book)
+					if used > here.room + 0.01 and used > float(was_used.get(book.id, INF)):
+						overbuilt[book.id] = true
+					was_used[book.id] = used
 			(by_kind[kind] as Array).append({"book": book, "trace": trace, "land": land})
 	var ms := Time.get_ticks_msec() - t0
 	print("THE CENTURY: %d towns, %.0f game years each, %d steps in %d ms (%.0f us a step)"
@@ -187,6 +200,11 @@ func _initialize() -> void:
 		check(crashes == 0, "%s: none crashes twice after settling (%d do)" % [kind, crashes])
 		check(shaky == 0, "%s: every one holds steady over its last sixty years (%d swing)" % [kind, shaky])
 
+	check(overbuilt.is_empty(), "no town ever builds past the ground it has room on (%d did)" % overbuilt.size())
+	var tight: Array = by_kind["cramped"]
+	var grown_tight: int = tight.filter(func(t): return t["book"].stage >= 3).size()
+	check(grown_tight < TOWNS_EACH / 4, "rich land with little room to build stays small (%d of %d grew)"
+		% [grown_tight, TOWNS_EACH])
 	# What the land should make of them.
 	var plains: Array = by_kind["plains"]
 	var grown := plains.filter(func(t): return t["book"].stage >= 3).size()
