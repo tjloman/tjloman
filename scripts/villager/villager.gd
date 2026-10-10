@@ -1823,6 +1823,8 @@ func _deliver_carry() -> void:
 			"meat": village.store.add(FoodItem.FoodType.MEAT, _carry_amount)
 			"lumber": village.store.add_lumber(_carry_amount)
 			"stone": village.store.add_stone(_carry_amount)
+		if _carry_kind == "plant" or _carry_kind == "meat":
+			Yields.note(_carry_job, _carry_amount)   # see Yields: off unless measuring
 		if _carry_announce != "" and village.is_player_home:
 			GameState.announce(_carry_announce)
 	_clear_carry()

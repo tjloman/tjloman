@@ -303,6 +303,7 @@ func _banked() -> bool:
 				> FoodStore.PLATFORM_RADIUS + 1.0:
 			continue
 		store.add(FoodItem.FoodType.MEAT, meat)
+		Yields.note("butcher", meat)
 		var town := store.get_parent() as Village
 		if town != null and is_instance_valid(town):
 			town.wonder.given(town, "meat", meat, 0.0,

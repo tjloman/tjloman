@@ -144,6 +144,7 @@ static func go(who: Villager, delta: float) -> void:
 			return
 		if who._move_toward(who.target_bush.global_position, pace, delta):
 			if who.target_bush.take_berry():
+				Yields.note("berries", 1.0)
 				who._dismount()
 				who.state = Villager.State.EATING
 				who._action_time = 2.0

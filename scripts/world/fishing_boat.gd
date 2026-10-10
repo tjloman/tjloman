@@ -253,6 +253,7 @@ func _land_the_catch() -> void:
 	if home_store == null or not is_instance_valid(home_store):
 		return
 	home_store.add(FoodItem.FoodType.MEAT, CATCH)
+	Yields.note("boat", CATCH)
 
 
 ## TAKEN UP BY A HAND. The hand freezes what it holds, and a frozen boat that
