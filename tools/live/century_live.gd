@@ -28,12 +28,15 @@ extends SceneTree
 const TOWNS_EACH := 40
 const YEARS := 180.0
 const SETTLE := 30.0
+## A COVE has less than one field's worth of flat ground: at the live game's
+## yields (a field feeds dozens; see TownRules.FIELD_YIELD) two fields would make
+## any cove a farming town, and fishing is what a town does when it cannot farm.
 ## `room` is ground a house or a field could stand on within a full-grown
 ## town's reach (52 m: about 130 samples where all of it is good ground).
 const KINDS := {
 	"plains": {"fields": 250.0, "room": 130.0, "bushes": 10.0, "wood": 15.0, "game": 120.0,
 		"predators": 0.5, "biome": "grassland"},
-	"fishing": {"water": 150.0, "shore": 30.0, "fields": 10.0, "room": 55.0, "bushes": 5.0,
+	"fishing": {"water": 150.0, "shore": 30.0, "fields": 3.0, "room": 55.0, "bushes": 5.0,
 		"wood": 8.0, "game": 30.0, "predators": 0.3, "biome": "grassland"},
 	"forest": {"fields": 80.0, "room": 110.0, "bushes": 14.0, "wood": 40.0, "game": 160.0,
 		"predators": 3.0, "biome": "forest"},

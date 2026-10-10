@@ -261,9 +261,9 @@ func _initialize() -> void:
 	var vegan = load("res://scripts/world/board/town_book.gd").new()
 	vegan.diet = 0
 	vegan.farms = 3
-	var kinds: Array = rules._sources(vegan, lake, 1.0, 1.0).map(func(s): return s[0])
-	check(not kinds.has("fish") and not kinds.has("hunt") and kinds.has("fields"),
-		"out of sight, a vegan town farms and gathers and neither hunts nor fishes (%s)" % [kinds])
+	var works: Array = rules._sources(vegan, lake, 1.0, 1.0).map(func(s): return s[0])
+	check(not works.has("fish") and not works.has("hunt") and works.has("fields"),
+		"out of sight, a vegan town farms and gathers and neither hunts nor fishes (%s)" % [works])
 	_done()
 
 

@@ -42,7 +42,7 @@ const ELDER_YEARS := 12.5
 ## meal and a half a day, and a day is 1.8 years. Children eat nothing in the
 ## live town — they are taken out of its economy altogether — but out here a
 ## poor town's children are what it cannot always feed.
-const EAT_ADULT := 0.85
+const EAT_ADULT := 0.8          # measured: 0.79 (tools/live/calibrate_live.gd)
 const EAT_ELDER := 0.7
 const EAT_CHILD := 0.35
 ## What a town eats a head, children, adults and elders together.
@@ -71,11 +71,14 @@ const RESERVE_YEARS := 2.0
 const RESERVE_CAP_YEARS := 5.0
 const MATERIAL_BUILDS := 3.0
 
-## WHAT A PAIR OF HANDS BRINGS IN A YEAR, at a full larder and a fair sky.
-## About what three or four people eat, from each farmer; fishing a good shore
-## is the best work there is.
-const FIELD_YIELD := 8.0         # a field, worked by FIELD_HANDS
-const FIELD_HANDS := 2.0
+## WHAT A FIELD AND A PAIR OF HANDS BRING IN A YEAR, at a full larder and a
+## fair sky. MEASURED, not chosen: tools/live/calibrate_live.gd ran the home
+## town for three game days, twice, and its fields brought in 55 and 61 meals a
+## field-year, tended and harvested by about one farmer to every three fields —
+## a live field mostly grows by itself (Farm.BASE_GROWTH_PER_SEC), and the
+## hands only tend it and carry the harvest home.
+const FIELD_YIELD := 58.0        # a field, worked by FIELD_HANDS
+const FIELD_HANDS := 0.32
 const FISH_PER_HAND := 4.5
 const BERRIES_PER_HAND := 3.0
 const HUNT_PER_HAND := 3.5
