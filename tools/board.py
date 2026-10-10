@@ -18,8 +18,17 @@ What holds it there, in the source:
   5. THE BEASTS CAN BE KEPT IN CHECK: a town's guard culls them.
   6. ONE SOURCE FOR THE LAND: a chunk scatters bushes and beasts from the very
      tables TownLand reckons a town's land from (Chunk.BUSHES, BEASTS, STAND).
-  7. And with GODOT set, tools/live/century_live.gd runs the rules over 280
-     towns for 180 game years and judges every one.
+  7. A TOWN OUT OF SIGHT IS FOLDED INTO ITS RECORD and remembered with every
+     other (SaveGame.village_memory); taken back, it is first CAUGHT UP
+     (SaveGame.recall -> Chessboard.bring_up_to_date), its people reconciled
+     BY NAME, the dead chosen from those past their span, and everyone set to
+     the state the town is in -- nobody comes back starving to a full granary.
+  8. A PERSON'S SPAN IS SAVED and a restored one always has years left.
+  9. THE TOTEM CAN BE HELD: a hoverable body in the totem group, which the hand
+     reads like the nest wall, opening TownReading in the stone panel.
+ 10. And with GODOT set, tools/live/century_live.gd runs the rules over 280
+     towns for 180 game years and judges every one, and fold_live.gd folds a
+     believing town, lets twenty years pass, and brings it back.
 """
 import os
 import pathlib
@@ -31,6 +40,12 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 RULES = (ROOT / "scripts/world/board/town_rules.gd").read_text()
 LAND = (ROOT / "scripts/world/board/town_land.gd").read_text()
 CHUNK = (ROOT / "scripts/world/chunk.gd").read_text()
+BOARD = (ROOT / "scripts/world/board/chessboard.gd").read_text()
+FOLD = (ROOT / "scripts/world/board/town_fold.gd").read_text()
+SAVE = (ROOT / "scripts/save_game.gd").read_text()
+VILLAGE = (ROOT / "scripts/world/village.gd").read_text()
+HAND = (ROOT / "scripts/player/divine_hand.gd").read_text()
+HUD = (ROOT / "scripts/ui/hud.gd").read_text()
 
 
 def body(text, name):
@@ -74,6 +89,23 @@ def source(fail):
     for table in ("Chunk.STAND", "Chunk.BUSHES", "Chunk.BEASTS", "herds_remembered"):
         if table not in LAND:
             fail.append("TownLand does not read %s" % table)
+    fold = body(BOARD, "fold")
+    if "town.to_dict()" not in fold or "SaveGame.village_memory.append(record)" not in fold:
+        fail.append("a folded town is not remembered as its own record")
+    if "Chessboard.bring_up_to_date(" not in body(SAVE, "recall"):
+        fail.append("a town is taken back without its years away")
+    rec = body(FOLD, "_reconcile")
+    if "_due(" not in rec or "_condition(one, book, rng)" not in rec:
+        fail.append("the alibi does not take the dead from those past their span, or does not "
+                    "set the living to the state of their town")
+    if '"lifespan": v.lifespan' not in body(VILLAGE, "to_dict") \
+            or 'entry.get("lifespan"' not in body(VILLAGE, "_restore_villager"):
+        fail.append("a person's span is not saved, or a restored one can die on the first morning")
+    totem = body(VILLAGE, "_build_totem")
+    if "add_to_group(TOTEMS)" not in totem or "collision_layer = 4" not in totem:
+        fail.append("the totem is not something the hand can hold")
+    if "Village.TOTEMS" not in body(HAND, "_readable") or "TownReading.of(" not in body(HUD, "_on_stone_read"):
+        fail.append("holding a totem does not read the town")
 
 
 def live(fail):
@@ -81,13 +113,15 @@ def live(fail):
     if not godot or not pathlib.Path(godot).exists():
         print("  GODOT not set: not run in an engine here")
         return
-    ran = subprocess.run([godot, "--headless", "--path", str(ROOT), "--script",
-                          "tools/live/century_live.gd"], capture_output=True, text=True,
-                         timeout=600)
-    checks = [ln for ln in ran.stdout.splitlines() if ln.rstrip().endswith(("yes", "NO"))]
-    print("  in Godot: %d checks, %s" % (len(checks), "all pass" if ran.returncode == 0 else "FAILING"))
-    if ran.returncode != 0:
-        fail.append("in Godot:\n" + "\n".join(ln for ln in checks if ln.rstrip().endswith("NO")))
+    for test in ("century_live.gd", "fold_live.gd"):
+        ran = subprocess.run([godot, "--headless", "--path", str(ROOT), "--script",
+                              "tools/live/" + test], capture_output=True, text=True, timeout=600)
+        checks = [ln for ln in ran.stdout.splitlines() if ln.rstrip().endswith(("yes", "NO"))]
+        print("  %s in Godot: %d checks, %s" % (test, len(checks),
+                                                "all pass" if ran.returncode == 0 else "FAILING"))
+        if ran.returncode != 0:
+            fail.append("%s in Godot:\n" % test + "\n".join(
+                ln for ln in checks if ln.rstrip().endswith("NO")))
 
 
 def main():

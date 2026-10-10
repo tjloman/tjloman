@@ -733,10 +733,13 @@ func describe(target: Node3D) -> String:
 	if target.has_method("hover_text"):
 		return str(target.call("hover_text"))
 	if target is CreatureNest:
-		# THE ONE THING IN THE WORLD THAT ANSWERS A LONG PRESS WITH WORDS, and
-		# nothing anywhere said so. A player who does not already know holds
-		# nothing, because there is no reason to try.
+		# ONE OF THE TWO THINGS IN THE WORLD THAT ANSWER A LONG PRESS WITH
+		# WORDS, and nothing anywhere said so. A player who does not already
+		# know holds nothing, because there is no reason to try.
 		return "The Nest — hold on the stone wall to read it"
+	if target.is_in_group(Village.TOTEMS) and target.has_meta("town") \
+			and is_instance_valid(target.get_meta("town")):
+		return "%s's totem — hold on it to read the town" % (target.get_meta("town") as Village).village_name
 	if target.has_meta("hover_name"):
 		return str(target.get_meta("hover_name"))
 	return target.name
@@ -851,7 +854,7 @@ func _on_pointer_button(event: InputEventMouseButton) -> void:
 			_charging = false
 			_tying = 0.0
 			return
-		_reading = hover_target is CreatureNest and state == HandState.IDLE
+		_reading = _readable(hover_target) and state == HandState.IDLE
 		# A HAND HELD ON THE CREATURE CALLS IT — on a mouse as on a thumb, since
 		# there is no other way to stroke it on either. Moved before it fills, it
 		# was the land you grabbed, exactly as a summons is. See Audience.
@@ -1563,8 +1566,8 @@ func _tick_press_charge(delta: float) -> void:
 		# a ring under the finger and nothing has ever drawn it, so the hover
 		# line does the work instead, and it works the same on a thumb as on a
 		# mouse.
-		hover_info_changed.emit("Reading the stone... %d%%"
-			% int(charge_fraction() * 100.0))
+		hover_info_changed.emit("Reading the %s... %d%%"
+			% ["stone" if hover_target is CreatureNest else "totem", int(charge_fraction() * 100.0)])
 		return
 	if not _charging:
 		return
@@ -1589,6 +1592,11 @@ func _tick_greeting(delta: float) -> void:
 	_greeting = null
 	hover_info_changed.emit("")
 	audience.open(called, camera_rig)
+
+
+## WHAT ANSWERS A LONG PRESS WITH WORDS: the nest wall, and a town's totem.
+func _readable(target: Variant) -> bool:
+	return is_instance_valid(target) and (target is CreatureNest or (target as Node).is_in_group(Village.TOTEMS))
 
 
 ## The land, found once.

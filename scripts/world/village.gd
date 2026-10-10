@@ -13,6 +13,10 @@ enum Diet { VEGAN, OMNIVORE, CARNIVORE, CANNIBAL }
 const CONVERT_BELIEF := 40.0
 const BELIEF_DECAY_PER_SEC := 0.02
 const WORSHIP_PRAYER_PER_SEC := 1.5
+## Seconds a town's prayer is averaged over, for while it is out of sight.
+const PRAYER_AVERAGED := 60.0
+## The group a totem is in: the hand reads a town by holding one.
+const TOTEMS := "totem"
 const WORSHIP_BELIEF_PER_SEC := 0.05
 const MIN_INFLUENCE := 14.0
 ## How far from an atrocity a child or an expecting mother bolts. Wider than the
@@ -252,6 +256,10 @@ var diet := Diet.OMNIVORE
 
 
 var totem: Node3D
+## WHAT THE CHESSBOARD KNOWS OF THIS TOWN from its time out of sight: its
+## history, its tallies, how hard it has grown (TownBook.to_dict). Carried
+## through every visit and every save; read by the totem (TownReading).
+var board: Dictionary = {}
 var farm: Farm                 # the founding field (always farms[0])
 var farms: Array[Farm] = []
 var store: FoodStore
@@ -321,6 +329,7 @@ var _children := 0
 var _teachers := 0
 var _jobs := {}
 var _worshippers := 0
+var _prayer_rate := 0.0   # prayer a second, averaged: see PRAYER_AVERAGED
 var _dancers := 0
 ## Mothers expecting, counted at the tally. See `at_capacity`.
 var _expecting := 0
@@ -509,8 +518,23 @@ func _search_slowly(search: BuildSearch) -> bool:
 	return false
 
 
+## THE TOTEM, and something the hand can hold on: hold it and the town is read
+## (TownReading). On the hoverable layer, so villagers walk through it as they
+## always have.
 func _build_totem() -> void:
-	totem = Node3D.new()
+	var post := StaticBody3D.new()
+	post.collision_layer = 4
+	post.collision_mask = 0
+	var shape := CollisionShape3D.new()
+	var column := CylinderShape3D.new()
+	column.radius = 0.7
+	column.height = 5.0
+	shape.shape = column
+	shape.position = Vector3(0, 2.5, 0)
+	post.add_child(shape)
+	post.add_to_group(TOTEMS)
+	post.set_meta("town", self)
+	totem = post
 	totem.name = "Totem"
 	totem.add_child(Util.cylinder(0.45, 4.0, Color(0.55, 0.4, 0.25), Vector3(0, 2, 0)))
 	_totem_orb = Util.sphere(0.6, Color(1.0, 0.85, 0.3), Vector3(0, 4.4, 0), converted)
@@ -1132,11 +1156,15 @@ func _process(delta: float) -> void:
 	# the field. See Scheduler.MOST_OWED.
 	_sim_last = Scheduler.now()
 	var worshippers := _worshippers
+	var praying := 0.0
 	if worshippers > 0:
 		if converted:
 			var conviction := lerpf(0.75, 1.25, (average_morality() + 100.0) / 200.0)
-			GameState.add_prayer_power(worshippers * WORSHIP_PRAYER_PER_SEC * conviction * delta)
+			praying = worshippers * WORSHIP_PRAYER_PER_SEC * conviction
+			GameState.add_prayer_power(praying * delta)
 			change_belief(worshippers * WORSHIP_BELIEF_PER_SEC * delta)
+	# What it prays, on average: a folded town keeps praying at this rate.
+	_prayer_rate += (praying - _prayer_rate) * minf(delta / PRAYER_AVERAGED, 1.0)
 	change_belief(-BELIEF_DECAY_PER_SEC * delta)
 
 	# The maulings under way, and the town's memory of wonders. Both are small
@@ -1460,7 +1488,7 @@ func _update_influence() -> void:
 	if is_player_home:
 		# Every converted village widens the reservoir of prayer you can
 		# hold — the gate behind the mightiest, most constant miracles.
-		var believers := 0
+		var believers := Chessboard.remembered_believers()
 		for v in get_tree().get_nodes_in_group("village"):
 			if (v as Village).converted:
 				believers += 1
@@ -2081,13 +2109,16 @@ func to_dict() -> Dictionary:
 	var folk := []
 	for v in my_villagers():
 		folk.append({
-			"name": v.villager_name, "female": v.is_female, "age": v.age,
+			"name": v.villager_name, "female": v.is_female, "age": v.age, "lifespan": v.lifespan,
+			"happiness": v.happiness,
 			"morality": v.morality, "health": v.health, "weapon": v.weapon,
 			"hunger": v.hunger, "energy": v.energy,
 		})
 	return {
 		"name": village_name, "home": is_player_home,
 		"pos": [global_position.x, global_position.z],
+		# WHEN, and what the board knew: a folded town is stepped on from here.
+		"at_years": GameState.game_years, "board": board, "prayer_rate": _prayer_rate,
 		"converted": converted, "belief": belief, "diet": int(diet),
 		"resolve": resolve, "grudge": grudge, "attention": attention,
 		"hive": hive.to_dict(),
@@ -2286,6 +2317,8 @@ func _rebuild(data: Dictionary) -> void:
 ## replaced wholesale by the saved roster.
 func from_dict(data: Dictionary) -> void:
 	village_name = String(data.get("name", village_name))
+	board = (data.get("board", {}) as Dictionary).duplicate(true)
+	_prayer_rate = float(data.get("prayer_rate", 0.0))
 	hive.from_dict(data.get("hive", {}))
 	feud.from_dict(data.get("feud", {}))
 	converted = bool(data.get("converted", converted))
@@ -2317,6 +2350,10 @@ func _restore_villager(entry: Dictionary) -> void:
 	var v := Villager.new()
 	v.village = self
 	v.age = float(entry.get("age", 25.0))
+	# NOBODY DIES ON THE FIRST MORNING BACK, either: a lifespan used to be rolled
+	# afresh here, so an elder brought back from a save — or from years away
+	# (TownFold) — could be past it before they had taken a step.
+	v.lifespan = maxf(float(entry.get("lifespan", v.lifespan)), v.age + randf_range(1.0, 8.0))
 	add_child(v)
 	# Name and sex are set in _ready, so overwrite them once it is in the tree.
 	v.is_female = bool(entry.get("female", true))
@@ -2326,6 +2363,7 @@ func _restore_villager(entry: Dictionary) -> void:
 	v.weapon = String(entry.get("weapon", ""))
 	v.hunger = float(entry.get("hunger", 30.0))
 	v.energy = float(entry.get("energy", 80.0))
+	v.happiness = float(entry.get("happiness", v.happiness))
 	v.position = _grounded(Vector3(randf_range(-6, 6), 0, randf_range(-6, 6)), 0.5) \
 		+ Vector3(0, 0.6, 0)
 

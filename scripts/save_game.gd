@@ -283,7 +283,7 @@ func _arm_active() -> void:
 		return
 	pending_world = data
 	pending_seed = int(data.get("seed", 0))
-	village_memory = (data.get("villages", []) as Array).duplicate(true)
+	village_memory = _stamped(data)
 	GameState.game_years = float(data.get("years", 0.0))
 	GameState.alignment = float(data.get("alignment", 0.0))
 	GameState.set_max_prayer_power(float(data.get("max_prayer", 100.0)))
@@ -401,7 +401,7 @@ func load_game() -> bool:
 	# The village records must be in memory BEFORE the reload, because the home
 	# village is built during Main's very first breath and asks for its past
 	# straight away.
-	village_memory = (data.get("villages", []) as Array).duplicate(true)
+	village_memory = _stamped(data)
 	_reload({
 		"years": float(data.get("years", 0.0)),
 		"alignment": float(data.get("alignment", 0.0)),
@@ -442,6 +442,19 @@ func _reload(globals: Dictionary) -> void:
 	get_tree().reload_current_scene()
 
 
+## THE TOWNS IN A SAVE, each stamped with when it was written down if it does
+## not say: a town folded into numbers carries its own time, and one from an
+## older save was as it is at the moment it was saved. Either way the board
+## counts its years away from there (Chessboard.bring_up_to_date).
+func _stamped(data: Dictionary) -> Array:
+	var towns := (data.get("villages", []) as Array).duplicate(true)
+	var years := float(data.get("years", 0.0))
+	for record: Dictionary in towns:
+		if not record.has("at_years"):
+			record["at_years"] = years
+	return towns
+
+
 ## Called by a village the moment it is built — whether at startup or forty
 ## minutes later as you wander back to it. If we remember a town that stood
 ## about here, its whole life is handed back and the memory is spent.
@@ -467,6 +480,9 @@ func recall(village: Village) -> void:
 		return
 	var record: Dictionary = village_memory[best]
 	village_memory.remove_at(best)
+	# ITS YEARS AWAY FIRST: the record is stepped up to now, and its people made
+	# to agree with the numbers. See Chessboard and TownFold.
+	Chessboard.bring_up_to_date(record, village.get_tree().get_first_node_in_group("world_gen") as WorldGen)
 	village.from_dict(record)
 
 

@@ -18,7 +18,7 @@ const STAGE_NAMES: Array[String] = ["camp", "hamlet", "village", "town", "city"]
 const CHRONICLE_LINES := 16
 ## What is written down when it folds, and read back when it unfolds.
 const _KEPT: Array[String] = ["id", "name", "home", "converted", "belief",
-	"children", "adults", "elders", "food", "wood", "stone", "houses", "farms",
+	"children", "adults", "elders", "women", "food", "wood", "stone", "houses", "farms",
 	"building", "tilling", "fish_stock", "game_stock", "berry_stock", "beast_stock", "fed",
 	"morale", "hardiness", "stage", "stage_years", "ruined", "years", "steps",
 	"leaning", "born", "starved", "taken", "aged_out", "lost_young", "left",
@@ -34,6 +34,7 @@ var belief := 0.0
 var children := 0.0
 var adults := 0.0
 var elders := 0.0
+var women := 0.5        # the share of them who are women
 
 var food := 0.0         # grain, fish, meat and berries, in meals (FoodItem)
 var wood := 0.0

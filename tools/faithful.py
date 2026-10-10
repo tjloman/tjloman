@@ -1,25 +1,27 @@
 #!/usr/bin/env python3
-"""A TOWN THAT BELIEVES COMES BACK WITH THE GAME.
+"""A TOWN THAT BELIEVES IS NEVER LOST, NEAR OR FAR.
 
-A saved town came back only when its ground streamed in again: a town that
-believed in you a kilometre away did not exist until you went there, and a
-colony (founded by a wagon wherever it stopped, on no site the world founds
-towns on) never came back at all, its record waiting in memory forever.
+It used to be raised whole as the game loaded, wherever it was, so that its
+prayers came in and a colony (founded by a wagon on no site the world founds
+towns on) came back at all. Towns out of sight are numbers now (Chessboard), so
+a believing town far off stays folded -- and must still pray, still count, and
+still be there, once.
 
 What holds that in place:
-
-  1. EVERY CONVERTED TOWN IS RAISED AS THE GAME LOADS, at its saved spot, right
-     after home — and only converted, non-home ones (the rest still wait to be
-     walked to); its cell is marked so the streaming land does not found it
-     again.
-  2. IT TAKES BACK ITS OWN PAST the way any town does: SaveGame.recall, by
-     position, when the town opens for business.
-  3. A TOWN STILL BEING RAISED IS NOT WRITTEN DOWN: a save in its first few
+  1. THE CHESSBOARD COMES WITH THE WORLD: main adds it as the land is raised.
+  2. IT RAISES ANY REMEMBERED TOWN, colony or not, AS THE LAND COMES BACK TO IT
+     (WorldGen.raise_record) -- never home, never one already standing -- and
+     the raised town's cell is marked so the streaming land does not found it
+     twice.
+  3. IT TAKES BACK ITS OWN PAST the way any town does: SaveGame.recall, by
+     position, when the town opens for business -- caught up to now first.
+  4. A FOLDED TOWN THAT BELIEVES PRAYS, and counts toward the prayer the god
+     can hold.
+  5. A TOWN STILL BEING RAISED IS NOT WRITTEN DOWN: a save in its first few
      seconds would hold fresh strangers beside the real record.
-  4. And with GODOT set to a Godot binary, both launches are run for real
+  6. And with GODOT set to a Godot binary, both launches are run for real
      (tools/saves/faithful_live.gd): found a believing town past the horizon,
-     save, launch again, and find it standing, once, believing, before the
-     camera has gone near it.
+     save, launch again, and find it kept -- once, believing, praying.
 """
 import os
 import pathlib
@@ -50,21 +52,27 @@ def body(text, name):
 
 def source(fail):
     ready = body(MAIN, "_ready")
-    home = ready.find("world_gen.player_village = village")
-    raise_at = ready.find("world_gen.raise_the_faithful(SaveGame.village_memory)")
-    beast = ready.find("creature = Creature.new()")
-    if raise_at < 0 or not home < raise_at < beast:
-        fail.append("believing towns are not raised as the game loads, right after home")
-    faithful = body(WORLD, "raise_the_faithful")
-    if 'not bool(record.get("converted", false))' not in faithful \
-            or 'bool(record.get("home", false))' not in faithful:
-        fail.append("raise_the_faithful raises towns that do not believe, or home again")
-    if "_village_cells[cell] = town" not in faithful:
+    if "add_child(Chessboard.new())" not in ready:
+        fail.append("the chessboard does not come with the world")
+    board = (ROOT / "scripts/world/board/chessboard.gd").read_text()
+    near = body(board, "_unfold_the_near")
+    if "world.raise_record(record)" not in near or 'bool(record.get("home", false))' not in near \
+            or "standing" not in near:
+        fail.append("remembered towns are not raised as the land comes back, or home or a "
+                    "standing town is raised again")
+    if "_village_cells[cell] = town" not in body(WORLD, "raise_record"):
         fail.append("a raised town's cell is not marked: the land streaming in founds it twice")
     if "SaveGame.recall(self)" not in body(VILLAGE, "_deal_the_work"):
         fail.append("a town no longer takes back its own past when it opens for business")
+    if "Chessboard.bring_up_to_date(" not in body(SAVE, "recall"):
+        fail.append("a town is taken back without its years away")
     if "founded = true" not in body(VILLAGE, "_open_for_business"):
         fail.append("a town never says it is whole")
+    pray = body(board, "_pray")
+    if "GameState.add_prayer_power(" not in pray or '"converted"' not in pray:
+        fail.append("a folded town that believes no longer prays")
+    if "Chessboard.remembered_believers()" not in body(VILLAGE, "_update_influence"):
+        fail.append("a folded town that believes no longer counts toward the prayer the god can hold")
     snap = body(SAVE, "snapshot")
     if "if not (v as Village).founded:" not in snap or "for remembered: Dictionary in village_memory" not in snap:
         fail.append("a save writes down a town still being raised, beside its real record")
@@ -90,7 +98,7 @@ def live(fail):
 
 def main():
     fail = []
-    print("BELIEVING TOWNS, BACK WITH THE GAME")
+    print("BELIEVING TOWNS, NEVER LOST")
     source(fail)
     live(fail)
     print()

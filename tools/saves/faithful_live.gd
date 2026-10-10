@@ -1,15 +1,16 @@
 extends SceneTree
-## A TOWN THAT BELIEVES COMES BACK WITH THE GAME — checked in a real engine,
-## across two launches, headless:
+## A TOWN THAT BELIEVES IS NEVER LOST — checked in a real engine, across two
+## launches, headless:
 ##
 ##     godot --headless --path . --script tools/saves/faithful_live.gd -- write
 ##     godot --headless --path . --script tools/saves/faithful_live.gd -- read
 ##
 ## `write` founds a town far past the horizon, makes it believe, and saves.
 ## `read` launches again on that save and asks, before the camera has gone
-## anywhere near it: is the town standing, where it was, believing what it
-## believed — once, not twice — and is its waiting record spent? Then saves
-## again and checks the save holds it exactly once. Exits non-zero on failure.
+## anywhere near it: is the town kept — once, folded or standing, never both —
+## where it was, believing what it believed, and are its prayers still coming
+## in? Then saves again and checks the save holds it exactly once. Exits
+## non-zero on failure.
 ##
 ## Names no class of the game's (a --script is compiled before the autoloads).
 
@@ -79,28 +80,34 @@ func _read(saves: Node, world: Node, creature: Node) -> void:
 	print("FAITHFUL TOWNS: reading")
 	var eye: Vector3 = root.get_node("/root/GameState").camera_focus
 	print("    the camera is %.0fm from it" % Vector2(eye.x, eye.z).distance_to(AT))
+	# Far past the horizon, it is out of sight: kept as its record, folded —
+	# or, if the land has reached it, standing. Once, either way.
 	var found: Array = []
 	for v in root.get_tree().get_nodes_in_group("village"):
 		if String(v.village_name) == NAME:
 			found.append(v)
-	check(found.size() == 1, "the believing town is standing at launch, once (%d)" % found.size())
-	if found.is_empty():
-		return
-	var town = found[0]
-	check(Vector2(town.global_position.x, town.global_position.z).distance_to(AT) < 1.0,
-		"where it stood")
-	for i in 3000:
-		if town.founded:
-			break
-		await process_frame
-	check(town.founded, "and whole")
-	check(town.converted and absf(town.belief - BELIEF) < 0.5,
-		"believing what it believed (%.1f)" % town.belief)
-	var waiting := 0
+	var waiting: Array = []
 	for entry in saves.village_memory:
 		if String(entry.get("name", "")) == NAME:
-			waiting += 1
-	check(waiting == 0, "its saved record taken back, not left waiting")
+			waiting.append(entry)
+	check(found.size() + waiting.size() == 1,
+		"the believing town is kept, once (%d standing, %d folded)" % [found.size(), waiting.size()])
+	if found.size() + waiting.size() != 1:
+		return
+	var record: Dictionary = waiting[0] if not waiting.is_empty() else found[0].to_dict()
+	var at: Array = record.get("pos", [0.0, 0.0])
+	check(Vector2(float(at[0]), float(at[1])).distance_to(AT) < 1.0, "where it stood")
+	check(bool(record.get("converted", false)) and absf(float(record.get("belief", 0.0)) - BELIEF) < 0.5,
+		"believing what it believed (%.1f)" % float(record.get("belief", 0.0)))
+	# Past the opening screen, which pauses the world: nothing prays in a pause.
+	for n in root.find_children("*", "StartScreen", true, false):
+		n.queue_free()
+	paused = false
+	var state: Node = root.get_node("/root/GameState")
+	state.prayer_power = 0.0
+	for i in 120:
+		await process_frame
+	check(state.prayer_power > 0.0, "and its prayers still come in (%.2f)" % state.prayer_power)
 	check(bool(saves.save_to_disk(world, creature, true)), "saved again")
 	var again: Dictionary = saves.read_from_disk()
 	var times := 0

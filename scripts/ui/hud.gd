@@ -280,15 +280,29 @@ func _edge_span(box: Rect2, out: Vector2) -> float:
 	return span if span < INF else 0.0
 
 
-func _on_stone_read(nest: Node) -> void:
-	var wall := nest as CreatureNest
-	if wall == null or not is_instance_valid(wall):
+## THE NEST WALL OR A TOWN'S TOTEM, held long enough to read. The same panel
+## for both: the wall is what the creature has made of itself, the totem is the
+## town — its people, its work, and what happened while it was out of sight.
+func _on_stone_read(read_given: Variant) -> void:
+	if not is_instance_valid(read_given):
 		return
-	_fill_stone(wall.reading())
+	var read: Node = read_given
+	var wall := read as CreatureNest
+	var held: Variant = read.get_meta("town") if read.has_meta("town") else null
+	if wall == null and not is_instance_valid(held):
+		return
+	var town: Village = null if wall != null else held
+	if wall != null:
+		_stone_label.text = "SCRATCHED INTO THE STONE"
+		_fill_stone(wall.reading())
+	else:
+		_stone_label.text = "%s, AS ITS TOTEM KNOWS IT" % town.village_name.to_upper()
+		_fill_stone(TownReading.of(town))
 	_stone_panel.visible = true
 	_stone_time = STONE_HOLD
-	_stone_at = wall.global_position
-	_stone_on = wall.tablet_point()
+	_stone_at = (read as Node3D).global_position
+	_stone_on = wall.tablet_point() if wall != null \
+		else (read as Node3D).global_position + Vector3(0.0, 4.4, 0.0)
 	# Off the screen's middle and free to move: from here on it follows the
 	# stone rather than sitting where the last one sat.
 	_stone_panel.set_anchors_and_offsets_preset(
@@ -312,13 +326,15 @@ func _fill_stone(part: Dictionary) -> void:
 	# of the header — what he holds against what is so — and a column whose
 	# width depends on what happens to be in it is not a column.
 	var half := (wide - 26.0) * 0.5
-	var head := _stone_grid(2)
-	head.add_child(_stone_cell("WHAT HE HOLDS", half, true))
-	head.add_child(_stone_cell("WHAT IS SO", half, true))
-	for pair: Array in part.get("pairs", []):
-		head.add_child(_stone_cell(String(pair[0]), half))
-		head.add_child(_stone_cell(String(pair[1]), half))
-	_stone_rows.add_child(head)
+	var pairs: Array = part.get("pairs", [])
+	if not pairs.is_empty():
+		var head := _stone_grid(2)
+		head.add_child(_stone_cell("WHAT HE HOLDS", half, true))
+		head.add_child(_stone_cell("WHAT IS SO", half, true))
+		for pair: Array in pairs:
+			head.add_child(_stone_cell(String(pair[0]), half))
+			head.add_child(_stone_cell(String(pair[1]), half))
+		_stone_rows.add_child(head)
 	for block: Dictionary in part.get("blocks", []):
 		_stone_rows.add_child(_stone_cell(String(block["head"]), wide, true))
 		var keyw := wide * KEY_SHARE

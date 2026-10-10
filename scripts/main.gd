@@ -74,10 +74,11 @@ func _ready() -> void:
 	village.position = Vector3(0, world_gen.height_at(0, 0), 0)
 	add_child(village)
 	world_gen.player_village = village
-	# AND EVERY TOWN THAT BELIEVES IN YOU, back with the game rather than when
-	# you next wander past it — and a colony, which stands on no site the world
-	# would ever found a town on again, back at all. See WorldGen.raise_the_faithful.
-	world_gen.raise_the_faithful(SaveGame.village_memory)
+	# AND EVERY TOWN OUT OF SIGHT, as numbers: the chessboard folds a town that
+	# falls out of the loaded land, raises one that comes back into it — a
+	# colony on no site the world would found a town on included — and keeps
+	# the prayers of the faithful coming in while they are away. See Chessboard.
+	add_child(Chessboard.new())
 
 	# WHERE IT IS RAISED, and it is not in the middle of the village.
 	#
