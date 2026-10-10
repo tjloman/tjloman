@@ -84,7 +84,7 @@ def source(fail):
         fail.append("the house welds without keeping its window material apart")
     if "Weld.statics(self, [_lamp, _feed])" not in body(SHOP, "_ready"):
         fail.append("the workshop welds without keeping the lamp and the feed")
-    if "Quality.label_distance()" not in body(MAN, "_physics_process"):
+    if "Quality.label_distance()" not in body(MAN, "take_turn"):
         fail.append("villager labels no longer shrink with the tier")
     if "REDRAW_EVERY" not in body(FARM, "_show_crop"):
         fail.append("the crop rewrites twelve transforms every frame again")

@@ -11,7 +11,7 @@ extends SceneTree
 ## frame meter's own ledger for a while and prints:
 ##
 ##   * the frame, wall clock: middle, 90th, worst;
-##   * the bill, summed over the run, dearest first;
+##   * the bill, a physics step on average, dearest first;
 ##   * every single call over SLOW_CALL ms: which class, what it was doing.
 ##
 ## Nothing is checked here and nothing exits non-zero — it is a measuring
@@ -82,6 +82,7 @@ func _initialize() -> void:
 	var calls := {}
 	var slow := []
 	var last := Time.get_ticks_usec()
+	var steps_from := Engine.get_physics_frames()
 	for f in watch:
 		await process_frame
 		var at := Time.get_ticks_usec()
@@ -94,6 +95,10 @@ func _initialize() -> void:
 		if not worst.is_empty() and float(worst[2]) > SLOW_CALL:
 			slow.append([f, worst[0], str(worst[1]), float(worst[2])])
 	meter.visible = false
+	# PER PHYSICS STEP, not per frame: the simulation is paid for by the step, and
+	# a run fast enough to draw two frames a step would otherwise read as half
+	# the cost it is.
+	var steps := maxi(int(Engine.get_physics_frames() - steps_from), 1)
 
 	var sorted := walls.duplicate()
 	sorted.sort()
@@ -108,9 +113,9 @@ func _initialize() -> void:
 	for k in bill:
 		rows.append([k, bill[k], calls[k]])
 	rows.sort_custom(func(a, b): return a[1] > b[1])
-	print("  THE BILL, a frame on average:")
+	print("  THE BILL, a physics step on average (%.2f steps a frame):" % (float(steps) / watch))
 	for r in rows.slice(0, 12):
-		print("    %-28s %8.2f ms  %7.0f calls" % [r[0], r[1] / watch, float(r[2]) / watch])
+		print("    %-28s %8.2f ms  %7.0f calls" % [r[0], r[1] / steps, float(r[2]) / steps])
 	print("  CALLS OVER %.0f ms: %d" % [SLOW_CALL, slow.size()])
 	slow.sort_custom(func(a, b): return a[3] > b[3])
 	for s in slow.slice(0, 25):

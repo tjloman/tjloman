@@ -44,7 +44,7 @@ def body(text, name):
 
 
 def source(fail):
-    if "VillagerPose.apply(self)" not in body(VILLAGER, "_physics_process"):
+    if "VillagerPose.apply(self)" not in body(VILLAGER, "take_turn"):
         fail.append("nothing puts a villager's body in its pose")
     feel = body(CREATURE, "_tick_feelings")
     if "CreatureLeisure.pass_out_if_spent(self)" not in feel:

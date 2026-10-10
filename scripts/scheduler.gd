@@ -69,15 +69,24 @@ static func turn(who: Node, stride: int, last_ran: int) -> int:
 	if stride <= 1:
 		return 1
 	var frames := int(Engine.get_physics_frames())
-	# THE PHASE. `who`'s id is a number nobody else has and nobody had to hand
-	# out, so a hundred entities on the same stride land on every frame of the
-	# cycle in turn rather than all on one of them.
-	if (frames + int(who.get_instance_id())) % stride != 0:
+	if (frames + phase(int(who.get_instance_id()))) % stride != 0:
 		return 0
 	# Counted from when it ACTUALLY last ran, not from the stride — because the
 	# stride changes as a thing walks toward and away from the camera, and a
 	# creature that has been on a coarse clock owes the time it really missed.
 	return clampi(frames - last_ran, 1, MOST_OWED)
+
+
+## THE PHASE: where in the cycle an id falls. The id is a number nobody else has
+## and nobody had to hand out, so a hundred entities on the same stride land on
+## every frame of the cycle in turn rather than all on one of them — BUT NOT
+## RAW. Godot hands ids out in steps, and a villager makes a fixed number of
+## objects of its own (body, label, flame, helpers) before the next villager
+## is made, so a town founded in one go had ids a constant apart: at stride 4,
+## 261 of 276 of them fell on the SAME frame (tools/live/crowd_clock_live.gd).
+## Hashed, the steps are gone.
+static func phase(id: int) -> int:
+	return hash(id)
 
 
 ## The frame an entity should remember it ran on.
@@ -95,7 +104,7 @@ static func spread(ids: Array, stride: int) -> float:
 	bins.resize(stride)
 	bins.fill(0)
 	for id: int in ids:
-		var at: int = id % stride
+		var at: int = phase(id) % stride
 		bins[at] = int(bins[at]) + 1
 	var most := 0
 	for n: int in bins:

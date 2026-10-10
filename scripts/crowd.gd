@@ -40,18 +40,30 @@ const AT_FULL: Array[int] = [40, 60, 90]
 ## starts to read as a stutter rather than as a slower walk, and a city that
 ## large is a problem to solve elsewhere.
 const STRIDE_MOST := 4
+## THE CENSUS IS AVERAGED over this many frames, and no single answer counts for
+## more of them. A villager asks only on its own turn now (CrowdClock) and is
+## counted for every frame since it last asked — so one frame's tally lurches:
+## the frame after the crowd thinned to a quarter, only the quarter booked one
+## frame out had asked, the census read a quarter of the town, the stride fell
+## back to one, and the next frame it read the whole town again. Two strides'
+## worth of frames is the whole crowd every time, give or take a body — so no
+## single asker may count for more than this many frames either.
+const CENSUS_FRAMES := 8
 
 static var _counted := 0
 static var _crowd := 0
 static var _frame := -1
+static var _past := PackedInt32Array()
 
 
 ## I AM IN THE NEAR BAND. Said by anything that has just worked out that it is,
 ## which is the only census this needs: the tally is a side effect of a question
-## that was being asked anyway.
-static func counted_near() -> void:
+## that was being asked anyway. `frames` is how many frames the asker's answer
+## covers: a villager asks only on its turn now (CrowdClock), and a body asked
+## about once in four frames is still a body in all four.
+static func counted_near(frames := 1) -> void:
 	_roll()
-	_counted += 1
+	_counted += frames
 
 
 ## HOW OFTEN A BODY IN THE NEAR BAND SHOULD TICK, given how many of them there
@@ -79,8 +91,16 @@ static func near() -> int:
 static func _roll() -> void:
 	var now := int(Engine.get_physics_frames())
 	if now != _frame:
+		if _past.size() != CENSUS_FRAMES:
+			_past.resize(CENSUS_FRAMES)
+			_past.fill(0)
+		_past[posmod(_frame, CENSUS_FRAMES)] = _counted
 		_frame = now
-		_crowd = _counted
+		var all := 0
+		for n in _past:
+			all += n
+		@warning_ignore("integer_division")
+		_crowd = (all + CENSUS_FRAMES - 1) / CENSUS_FRAMES
 		_counted = 0
 
 
@@ -90,3 +110,4 @@ static func clear() -> void:
 	_counted = 0
 	_crowd = 0
 	_frame = -1
+	_past.fill(0)

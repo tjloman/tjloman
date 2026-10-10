@@ -300,8 +300,14 @@ var _wd_still := 0.0             # seconds of a travel state spent going nowhere
 ## a crowd across the cycle, and this makes the delta it is charged exact.
 var _sim_last := 0
 ## How much ground one throttled step must cover to match real time. See the
-## note in _physics_process — this is what keeps distant villages fed.
+## note in take_turn — this is what keeps distant villages fed.
 var _sim_scale := 1.0
+## Kept by CrowdClock: where in a cycle this one's turn falls, and the frame it
+## is next booked for. Machinery the clock drives; nothing here reads them.
+@warning_ignore("unused_private_class_variable")
+var _clock_seat := -1
+@warning_ignore("unused_private_class_variable")
+var _clock_due := -1
 var _shop_spot := Vector3.INF
 var _shop_kind := ""
 var _shift_left := 0.0
@@ -340,6 +346,7 @@ var _body_mesh: Node3D   # MeshInstance3D (procedural) or a custom model root
 
 func _ready() -> void:
 	add_to_group("villagers")
+	CrowdClock.enlist(self)   # the engine does not tick them: see take_turn
 	add_to_group(Affords.PICKABLE)
 	collision_layer = 2
 	collision_mask = 1 | 8  # world + trees (their own layer)
@@ -408,43 +415,25 @@ func _rethink() -> void:
 	_decision_due = true
 
 
-func _physics_process(delta: float) -> void:
+## ONE TURN OF A LIFE. The engine does not call this — CrowdClock does, on
+## this villager's turn only, with how many physics frames the turn stands for:
+## one near the camera and in the hand, more on a slower clock. Held, falling
+## and alight they are called every frame. See CrowdClock for why.
+func take_turn(delta: float, owed: int) -> void:
 	Ledger.open(&"Villager", state)
-	# ALIGHT, OR IN THE AIR — before the LOD below, because a scream arriving
-	# every fourth frame would not be a scream. See Agitation.
+	# ALIGHT, OR IN THE AIR — CrowdClock runs them every frame while they are,
+	# because a scream arriving every fourth frame would not be a scream.
 	_agitation.judder(self, _visuals, burning,
 		state == State.FALLING and not _gentle_drop, _burn_visual)
-	# Simulation LOD: a villager the player isn't looking at runs on a slower
-	# clock — it still lives and works, just updated every few frames with the
-	# skipped time folded into delta. Held/falling always run full-rate so the
-	# hand stays responsive wherever it reaches.
-	if state != State.HELD and state != State.FALLING:
-		var stride := Util.sim_stride(global_position)
-		_sim_scale = 1.0
-		if stride > 1:
-			# WHOSE TURN IS IT. Every villager used to count from zero, so fifty
-			# of them ticked on the same frame and idled for the next three —
-			# see Scheduler for why that made the whole device throttle.
-			var turn: int = Scheduler.turn(self, stride, _sim_last)
-			if turn == 0:
-				return
-			delta *= float(turn)
-			# MOVEMENT MUST BE PAID FOR TOO. move_and_slide() integrates over
-			# the ENGINE's frame, not the delta we were handed — so running on
-			# a slower clock silently moved them at a tenth speed while hunger
-			# ticked at full rate. Villages the player wasn't near starved on
-			# the way to the granary. The stride is folded into velocity so
-			# they cover the same ground either way.
-			_sim_scale = float(turn)
-	# THE CLOCK IS STAMPED WHENEVER IT ACTUALLY RUNS, not only on the frames it
-	# runs coarsely. This line used to live inside the `stride > 1` branch, so a
-	# villager standing near the camera — stride 1, branch skipped — went on
-	# not writing it for as long as it stayed there. `_sim_last` then meant "the
-	# frame it was last FAR AWAY", and the moment anything nudged the stride
-	# above 1 (the camera panning off, or the heat band moving, which a casting
-	# session did all by itself) Scheduler.turn handed back every frame since,
-	# multiplied it into delta AND into the velocity scale, and threw it across
-	# the field. See Scheduler.MOST_OWED.
+	# MOVEMENT MUST BE PAID FOR TOO. move_and_slide() integrates over the
+	# ENGINE's frame, not the delta we were handed — so running on a slower
+	# clock silently moved them at a tenth speed while hunger ticked at full
+	# rate. Villages the player wasn't near starved on the way to the granary.
+	# The frames owed are folded into velocity so they cover the same ground.
+	delta *= float(owed)
+	_sim_scale = float(owed)
+	# THE CLOCK IS STAMPED WHENEVER IT ACTUALLY RUNS: what is owed next time is
+	# counted from here. See Scheduler.MOST_OWED.
 	_sim_last = Scheduler.now()
 	# THINK SLOWER THAN YOU MOVE. Needs, hazards, timers, the watchdog, the label
 	# and the state machine ran on every physics tick — two a frame on a slow
@@ -2100,6 +2089,7 @@ func ignite() -> void:
 	burning = true
 	_burn_visual = Util.small_flame(1.4)
 	_visuals.add_child(_burn_visual)
+	CrowdClock.heat(self)
 
 
 func extinguish() -> void:
@@ -2344,6 +2334,7 @@ func pick_up() -> void:
 	_dismount()
 	state = State.HELD
 	velocity = Vector3.ZERO
+	CrowdClock.heat(self)
 
 
 ## A still hand sets a villager down gently (no fear, no harm — and where
@@ -2353,6 +2344,7 @@ func drop(throw_velocity: Vector3, gentle := false) -> void:
 	state = State.FALLING
 	velocity = throw_velocity
 	_gentle_drop = gentle
+	CrowdClock.heat(self)
 	if not gentle and throw_velocity.length() > 10.0:
 		GameState.shift_alignment(-1.0)
 

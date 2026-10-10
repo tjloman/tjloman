@@ -94,7 +94,7 @@ def walk(goal, speed, every, subtract=True):
 
 
 def source(fail):
-    phys = body(MAN, "_physics_process")
+    phys = body(MAN, "take_turn")
     gate = phys.find("_brain_left -= 1")
     if gate < 0 or "VillagerFeet.coast(self, delta)" not in phys:
         fail.append("the villager thinks on every tick again")

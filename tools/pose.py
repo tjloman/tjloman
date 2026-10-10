@@ -124,7 +124,7 @@ def derived(fail):
         fail.append("a seat is honoured outside school, and a child sits on after it")
     if not re.search(r"State\.EATING and VillagerLook\.eating_a_person\(who\):\s*\n\s*return FEED", of):
         fail.append("feeding over a body is not read from what they are eating")
-    if "VillagerPose.apply(self)" not in body(VILLAGER, "_physics_process"):
+    if "VillagerPose.apply(self)" not in body(VILLAGER, "take_turn"):
         fail.append("the pose is never applied")
 
 

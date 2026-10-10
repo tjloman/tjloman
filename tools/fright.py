@@ -151,7 +151,7 @@ def source(fail):
         fail.append("scare() does not start the steadied window")
     if scare.find("happiness = maxf(happiness - 10.0") > scare.find("_steady_until"):
         fail.append("a steadied villager's fright costs them nothing at all")
-    phys = body(VILLAGER, "_physics_process")
+    phys = body(VILLAGER, "take_turn")
     m = re.search(r"State\.FLEE:\n(.*?)\n\t\tState\.", phys, re.S)
     if not m:
         fail.append("could not find the FLEE arm")

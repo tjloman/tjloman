@@ -100,7 +100,7 @@ def live(new, days=6, seed=1):
 
 
 def source(fail):
-    phys = body(MAN, "_physics_process")
+    phys = body(MAN, "take_turn")
     m = re.search(r"State\.SLEEPING:\n(.*?)\n\t\tState\.", phys, re.S)
     arm = m.group(1) if m else ""
     if "energy >= 100.0" in arm:

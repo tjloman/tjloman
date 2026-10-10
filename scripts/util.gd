@@ -16,6 +16,10 @@ class_name Util
 ## it a long session walking across the world leaves a row per chunk material
 ## ever made, all of them empty.
 const SWEEP_EVERY := 512
+## The edges of the simulation bands, in metres from the camera's focus: see
+## `sim_stride`.
+const SIM_NEAR := 130.0
+const SIM_FAR := 260.0
 
 # Pools keyed by their defining parameters. Never mutate a resource fetched
 # from here — it is shared by every part that asked for the same thing.
@@ -671,26 +675,43 @@ static func apply_lod(root: Node, end_dist: float) -> void:
 ## skip between full updates, by distance from the camera's focus. Keeps a big
 ## streamed world cheap — a crowd the player isn't looking at ticks coarsely
 ## (still alive, just less often), while everything nearby runs full-rate.
-static func sim_stride(pos: Vector3) -> int:
+## `asked_every` is how many frames since the asker last asked: one for anything
+## that asks every frame. (CrowdClock asks for a whole crowd at once instead —
+## see `band_stride` — and counts its own census.)
+static func sim_stride(pos: Vector3, asked_every := 1) -> int:
 	var f := GameState.camera_focus
 	var dx := pos.x - f.x
 	var dz := pos.z - f.z
-	var d2 := dx * dx + dz * dz
+	var band := sim_band(dx * dx + dz * dz)
+	if band == 0:
+		# THE NEAR BAND COUNTS ITSELF. A city of two hundred fits inside a
+		# hundred and thirty metres, so the band meant to protect the frame
+		# handed full rate to every one of them precisely because they were all
+		# standing together where the player was looking. See Crowd: past what a
+		# frame can carry, the stride rises for everybody until the work fits.
+		Crowd.counted_near(asked_every)
+	return band_stride(band)
+
+
+## WHICH BAND, from the squared ground distance to the camera's focus: 0 near,
+## 1 middle, 2 far.
+static func sim_band(d2: float) -> int:
+	if d2 > SIM_FAR * SIM_FAR:
+		return 2
+	return 1 if d2 > SIM_NEAR * SIM_NEAR else 0
+
+
+## THE STRIDE OF A BAND. The same for everybody in it this frame, so a crowd
+## asks once rather than once a body.
+static func band_stride(band: int) -> int:
 	# A struggling device thins the far half of the world further still. Distant
 	# villagers and beasts are the cheapest thing to slow down and the least
 	# noticeable, so they take the first cut (see Quality.sim_relief).
 	var relief := Quality.sim_relief()
-	if d2 > 260.0 * 260.0:
+	if band == 2:
 		return 10 * relief
-	if d2 > 130.0 * 130.0:
+	if band == 1:
 		return 4 * relief
-	# THE NEAR BAND COUNTS ITSELF. A city of two hundred fits inside a hundred
-	# and thirty metres, so the band meant to protect the frame handed full rate
-	# to every one of them precisely because they were all standing together
-	# where the player was looking. See Crowd: past what a frame can carry, the
-	# stride rises for everybody until the work fits, and Scheduler deals that
-	# evenly across the cycle as it always has.
-	Crowd.counted_near()
 	return maxi(Crowd.stride(), 1 if relief == 1 else 2)
 
 

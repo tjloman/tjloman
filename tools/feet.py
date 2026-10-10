@@ -64,7 +64,7 @@ RECHECK = const(FEET, "GROUND_RECHECK")
 def source(fail):
     code = bare(MAN)
     slides = code.count("move_and_slide()")
-    phys = body(MAN, "_physics_process")
+    phys = body(MAN, "take_turn")
     m = re.search(r"\n\t\tState\.FALLING:\n(.*?)\n\t\tState\.", phys, re.S)
     falling = m.group(1) if m else ""
     if slides != 1 or "move_and_slide()" not in falling:

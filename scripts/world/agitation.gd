@@ -89,6 +89,12 @@ func judder(who: Node3D, visuals: Node3D, burning: bool, airborne: bool,
 	_cried_at = cry(who, _cried_at, human)
 
 
+## STILL SHAKING: gripped last time it was asked, and owed the settle that
+## puts the body straight again. CrowdClock keeps them on every frame till then.
+func gripped() -> bool:
+	return _gripped
+
+
 ## IS THIS BODY PAST BEARING IT? The one definition, so the flail, the cry and
 ## anything that wants to ask later all agree.
 ##

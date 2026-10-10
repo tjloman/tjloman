@@ -174,7 +174,7 @@ def grief(fail):
     if not re.search(r"return who\.morality >= MONSTROUS$", wm.strip()):
         fail.append("will_mourn is not the monstrous line: `%s`" % wm.strip())
     grieving = body(GRIEF, "mourn")
-    if "VillagerGrief.mourn(self, delta)" not in body(V, "_physics_process"):
+    if "VillagerGrief.mourn(self, delta)" not in body(V, "take_turn"):
         fail.append("the MOURNING state no longer runs the mourning")
     for what, why in (
             ('_work_noise("weep"', "they weep openly — it has to be heard"),
@@ -343,7 +343,7 @@ def butchery(fail):
                     "burnt ones — a charred body feeds nobody")
     else:
         print("  and never to a burnt one ....................... yes")
-    st = body(V, "_physics_process")
+    st = body(V, "take_turn")
     skinning = st.split("State.SKINNING:")[-1].split("State.GO_BEAT:")[0] + body(GRIEF, "skin")
     if "butcher()" not in skinning:
         fail.append("skinning no longer butchers anything")

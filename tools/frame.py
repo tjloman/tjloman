@@ -202,7 +202,8 @@ for path in sorted((ROOT / "scripts").rglob("*.gd")):
         above = rows_here[n - 1] if n else ""
         named = re.search(r'Ledger\.open\(&"([\w:]+)"', row)
         name = named.group(1) if named else ""
-        if re.match(r"func _(physics_)?process\(", above.strip()):
+        # A villager's turn is its _process: CrowdClock calls it, not the engine.
+        if re.match(r"func (_(physics_)?process|take_turn)\(", above.strip()):
             own.add(name)
             continue
         if name in own or name.split(":")[0] in own and ":" in name:

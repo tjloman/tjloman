@@ -157,7 +157,7 @@ def silence(fail):
                     "or where one is hiding")
     else:
         print("  and nothing floats over their head ............ yes")
-    arm = (body(V, "_physics_process") or "").split("State.LEAVING:")[-1][:200]
+    arm = (body(V, "take_turn") or "").split("State.LEAVING:")[-1][:200]
     if "ChildSafety.leave_step(self, delta)" not in arm or "queue_free()" not in arm:
         fail.append("a leaving child never walks anywhere, or never goes in")
     if "shelter_for(" in (body(SAFE, "leave_step") or ""):
@@ -248,7 +248,7 @@ def a_day_indoors(fail):
         fail.append("a child indoors can still be seen, hovered or hit")
     else:
         print("  indoors, nothing can see, hover or reach them .. yes")
-    if "if sheltering and state not in" not in (body(V, "_physics_process") or ""):
+    if "if sheltering and state not in" not in (body(V, "take_turn") or ""):
         fail.append("anything that writes a villager's state from outside — a "
                     "scare, a festival, a muster — walks an invisible child out "
                     "of their house and into a field")

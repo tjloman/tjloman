@@ -46,7 +46,7 @@ WATCHED = [
     "world/village_watch.gd", "world/village_party.gd", "world/agitation.gd",
 ]
 # Where the frame begins, and where it is allowed to stop being cheap.
-ENTRY = "_physics_process"
+ENTRY = "take_turn"
 SPOOLED = {"_choose", "_pick_job", "_start_job", "idle", "_slots"}
 
 WALKS = [
@@ -199,7 +199,8 @@ at_full = number("AT_FULL", CROWD, "crowd.gd")
 most = number("STRIDE_MOST", CROWD, "crowd.gd")[0]
 
 print()
-near_band = re.search(r"Crowd\.counted_near\(\)", UTIL) is not None
+near_band = re.search(r"Crowd\.counted_near\(", UTIL) is not None \
+    and "Crowd.counted_near(_near_frames)" in (SCRIPTS / "crowd_clock.gd").read_text()
 print("THE NEAR BAND %s itself."
       % ("counts" if near_band else "DOES NOT COUNT"))
 if not near_band:
@@ -246,6 +247,35 @@ if walks_world:
     fail.append("Village._retally walks every villager in the world to count one town's")
 if matched:
     fail.append("Villager.current_job is a match again: the tally pays it for everybody")
+
+# THE CROWD CLOCK. The engine used to call every villager every physics step so
+# that most of them could say "not my turn" and return: 1,270 calls a step for
+# nothing in the throng, and the engine's price for making them. CrowdClock
+# calls only those whose turn it is (tools/live/crowd_clock_live.gd checks it
+# in an engine; these are the statements it rests on).
+vtext = (SCRIPTS / "villager/villager.gd").read_text()
+clock = (SCRIPTS / "crowd_clock.gd").read_text()
+sched = (SCRIPTS / "scheduler.gd").read_text()
+vfun = functions(vtext)
+print()
+engine_ticked = re.search(r"^func _physics_process\(", vtext, re.M) is not None
+print("THE ENGINE %s villagers; CrowdClock calls them on their turns."
+      % ("STILL TICKS" if engine_ticked else "ticks no"))
+if engine_ticked:
+    fail.append("Villager has a _physics_process again: the engine calls all of them "
+                "every step, and most only to say it is not their turn")
+if "CrowdClock.enlist(self)" not in code(vtext, "_ready"):
+    fail.append("a villager is never put on the crowd clock, so it never lives")
+for fn in ("pick_up", "drop", "ignite"):
+    if "CrowdClock.heat(self)" not in code(vtext, fn):
+        fail.append("Villager.%s does not fetch them to every frame: the hand waits "
+                    "for a far villager's turn" % fn)
+if "who._clock_seat" not in code(clock, "_book"):
+    fail.append("the clock deals turns by engine id, which a town founded in one go "
+                "has a constant apart: the whole town lands on one frame")
+if "phase(" not in code(sched, "turn") or "hash(" not in code(sched, "phase"):
+    fail.append("Scheduler.turn phases by the raw engine id again, which bunches a "
+                "batch of entities onto one frame of the cycle")
 
 print()
 if fail:

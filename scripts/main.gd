@@ -1559,7 +1559,8 @@ func _run_smoke_test() -> void:
 	for s2: int in [2, 4, 10]:
 		var bins := {}
 		for id: int in ids:
-			bins[id % s2] = int(bins.get(id % s2, 0)) + 1
+			var at: int = Scheduler.phase(id) % s2
+			bins[at] = int(bins.get(at, 0)) + 1
 		var worst := 0
 		for k in bins:
 			worst = maxi(worst, int(bins[k]))
