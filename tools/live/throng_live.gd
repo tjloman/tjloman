@@ -59,6 +59,10 @@ func _initialize() -> void:
 	if not others.is_empty():
 		@warning_ignore("integer_division")
 		each = maxi(souls - had - want_home, 0) / others.size()
+	# No other town standing — the rest have folded out of sight, or the world
+	# has none near — and home takes them all, up to the most a town may hold.
+	if others.is_empty():
+		want_home = clampi(souls - had, 0, 400 - home.my_villagers().size())
 	for t in towns:
 		var add := want_home if t == home else each
 		for i in add:

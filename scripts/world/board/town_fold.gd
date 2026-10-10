@@ -65,7 +65,7 @@ static func book_of(record: Dictionary, now: float) -> TownBook:
 	book.stone = float(store.get("stone", 0))
 	book.years = float(record.get("at_years", now))
 	if not record.has("board"):
-		book.stage = _stage_for(book.population())
+		book.stage = _stage_for(book.population()) as TownBook.Stage
 	book.ruined = book.houses.is_empty() and book.population() <= RUIN_MOST
 	return book
 

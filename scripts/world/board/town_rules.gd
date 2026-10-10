@@ -506,10 +506,10 @@ static func _climb(book: TownBook, dt: float) -> void:
 	else:
 		book.stage_years *= exp(-dt / STAGE_HOLD)
 	if book.stage_years >= STAGE_HOLD:
-		book.stage += 1
+		book.stage = (book.stage + 1) as TownBook.Stage
 		book.stage_years = 0.0
 		book.note("It has grown into a %s." % book.stage_name())
 	elif book.stage_years <= -STAGE_HOLD * 1.5:
-		book.stage -= 1
+		book.stage = (book.stage - 1) as TownBook.Stage
 		book.stage_years = 0.0
 		book.note("It has dwindled to a %s." % book.stage_name())
