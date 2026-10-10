@@ -9,7 +9,10 @@ extends SceneTree
 ##   3. a town is still staggered: no frame carries much more than its share;
 ##   4. the near band's census still counts every body in it, every frame;
 ##   5. a villager picked up far away runs every frame at once, and so does one
-##      thrown or set alight, till it is over.
+##      thrown or set alight, till it is over;
+##   6. "who is near here" (CrowdClock.around) misses nobody the whole group
+##      would have found, follows somebody carried off in the hand, forgets
+##      the dead, and reads only the plots round the ask, not the town.
 ## Whatever it changes it puts back. Exits non-zero on failure. Names no class
 ## of the game's (see look.gd).
 
@@ -177,6 +180,51 @@ func _initialize() -> void:
 		alight = alight and (not far.burning or far._sim_last == Engine.get_physics_frames())
 	check(far != null and far.burning and alight, "and while alight")
 	far.extinguish()
+
+	# 6. Who is near here.
+	var clock: Script = load("res://scripts/crowd_clock.gd")
+	await frames(45)
+	var missed := 0
+	var asked := 0
+	var read := 0
+	var dead_back := 0
+	var everybody: Array = get_nodes_in_group("villagers")
+	for i in 60:
+		var spot: Vector3 = everybody[i * 7 % everybody.size()].global_position \
+			+ Vector3(randf_range(-20, 20), 0, randf_range(-20, 20))
+		var reach: float = [6.0, 13.2, 16.0, 22.0, 30.0][i % 5]
+		var found: Array = clock.around(spot, reach)
+		# Nobody handed back from outside the plots that cover the ask: the
+		# farthest corner of them is (reach + slack + one plot) on each axis.
+		var corner: float = (reach + clock.PLOT_SLACK + clock.PLOT) * sqrt(2.0)
+		for v in found:
+			if not is_instance_valid(v):
+				dead_back += 1
+			elif Vector2(v.global_position.x - spot.x, v.global_position.z - spot.z).length() > corner:
+				read += 1
+		for v in everybody:
+			if is_instance_valid(v) and v.global_position.distance_to(spot) < reach:
+				asked += 1
+				if not found.has(v):
+					missed += 1
+	check(asked > 100 and missed == 0,
+		"nobody within reach is missed (%d found by the whole group, %d missed)" % [asked, missed])
+	check(read == 0, "and nobody is read from beyond the plots round the ask (%d were)" % read)
+	var carried: Node = before.keys().filter(steady)[1]
+	var was_at: Vector3 = carried.global_position
+	carried.pick_up()
+	carried.global_position = was_at + Vector3(70, 0, 0)    # as the hand carries
+	await frames(2)
+	check(clock.around(was_at + Vector3(70, 0, 0), 3.0).has(carried)
+		and not clock.around(was_at, 3.0).has(carried),
+		"somebody carried off is found where they are now, not where they were")
+	carried.drop(Vector3.ZERO, true)
+	carried.global_position = was_at
+	var gone: Node = before.keys().filter(steady)[2]
+	var gone_at: Vector3 = gone.global_position
+	gone.free()
+	dead_back += clock.around(gone_at, 3.0).filter(func(v): return not is_instance_valid(v)).size()
+	check(dead_back == 0, "and the dead are not handed back (%d were)" % dead_back)
 
 	print("CROWD CLOCK LIVE: %s" % ("all pass" if fails == 0 else "%d FAILING" % fails))
 	quit(1 if fails > 0 else 0)

@@ -38,6 +38,19 @@ const WHEEL := 64
 ## not process a node outside the tree, so neither does this — it just keeps
 ## their place.
 const OUT_OF_TREE := 8
+## THE PLOTS: who is standing where, in squares this many metres on a side —
+## a third of a chunk, so a creature looking sixteen metres round itself reads
+## four of them, not a chunk's worth of a city. Asking "who is near here" used
+## to mean walking every villager in the world: fourteen hundred of them, for
+## the creature's eyes several times a decision and for every wolf choosing
+## prey. Kept on each villager's own turn, which is the only time they move —
+## the hand and a throw make them hot (every frame), so those keep up too.
+const PLOT := 16.0
+## And a little more round the edge than was asked for: somebody set down by a
+## hand or lifted out of the ground has moved since their last turn.
+const PLOT_SLACK := 2.0
+## A villager on no plot: not yet placed, or out of the tree.
+const UNPLOTTED := Vector2i(1 << 30, 1 << 30)
 
 static var _the: CrowdClock = null
 
@@ -57,6 +70,7 @@ var _last := -1       # the last physics frame served
 var _focus := Vector3.ZERO
 var _strides: Array[int] = [1, 1, 1]
 var _near_frames := 0
+var _plots := {}      # Vector2i -> Array of villagers standing in it
 
 
 ## A NEW VILLAGER JOINS THE CLOCK, from their own `_ready`. Their first turn is
@@ -71,7 +85,18 @@ static func enlist(who: Villager) -> void:
 	who._sim_last = Scheduler.now()
 	who._clock_seat = _the._next_seat
 	_the._next_seat += 1
+	_the._replot(who)
 	_the._book(who, Util.sim_stride(who.global_position))
+
+
+## EVERYBODY WHO MIGHT BE WITHIN `reach` OF `at`: the villagers on the plots that
+## square covers. A superset — whoever asks keeps its own distance test, exactly
+## as it did over the whole group. The engine's group is still the one to walk
+## for "everybody, wherever they are"; this is for "anybody near here".
+static func around(at: Vector3, reach: float) -> Array:
+	if _the == null or not is_instance_valid(_the):
+		return []
+	return _the._gather(at, reach)
 
 
 ## HELD, THROWN OR ALIGHT: their next turn is the next frame, whatever they were
@@ -86,6 +111,7 @@ static func clear() -> void:
 	if _the != null and is_instance_valid(_the):
 		for i in WHEEL:
 			_the._slots[i] = []
+		_the._plots.clear()
 
 
 func _init() -> void:
@@ -139,6 +165,7 @@ func _serve(held: Variant, booked: int, now: int, step: float) -> void:
 		return
 	who._clock_due = -1                 # served: whatever books them next wins
 	if not who.is_inside_tree():
+		_unplot(who)                    # not in the world, so not near anything
 		_book_at(who, now + OUT_OF_TREE)
 		return
 	# Counted from when they last ran — which, for anybody held, falling or
@@ -146,6 +173,9 @@ func _serve(held: Variant, booked: int, now: int, step: float) -> void:
 	var owed := clampi(now - who._sim_last, 1, Scheduler.MOST_OWED)
 	who.take_turn(step, owed)
 	Ledger.open(&"CrowdClock")          # the booking is the clock's, not theirs
+	if not is_instance_valid(who) or who.is_queued_for_deletion():
+		return                          # gone in their own turn
+	_replot(who)
 	if _hot(who):
 		_book_at(who, now + 1)
 		return
@@ -179,3 +209,40 @@ func _book_at(who: Villager, frame: int) -> void:
 	var slot: Array = _slots[frame % WHEEL]
 	slot.append(who)
 	slot.append(frame)
+
+
+func _gather(at: Vector3, reach: float) -> Array:
+	var out := []
+	var r := reach + PLOT_SLACK
+	for px in range(floori((at.x - r) / PLOT), floori((at.x + r) / PLOT) + 1):
+		for pz in range(floori((at.z - r) / PLOT), floori((at.z + r) / PLOT) + 1):
+			var plot: Array = _plots.get(Vector2i(px, pz), [])
+			for i in range(plot.size() - 1, -1, -1):
+				if is_instance_valid(plot[i]):
+					out.append(plot[i])
+				else:
+					plot.remove_at(i)   # freed without a last turn: gone now
+	return out
+
+
+## Put them on the plot they are standing in, if it is not the one they are on.
+func _replot(who: Villager) -> void:
+	var at := who.global_position
+	var plot := Vector2i(floori(at.x / PLOT), floori(at.z / PLOT))
+	if plot == who._clock_plot:
+		return
+	_unplot(who)
+	if not _plots.has(plot):
+		_plots[plot] = []
+	(_plots[plot] as Array).append(who)
+	who._clock_plot = plot
+
+
+func _unplot(who: Villager) -> void:
+	if who._clock_plot == UNPLOTTED:
+		return
+	var was: Array = _plots.get(who._clock_plot, [])
+	was.erase(who)
+	if was.is_empty():
+		_plots.erase(who._clock_plot)
+	who._clock_plot = UNPLOTTED

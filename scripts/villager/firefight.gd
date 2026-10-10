@@ -73,11 +73,10 @@ static func stand_for(who: Villager, thing: Node3D) -> Vector3:
 	return thing.global_position + away.normalized() * BEAT_FROM
 
 
-## O(N) BY DESIGN: at the moment a building catches and on the fire's spread
-## beat (every Kindling.SPREAD_EVERY seconds), never on anybody's frame.
-## EVERYBODY WHO CANNOT FIGHT IT, OUT OF THE WAY.
-static func clear_the_way(tree: SceneTree, at: Vector3) -> void:
-	for v in tree.get_nodes_in_group("villagers"):
+## EVERYBODY WHO CANNOT FIGHT IT, OUT OF THE WAY. Once when a building catches
+## and on the fire's spread beat (every Kindling.SPREAD_EVERY seconds).
+static func clear_the_way(_tree: SceneTree, at: Vector3) -> void:
+	for v in CrowdClock.around(at, FLEE_REACH):
 		var soul := v as Villager
 		if soul == null or not is_instance_valid(soul) or can_beat(soul):
 			continue

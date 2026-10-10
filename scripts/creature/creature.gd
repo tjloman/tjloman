@@ -1279,7 +1279,7 @@ func _process_carrying(delta: float) -> void:
 					store.add_lumber((_carried as WildTree).timber())
 					_carried.queue_free()
 				_carried = null
-				for v in get_tree().get_nodes_in_group("villagers"):
+				for v in CrowdClock.around(global_position, 8.0):
 					if v.global_position.distance_to(global_position) < 8.0:
 						v.cheer(2.0)
 				# CARRIED IN AND SET DOWN. Worth far less than the shot from the
@@ -1690,7 +1690,7 @@ func _process_play(delta: float) -> void:
 		steering.walk_phase += delta * 10.0      # the bounce: see CreaturePose
 	if _cheer_time <= 0.0:
 		_cheer_time = 1.5
-		for v in get_tree().get_nodes_in_group("villagers"):
+		for v in CrowdClock.around(global_position, 9.0):
 			if v.global_position.distance_to(global_position) < 9.0:
 				v.cheer(1.5)
 	if _action_time <= 0.0:

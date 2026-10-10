@@ -106,7 +106,7 @@ static func _who_loves(child: Villager) -> Villager:
 		return mum
 	var best: Villager = null
 	var best_gap := STEPS_IN_FROM
-	for v in child.get_tree().get_nodes_in_group("villagers"):
+	for v in CrowdClock.around(here, STEPS_IN_FROM):
 		var soul := v as Villager
 		if soul == null or not is_instance_valid(soul) or soul == child:
 			continue

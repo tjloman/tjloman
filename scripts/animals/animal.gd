@@ -473,7 +473,7 @@ func _think() -> void:
 			SoundBank.play_at("bark", global_position, -2.0)
 			(wolf as Animal).scare(global_position)
 		# Guard dogs also cheer up anyone nearby. Dogs are like that.
-		for v in get_tree().get_nodes_in_group("villagers"):
+		for v in CrowdClock.around(global_position, 6.0):
 			if v.global_position.distance_to(global_position) < 6.0:
 				v.cheer(0.3)
 
@@ -496,7 +496,7 @@ func _find_prey() -> Node3D:
 			best_dist = d
 			best = animal
 	if best == null and spec.get("attacks_villagers", false):
-		for v in get_tree().get_nodes_in_group("villagers"):
+		for v in CrowdClock.around(global_position, best_dist * 0.6):
 			var d := global_position.distance_to(v.global_position)
 			if d < best_dist * 0.6:
 				best_dist = d

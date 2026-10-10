@@ -303,11 +303,14 @@ var _sim_last := 0
 ## note in take_turn — this is what keeps distant villages fed.
 var _sim_scale := 1.0
 ## Kept by CrowdClock: where in a cycle this one's turn falls, and the frame it
-## is next booked for. Machinery the clock drives; nothing here reads them.
+## is next booked for, and the plot they stand on (CrowdClock.around).
+## Machinery the clock drives; nothing here reads them.
 @warning_ignore("unused_private_class_variable")
 var _clock_seat := -1
 @warning_ignore("unused_private_class_variable")
 var _clock_due := -1
+@warning_ignore("unused_private_class_variable")
+var _clock_plot := CrowdClock.UNPLOTTED
 var _shop_spot := Vector3.INF
 var _shop_kind := ""
 var _shift_left := 0.0

@@ -277,6 +277,26 @@ if "phase(" not in code(sched, "turn") or "hash(" not in code(sched, "phase"):
     fail.append("Scheduler.turn phases by the raw engine id again, which bunches a "
                 "batch of entities onto one frame of the cycle")
 
+# WHO IS NEAR HERE. The creature's eyes, its watching and its leisure, every
+# wolf choosing prey and every frightened child looking for a grown-up walked the
+# whole world's villagers to find the few within twenty metres. They ask the
+# crowd clock's plots now (CrowdClock.around): only the squares round the ask.
+# The miracles still walk everybody, once a cast, which is what they are for.
+NEAR_ASKERS = ["creature/creature_eyes.gd", "creature/creature_watching.gd",
+               "creature/creature_leisure.gd", "creature/creature.gd",
+               "animals/animal.gd", "villager/child_safety.gd", "villager/firefight.gd"]
+walkers = []
+for rel in NEAR_ASKERS:
+    src = "\n".join(ln.split("#")[0] for ln in (SCRIPTS / rel).read_text().splitlines())
+    if 'get_nodes_in_group("villagers")' in src:
+        walkers.append(rel)
+print()
+print("WHO IS NEAR HERE: %s" % ("asked of the plots" if not walkers
+                                 else "WALKS THE WORLD in " + ", ".join(walkers)))
+for rel in walkers:
+    fail.append("%s walks every villager in the world to find the ones near it: "
+                "ask CrowdClock.around" % rel)
+
 print()
 if fail:
     for line in fail:

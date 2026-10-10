@@ -47,7 +47,7 @@ static func home_village(tree: SceneTree) -> Village:
 ## reaching for a healing miracle instead of standing about.
 static func wounded_near(who: Creature, within := VILLAGER_REACH) -> float:
 	var hurt := 0
-	for v in who.get_tree().get_nodes_in_group("villagers"):
+	for v in CrowdClock.around(who.global_position, within):
 		var villager := v as Villager
 		if not is_instance_valid(villager):
 			continue
@@ -62,7 +62,7 @@ static func wounded_near(who: Creature, within := VILLAGER_REACH) -> float:
 static func neediest_near(who: Creature, within := VILLAGER_REACH) -> Villager:
 	var best: Villager = null
 	var worst := 60.0
-	for v in who.get_tree().get_nodes_in_group("villagers"):
+	for v in CrowdClock.around(who.global_position, within):
 		var villager := v as Villager
 		if not is_instance_valid(villager):
 			continue
@@ -77,7 +77,7 @@ static func neediest_near(who: Creature, within := VILLAGER_REACH) -> Villager:
 
 ## Scare (and horrify) everyone who saw that.
 static func scare_witnesses(who: Creature, radius: float, horror: float) -> void:
-	for v in who.get_tree().get_nodes_in_group("villagers"):
+	for v in CrowdClock.around(who.global_position, radius):
 		var villager := v as Villager
 		if is_instance_valid(villager) \
 				and villager.global_position.distance_to(who.global_position) < radius:
@@ -90,7 +90,7 @@ static func scare_witnesses(who: Creature, radius: float, horror: float) -> void
 ## nothing for it.
 static func audience(who: Creature, radius: float) -> int:
 	var count := 0
-	for v in who.get_tree().get_nodes_in_group("villagers"):
+	for v in CrowdClock.around(who.global_position, radius):
 		var villager := v as Villager
 		if is_instance_valid(villager) and not villager.is_afraid() \
 				and villager.global_position.distance_to(who.global_position) < radius:
@@ -100,7 +100,7 @@ static func audience(who: Creature, radius: float) -> int:
 
 ## Gladden everyone near enough to be gladdened.
 static func cheer_near(who: Creature, radius: float, amount: float) -> void:
-	for v in who.get_tree().get_nodes_in_group("villagers"):
+	for v in CrowdClock.around(who.global_position, radius):
 		if v.global_position.distance_to(who.global_position) < radius:
 			v.cheer(amount)
 
@@ -148,7 +148,7 @@ static func circumstances(who: Creature) -> Dictionary:
 	var kin_afraid := 0.0
 	var kin_hurting := 0.0
 	var kin_glad := 0.0
-	for v in who.get_tree().get_nodes_in_group("villagers"):
+	for v in CrowdClock.around(who.global_position, 22.0):
 		var villager := v as Villager
 		if not is_instance_valid(villager):
 			continue
@@ -231,10 +231,10 @@ static func plight_of(villager_given: Variant) -> Dictionary:
 
 ## Whoever nearby is worst off — the one a creature that cared would go to
 ## first. Ranked by plain visible trouble, not by anything it has learned.
-static func neediest_soul(tree: SceneTree, from: Vector3, radius := 30.0) -> Villager:
+static func neediest_soul(_tree: SceneTree, from: Vector3, radius := 30.0) -> Villager:
 	var best: Villager = null
 	var worst := 0.35
-	for v in tree.get_nodes_in_group("villagers"):
+	for v in CrowdClock.around(from, radius):
 		var villager := v as Villager
 		if not is_instance_valid(villager):
 			continue

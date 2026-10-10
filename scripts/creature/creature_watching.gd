@@ -36,7 +36,7 @@ static func observe(who: Creature) -> void:
 	var watched_work := false
 	var souls := 0
 	var looked_at := who.head.subject
-	for v in who.get_tree().get_nodes_in_group("villagers"):
+	for v in CrowdClock.around(who.global_position, 16.0):
 		var villager := v as Villager
 		if not is_instance_valid(villager):
 			continue

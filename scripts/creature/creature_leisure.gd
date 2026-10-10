@@ -104,7 +104,7 @@ static func pray(who: Creature, delta: float) -> void:
 	who._action_time -= delta
 	who.express("love", 0.6)
 	var faithful := 0
-	for v in who.get_tree().get_nodes_in_group("villagers"):
+	for v in CrowdClock.around(who.global_position, 22.0):
 		var villager := v as Villager
 		if not is_instance_valid(villager) or villager.global_position \
 				.distance_to(who.global_position) > 22.0:
@@ -175,7 +175,7 @@ static func commune(who: Creature, delta: float) -> void:
 		who._cheer_time -= delta
 		if who._cheer_time <= 0.0:
 			who._cheer_time = 2.0
-			for v in who.get_tree().get_nodes_in_group("villagers"):
+			for v in CrowdClock.around(who.global_position, 20.0):
 				var villager := v as Villager
 				if is_instance_valid(villager) and villager.global_position \
 						.distance_to(who.global_position) < 20.0:
