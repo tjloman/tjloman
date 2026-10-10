@@ -80,6 +80,7 @@ static func bring_up_to_date(record: Dictionary, world: WorldGen) -> void:
 	var board: Dictionary = record.get("board", {})
 	TownLand.write_back(world, Vector2(spot.x, spot.z), float(board.get("game_stock", 1.0)),
 		float(board.get("beast_stock", 1.0)))
+	TownLand.write_back_woods(world, Vector2(spot.x, spot.z), float(board.get("wood_stock", 1.0)))
 	Ledger.resume(clock)
 
 
@@ -151,6 +152,8 @@ func fold(town: Village, world: WorldGen) -> void:
 		board["game_stock"] = clampf(land.game_now / land.game, 0.05, 1.0)
 	if land.predators > 0.0:
 		board["beast_stock"] = clampf(land.predators_now / land.predators, 0.02, 1.0)
+	if land.wood > 0.0:
+		board["wood_stock"] = clampf(land.wood_now / land.wood, 0.05, 1.0)
 	record["board"] = board
 	SaveGame.village_memory.append(record)
 	_far.erase(town)

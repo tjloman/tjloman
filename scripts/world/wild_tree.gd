@@ -160,6 +160,10 @@ const TREE_GRAVITY := 20.0
 
 var style := "forest"
 var rng_seed := 0
+## ONE OF ITS CHUNK'S SEED STAND (Chunk._plant_stand), whose going the world
+## remembers (`_gone_from_spot`) — not a sapling it seeded, nor one set down by
+## the hand somewhere new.
+var from_stand := false
 var lumber := 1.0
 var burning := false
 
@@ -543,6 +547,7 @@ func current_height() -> float:
 
 
 func pick_up() -> void:
+	_gone_from_spot()      # uprooted: wherever it ends up, its own spot is bare
 	_held = true
 	_flying = false
 	_down = false
@@ -922,6 +927,7 @@ func _burn(delta: float) -> void:
 
 	if _burn_time <= 0.0:
 		# Consumed to ash — no lumber, and a gap the fire can't cross.
+		_gone_from_spot()
 		queue_free()
 
 
@@ -989,6 +995,7 @@ func fell() -> int:
 	if _felled:
 		return 0
 	_felled = true
+	_gone_from_spot()
 	collision_layer = 0
 	# AND THE BOARD GOES WITH IT. A chunk you logged and walked away from would
 	# otherwise still show its wood standing on the horizon — the impostors are
@@ -1002,6 +1009,17 @@ func fell() -> int:
 	tween.tween_interval(2.0)
 	tween.tween_callback(queue_free)
 	return timber()
+
+
+## GONE FROM ITS SPOT, and the world told so, once: the seed would otherwise
+## stand it up again the next time its chunk is built. See WorldGen._felled.
+func _gone_from_spot() -> void:
+	if not from_stand:
+		return
+	from_stand = false
+	var ground := get_parent() as Chunk
+	if ground != null:
+		ground.world.remember_felled(ground.cell, {"seed": rng_seed, "at": GameState.game_years})
 
 
 ## WHAT A TREE IS ACTUALLY WORTH: the running sum of the Fibonacci sequence up

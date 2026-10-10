@@ -26,9 +26,15 @@ What holds it there, in the source:
   8. A PERSON'S SPAN IS SAVED and a restored one always has years left.
   9. THE TOTEM CAN BE HELD: a hoverable body in the totem group, which the hand
      reads like the nest wall, opening TownReading in the stone panel.
- 10. And with GODOT set, tools/live/century_live.gd runs the rules over 280
-     towns for 180 game years and judges every one, and fold_live.gd folds a
-     believing town, lets twenty years pass, and brings it back.
+ 10. THE WOODS REMEMBER: a tree of a chunk's stand that is felled, burned or
+     uprooted is written down (WorldGen._felled) and saved, and the seed
+     leaves it out until it has grown back (Chunk._after_felling); a town out
+     of sight fells timber from the land's woods, never past KEEP_STOCK, and
+     what it cut is written back to the woods when it returns.
+ 11. And with GODOT set, tools/live/century_live.gd runs the rules over 320
+     towns for 180 game years and judges every one, fold_live.gd folds a
+     believing town, lets twenty years pass, and brings it back, and
+     woods_live.gd fells, saves, sheds and regrows a wood.
 """
 import os
 import pathlib
@@ -46,6 +52,7 @@ SAVE = (ROOT / "scripts/save_game.gd").read_text()
 VILLAGE = (ROOT / "scripts/world/village.gd").read_text()
 HAND = (ROOT / "scripts/player/divine_hand.gd").read_text()
 HUD = (ROOT / "scripts/ui/hud.gd").read_text()
+TREE = (ROOT / "scripts/world/wild_tree.gd").read_text()
 
 
 def body(text, name):
@@ -117,6 +124,18 @@ def source(fail):
     totem = body(VILLAGE, "_build_totem")
     if "add_to_group(TOTEMS)" not in totem or "collision_layer = 4" not in totem:
         fail.append("the totem is not something the hand can hold")
+    if "return _after_felling(out)" not in body(CHUNK, "_tree_stand"):
+        fail.append("a chunk's seed stands its trees again however many were felled")
+    for fn in ("fell", "pick_up", "_burn"):
+        if "_gone_from_spot()" not in body(TREE, fn):
+            fail.append("a tree gone by %s is not remembered as down" % fn)
+    if '"woods": world.woods_to_save()' not in body(SAVE, "snapshot") \
+            or "world.woods_from_save(" not in body(SAVE, "apply_pending"):
+        fail.append("a save forgets which trees are down")
+    if "_spare(book.wood_stock" not in body(RULES, "_build"):
+        fail.append("a town out of sight can fell its woods bare")
+    if "TownLand.write_back_woods(" not in body(BOARD, "bring_up_to_date"):
+        fail.append("a town's felling out of sight is not written back to the woods")
     if "Village.TOTEMS" not in body(HAND, "_readable") or "TownReading.of(" not in body(HUD, "_on_stone_read"):
         fail.append("holding a totem does not read the town")
 
@@ -126,7 +145,7 @@ def live(fail):
     if not godot or not pathlib.Path(godot).exists():
         print("  GODOT not set: not run in an engine here")
         return
-    for test in ("century_live.gd", "fold_live.gd"):
+    for test in ("century_live.gd", "fold_live.gd", "woods_live.gd"):
         ran = subprocess.run([godot, "--headless", "--path", str(ROOT), "--script",
                               "tools/live/" + test], capture_output=True, text=True, timeout=600)
         checks = [ln for ln in ran.stdout.splitlines() if ln.rstrip().endswith(("yes", "NO"))]

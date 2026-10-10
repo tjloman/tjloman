@@ -44,10 +44,10 @@ const FOOTPRINT := 2.2
 const BUILDS_OUT := 56.0
 ## What is kept in each ring.
 const KEYS: Array[String] = ["water", "shore", "fields", "room", "wood", "bushes",
-	"game", "predators", "game_now", "predators_now"]
+	"game", "predators", "game_now", "predators_now", "wood_now"]
 ## The wild larders: counted out to the whole reach, not just where it builds.
 const WILD: Array[String] = ["water", "shore", "wood", "bushes", "game", "predators",
-	"game_now", "predators_now"]
+	"game_now", "predators_now", "wood_now"]
 
 var reach := 0.0
 var biome := "grassland"
@@ -56,6 +56,7 @@ var shore := 0.0        # dry samples beside water
 var fields := 0.0       # samples a field could go on
 var room := 0.0         # samples a house or a field could stand on
 var wood := 0.0         # trees, as the chunks would grow them
+var wood_now := 0.0     # and as they stand, less what is down (WorldGen.felled_at)
 var bushes := 0.0       # berry bushes
 ## THE BEASTS: what the land holds of them — every herd as it was born, which
 ## is what it grows back to — and what is left of them now, where somebody has
@@ -187,7 +188,13 @@ func _total(count: int) -> void:
 
 func _count_chunk(world: WorldGen, cell: Vector2i, here: String, share: float, ring: Dictionary) -> void:
 	var stand: Array = Chunk.STAND.get(here, [0, 0, ""])
-	ring["wood"] += (float(stand[0]) + float(stand[1])) * 0.5 * share
+	var grows := (float(stand[0]) + float(stand[1])) * 0.5
+	ring["wood"] += grows * share
+	var down := 0.0
+	for entry: Dictionary in world.felled_at(cell):
+		if GameState.game_years - float(entry["at"]) < Chunk.REGROW_YEARS:
+			down += 1.0 if entry.has("seed") else float(entry["any"])
+	ring["wood_now"] += maxf(grows - down, 0.0) * share
 	var bush: Array = Chunk.BUSHES.get(here, [0, 0])
 	ring["bushes"] += (float(bush[0]) + float(bush[1])) * 0.5 * share
 	var known = world.herds_remembered(cell)
@@ -261,6 +268,7 @@ func to_dict() -> Dictionary:
 	return {"reach": reach, "biome": biome, "water": water, "shore": shore,
 		"fields": fields, "room": room, "wood": wood, "bushes": bushes, "game": game,
 		"predators": predators, "game_now": game_now, "predators_now": predators_now,
+		"wood_now": wood_now,
 		"edition": edition, "rings": rings}
 
 
@@ -268,6 +276,37 @@ static func from_dict(data: Dictionary) -> TownLand:
 	var land := made(data)
 	land.rings = (data.get("rings", []) as Array).duplicate(true)
 	return land
+
+
+## AND WHAT ITS FELLING LEFT of the woods round it: every chunk the town's
+## numbers reach has as many of its trees down as the board says, the newly cut
+## ones counted from today — and one drawn far off as billboards is drawn again
+## with them gone. A wood of real trees is left as it stands: trees do not
+## vanish in front of the player.
+static func write_back_woods(world: WorldGen, at: Vector2, wood_share: float) -> void:
+	var span := int(ceilf(REACH / WorldGen.CHUNK_SIZE))
+	var centre := WorldGen.cell_of(at.x, at.y)
+	var now := GameState.game_years
+	for dx in range(-span, span + 1):
+		for dz in range(-span, span + 1):
+			var cell := centre + Vector2i(dx, dz)
+			var mid := (Vector2(cell) + Vector2(0.5, 0.5)) * WorldGen.CHUNK_SIZE
+			if mid.distance_to(at) > REACH + WorldGen.CHUNK_SIZE * 0.5:
+				continue
+			var standing := world.chunk_at(mid.x, mid.y)
+			if standing != null and (not standing.terrain_only or standing.wooded):
+				continue
+			var stand: Array = Chunk.STAND.get(world.biome_at(mid.x, mid.y), [0, 0, ""])
+			var grows := (float(stand[0]) + float(stand[1])) * 0.5
+			var down := 0.0
+			for entry: Dictionary in world.felled_at(cell):
+				if now - float(entry["at"]) < Chunk.REGROW_YEARS:
+					down += 1.0 if entry.has("seed") else float(entry["any"])
+			var more := roundi(grows * (1.0 - wood_share) - down)
+			if more > 0:
+				world.remember_felled(cell, {"any": more, "at": now})
+				if standing != null:
+					standing.restand()
 
 
 static func _thin(chunk: Chunk, game_share: float, beast_share: float) -> void:

@@ -129,6 +129,11 @@ const BUILDS_WITHIN := 0.8
 const FIELD_EFFORT := 30.0
 const EFFORT_PER_HAND := 40.0
 const WOOD_PER_HAND := 8.0
+## THE WOODS: the timber a tree yields on average (WildTree.TIMBER, a tree of the
+## seed's stand standing between size four and ten), and how fast a wood grows
+## back — a felled tree is a young tree in Chunk.REGROW_YEARS.
+const LUMBER_A_TREE := 51.0
+const WOOD_REGROW := 0.1
 const STONE_PER_HAND := 4.0
 ## Houses stand empty and fall when there are this many beds per soul and more.
 const EMPTY_BEDS := 1.8
@@ -281,6 +286,7 @@ static func step(book: TownBook, land: TownLand, rain: float, dt: float) -> void
 	book.berry_stock = _regrow(book.berry_stock, BERRY_REGROW * clampf(rain, 0.3, 1.5), dt)
 	var game_room := maxf(land.game, 1.0)
 	book.game_stock = _regrow(book.game_stock, GAME_REGROW, dt)
+	book.wood_stock = _regrow(book.wood_stock, WOOD_REGROW, dt)
 	var beasts := land.predators * book.beast_stock
 	book.game_stock = maxf(book.game_stock - beasts * BEAST_EATS * dt / game_room, 0.05)
 	var cull := BEAST_CULL * _guard(book) * minf(book.adults, CULLERS) / CULLERS
@@ -423,14 +429,22 @@ static func _build(book: TownBook, land: TownLand, hands: float, dt: float) -> v
 		hands *= 0.3                    # they gather; they do not raise
 		cramped = false
 	var gather := hands * (0.4 if cramped else 0.25)
-	var trees := clampf(land.wood / 6.0, 0.1, 1.0)
+	var trees := clampf(land.wood / 6.0, 0.1, 1.0) * clampf(book.wood_stock / 0.5, 0.2, 1.0)
 	var biggest: Dictionary = House.SPECS[House.Size.LONGHOUSE]
 	var wood_full := book.wood >= float(biggest["lumber"]) * MATERIAL_BUILDS
 	var stone_full := book.stone >= float(biggest["stone"]) * MATERIAL_BUILDS
 	if wood_full and stone_full:
 		gather = 0.0
 	if not wood_full:
-		book.wood += gather * (0.65 if not stone_full else 1.0) * WOOD_PER_HAND * trees * dt
+		# FELLED FROM THE WOODS ROUND IT, never cut below the share every larder
+		# is left at, and only what the trees grow back once it is down to it.
+		var timber_room := land.wood * LUMBER_A_TREE
+		var cut := gather * (0.65 if not stone_full else 1.0) * WOOD_PER_HAND * trees * dt
+		cut = minf(cut, _spare(book.wood_stock, WOOD_REGROW, timber_room, dt))
+		book.wood += cut
+		book.felled += cut / LUMBER_A_TREE
+		if timber_room > 0.0:
+			book.wood_stock -= cut / timber_room
 	if not stone_full:
 		book.stone += gather * (0.35 if not wood_full else 1.0) * STONE_PER_HAND * dt
 	var raise := hands - gather

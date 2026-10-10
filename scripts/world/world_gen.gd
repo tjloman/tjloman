@@ -210,6 +210,14 @@ var _pond_edition := 0
 ## camera moved away and back. Present means "this is what lives here now",
 ## including an empty list for a herd hunted out.
 var _herds_known := {}
+## THE WOODS AS THEY STAND: which trees of each chunk's stand are down, and when
+## they came down — felled, burned, uprooted. A chunk built again leaves them
+## out (Chunk._after_felling) until they have had REGROW_YEARS to come back, and
+## stands them small for as long again while they grow. Cell -> Array of
+## {"seed": the tree's seed, "at": game years} for a tree that is known, or
+## {"any": how many, "at": ...} for trees a town out of sight felled
+## (TownLand.write_back), which takes them from those still standing.
+var _felled := {}
 ## Out of sight, hidden, switched off, and waiting their turn to be freed. See
 ## SHEDS_PER_FRAME.
 var _doomed: Array[Chunk] = []
@@ -870,6 +878,47 @@ func _show_pond(pond: Dictionary) -> void:
 		disc.material_override = Util.lit(skin)
 	add_child(disc)
 	pond["node"] = disc
+
+
+## A TREE OF THIS CELL'S STAND IS DOWN. See `_felled`.
+func remember_felled(cell: Vector2i, entry: Dictionary) -> void:
+	if not _felled.has(cell):
+		_felled[cell] = []
+	(_felled[cell] as Array).append(entry)
+
+
+## WHAT IS DOWN HERE, still missing or still growing back; what has grown back
+## whole is forgotten.
+func felled_at(cell: Vector2i) -> Array:
+	var gone: Array = _felled.get(cell, [])
+	if gone.is_empty():
+		return gone
+	var now := GameState.game_years
+	var growing := gone.filter(func(e): return now - float(e["at"]) < Chunk.REGROW_YEARS * 2.0)
+	if growing.size() != gone.size():
+		_felled[cell] = growing
+	return growing
+
+
+func woods_to_save() -> Array:
+	var out := []
+	for cell: Vector2i in _felled:
+		var gone := felled_at(cell)
+		if not gone.is_empty():
+			out.append({"x": cell.x, "z": cell.y, "gone": gone})
+	return out
+
+
+func woods_from_save(data: Array) -> void:
+	for entry in data:
+		var row := entry as Dictionary
+		var cell := Vector2i(int(row.get("x", 0)), int(row.get("z", 0)))
+		_felled[cell] = (row.get("gone", []) as Array).duplicate(true)
+		# A chunk already standing was planted from the seed before the save was
+		# read; what the save says is down comes down.
+		var cached = _chunks.get(cell)
+		if cached != null and is_instance_valid(cached) and not (cached as Chunk).terrain_only:
+			(cached as Chunk).fell_remembered()
 
 
 func remember_herds(cell: Vector2i, rows: Array) -> void:

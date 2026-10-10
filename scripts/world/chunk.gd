@@ -42,6 +42,11 @@ const STAND := {
 	"wetland": [1, 3, "wetland"],
 }
 
+## HOW LONG A TREE OF THE SEED'S STAND STAYS DOWN, in game years, once felled,
+## burned or uprooted — and it grows back to its full size over as long again.
+## Thirty years: a woodland cut in a player's grandfather's time is a young
+## wood in his own.
+const REGROW_YEARS := 30.0
 ## BERRY BUSHES BY BIOME: fewest and most to a chunk. And the BEASTS: each
 ## kind's chance of a herd on a chunk (two herds at most). Both were literals in
 ## `_scatter`'s match; they are tables now for the same reason STAND is — a town
@@ -1187,12 +1192,87 @@ func _tree_stand(rng: RandomNumberGenerator) -> Array[Dictionary]:
 		var carried := rng.randf_range(4.0, WildTree.MAX_LUMBER)
 		out.append({"spot": spot, "seed": from_seed, "lumber": carried,
 			"style": String(spec[2])})
-	return out
+	return _after_felling(out)
+
+
+## WHAT HAS BEEN CUT HERE, taken out of the stand the seed grows — AFTER every
+## draw from the stream, so not one tree that stands moves (see `_scatter`).
+## A tree down for less than REGROW_YEARS is not there; one down longer stands
+## again, small, and grows back to its size over as long again. Trees a town
+## out of sight felled are taken from those still standing, in an order fixed
+## by their seeds, so the same ones are missing every time. See WorldGen._felled.
+func _after_felling(stand: Array[Dictionary]) -> Array[Dictionary]:
+	var gone := world.felled_at(cell)
+	if gone.is_empty():
+		return stand
+	var now := GameState.game_years
+	var by_seed := {}
+	for it: Dictionary in stand:
+		by_seed[it["seed"]] = it
+	var order := stand.duplicate()
+	order.sort_custom(func(a, b): return hash(a["seed"]) < hash(b["seed"]))
+	var taken := {}
+	for entry: Dictionary in gone:
+		var age := now - float(entry["at"])
+		var hit: Array = []
+		if entry.has("seed"):
+			var one := int(entry["seed"])   # a float, read back from a save
+			if by_seed.has(one) and not taken.has(one):
+				hit.append(by_seed[one])
+		else:
+			for it: Dictionary in order:
+				if hit.size() >= int(entry["any"]):
+					break
+				if not taken.has(it["seed"]):
+					hit.append(it)
+		for it: Dictionary in hit:
+			taken[it["seed"]] = true
+			if age < REGROW_YEARS:
+				it["down"] = true
+			else:
+				it["lumber"] = maxf(1.0, float(it["lumber"]) * (age - REGROW_YEARS) / REGROW_YEARS)
+	var standing: Array[Dictionary] = []
+	for it: Dictionary in stand:
+		if not it.get("down", false):
+			standing.append(it)
+	return standing
+
+
+## TREES STANDING HERE THAT THE WORLD REMEMBERS ARE DOWN, felled: a chunk
+## planted from the seed before a save's woods were read (WorldGen.
+## woods_from_save).
+func fell_remembered() -> void:
+	var stand: Array[Dictionary] = []
+	var trees := {}
+	for node in get_children():
+		var tree := node as WildTree
+		if tree != null and tree.from_stand:
+			stand.append({"seed": tree.rng_seed, "lumber": tree.lumber})
+			trees[tree.rng_seed] = tree
+	var left := {}
+	for it: Dictionary in _after_felling(stand):
+		left[it["seed"]] = true
+	for seed_of: int in trees:
+		if not left.has(seed_of):
+			(trees[seed_of] as WildTree).from_stand = false   # already counted: not twice
+			(trees[seed_of] as WildTree).queue_free()
+
+
+## THE WOOD OUT HERE ASKED AGAIN, for a chunk drawn as billboards: a town out
+## of sight has felled some of it (TownLand.write_back_woods), and the boards
+## show what it left. A chunk with real trees keeps them; see `fell_remembered`.
+func restand() -> void:
+	if wooded or not terrain_only:
+		return
+	_stand_kept = _tree_stand(world.chunk_rng(cell))
+	_stand_known = true
+	retally_boards()
 
 
 func _plant_stand(stand: Array[Dictionary]) -> void:
 	for it: Dictionary in stand:
 		var tree := WildTree.new()
+		tree.from_stand = true
 		tree.style = it["style"]
 		tree.rng_seed = it["seed"]
 		tree.lumber = it["lumber"]

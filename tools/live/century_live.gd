@@ -80,6 +80,7 @@ func _initialize() -> void:
 	var over_ever := {}
 	var overbuilt := {}
 	var was_used := {}
+	var woods_low := {}
 	var t0 := Time.get_ticks_msec()
 	var stepped := 0
 	for kind: String in KINDS:
@@ -116,6 +117,7 @@ func _initialize() -> void:
 				var day: float = book.years / 1.8
 				rules.step(book, land, weather.rain(77, book.pos, day, land.biome), dt)
 				stepped += 1
+				woods_low[book.id] = minf(float(woods_low.get(book.id, 1.0)), book.wood_stock)
 				if book.years >= next_year:
 					next_year += 1.0
 					trace.append(book.population())
@@ -204,6 +206,27 @@ func _initialize() -> void:
 		check(shaky == 0, "%s: every one holds steady over its last sixty years (%d swing)" % [kind, shaky])
 
 	check(overbuilt.is_empty(), "no town ever builds past the ground it has room on (%d did)" % overbuilt.size())
+	# THE WOODS: a town fells the trees round it for its timber, never past the
+	# share every larder is left at, and they grow back once it eases off.
+	var cut := 0
+	var stripped := 0
+	var regrown := 0
+	var trees_down := 0.0
+	for kind: String in KINDS:
+		for t: Dictionary in by_kind[kind]:
+			var low := float(woods_low.get(t["book"].id, 1.0))
+			trees_down += t["book"].felled
+			if low < 0.9:
+				cut += 1
+			if low < rules.KEEP_STOCK - 0.02:
+				stripped += 1
+			if t["book"].wood_stock > low + 0.05:
+				regrown += 1
+	print("  woods: %d towns cut theirs below nine tenths, %d grew back since, %.0f trees felled in all"
+		% [cut, regrown, trees_down])
+	check(cut >= TOWNS_EACH and stripped == 0,
+		"towns fell the woods round them (%d did), never past what is left standing (%d did)" % [cut, stripped])
+	check(regrown >= 1, "and a wood grows back once the felling eases (%d did)" % regrown)
 	var tight: Array = by_kind["cramped"]
 	var grown_tight: int = tight.filter(func(t): return t["book"].stage >= 3).size()
 	check(grown_tight < TOWNS_EACH / 4, "rich land with little room to build stays small (%d of %d grew)"

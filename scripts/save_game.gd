@@ -324,6 +324,8 @@ func snapshot(world: WorldGen, creature: Creature) -> Dictionary:
 		# AND WHAT IS STILL ALIVE IN THEM. The seed says how many were born here;
 		# only this says how many are left.
 		"herds": world.herds_to_save(),
+		# AND WHICH TREES ARE DOWN, and since when: the seed stands them all.
+		"woods": world.woods_to_save(),
 		# AND WHERE THE GOD HAS BEEN. The seed can redraw any valley on demand;
 		# only this says which ones were ever actually visited, and the temple's
 		# well fogs everything else. See WorldGen._known.
@@ -511,6 +513,7 @@ func apply_pending(world: WorldGen, creature: Creature) -> void:
 			world.rebuild_all()
 		world.ponds_from_save(pending_world.get("ponds", []) as Array)
 		world.herds_from_save(pending_world.get("herds", []) as Array)
+		world.woods_from_save(pending_world.get("woods", []) as Array)
 		world.known_from_save(pending_world.get("known", []) as Array)
 		GameState.announce("The world returns as you left it.")
 	# A brand-new profile names its creature the moment it draws breath.
