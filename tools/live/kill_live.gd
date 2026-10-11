@@ -44,17 +44,22 @@ func _initialize() -> void:
 		var before: int = herd.alive()
 		var victim = agents[0]
 		var where: Vector3 = victim.global_position
+		var row: Dictionary = {}
+		for m in herd._members:
+			if typeof(m["agent"]) == TYPE_OBJECT and m["agent"] == victim:
+				row = m
 		victim.take_damage(9999.0)
 		check(herd.alive() == before - 1, "a %s killed: its herd is one smaller at once (%d to %d)"
 			% [kind, before, herd.alive()])
 		for i in 600:
 			await process_frame
-		# THE SIGN OF THE DEAD WALKING: the herd's count back where it was. Its
-		# living mates may well wander past the body; that is not it.
+		# THE SIGN OF THE DEAD WALKING: its own row alive again, or given a new
+		# body. Not the herd's count: a herd calves, and a pack grows on its kills.
 		var bodies := _near(where, "Carcass", "")
-		check(bodies >= 1 and herd.alive() <= before - 1,
-			"its body lies where it fell, and it does not stand up again (%d bodies; the herd %d of %d)"
-			% [bodies, herd.alive(), before])
+		var risen: bool = row.is_empty() or not row["dead"] or typeof(row["agent"]) == TYPE_OBJECT
+		check(bodies >= 1 and not risen,
+			"its body lies where it fell, and it does not stand up again (%d bodies; its row %s)"
+			% [bodies, "risen" if risen else "dead"])
 		herd.queue_free()
 		await process_frame
 	# 3. Freed some other way: no death, no telling.

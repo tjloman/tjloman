@@ -115,6 +115,10 @@ const DESERT_HEAT := 0.52
 const DESERT_DRY := 0.0
 const TUNDRA_COLD := -0.52
 const RAINFOREST_WET := 0.30
+## How far either side of a border the land's ruggedness is blended, in the
+## climate noises' own units: forty metres or so either way, and a border no steeper
+## than the land itself (tools/live/seams_live.gd). See `_rugged`.
+const RUGGED_BLEND := 0.2
 
 ## HOW MANY TIMES THE LAND HAS BEEN ASKED WHAT IT IS, this frame. Read and
 ## reset by the frame meter; counted in `seeded_height_at`, which is where the
@@ -511,31 +515,50 @@ func land_edition() -> int:
 
 
 func _seeded_height(x: float, z: float) -> float:
-	var biome := biome_at(x, z)
-	var amp := 11.0
-	match biome:
-		"rocky_hills":
-			amp = 24.0
-		"wetland":
-			amp = 4.0
-		"savanna":
-			amp = 7.0
-		# Dunes: gentler than hills and rounder than grass, so a desert reads as
-		# swells rather than as either a plain or a mountain range.
-		"desert":
-			amp = 9.0
-		# The cold flats. Tundra is the flattest country in the game on purpose —
-		# it is meant to feel like somewhere with nothing to hide behind.
-		"tundra":
-			amp = 5.0
-		"rainforest":
-			amp = 10.0
-	var h := _height_noise.get_noise_2d(x, z) * amp + 2.2
+	var h := _height_noise.get_noise_2d(x, z) * _rugged(x, z) + 2.2
 	h += _detail_noise.get_noise_2d(x, z) * 0.7
 	# The cradle: land near the origin is gently flattened so the player's
 	# village always has room to breathe.
 	var d := Vector2(x, z).length()
 	return lerpf(2.0, h, smoothstep(28.0, 80.0, d))
+
+
+## HOW RUGGED THE COUNTRY IS HERE: the metres the land's noise is scaled by.
+##
+## Rocky hills twenty-four, grass eleven, wetland four: each country its own,
+## and the ladder `biome_at` climbs is the same one. But it was read off the
+## biome, and a biome changes at a LINE — so the scale changed all at once
+## there, and a hill across a border had a step in it up to nine and a half
+## metres high in half a metre (tools/live/seams_live.gd): a straight crease
+## that looked like a seam in the ground, and that no villager could climb.
+##
+## So each rung of the ladder is taken SOFTLY: blended in over a band of
+## RUGGED_BLEND either side of its threshold, the lowest rung first and every
+## rung above laid over it, as `biome_at` asks them. Away from a border every
+## blend is wholly one side or the other and the scale is the country's own,
+## exactly; across one, the land rises from one country to the next over a
+## score of metres.
+func _rugged(x: float, z: float) -> float:
+	var t := _temp_noise.get_noise_2d(x, z)
+	var w := _wet_noise.get_noise_2d(x, z)
+	var amp := 11.0                                                      # grassland
+	amp = lerpf(amp, 24.0, _soft(-0.4 - t))                              # rocky hills
+	amp = lerpf(amp, 11.0, _soft(w - 0.15))                              # forest
+	amp = lerpf(amp, 4.0, _soft(w - 0.45))                               # wetland
+	var jungle := _soft(_jungle_noise.get_noise_2d(x, z)) if w > RAINFOREST_WET - RUGGED_BLEND else 0.0
+	amp = lerpf(amp, 10.0, _soft(w - RAINFOREST_WET) * jungle)           # rainforest
+	# The cold flats. Tundra is the flattest country in the game on purpose —
+	# it is meant to feel like somewhere with nothing to hide behind.
+	amp = lerpf(amp, 5.0, _soft(TUNDRA_COLD - t))                        # tundra
+	amp = lerpf(amp, 7.0, _soft(t - 0.4))                                # savanna
+	# Dunes: gentler than hills and rounder than grass, so a desert reads as
+	# swells rather than as either a plain or a mountain range.
+	return lerpf(amp, 9.0, _soft(t - DESERT_HEAT) * _soft(DESERT_DRY - w))   # desert
+
+
+## Nothing below a threshold, all of it above, and a smooth ramp across the band.
+static func _soft(past: float) -> float:
+	return smoothstep(-RUGGED_BLEND, RUGGED_BLEND, past)
 
 
 ## WHAT KIND OF PLACE THIS IS, from two noises and a coin.

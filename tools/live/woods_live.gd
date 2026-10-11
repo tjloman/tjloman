@@ -140,13 +140,19 @@ func _initialize() -> void:
 	var share: float = read.wood_now / maxf(read.wood, 0.01)
 	check(absf(share - 0.5) < 0.15, "and its land reads them as cut (%.2f standing)" % share)
 	# And a wood drawn far off as billboards is drawn again without them.
+	# Waited for, up to ten seconds: what stands far off as billboards is
+	# whatever the far ring has drawn by now.
 	var boards: Node = null
-	for n in world.get_children():
-		if "terrain_only" in n and n.terrain_only and not n.wooded and n._stand_known \
-				and n._stand_kept.size() >= 4 and world.felled_at(n.cell).is_empty() \
-				and _built_or_boarded(n.cell) == n:
-			boards = n
+	for wait in 600:
+		for n in world.get_children():
+			if "terrain_only" in n and n.terrain_only and not n.wooded and n._stand_known \
+					and n._stand_kept.size() >= 4 and world.felled_at(n.cell).is_empty() \
+					and _built_or_boarded(n.cell) == n:
+				boards = n
+				break
+		if boards != null:
 			break
+		await process_frame
 	check(boards != null, "a wood stands far off as billboards")
 	if boards != null:
 		var drawn: int = boards._stand_kept.size()

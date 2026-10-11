@@ -7,7 +7,8 @@ With GODOT set to a Godot binary, runs in a real engine, headless:
                                   once, and the dead row never stands again;
   tools/live/typing_live.gd       the map-name field lets go of the keyboard;
   tools/live/crowd_clock_live.gd  the crowd clock pays every villager, and
-                                  walks nobody in a town held still.
+                                  walks nobody in a town held still;
+  tools/live/seams_live.gd        no cliff where one country meets another.
 
 And always, the statements:
 
@@ -19,6 +20,8 @@ And always, the statements:
   3. A TOWN THE WORLD FOUNDS WHERE ONE IS REMEMBERED is raised from its record
      a few pieces a frame (VillageRaise), not founded and overwritten in one.
   4. THE MAP-NAME FIELD LETS GO OF THE KEYS.
+  5. THE LAND'S RUGGEDNESS IS BLENDED ACROSS BORDERS (WorldGen._rugged), never
+     read off the biome, whose line made a step metres high.
 """
 import os
 import pathlib
@@ -27,7 +30,7 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-LIVE = ("kill_live.gd", "typing_live.gd", "crowd_clock_live.gd")
+LIVE = ("kill_live.gd", "typing_live.gd", "crowd_clock_live.gd", "seams_live.gd")
 
 
 def body(text, name):
@@ -56,6 +59,11 @@ def source(fail):
         fail.append("the crowd clock walks villagers of a town held still, with no physics space")
     if "village.from_memory = true" not in body(world, "_maybe_found_village"):
         fail.append("a town the world founds where one is remembered is overwritten in one frame")
+    height = body(world, "_seeded_height")
+    if "_rugged(" not in height or "biome_at(" in height:
+        fail.append("the land's ruggedness is read off the biome again: a cliff at every border")
+    if "_soft(" not in body(world, "_rugged"):
+        fail.append("the ruggedness changes at a line, not across a band")
     if "release_focus()" not in body(menu, "_input"):
         fail.append("the map-name field never lets go of the keyboard")
 
