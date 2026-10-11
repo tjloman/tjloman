@@ -304,8 +304,9 @@ func _ready() -> void:
 
 
 func power() -> float:
-	var believers := 0
-	var belief_sum := 0.0
+	# The towns out of sight still believe (Chessboard): their faith still counts.
+	var believers := Chessboard.remembered_believers()
+	var belief_sum := Chessboard.remembered_belief()
 	for v in get_tree().get_nodes_in_group("village"):
 		if (v as Village).converted:
 			believers += 1
@@ -419,9 +420,11 @@ func known_runes() -> Array:
 	return known
 
 
-## How many villages hold your faith (the home village counts once converted).
+## How many villages hold your faith (the home village counts once converted) —
+## standing or out of sight. A town that folds still believes, and what it
+## taught you is not forgotten because you walked away from it.
 func faithful_villages() -> int:
-	var n := 0
+	var n := Chessboard.remembered_believers()
 	for v in get_tree().get_nodes_in_group("village"):
 		if (v as Village).converted:
 			n += 1

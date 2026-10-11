@@ -82,23 +82,42 @@ static func remembered_believers() -> int:
 	return count
 
 
+## AND HOW MUCH THEY BELIEVE, all told: a miracle's strength counts them too.
+static func remembered_belief() -> float:
+	var total := 0.0
+	for record: Dictionary in SaveGame.village_memory:
+		if bool(record.get("converted", false)) and not bool(record.get("home", false)):
+			total += float(record.get("belief", 0.0))
+	return total
+
+
 ## BRING A REMEMBERED TOWN UP TO NOW, as it is taken back: called by
 ## SaveGame.recall before the record is handed to the town. The land is the one
 ## read when it folded, read again if a miracle has moved it since.
-static func bring_up_to_date(record: Dictionary, world: WorldGen) -> void:
+##
+## `and_the_land` false leaves the herds and the woods round it alone: a town
+## raised a few pieces a frame (VillageRaise) writes them back as it stands,
+## or the beasts would have seconds to calve back past what its hunting left.
+static func bring_up_to_date(record: Dictionary, world: WorldGen, and_the_land := true) -> void:
 	if world == null:
 		return
-	var at: Array = record.get("pos", [0.0, 0.0])
-	var spot := Vector3(float(at[0]), 0.0, float(at[1]))
 	var land := _land_of(record, world)
 	var clock := Ledger.swap(&"Chessboard:alibi", String(record.get("name", "")))
 	TownFold.catch_up(record, land, world.world_seed, GameState.game_years)
-	# AND WHAT ITS HUNTING LEFT is what the herds round it are when they stand.
+	if and_the_land:
+		write_back(record, world)
+	Ledger.resume(clock)
+
+
+## AND WHAT ITS HUNTING AND FELLING LEFT is what the herds and the woods round
+## it are when they stand.
+static func write_back(record: Dictionary, world: WorldGen) -> void:
+	var at: Array = record.get("pos", [0.0, 0.0])
+	var spot := Vector3(float(at[0]), 0.0, float(at[1]))
 	var board: Dictionary = record.get("board", {})
 	TownLand.write_back(world, Vector2(spot.x, spot.z), float(board.get("game_stock", 1.0)),
 		float(board.get("beast_stock", 1.0)))
 	TownLand.write_back_woods(world, Vector2(spot.x, spot.z), float(board.get("wood_stock", 1.0)))
-	Ledger.resume(clock)
 
 
 ## THE LAND A RECORD'S TOWN READ when it folded, read again if a miracle has
@@ -241,21 +260,23 @@ func _world() -> WorldGen:
 	return get_tree().get_first_node_in_group("world_gen") as WorldGen
 
 
-## THE TOWNS OUT OF SIGHT, each stepped up to now once its next step is due. A
-## record with no land read yet has it read — one a round, the board's slowest call.
+## THE TOWNS OUT OF SIGHT, each stepped up to now once its next step is due, on
+## the land it read when it folded. NEVER A LAND READ HERE: a read is the board's
+## slowest call, hundreds of milliseconds, and the land's edition moves with
+## every crater anywhere — re-reading on that put a whole read into one frame,
+## town after town. A record whose land is stale is read again when it is seen
+## (`bring_up_to_date`); one with none is caught up then, as it always was.
 func _step_the_folded(world: WorldGen) -> void:
 	var now := GameState.game_years
-	var read := false
 	for record: Dictionary in SaveGame.village_memory:
-		if bool(record.get("home", false)) \
+		if bool(record.get("home", false)) or not record.has("land") \
 				or now - float(record.get("at_years", now)) < TownRules.step_years():
 			continue
-		if not record.has("land"):
-			if read:
-				continue
-			read = true
+		var land := TownLand.from_dict(record["land"])
+		if land.rings.is_empty():
+			continue
 		var clock := Ledger.swap(&"Chessboard:step", String(record.get("name", "")))
-		TownFold.catch_up(record, _land_of(record, world), world.world_seed, now, true)
+		TownFold.catch_up(record, land, world.world_seed, now, true)
 		Ledger.resume(clock)
 
 
@@ -282,7 +303,8 @@ func _gathered(band: Dictionary) -> bool:
 
 ## A BAND IN LOADED LAND IS PEOPLE WALKING, so long as either end of its road
 ## stands; anywhere else it is its record. Anybody the hand took out of a band
-## (or who otherwise stopped walking with it) stays where they were put.
+## stays where they were put; anybody a fright, a festival or a muster turned
+## aside goes back on the road with the others.
 func _show_the_road(world: WorldGen, eye: Vector2i) -> void:
 	for band: Dictionary in SaveGame.bands.duplicate():
 		var at := Vector2(float(band["pos"][0]), float(band["pos"][1]))
@@ -295,10 +317,19 @@ func _show_the_road(world: WorldGen, eye: Vector2i) -> void:
 		for one in Migration.walkers.get(band["id"], []):
 			if not is_instance_valid(one):
 				continue
-			if (one as Villager).state == Villager.State.MIGRATE:
-				walking.append(one)
-			else:
-				Migrant.arrive(one as Villager, (one as Villager).village)
+			var who := one as Villager
+			match who.state:
+				Villager.State.MIGRATE, Villager.State.DYING, Villager.State.PINNED:
+					walking.append(who)
+				Villager.State.HELD, Villager.State.FALLING:
+					who.set_meta("off_the_road", true)     # the hand has them
+					walking.append(who)
+				_:
+					if who.has_meta("off_the_road"):
+						Migrant.arrive(who, who.village)    # set down: they stay
+					else:
+						who.state = Villager.State.MIGRATE
+						walking.append(who)
 		if walking.is_empty() and (band["folk"] as Array).is_empty():
 			Migration.walkers.erase(band["id"])
 			SaveGame.bands.erase(band)        # nobody left on this road

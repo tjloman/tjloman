@@ -125,7 +125,7 @@ def source(fail):
     fold = body(BOARD, "fold")
     if "town.to_dict()" not in fold or "SaveGame.village_memory.append(record)" not in fold:
         fail.append("a folded town is not remembered as its own record")
-    if "Chessboard.bring_up_to_date(" not in body(SAVE, "recall"):
+    if "Chessboard.bring_up_to_date(" not in body(SAVE, "take_back") or "take_back(village)" not in body(SAVE, "recall"):
         fail.append("a town is taken back without its years away")
     rec = body(FOLD, "_reconcile")
     if "_due(" not in rec or "_condition(one, book, rng)" not in rec:
@@ -154,7 +154,7 @@ def source(fail):
             or "world.sow(" not in body((ROOT / "scripts/miracles/miracle_manager.gd").read_text(), "_cast_forest_seed") \
             or '"sown":' not in body((ROOT / "scripts/world/world_gen.gd").read_text(), "woods_to_save"):
         fail.append("a planted tree is not remembered while it lives, or not forgotten when it dies")
-    if "TownLand.write_back_woods(" not in body(BOARD, "bring_up_to_date"):
+    if "TownLand.write_back_woods(" not in body(BOARD, "write_back") or "write_back(record, world)" not in body(BOARD, "bring_up_to_date"):
         fail.append("a town's felling out of sight is not written back to the woods")
     # FISHING IS A LIVELIHOOD: a cast brings home a string, the board's rate is
     # the one measured in a cove town, and the fishers grow with the town.
@@ -175,6 +175,17 @@ def source(fail):
         fail.append("towns do not trade, or the traders do not go there and back")
     if "journey.is_empty()" not in body(VILLAGE, "_refresh_roster") or "Migrant.walk(self, delta)" not in villager_src:
         fail.append("a villager on the road is still on a town's roll, or does not walk with the band")
+    step_body = body(BOARD, "_step_the_folded")
+    if "TownLand.read(" in step_body or "_land_of(" in step_body:
+        fail.append("the board's clock reads land: hundreds of milliseconds in one frame, town after town")
+    raise_src = (ROOT / "scripts/world/village_raise.gd").read_text()
+    if "town.from_memory = true" not in body((ROOT / "scripts/world/world_gen.gd").read_text(), "raise_record") \
+            or "VillageRaise.found(self)" not in body(VILLAGE, "_found") \
+            or "_next_frame(town)" not in body(raise_src, "found") or "_search_slowly(" not in body(raise_src, "found"):
+        fail.append("a remembered town is raised in one frame again, founders and all")
+    miracles = (ROOT / "scripts/miracles/miracle_manager.gd").read_text()
+    if "Chessboard.remembered_believers()" not in body(miracles, "faithful_villages"):
+        fail.append("a believing town out of sight stops teaching its runes")
     if '"bands": Migration.to_save()' not in body(SAVE, "snapshot"):
         fail.append("a save forgets the bands on the road")
     if "##     static func _raid(" not in road:

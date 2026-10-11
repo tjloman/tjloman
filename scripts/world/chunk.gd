@@ -1427,6 +1427,9 @@ func _scatter_animals(rng: RandomNumberGenerator, table: Dictionary) -> void:
 	# — the stream carries on into the great stone after this, and one roll fewer
 	# would move it. Only the making is skipped.
 	var known = world.herds_remembered(cell)
+	# Never seen, but hunted: a town's hunting left this share (TownLand.write_back).
+	var share = world._herd_share_at(cell) if known == null else null
+	var hunted := []
 	var herds := 0
 	var full := false
 	for species: String in table:
@@ -1442,11 +1445,18 @@ func _scatter_animals(rng: RandomNumberGenerator, table: Dictionary) -> void:
 			if not _spot_ok(spot):
 				continue
 			var count := Herd.roll_for(species, rng)
-			if known == null:
+			if share != null:
+				var beast := bool((Animal.SPECIES.get(species, {}) as Dictionary).get("attacks_villagers", false))
+				var left := roundi(count * float(share[1] if beast else share[0]))
+				if left > 0:
+					hunted.append({"species": species, "alive": left, "born": count, "x": spot.x, "z": spot.z})
+			elif known == null:
 				_place(Herd.create(species, count, world), spot, 0.0)
 			herds += 1
 	if known != null:
 		restock(known)
+	elif share != null:
+		restock(hunted)
 
 
 ## THE WILD HERDS LIVING HERE NOW, as rows a chunk can be restocked from: kind,

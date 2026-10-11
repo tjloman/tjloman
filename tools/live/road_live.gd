@@ -62,8 +62,8 @@ func _initialize() -> void:
 	# 1. Stepped out of sight.
 	var behind := _record("Lagwick", FAR + Vector2(-500.0, 0.0), 20, 6, 300)
 	behind["at_years"] = now - 3.0
-	behind["land"] = lands.made(
-		{"fields": 80.0, "room": 100.0, "bushes": 8.0, "wood": 10.0, "game": 60.0}).to_dict()
+	# The land read as a fold reads it: the board steps a town on the land it has.
+	behind["land"] = lands.read(main.world_gen, Vector3(behind["pos"][0], 0.0, behind["pos"][1])).to_dict()
 	saves.village_memory.append(behind)
 	await seconds(9.0)
 	check(float(behind["at_years"]) > now - 1.0, "a town out of sight is stepped by the board (%.1f years behind)"

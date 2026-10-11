@@ -246,6 +246,8 @@ static func write_back(world: WorldGen, at: Vector2, game_share: float, beast_sh
 				continue
 			var known = world.herds_remembered(cell)
 			if known == null:
+				# Nobody has been here: the share is kept for when somebody is.
+				world._remember_herd_share(cell, game_share, beast_share)
 				continue
 			var kept := []
 			for row: Dictionary in known:

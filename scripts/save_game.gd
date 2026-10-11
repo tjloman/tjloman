@@ -470,8 +470,16 @@ func _stamped(data: Dictionary) -> Array:
 ## minutes later as you wander back to it. If we remember a town that stood
 ## about here, its whole life is handed back and the memory is spent.
 func recall(village: Village) -> void:
+	var record := take_back(village)
+	if not record.is_empty():
+		village.from_dict(record)
+
+
+## THE RECORD OF THE TOWN THAT STOOD HERE, taken out of memory and stepped up
+## to now — or empty. VillageRaise puts it back a few pieces a frame.
+func take_back(village: Village, and_the_land := true) -> Dictionary:
 	if village_memory.is_empty():
-		return
+		return {}
 	var here := Vector2(village.global_position.x, village.global_position.z)
 	var best := -1
 	var best_dist := SAME_TOWN
@@ -488,13 +496,14 @@ func recall(village: Village) -> void:
 			best_dist = d
 			best = i
 	if best < 0:
-		return
+		return {}
 	var record: Dictionary = village_memory[best]
 	village_memory.remove_at(best)
 	# ITS YEARS AWAY FIRST: the record is stepped up to now, and its people made
 	# to agree with the numbers. See Chessboard and TownFold.
-	Chessboard.bring_up_to_date(record, village.get_tree().get_first_node_in_group("world_gen") as WorldGen)
-	village.from_dict(record)
+	Chessboard.bring_up_to_date(record, village.get_tree().get_first_node_in_group("world_gen") as WorldGen,
+		and_the_land)
+	return record
 
 
 ## Called by Main once the fresh world exists. Unpacks whichever parcel is

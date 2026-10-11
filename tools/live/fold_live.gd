@@ -6,8 +6,8 @@ extends SceneTree
 ##   1. a town the camera leaves far behind is FOLDED: its people and houses
 ##      freed, its record — land read and all — remembered, once;
 ##   2. home never folds;
-##   3. a town that believes keeps praying while it is folded, and still counts
-##      toward the prayer the god can hold;
+##   3. a town that believes keeps praying while it is folded, still counts
+##      toward the prayer the god can hold, and still teaches its runes;
 ##   4. years pass; the camera comes back, and the town is UNFOLDED where it
 ##      stood, caught up: its people agree with the board's numbers, the ones
 ##      who lived are the ones the player knew, older by the years away, and
@@ -85,6 +85,7 @@ func _initialize() -> void:
 
 	# 1. Gone far away: it folds. A live town grows fast, so what it had is
 	# taken as it leaves, not before.
+	var runes_before: Array = main.miracles.known_runes()
 	var at_fold := [-1]
 	town.tree_exiting.connect(func(): at_fold[0] = town.my_villagers().size())
 	rig.global_position = Vector3(3000.0, 0.0, 3000.0)
@@ -94,6 +95,10 @@ func _initialize() -> void:
 	var records: Array = saves.village_memory.filter(func(r): return r.get("name", "") == "Foldwick")
 	check(standing.is_empty(), "the town the camera left behind is folded: no longer standing")
 	check(records.size() == 1, "and remembered, once (%d)" % records.size())
+	var runes_after: Array = main.miracles.known_runes()
+	check(runes_after == runes_before and runes_before.size() > 0,
+		"and what it taught you is not forgotten: %d runes before, %d after" % [runes_before.size(),
+			runes_after.size()])
 	var record: Dictionary = records[0] if not records.is_empty() else {}
 	var written: int = (record.get("folk", []) as Array).size()
 	check(written == int(at_fold[0]) and written > 0 and record.has("land"),
@@ -102,9 +107,6 @@ func _initialize() -> void:
 	# food put by must not bring them back still starving.
 	for one: Dictionary in record.get("folk", []):
 		one["hunger"] = 90.0
-	# And it had hunted its game hard: a third left. Twenty years of its own
-	# hunting and the land's growing back decide what stands when it returns.
-	(record["board"] as Dictionary)["game_stock"] = 0.3
 	# 2. Home stays.
 	var home: Array = get_nodes_in_group("village").filter(
 		func(v): return is_instance_valid(v) and v.is_player_home)
@@ -121,6 +123,12 @@ func _initialize() -> void:
 
 	# 4. Twenty years on, back again.
 	state.game_years += 20.0
+	# The board steps it through those years while it is out of sight (a round
+	# every few seconds); then its hunters are found to have left a third of the
+	# game. Set after the years, or twenty years of the game growing back would
+	# leave the herds as the seed made them and nothing to tell apart.
+	await seconds(6.0)
+	(record["board"] as Dictionary)["game_stock"] = 0.3
 	rig.global_position = Vector3(at.x, 0.0, at.y)
 	var back = null
 	for i in 600:
@@ -130,6 +138,12 @@ func _initialize() -> void:
 				back = v
 		if back != null and back.founded:
 			break
+	# THE HERDS, the frame it stands — its herds are written back as it does —
+	# before any of them can meet another and join it: a joined herd keeps the
+	# better of the two births (Herd.merge_from), and two remnants that meet are
+	# not a herd the hunting missed.
+	var herds_seen: Array = _herds_over(world, at, float(back.board.get("game_stock", 1.0))) \
+		if back != null else [0, 0]
 	await seconds(1.0)
 	check(back != null and back.founded, "back in sight, it is raised again")
 	if back == null:
@@ -181,24 +195,8 @@ func _initialize() -> void:
 		% [back.houses.size(), wanted, back.farms.size(), int(record.get("farms", 0))])
 	# AND THE HERDS ROUND IT ARE WHAT ITS HUNTING LEFT — remembered or standing.
 	var game_share := float(book.get("game_stock", 1.0))
-	var kinds: Dictionary = load("res://scripts/animals/animal.gd").get_script_constant_map()["SPECIES"]
-	var looked := 0
-	var over := 0
-	var span := 3
-	var centre: Vector2i = world.cell_of(at.x, at.y)
-	for dx in range(-span, span + 1):
-		for dz in range(-span, span + 1):
-			var cell := centre + Vector2i(dx, dz)
-			var mid := (Vector2(cell) + Vector2(0.5, 0.5)) * 48.0
-			var chunk = world.chunk_at(mid.x, mid.y)
-			if chunk != null and not chunk.terrain_only:
-				for n in chunk.get_children():
-					if n.get_script() != null and String(n.get_script().get_global_name()) == "Herd" \
-							and n.keeper == null and not bool((kinds.get(n.species, {}) as Dictionary)
-								.get("attacks_villagers", false)):
-						looked += 1
-						if n.alive() > roundi(n.born_head() * game_share):
-							over += 1
+	var over: int = herds_seen[0]
+	var looked: int = herds_seen[1]
 	print("    hunting left %.0f%% of the game; %d herds round it looked at" % [game_share * 100.0, looked])
 	check(game_share < 1.0 and looked > 0 and over == 0,
 		"the herds round it stand at what its hunting left (%d of %d over)" % [over, looked])
@@ -264,7 +262,64 @@ func _initialize() -> void:
 	var works: Array = rules._sources(vegan, lake, 1.0, 1.0).map(func(s): return s[0])
 	check(not works.has("fish") and not works.has("hunt") and works.has("fields"),
 		"out of sight, a vegan town farms and gathers and neither hunts nor fishes (%s)" % [works])
+	# 7. AND WHERE NOBODY HAS EVER BEEN, a town's hunting still left its share:
+	# ground never loaded, written back to, and then walked into.
+	var wild := Vector2(-2600.0, 2600.0)
+	for i in 400:                                  # grazing country, where herds are
+		var probe := wild + Vector2((i % 20) * 48.0, (i / 20) * 48.0)
+		if ["grassland", "savanna"].has(world.biome_at(probe.x, probe.y)):
+			wild = probe
+			break
+	land_script.write_back(world, wild, 0.3, 0.3)
+	rig.global_position = Vector3(wild.x, 0.0, wild.y)
+	var spot_cell: Vector2i = world.cell_of(wild.x, wild.y)
+	for i in 1800:
+		await process_frame
+		var built := 0
+		for dx in range(-1, 2):
+			for dz in range(-1, 2):
+				var mid := (Vector2(spot_cell + Vector2i(dx, dz)) + Vector2(0.5, 0.5)) * 48.0
+				var here = world.chunk_at(mid.x, mid.y)
+				if here != null and not here.terrain_only:
+					built += 1
+		if built == 9:
+			break
+	var hunted: Array = _herds_over(world, wild, 0.3)
+	check(hunted[1] > 0 and hunted[0] == 0,
+		"ground nobody had seen comes up with what the hunting left (%d of %d herds over, round %s)"
+		% [hunted[0], hunted[1], str(spot_cell)])
 	_done()
+
+
+## HOW MANY OF THE WILD HERDS ROUND `at` STAND OVER what its hunting left —
+## not counting the beasts drawn in plain view, which are never taken —
+## (`game_share` of what each was born), and how many were looked at.
+func _herds_over(world: Node, at: Vector2, game_share: float) -> Array:
+	var kinds: Dictionary = load("res://scripts/animals/animal.gd").get_script_constant_map()["SPECIES"]
+	var looked := 0
+	var over := 0
+	var span := 3
+	var centre: Vector2i = world.cell_of(at.x, at.y)
+	for dx in range(-span, span + 1):
+		for dz in range(-span, span + 1):
+			var cell := centre + Vector2i(dx, dz)
+			var mid := (Vector2(cell) + Vector2(0.5, 0.5)) * 48.0
+			var chunk = world.chunk_at(mid.x, mid.y)
+			if chunk != null and not chunk.terrain_only:
+				for n in chunk.get_children():
+					if n.get_script() != null and String(n.get_script().get_global_name()) == "Herd" \
+							and n.keeper == null and not bool((kinds.get(n.species, {}) as Dictionary)
+								.get("attacks_villagers", false)):
+						looked += 1
+						# The beasts in plain view are not taken from under the
+						# player's eyes (Herd.take_one): everything else must go.
+						var seen: int = (n._members as Array).filter(
+							func(m): return not m["dead"] and m["agent"] != null).size()
+						if n.alive() - seen > roundi(n.born_head() * game_share):
+							over += 1
+							print("    over: %s %d of %d born, in %s, %.0f m from the town" % [n.species, n.alive(),
+								n.born_head(), str(cell), Vector2(n.global_position.x, n.global_position.z).distance_to(at)])
+	return [over, looked]
 
 
 func _done() -> void:

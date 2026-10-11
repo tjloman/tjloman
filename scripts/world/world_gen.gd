@@ -210,6 +210,10 @@ var _pond_edition := 0
 ## camera moved away and back. Present means "this is what lives here now",
 ## including an empty list for a herd hunted out.
 var _herds_known := {}
+## AND WHERE NOBODY HAS BEEN, the share a town's hunting left (TownLand.
+## write_back): cell -> [game, beasts]. A chunk first built here rolls its herds
+## from the seed and keeps that share of them (Chunk._scatter_animals).
+var _herd_shares := {}
 ## THE WOODS AS THEY STAND: which trees of each chunk's stand are down —
 ## felled, burned, uprooted — FOR GOOD. The seed does not grow them back: a wood
 ## comes back only from what is planted, by a grown tree's seed or by the god
@@ -972,6 +976,17 @@ func woods_from_save(data: Variant) -> void:
 
 func remember_herds(cell: Vector2i, rows: Array) -> void:
 	_herds_known[cell] = rows
+	_herd_shares.erase(cell)
+
+
+func _remember_herd_share(cell: Vector2i, game: float, beasts: float) -> void:
+	_herd_shares[cell] = [game, beasts]
+
+
+## What a town's hunting left of the herds here, where nobody has been: null if
+## nothing is known.
+func _herd_share_at(cell: Vector2i) -> Variant:
+	return _herd_shares.get(cell)
 
 
 ## What was left living here, or null if nobody has ever been here to see.
@@ -991,6 +1006,9 @@ func herds_to_save() -> Array:
 	var out := []
 	for cell: Vector2i in all:
 		out.append({"x": cell.x, "z": cell.y, "herds": all[cell]})
+	for cell: Vector2i in _herd_shares:
+		if not all.has(cell):
+			out.append({"x": cell.x, "z": cell.y, "share": _herd_shares[cell]})
 	return out
 
 
@@ -998,6 +1016,9 @@ func herds_from_save(data: Array) -> void:
 	for entry in data:
 		var row := entry as Dictionary
 		var cell := Vector2i(int(row.get("x", 0)), int(row.get("z", 0)))
+		if row.has("share"):
+			_herd_shares[cell] = row["share"]
+			continue
 		_herds_known[cell] = row.get("herds", []) as Array
 		# A chunk already standing was stocked from the seed before the save was
 		# read; it is stocked again from what the save remembers.
@@ -1839,6 +1860,7 @@ func raise_record(record: Dictionary) -> Village:
 	var z := float(pos[1])
 	var town := Village.new()
 	town.is_player_home = false
+	town.from_memory = true
 	town.village_name = String(record.get("name", "a town"))
 	town.position = Vector3(x, height_at(x, z), z)
 	add_sibling(town)

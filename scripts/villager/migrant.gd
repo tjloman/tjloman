@@ -21,6 +21,7 @@ const WITH_IT := 6.0
 
 static func enlist(who: Villager, band: Dictionary) -> void:
 	who.journey = band
+	who.remove_meta("off_the_road")       # a new road; the last one is over
 	who.state = Villager.State.MIGRATE
 	who.velocity = Vector3.ZERO
 	if who.village != null and is_instance_valid(who.village):

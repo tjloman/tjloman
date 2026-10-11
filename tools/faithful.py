@@ -64,7 +64,7 @@ def source(fail):
         fail.append("a raised town's cell is not marked: the land streaming in founds it twice")
     if "SaveGame.recall(self)" not in body(VILLAGE, "_deal_the_work"):
         fail.append("a town no longer takes back its own past when it opens for business")
-    if "Chessboard.bring_up_to_date(" not in body(SAVE, "recall"):
+    if "Chessboard.bring_up_to_date(" not in body(SAVE, "take_back") or "take_back(village)" not in body(SAVE, "recall"):
         fail.append("a town is taken back without its years away")
     if "founded = true" not in body(VILLAGE, "_open_for_business"):
         fail.append("a town never says it is whole")

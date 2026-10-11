@@ -264,6 +264,9 @@ var totem: Node3D
 ## history, its tallies, how hard it has grown (TownBook.to_dict). Carried
 ## through every visit and every save; read by the totem (TownReading).
 var board: Dictionary = {}
+## RAISED FROM ITS RECORD (WorldGen.raise_record): put back as it was, a few
+## pieces a frame, rather than founded and then overwritten. See VillageRaise.
+var from_memory := false
 var farm: Farm                 # the founding field (always farms[0])
 var farms: Array[Farm] = []
 var store: FoodStore
@@ -431,6 +434,8 @@ func _found() -> void:
 		_update_influence()
 		_build_starting_houses()
 		_open_for_business()
+	elif from_memory:
+		VillageRaise.found(self)
 	else:
 		_found_in_stages()
 
@@ -2349,6 +2354,19 @@ func _rebuild(data: Dictionary) -> void:
 ## Restore a village's lived state onto a freshly generated one. Its people are
 ## replaced wholesale by the saved roster.
 func from_dict(data: Dictionary) -> void:
+	_take_fields(data)
+	_rebuild(data)
+	var folk: Array = data.get("folk", [])
+	if not folk.is_empty():
+		for v in my_villagers():
+			v.queue_free()
+		for entry: Dictionary in folk:
+			_restore_villager(entry)
+	_finish_restoring()
+
+
+## The record's plain numbers: name, faith, stocks — nothing that is built.
+func _take_fields(data: Dictionary) -> void:
 	village_name = String(data.get("name", village_name))
 	board = (data.get("board", {}) as Dictionary).duplicate(true)
 	_prayer_rate = float(data.get("prayer_rate", 0.0))
@@ -2366,14 +2384,10 @@ func from_dict(data: Dictionary) -> void:
 		store.meat_food = int(st.get("meat", store.meat_food))
 		store.lumber = int(st.get("lumber", store.lumber))
 		store.stone = int(st.get("stone", store.stone))
-	_rebuild(data)
-	var folk: Array = data.get("folk", [])
-	if not folk.is_empty():
-		for v in my_villagers():
-			v.queue_free()
-		for entry: Dictionary in folk:
-			_restore_villager(entry)
-		_assign_housing()    # the roster: see `_retally`, which does not walk for it
+
+
+func _finish_restoring() -> void:
+	_assign_housing()    # the roster: see `_retally`, which does not walk for it
 	if converted:
 		_totem_orb.material_override = Util.mat(Color(1.0, 0.85, 0.3), true)
 	_update_influence()
