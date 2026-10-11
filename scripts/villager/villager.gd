@@ -480,7 +480,9 @@ func take_turn(delta: float, owed: int) -> void:
 		_stick_to_ground()
 		return
 	if state == State.MIGRATE:
-		Migrant.walk(self, delta)    # on the road: walking, and nothing else
+		_tick_lifecycle(delta)       # the years go by on the road as anywhere
+		if is_instance_valid(self) and not is_queued_for_deletion():
+			Migrant.walk(self, delta)    # and walking is all they do
 		return
 	# THE TURN TO THINK, if one is owed and the frame has room. Refused, they
 	# carry on into the state machine below doing what they were already doing.

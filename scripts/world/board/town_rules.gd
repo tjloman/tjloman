@@ -222,6 +222,12 @@ static func fields_room(land: TownLand) -> int:
 	return int(minf(land.fields, land.room * FIELD_SHARE) / SAMPLES_PER_FIELD)
 
 
+## THE FIELDS A TOWN THIS SIZE HAS ANY USE FOR: enough, in a poor year, for two
+## years' eating a year — the granary's own measure — and one to grow into.
+static func fields_wanted(book: TownBook) -> int:
+	return ceili(book.population() * EAT_HEAD * RESERVE_YEARS / (FIELD_YIELD * 0.5)) + 1
+
+
 ## HOW MUCH FOOD WORK A TOWN PUTS IN, as a share of what it eats, against how
 ## many years of eating it has put by. Below the reserve: extra, to fill it over
 ## two years. From the reserve to the cap: falling away fast, to a third.
@@ -453,8 +459,13 @@ static func _build(book: TownBook, land: TownLand, hands: float, dt: float) -> v
 	var pop := book.population()
 	var cramped := pop + 2.0 > book.beds() * 0.95
 	var free := land.room - room_used(book)
-	var more_fields := book.farms < fields_room(land) and free >= SAMPLES_PER_FIELD \
-		and book.fed < 1.05 and not book.ruined
+	# A FIELD ONLY WHERE ONE IS WANTED: a town that eats grain and may plough,
+	# and has fewer fields than feed it twice over. Hungry for any other reason
+	# — a diet that eats no grain, beasts at the door — a town built field after
+	# field: one of thirty-four souls came back with eighty-six.
+	var tills := book.diet <= DIET_OMNIVORE and not book.no_plough
+	var more_fields := tills and book.farms < mini(fields_room(land), fields_wanted(book)) \
+		and free >= SAMPLES_PER_FIELD and book.fed < 1.05 and not book.ruined
 	if book.ruined and not _recover(book):
 		hands *= 0.3                    # they gather; they do not raise
 		cramped = false

@@ -793,6 +793,16 @@ func take_damage(amount: float) -> void:
 func die(drop_meat := true) -> void:
 	if tamed_by != null:
 		tamed_by.on_tamed_lost(self)
+	# AND ITS HERD IS TOLD, NOW. A beast promoted out of a herd is still a row
+	# in its books; left to find out on its own, the herd asked whether the
+	# handle was null — and a FREED object IS null to `==` in Godot 4 — so the
+	# row was taken for one that never had a body, stayed alive, and was stood
+	# up again a moment later: a body on the ground where it was killed and the
+	# same beast walking on, still hunted. See Herd.release.
+	if has_meta("herd"):
+		var from = get_meta("herd")
+		if is_instance_valid(from) and from is Herd:
+			(from as Herd).release(self)
 	var meat: int = spec["meat"]
 	# IT LEAVES A BODY. It used to leave three chops in the grass where a bison
 	# had been standing — the animal simply stopped existing, and the meat

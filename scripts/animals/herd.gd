@@ -1181,7 +1181,7 @@ func _write_transforms(how_many := 0) -> void:
 		# number is right and wants keeping; what wants cutting is how many of
 		# them are out at once. The barn says how many that is, and says none
 		# when it has drawn them in for the night. See `shown`.
-		if m["agent"] != null or m["dead"] or (shown >= 0 and i >= shown):
+		if _has_body(m) or m["dead"] or (shown >= 0 and i >= shown):
 			_mm.set_instance_transform(i, Transform3D().scaled(Vector3.ZERO))
 			continue
 		var p: Vector4 = HerdMotion.pose(m["motion"], m["slot"])
@@ -1294,7 +1294,10 @@ func _tend_the_promoted(focus: Vector3, beast: Vector3) -> void:
 		# row holding a dead handle is the ordinary case here, not the strange
 		# one. It hard locked the game a minute and a half into a session.
 		var held = m["agent"]
-		if held == null:
+		# NOT `held == null`: a freed object compares equal to null, and a row
+		# whose beast was freed is the one this has to find. Only a row that
+		# never had a beast is passed over.
+		if typeof(held) != TYPE_OBJECT:
 			continue
 		var agent: Animal = null
 		if is_instance_valid(held):
@@ -1362,7 +1365,7 @@ func _look_for_more(focus: Vector3, beast: Vector3, budget: int) -> void:
 			break
 		var i := (_promote_cursor + step) % live
 		var m := _members[i]
-		if m["agent"] != null or m["dead"]:
+		if _has_body(m) or m["dead"]:
 			continue
 		var p := _stands_at(m)
 		if _watched_from(p, focus, beast) > PROMOTE_WITHIN:
@@ -1417,7 +1420,7 @@ func _reach_of_the_hand() -> void:
 		var gap := _flat_gap(_stands_at(m), hand)
 		if gap > HAND_REACH:
 			continue
-		if m["agent"] != null:
+		if _has_body(m):
 			near += 1
 			if near >= HAND_TAKES:
 				return          # the hand already has its few here
@@ -1517,7 +1520,7 @@ func _promote(i: int, p: Vector3) -> void:
 ## models. All of that from a counter that never came down.
 func _exit_tree() -> void:
 	for m in _members:
-		if m["agent"] != null:
+		if _has_body(m):
 			m["agent"] = null
 			_agents_afoot -= 1
 			_afoot_here = maxi(_afoot_here - 1, 0)
@@ -1554,6 +1557,14 @@ static func _watched_from(spot: Vector3, focus: Vector3, beast: Vector3) -> floa
 ## moment ago and has since been freed. Every reader goes through here because
 ## the obvious `var agent: Animal = m["agent"]` throws on a freed handle before
 ## any guard can run; see _tend_agents.
+## WHETHER A ROW HAS (OR HAD) A BEAST STANDING FOR IT — freed or not. Not
+## `m["agent"] != null`: a freed object compares equal to null in Godot 4, so a
+## row whose beast was just killed read as one that never had one, and was
+## stood up again. See Animal.die.
+static func _has_body(m: Dictionary) -> bool:
+	return typeof(m["agent"]) == TYPE_OBJECT
+
+
 static func _living(m: Dictionary) -> Animal:
 	var held = m["agent"]
 	if held == null or not is_instance_valid(held):
@@ -2006,7 +2017,7 @@ func _cull(many: int) -> void:
 	for m in _members:
 		if taken >= many:
 			break
-		if m["dead"] or m["agent"] != null:
+		if m["dead"] or _has_body(m):
 			continue
 		m["dead"] = true
 		_recount()
@@ -2075,7 +2086,7 @@ func release(beast: Animal) -> void:
 func give_one(at: Vector3) -> Animal:
 	_retag.call_deferred()   # one head lighter, once it has actually gone
 	for m in _members:
-		if m["dead"] or m["agent"] != null:
+		if m["dead"] or _has_body(m):
 			continue
 		m["dead"] = true
 		_recount()
@@ -2396,7 +2407,7 @@ func calmed(by: float) -> void:
 ## promoted into, so a beast the player is watching is not deleted mid-stride.
 func take_one() -> bool:
 	for m in _members:
-		if not m["dead"] and m["agent"] == null:
+		if not m["dead"] and not _has_body(m):
 			m["dead"] = true
 			_recount()
 			lost_one()

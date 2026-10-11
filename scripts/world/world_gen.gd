@@ -1839,11 +1839,21 @@ func _maybe_found_village(cell: Vector2i) -> void:
 		village.village_name = _village_name(rng)
 		pos.y = height_at(pos.x, pos.z)
 		village.position = pos
+		# A TOWN ALREADY REMEMBERED HERE is put back from its record a few
+		# pieces a frame (VillageRaise), not founded and then overwritten in
+		# one: that was a half-second frame for a big town. And it is no news.
+		for record: Dictionary in SaveGame.village_memory:
+			var at: Array = record.get("pos", [])
+			if at.size() >= 2 and not bool(record.get("home", false)) \
+					and Vector2(float(at[0]), float(at[1])).distance_to(Vector2(pos.x, pos.z)) < SaveGame.SAME_TOWN:
+				village.from_memory = true
+				break
 		# Villages persist even when their chunk unloads.
 		add_sibling.call_deferred(village)
 		_village_cells[cell] = village
-		GameState.announce("Scouts speak of a village called %s, far away. It believes in nothing... yet."
-			% village.village_name)
+		if not village.from_memory:
+			GameState.announce("Scouts speak of a village called %s, far away. It believes in nothing... yet."
+				% village.village_name)
 
 
 ## A REMEMBERED TOWN, RAISED WHERE IT STOOD — by the chessboard as the land

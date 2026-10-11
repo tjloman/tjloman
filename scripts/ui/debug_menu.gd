@@ -107,6 +107,11 @@ func _build() -> void:
 	_map_name = LineEdit.new()
 	_map_name.placeholder_text = "map name"
 	_map_name.custom_minimum_size = Vector2(250, 30)
+	# AND IT LETS GO OF THE KEYBOARD. A field keeps the keys until it is told
+	# otherwise, so once a name had been clicked into, the camera's W, A, S and
+	# D were typed into it for the rest of the session. Enter or Escape lets go,
+	# and so does a click anywhere else (`_input`) or closing the panel.
+	_map_name.text_submitted.connect(func(_text: String): _map_name.release_focus())
 	box.add_child(_map_name)
 	box.add_child(_button("Save this map", _on_save_map,
 		"Writes the seed and every reshaping to user://maps.\n"
@@ -223,10 +228,21 @@ func _process(delta: float) -> void:
 			_disarm()
 
 
+func _input(event: InputEvent) -> void:
+	if _map_name == null or not _map_name.has_focus():
+		return
+	var away: bool = event is InputEventMouseButton and event.pressed \
+		and not _map_name.get_global_rect().has_point(event.position)
+	var done: bool = event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE
+	if away or done or not _panel.visible:
+		_map_name.release_focus()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_debug"):
 		_panel.visible = not _panel.visible
 		if not _panel.visible:
+			_map_name.release_focus()
 			_disarm()
 
 

@@ -164,7 +164,11 @@ func _serve(held: Variant, booked: int, now: int, step: float) -> void:
 		keep.append(booked)
 		return
 	who._clock_due = -1                 # served: whatever books them next wins
-	if not who.is_inside_tree():
+	# NOT IN THE WORLD, OR HELD STILL: a town being raised is switched off until
+	# it stands (VillageRaise), and a switched-off body is taken out of the
+	# physics space — the clock calls past process modes, so a pupil of a town
+	# being raised was walked with no space to walk in.
+	if not who.is_inside_tree() or not who.can_process():
 		_unplot(who)                    # not in the world, so not near anything
 		_book_at(who, now + OUT_OF_TREE)
 		return

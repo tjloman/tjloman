@@ -13,6 +13,7 @@ extends SceneTree
 ##   6. "who is near here" (CrowdClock.around) misses nobody the whole group
 ##      would have found, follows somebody carried off in the hand, forgets
 ##      the dead, and reads only the plots round the ask, not the town.
+##   7. and a town held still is not walked by it.
 ## Whatever it changes it puts back. Exits non-zero on failure. Names no class
 ## of the game's (see look.gd).
 
@@ -226,6 +227,19 @@ func _initialize() -> void:
 	dead_back += clock.around(gone_at, 3.0).filter(func(v): return not is_instance_valid(v)).size()
 	check(dead_back == 0, "and the dead are not handed back (%d were)" % dead_back)
 
+	# 7. A town held still — as one being raised is (VillageRaise) — is not
+	# walked by the clock: a switched-off body has no physics space to walk in.
+	var stilled: Array = home.my_villagers()
+	var aged_then: Array = stilled.map(func(v): return v._sim_last)
+	home.process_mode = Node.PROCESS_MODE_DISABLED
+	for i in 60:
+		await process_frame
+	var ran := 0
+	for i in stilled.size():
+		if is_instance_valid(stilled[i]) and stilled[i]._sim_last != aged_then[i]:
+			ran += 1
+	home.process_mode = Node.PROCESS_MODE_INHERIT
+	check(ran == 0, "a town held still is not walked by the clock (%d of %d ran)" % [ran, stilled.size()])
 	print("CROWD CLOCK LIVE: %s" % ("all pass" if fails == 0 else "%d FAILING" % fails))
 	quit(1 if fails > 0 else 0)
 
