@@ -23,6 +23,8 @@ extends RefCounted
 const RUIN_MOST := 15.0
 ## The most of a town's dead the history names in one visit.
 const NAMED_DEAD := 4
+## The dead it keeps by name while out of sight, for the telling.
+const GONE_KEPT := 40
 ## Years of food in store past which a town's people come back fed, whatever
 ## the last season was like.
 const FED_STORE := 0.25
@@ -82,18 +84,47 @@ static func book_of(record: Dictionary, now: float) -> TownBook:
 
 ## THE ALIBI: step the record's town up to `now` and write the result back into
 ## the record, people and all. Returns how many steps it took.
-static func catch_up(record: Dictionary, land: TownLand, world_seed: int, now: float) -> int:
+##
+## QUIET, the board's own clock stepping a town out of sight (Chessboard): who
+## died is kept by name (record "gone") and nothing is written in its history —
+## a step is a quarter of a day, and a line for each would bury everything else.
+## Brought back into sight, it is told once, for all the years away.
+static func catch_up(record: Dictionary, land: TownLand, world_seed: int, now: float,
+		quiet := false) -> int:
 	var book := book_of(record, now)
 	var was_children := book.children
 	var was_adults := book.adults
 	var was_elders := book.elders
 	var was_kept := book.kept
+	var was_leaving := book.leaving
+	var was_young := book.leaving_young
 	var then := book.years
 	var steps := TownRules.catch_up(book, land, world_seed, now)
 	if steps == 0:
+		if not quiet and record.has("seen_at"):
+			_tell(book, record.get("gone", []), book.years - float(record["seen_at"]), record["seen_was"])
+			_heard(record)
+			record["board"] = book.to_dict()
 		return 0
 	var away := book.years - then
-	_reconcile(record, book, away, [was_children, was_adults, was_elders])
+	# WHO WENT, by name: out of the town before the rest is matched to the
+	# numbers, so those who walked away are not told as dead.
+	var kids := roundi(book.leaving_young - was_young)
+	var going := [maxi(roundi(book.leaving - was_leaving) - kids, 0), kids]
+	var was := [was_children, was_adults, was_elders]
+	var dead := _reconcile(record, book, away, going)
+	if not record.has("seen_at"):
+		record["seen_at"] = then
+		record["seen_was"] = was
+	var gone: Array = record.get("gone", [])
+	for one: Dictionary in dead:
+		if one.has("name") and gone.size() < GONE_KEPT:
+			gone.append({"name": one["name"], "age": one["age"]})
+	if quiet:
+		record["gone"] = gone
+	else:
+		_tell(book, gone, book.years - float(record["seen_at"]), record["seen_was"])
+		_heard(record)
 	var kept: Dictionary = (record.get("kept", {}) as Dictionary).duplicate()
 	for kind: String in kept:
 		kept[kind] = roundi(float(kept[kind]) * book.kept / maxf(was_kept, 1.0))
@@ -115,12 +146,14 @@ static func catch_up(record: Dictionary, land: TownLand, world_seed: int, now: f
 ## PEOPLE TO MATCH THE NUMBERS, BY NAME. Everyone is older by `away`; then each
 ## age is brought to the board's count — the eldest of an age go first when it
 ## has too many, and newcomers of that age are added when it has too few.
-static func _reconcile(record: Dictionary, book: TownBook, away: float, was: Array) -> void:
+static func _reconcile(record: Dictionary, book: TownBook, away: float,
+		going: Array = [0, 0]) -> Array:
 	var folk: Array = []
 	for one: Dictionary in record.get("folk", []):
 		var aged := one.duplicate()
 		aged["age"] = float(one.get("age", 25.0)) + away
 		folk.append(aged)
+	_set_out(record, folk, int(going[0]), int(going[1]))
 	var bands := [[0.0, TownRules.CHILD_YEARS],
 		[TownRules.CHILD_YEARS, TownRules.CHILD_YEARS + TownRules.ADULT_YEARS],
 		[TownRules.CHILD_YEARS + TownRules.ADULT_YEARS, 200.0]]
@@ -144,7 +177,36 @@ static func _reconcile(record: Dictionary, book: TownBook, away: float, was: Arr
 	for one: Dictionary in kept:
 		_condition(one, book, rng)
 	record["folk"] = kept
-	_tell(book, dead, away, was)
+	return dead
+
+
+## TOLD: what was kept for the telling is done with.
+static func _heard(record: Dictionary) -> void:
+	record.erase("seen_at")
+	record.erase("seen_was")
+	record.erase("gone")
+
+
+## THOSE WHO LEAVE, taken out of `folk` by name to wait for company on the
+## road (record "setting_out": Migration makes them a band): the youngest grown
+## first — the young are the ones who go — and children with them.
+static func _set_out(record: Dictionary, folk: Array, adults: int, children: int) -> void:
+	if adults + children <= 0:
+		return
+	var out: Array = record.get("setting_out", [])
+	var grown := []
+	var young := []
+	for one: Dictionary in folk:
+		var age := float(one["age"])
+		if age < TownRules.CHILD_YEARS:
+			young.append(one)
+		elif age < TownRules.CHILD_YEARS + TownRules.ADULT_YEARS:
+			grown.append(one)
+	grown.sort_custom(func(x, y): return float(x["age"]) < float(y["age"]))
+	for one: Dictionary in grown.slice(0, adults) + young.slice(0, children):
+		folk.erase(one)
+		out.append(one)
+	record["setting_out"] = out
 
 
 ## HOW EACH OF THEM IS, as their town is: fed if it has food put by or has been

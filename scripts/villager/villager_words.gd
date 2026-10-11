@@ -87,6 +87,7 @@ static func status_word(who: Villager) -> String:
 		Villager.State.TEACH: return "teaching the children"
 		Villager.State.HIDE: return "hiding"
 		Villager.State.LEAVING: return "going home"
+		Villager.State.MIGRATE: return "on the road"
 		Villager.State.HIDDEN: return "indoors"
 		Villager.State.FLEE: return "fleeing in terror"
 		Villager.State.HELD: return "in the grip of a god"

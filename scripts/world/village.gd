@@ -1358,7 +1358,7 @@ func _refresh_roster() -> void:
 	for v in get_tree().get_nodes_in_group("villagers"):
 		var villager := v as Villager
 		if is_instance_valid(villager) and villager.village == self \
-				and not villager.is_queued_for_deletion():
+				and not villager.is_queued_for_deletion() and villager.journey.is_empty():
 			_roster.append(villager)
 	_population = _roster.size()
 
@@ -1377,7 +1377,7 @@ func _refresh_roster() -> void:
 func _retally() -> void:
 	for i in range(_roster.size() - 1, -1, -1):
 		if not is_instance_valid(_roster[i]) or _roster[i].village != self \
-				or _roster[i].is_queued_for_deletion():
+				or _roster[i].is_queued_for_deletion() or not _roster[i].journey.is_empty():
 			_roster.remove_at(i)
 	_population = _roster.size()
 	_homeless = 0

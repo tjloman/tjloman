@@ -19,7 +19,7 @@ enum State {
 	GO_WORK, WORKING, GO_BUILD_SHOP, BUILDING_SHOP,
 	GO_BUILD_NEST, BUILDING_NEST, GO_CIRCLE, CIRCLING,
 	MUSTERING, HAULING, GO_ARM, FIGHT, HIDE,
-	FLEE, HELD, FALLING, PINNED, DYING, LEAVING, HIDDEN,
+	FLEE, HELD, FALLING, PINNED, DYING, LEAVING, HIDDEN, MIGRATE,
 }
 
 ## Names are drawn by sex, so a villager's name reads with its model.
@@ -170,6 +170,8 @@ const JOBS := {
 }
 
 var village: Village
+## The band they are on the road with (Migrant), while they are.
+var journey: Dictionary = {}
 ## The trade this one is posted to, while it is posted there. Public because a
 ## trade counts heads to know whether it still has room.
 var workshop: Workshop = null
@@ -476,6 +478,9 @@ func take_turn(delta: float, owed: int) -> void:
 	if state == State.DYING:
 		_process_dying(delta)
 		_stick_to_ground()
+		return
+	if state == State.MIGRATE:
+		Migrant.walk(self, delta)    # on the road: walking, and nothing else
 		return
 	# THE TURN TO THINK, if one is owed and the frame has room. Refused, they
 	# carry on into the state machine below doing what they were already doing.

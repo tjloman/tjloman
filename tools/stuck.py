@@ -129,6 +129,8 @@ BY_DESIGN = {
     "FALLING": "in the air; landing is what ends it",
     "PINNED": "under a beast's jaws; the Mauling's clock is the only one",
     "DYING": "the window is run by _process_dying, above the match",
+    "MIGRATE": "on the road, above the match: the band ends it (Migrant.arrive), and "
+               "Migrant.walk sends anybody whose band is gone back to WANDER",
 }
 
 

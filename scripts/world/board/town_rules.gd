@@ -604,6 +604,7 @@ static func _leave(book: TownBook, famine: float, dt: float) -> void:
 	book.adults -= go
 	book.children -= kids
 	book.leaving += go + kids
+	book.leaving_young += kids
 	book.left += go + kids
 
 

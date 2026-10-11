@@ -15,6 +15,14 @@ extends Node
 ## WHAT NEVER FOLDS: the home town; a town holding the creature's nest; a town
 ## still being founded; and one with somebody in the hand or in the air.
 ##
+## AND THE BOARD KEEPS TIME. Every ROUND_EVERY seconds each folded town whose
+## next step is due is stepped up to now — out of sight is not frozen; towns
+## out there grow, starve and send people away while nobody watches — and the
+## road between towns goes round (Migration): bands set off, walk, and arrive.
+## A band crossing loaded land, with either end of its road standing, is real
+## villagers walking (Migrant); out of loaded land it is folded back into its
+## record.
+##
 ## AND A TOWN THAT BELIEVES STILL PRAYS FOLDED, at the rate it kept while it
 ## was seen (Village.to_dict "prayer_rate"), or what its grown people would
 ## give if it was never seen praying — and it still counts toward the prayer the
@@ -30,15 +38,24 @@ const FOLD_AFTER := 8.0
 ## The share of a folded town's grown people at prayer at any moment, when it
 ## was never watched long enough to have a rate of its own.
 const AT_PRAYER := 0.04
+## How often the board steps the folded towns and the road goes round, seconds.
+const ROUND_EVERY := 4.0
 
 var _since := 0.0
 var _far := {}        # Village -> seconds it has been past the fold line
+var _round := 0.0
+
+
+func _ready() -> void:
+	Migration.walkers.clear()      # a new scene: nobody is walking yet
 
 
 func _process(delta: float) -> void:
 	Ledger.open(&"Chessboard")
 	_pray(delta)
+	_walk_the_road(delta)
 	_since += delta
+	_round += delta
 	if _since < LOOK_EVERY:
 		return
 	_since = 0.0
@@ -48,6 +65,11 @@ func _process(delta: float) -> void:
 	var eye := WorldGen.cell_of(GameState.camera_focus.x, GameState.camera_focus.z)
 	_fold_the_far(world, eye)
 	_unfold_the_near(world, eye)
+	if _round >= ROUND_EVERY:
+		_round = 0.0
+		_step_the_folded(world)
+		Migration.go_round(get_tree(), GameState.game_years)
+		_show_the_road(world, eye)
 
 
 ## TOWNS THAT BELIEVE, out of sight: they still count toward the prayer the god
@@ -68,12 +90,7 @@ static func bring_up_to_date(record: Dictionary, world: WorldGen) -> void:
 		return
 	var at: Array = record.get("pos", [0.0, 0.0])
 	var spot := Vector3(float(at[0]), 0.0, float(at[1]))
-	var land: TownLand = null
-	if record.has("land"):
-		land = TownLand.from_dict(record["land"])
-	if land == null or land.edition != world.land_edition() or land.rings.is_empty():
-		land = TownLand.read(world, spot, neighbours(world.get_tree(), Vector2(spot.x, spot.z), record))
-		record["land"] = land.to_dict()
+	var land := _land_of(record, world)
 	var clock := Ledger.swap(&"Chessboard:alibi", String(record.get("name", "")))
 	TownFold.catch_up(record, land, world.world_seed, GameState.game_years)
 	# AND WHAT ITS HUNTING LEFT is what the herds round it are when they stand.
@@ -82,6 +99,20 @@ static func bring_up_to_date(record: Dictionary, world: WorldGen) -> void:
 		float(board.get("beast_stock", 1.0)))
 	TownLand.write_back_woods(world, Vector2(spot.x, spot.z), float(board.get("wood_stock", 1.0)))
 	Ledger.resume(clock)
+
+
+## THE LAND A RECORD'S TOWN READ when it folded, read again if a miracle has
+## moved it since, or if it never had one (a record from an older save).
+static func _land_of(record: Dictionary, world: WorldGen) -> TownLand:
+	var land: TownLand = null
+	if record.has("land"):
+		land = TownLand.from_dict(record["land"])
+	if land == null or land.edition != world.land_edition() or land.rings.is_empty():
+		var at: Array = record.get("pos", [0.0, 0.0])
+		var spot := Vector3(float(at[0]), 0.0, float(at[1]))
+		land = TownLand.read(world, spot, neighbours(world.get_tree(), Vector2(spot.x, spot.z), record))
+		record["land"] = land.to_dict()
+	return land
 
 
 ## WHERE EVERY OTHER TOWN STANDS that could share ground with one at `here`,
@@ -157,6 +188,12 @@ func fold(town: Village, world: WorldGen) -> void:
 	record["board"] = board
 	SaveGame.village_memory.append(record)
 	_far.erase(town)
+	# Any band walking on its ground goes back to being a record first.
+	for band: Dictionary in SaveGame.bands:
+		for one in Migration.walkers.get(band["id"], []):
+			if is_instance_valid(one) and (one as Villager).village == town:
+				_fold_band(band)
+				break
 	town.queue_free()
 	Ledger.resume(clock)
 
@@ -202,3 +239,101 @@ func _pray(delta: float) -> void:
 
 func _world() -> WorldGen:
 	return get_tree().get_first_node_in_group("world_gen") as WorldGen
+
+
+## THE TOWNS OUT OF SIGHT, each stepped up to now once its next step is due. A
+## record with no land read yet has it read — one a round, the board's slowest call.
+func _step_the_folded(world: WorldGen) -> void:
+	var now := GameState.game_years
+	var read := false
+	for record: Dictionary in SaveGame.village_memory:
+		if bool(record.get("home", false)) \
+				or now - float(record.get("at_years", now)) < TownRules.step_years():
+			continue
+		if not record.has("land"):
+			if read:
+				continue
+			read = true
+		var clock := Ledger.swap(&"Chessboard:step", String(record.get("name", "")))
+		TownFold.catch_up(record, _land_of(record, world), world.world_seed, now, true)
+		Ledger.resume(clock)
+
+
+## THE ROAD, every frame: bands muster, walk, and arrive.
+func _walk_the_road(delta: float) -> void:
+	for band: Dictionary in SaveGame.bands.duplicate():
+		if not band["set_off"]:
+			band["muster"] = float(band["muster"]) - delta
+			if float(band["muster"]) <= 0.0 or _gathered(band):
+				band["set_off"] = true
+			continue
+		if Migration.advance(band, delta) and Migration.arrive(band, get_tree(), GameState.game_years):
+			SaveGame.bands.erase(band)
+
+
+func _gathered(band: Dictionary) -> bool:
+	var at := Vector2(float(band["pos"][0]), float(band["pos"][1]))
+	for one in Migration.walkers.get(band["id"], []):
+		if is_instance_valid(one) and Vector2((one as Node3D).global_position.x,
+				(one as Node3D).global_position.z).distance_to(at) > Migrant.WITH_IT:
+			return false
+	return true
+
+
+## A BAND IN LOADED LAND IS PEOPLE WALKING, so long as either end of its road
+## stands; anywhere else it is its record. Anybody the hand took out of a band
+## (or who otherwise stopped walking with it) stays where they were put.
+func _show_the_road(world: WorldGen, eye: Vector2i) -> void:
+	for band: Dictionary in SaveGame.bands.duplicate():
+		var at := Vector2(float(band["pos"][0]), float(band["pos"][1]))
+		var cell := WorldGen.cell_of(at.x, at.y)
+		var near := maxi(absi(cell.x - eye.x), absi(cell.y - eye.y)) <= world.unload_radius
+		var host := _standing(String(band["to"]), band["to_pos"])
+		if host == null:
+			host = _standing(String(band["from"]), band["from_pos"])
+		var walking: Array = []
+		for one in Migration.walkers.get(band["id"], []):
+			if not is_instance_valid(one):
+				continue
+			if (one as Villager).state == Villager.State.MIGRATE:
+				walking.append(one)
+			else:
+				Migrant.arrive(one as Villager, (one as Villager).village)
+		if walking.is_empty() and (band["folk"] as Array).is_empty():
+			Migration.walkers.erase(band["id"])
+			SaveGame.bands.erase(band)        # nobody left on this road
+		elif not walking.is_empty() or Migration.walkers.has(band["id"]):
+			Migration.walkers[band["id"]] = walking
+			band["names"] = walking.map(func(w): return w.villager_name) \
+				+ (band["folk"] as Array).map(func(one): return String(one.get("name", "")))
+			if not near or host == null:
+				_fold_band(band)
+		elif near and host != null and not (band["folk"] as Array).is_empty():
+			band["names"] = (band["folk"] as Array).map(func(one): return String(one.get("name", "")))
+			for one: Dictionary in band["folk"]:
+				var place := Migrant.place_in(band, String(one.get("name", "")))
+				var spot := Vector3(at.x + place.x, 0.0, at.y + place.y)
+				spot.y = world.height_at(spot.x, spot.z)
+				walking.append(Migrant.raise(one, host, spot, band))
+			Migration.walkers[band["id"]] = walking
+			band["folk"] = []
+			band["names"] = walking.map(func(w): return w.villager_name)
+
+
+## WALKERS BACK INTO THEIR RECORD: written down by name, and freed.
+static func _fold_band(band: Dictionary) -> void:
+	for one in Migration.walkers.get(band["id"], []):
+		if is_instance_valid(one):
+			(band["folk"] as Array).append(Migrant.entry_of(one as Villager))
+			(one as Node).queue_free()
+	Migration.walkers.erase(band["id"])
+
+
+func _standing(town_name: String, at: Array) -> Village:
+	var spot := Vector2(float(at[0]), float(at[1]))
+	for node in get_tree().get_nodes_in_group("village"):
+		var town := node as Village
+		if is_instance_valid(town) and town.village_name == town_name and not town.is_queued_for_deletion() \
+				and Vector2(town.global_position.x, town.global_position.z).distance_to(spot) < SaveGame.SAME_TOWN:
+			return town
+	return null

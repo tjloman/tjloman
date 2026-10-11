@@ -173,4 +173,5 @@ static func _tallies(book: Dictionary) -> Array:
 		["Taken by beasts", str(roundi(float(book.get("taken", 0.0))))],
 		["Children lost", str(roundi(float(book.get("lost_young", 0.0))))],
 		["Left for elsewhere", str(roundi(float(book.get("left", 0.0))))],
+		["Came from elsewhere", str(roundi(float(book.get("arrived", 0.0))))],
 	]

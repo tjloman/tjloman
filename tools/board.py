@@ -36,7 +36,14 @@ What holds it there, in the source:
  11. A BARN'S STOCK GOES WITH ITS TOWN: written into the record by kind, fed
      out of sight from the granary at the live barn's trough (Drove.trough) and
      dying off unfed, and put back into the barn when the town is raised again.
- 12. And with GODOT set, tools/live/century_live.gd runs the rules over 320
+ 12. THE ROAD BETWEEN TOWNS: the board keeps time -- every folded town is
+     stepped as its steps fall due, not frozen until seen. Those it sends away
+     leave by name (TownFold._set_out), not told as dead; they wait for company
+     and walk as a band to the town they know of with room and food, at a
+     family's pace. Towns trade what they have spare for what they lack, the
+     traders walking there and back. Ruins neither send nor receive. In loaded
+     land a band is villagers walking (Migrant), off every town's roll.
+ 13. And with GODOT set, tools/live/century_live.gd runs the rules over 320
      towns for 180 game years and judges every one, fold_live.gd folds a
      believing town, lets twenty years pass, and brings it back, and
      woods_live.gd fells, plants, saves and sheds a wood, and barn_live.gd
@@ -151,6 +158,27 @@ def source(fail):
         fail.append("a town's felling out of sight is not written back to the woods")
     # FISHING IS A LIVELIHOOD: a cast brings home a string, the board's rate is
     # the one measured in a cove town, and the fishers grow with the town.
+    road = (ROOT / "scripts/world/board/migration.gd").read_text()
+    villager_src = (ROOT / "scripts/villager/villager.gd").read_text()
+    if "_step_the_folded(world)" not in body(BOARD, "_process") \
+            or "TownFold.catch_up(" not in body(BOARD, "_step_the_folded"):
+        fail.append("a folded town is frozen until it is seen again: nothing out of sight moves")
+    if "_set_out(record, folk," not in body(FOLD, "_reconcile") or "going" not in body(FOLD, "catch_up") \
+            or "book.leaving_young += kids" not in body(RULES, "_leave"):
+        fail.append("those a town sends away vanish, or are told as dead, rather than leaving by name")
+    if 'town["ruined"]' not in body(road, "go_round") or 'town["ruined"]' not in body(road, "choose") \
+            or "KNOWS_OF" not in body(road, "choose"):
+        fail.append("a ruin sends or receives people, or a band goes where nobody has heard of")
+    if "PACE * seconds" not in body(road, "advance") or "Migration.advance(band, delta)" not in body(BOARD, "_walk_the_road"):
+        fail.append("a band arrives without walking the road")
+    if "_swap(band, here)" not in body(road, "arrive") or "_trade_from(town, towns, now)" not in body(road, "go_round"):
+        fail.append("towns do not trade, or the traders do not go there and back")
+    if "journey.is_empty()" not in body(VILLAGE, "_refresh_roster") or "Migrant.walk(self, delta)" not in villager_src:
+        fail.append("a villager on the road is still on a town's roll, or does not walk with the band")
+    if '"bands": Migration.to_save()' not in body(SAVE, "snapshot"):
+        fail.append("a save forgets the bands on the road")
+    if "##     static func _raid(" not in road:
+        fail.append("the raid is meant to be there, commented, for when there is another god")
     jobs = (ROOT / "scripts/world/village_jobs.gd").read_text()
     villager = (ROOT / "scripts/villager/villager.gd").read_text()
     catch = re.search(r"^const SHORE_CATCH := (\d+)", jobs, re.M)
@@ -181,7 +209,7 @@ def live(fail):
     if not godot or not pathlib.Path(godot).exists():
         print("  GODOT not set: not run in an engine here")
         return
-    for test in ("century_live.gd", "fold_live.gd", "woods_live.gd", "barn_live.gd"):
+    for test in ("century_live.gd", "fold_live.gd", "woods_live.gd", "barn_live.gd", "road_live.gd"):
         ran = subprocess.run([godot, "--headless", "--path", str(ROOT), "--script",
                               "tools/live/" + test], capture_output=True, text=True, timeout=600)
         checks = [ln for ln in ran.stdout.splitlines() if ln.rstrip().endswith(("yes", "NO"))]

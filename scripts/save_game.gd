@@ -67,6 +67,9 @@ var pending_seed := 0
 
 ## Saved village records still waiting for their town to stream in.
 var village_memory: Array = []
+## AND THE BANDS ON THE ROAD between them (Migration): who, going where, and
+## where they have got to.
+var bands: Array = []
 
 ## Every creature this god has raised: {id, name, seed, created, played,
 ## saved_at, character, growth}. The index is small and separate from the saves
@@ -167,6 +170,7 @@ func start_new(creature_name: String) -> void:
 	pending_world = {}
 	pending_creature = {}
 	village_memory.clear()
+	bands.clear()
 	pending_seed = int(profile(id).get("seed", randi()))
 	GameState.creature_name = String(profile(id).get("name", ""))
 	_reload({})
@@ -188,6 +192,7 @@ func switch_to(id: String) -> bool:
 	pending_world = {}
 	pending_creature = {}
 	village_memory.clear()
+	bands.clear()
 	pending_seed = int(profile(id).get("seed", randi()))
 	_reload({})
 	return true
@@ -284,6 +289,7 @@ func _arm_active() -> void:
 	pending_world = data
 	pending_seed = int(data.get("seed", 0))
 	village_memory = _stamped(data)
+	bands = (data.get("bands", []) as Array).duplicate(true)
 	GameState.game_years = float(data.get("years", 0.0))
 	GameState.alignment = float(data.get("alignment", 0.0))
 	GameState.set_max_prayer_power(float(data.get("max_prayer", 100.0)))
@@ -315,6 +321,7 @@ func snapshot(world: WorldGen, creature: Creature) -> Dictionary:
 		"max_prayer": GameState.max_prayer_power,
 		"creature": creature.to_dict(),
 		"villages": villages,
+		"bands": Migration.to_save(),
 		# WHAT WAS DONE TO THE LAND. Everything else about the terrain comes
 		# back from the seed; craters, ripples and volcanoes do not, so they are
 		# the one part of the ground that has to be written down.
@@ -404,6 +411,7 @@ func load_game() -> bool:
 	# village is built during Main's very first breath and asks for its past
 	# straight away.
 	village_memory = _stamped(data)
+	bands = (data.get("bands", []) as Array).duplicate(true)
 	_reload({
 		"years": float(data.get("years", 0.0)),
 		"alignment": float(data.get("alignment", 0.0)),
@@ -424,6 +432,7 @@ func regenerate_world(creature_given: Variant) -> void:
 	pending_world = {}
 	pending_creature = creature.to_dict() if is_instance_valid(creature) else {}
 	village_memory.clear()   # none of the old towns exist in the new land
+	bands.clear()
 	pending_seed = randi()
 	var entry := profile(active)
 	if not entry.is_empty():

@@ -23,7 +23,7 @@ const _KEPT: Array[String] = ["id", "name", "home", "converted", "belief", "diet
 	"felled", "kept", "kept_meat", "fodder", "herd_meat", "fed",
 	"morale", "hardiness", "stage", "stage_years", "ruined", "years", "steps",
 	"leaning", "born", "starved", "taken", "aged_out", "lost_young", "left",
-	"arrived", "chronicle", "leaving", "marks"]
+	"arrived", "chronicle", "leaving", "leaving_young", "marks"]
 
 var id := ""
 var name := ""
@@ -81,8 +81,10 @@ var herd_meat := 0.0    # and the meat its stock sent the store
 var left := 0.0         # walked away to somewhere else
 var arrived := 0.0
 var chronicle: Array = []   # [[year, line], ...], newest last
-## Who is on the road out, waiting to be a band (Chessboard takes them).
+## Who set out on the road, all told, and of them how many were children:
+## TownFold takes them out of the town by name as they go (`setting_out`).
 var leaving := 0.0
+var leaving_young := 0.0
 ## What it has already said about itself, so a famine is written down once.
 var marks := {}
 
