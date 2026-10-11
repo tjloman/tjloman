@@ -186,6 +186,10 @@ def source(fail):
     miracles = (ROOT / "scripts/miracles/miracle_manager.gd").read_text()
     if "Chessboard.remembered_believers()" not in body(miracles, "faithful_villages"):
         fail.append("a believing town out of sight stops teaching its runes")
+    if "SaveGame.village_memory" not in body(HUD, "_rebuild_roster"):
+        fail.append("a believing town out of sight drops off your villages")
+    if "deal_slowly(" not in body(raise_src, "found") or "_raise_trade(" not in body(raise_src, "found"):
+        fail.append("a remembered town's trades or its work are dealt in one frame again")
     if '"bands": Migration.to_save()' not in body(SAVE, "snapshot"):
         fail.append("a save forgets the bands on the road")
     if "##     static func _raid(" not in road:

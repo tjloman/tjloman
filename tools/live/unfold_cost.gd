@@ -48,9 +48,14 @@ func _initialize() -> void:
 	var houses := []
 	for i in many_houses:
 		houses.append(1)
+	# Its trades and school as a big town of three hundred has them.
+	var like := {"trades": {"well": 6, "mill": 5, "barn": 1, "shrine": 3}, "edubba": true}
 	saves.village_memory.append({"name": "Bigholm", "home": false, "pos": [at.x, at.y],
 		"at_years": state.game_years, "folk": folk, "houses": houses, "farms": 6,
-		"store": {"plant": 900, "meat": 100, "lumber": 80, "stone": 80}, "converted": false})
+		"store": {"plant": 900, "meat": 100, "lumber": 80, "stone": 80}, "converted": false,
+		"trades": like.get("trades", {}), "edubba": like.get("edubba", false),
+		"kept": {"pig": 30}})
+	print("    with trades %s" % str(like.get("trades", {})))
 	var town: Node = null
 	var began := Time.get_ticks_usec()
 	var last := began

@@ -97,8 +97,31 @@ static func roll() -> Dictionary:
 ##
 ## Returns the charter's name, for the town to remember itself by.
 static func deal(town: Village) -> String:
+	var hand := _hand(town)
+	var adults: Array = hand[1]
+	for i in adults.size():
+		_put_to_work(town, adults[i], hand[2][i] if i < (hand[2] as Array).size() else "rest")
+	return String(hand[0].get("name", "tillage"))
+
+
+## THE SAME DEAL, `a_frame` people a frame: a town of three hundred raised from
+## its record (VillageRaise) is two hundred hands, a tenth of a millisecond each.
+static func deal_slowly(town: Village, a_frame: int) -> String:
+	var hand := _hand(town)
+	var adults: Array = hand[1]
+	for i in adults.size():
+		if i % a_frame == a_frame - 1:
+			await town.get_tree().process_frame
+			if not town.is_inside_tree():
+				return ""
+		if is_instance_valid(adults[i]):
+			_put_to_work(town, adults[i], hand[2][i] if i < (hand[2] as Array).size() else "rest")
+	return String(hand[0].get("name", "tillage"))
+
+
+## The charter rolled, the grown people shuffled, and the jobs in the order dealt.
+static func _hand(town: Village) -> Array:
 	var charter := roll()
-	var mix: Dictionary = charter.get("mix", {})
 	var folk := town.my_villagers().duplicate()
 	folk.shuffle()
 	var adults: Array[Villager] = []
@@ -106,12 +129,7 @@ static func deal(town: Village) -> String:
 		var who := v as Villager
 		if who != null and is_instance_valid(who) and who.is_adult():
 			adults.append(who)
-	var queue := _slots(town, mix, adults.size())
-	for i in adults.size():
-		var who := adults[i]
-		var job: String = queue[i] if i < queue.size() else "rest"
-		_put_to_work(town, who, job)
-	return String(charter.get("name", "tillage"))
+	return [charter, adults, _slots(town, charter.get("mix", {}), adults.size())]
 
 
 ## THE ORDER THEY ARE DEALT IN. A list of job names, one per pair of hands,

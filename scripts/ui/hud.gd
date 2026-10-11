@@ -1308,21 +1308,59 @@ func _rebuild_roster() -> void:
 	for child in _roster_list.get_children():
 		child.queue_free()
 	var cam := camera_rig.global_position if camera_rig != null else Vector3.ZERO
+	# STANDING OR OUT OF SIGHT: a town that believes is yours wherever the
+	# camera is, and a town folded out of range (Chessboard) still believes.
 	var mine: Array = []
 	for v in get_tree().get_nodes_in_group("village"):
 		var vil := v as Village
 		if is_instance_valid(vil) and vil.converted:
-			mine.append(vil)
-	mine.sort_custom(func(a: Village, b: Village) -> bool:
-		return a.global_position.distance_to(cam) < b.global_position.distance_to(cam))
+			mine.append({"node": vil, "at": vil.global_position})
+	for record: Dictionary in SaveGame.village_memory:
+		var pos: Array = record.get("pos", [])
+		if bool(record.get("converted", false)) and not bool(record.get("home", false)) and pos.size() >= 2:
+			mine.append({"record": record, "at": Vector3(float(pos[0]), 0.0, float(pos[1]))})
+	mine.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return Vector2(a["at"].x - cam.x, a["at"].z - cam.z).length() \
+			< Vector2(b["at"].x - cam.x, b["at"].z - cam.z).length())
 	if mine.is_empty():
 		var none := Label.new()
 		none.text = "No village yet believes in you.\nConvert one with your miracles."
 		none.add_theme_font_size_override("font_size", 14)
 		_roster_list.add_child(none)
 		return
-	for vil: Village in mine:
-		_roster_list.add_child(_roster_row(vil, cam))
+	for entry: Dictionary in mine:
+		if entry.has("node"):
+			_roster_list.add_child(_roster_row(entry["node"], cam))
+		else:
+			_roster_list.add_child(_remembered_row(entry["record"], entry["at"], cam))
+
+
+## A BELIEVING TOWN OUT OF SIGHT: its numbers, and Go takes the camera there,
+## which brings it back.
+func _remembered_row(record: Dictionary, at: Vector3, cam: Vector3) -> Control:
+	var row := HBoxContainer.new()
+	row.custom_minimum_size = Vector2(300, 60)
+	row.add_theme_constant_override("separation", 10)
+	var go := Button.new()
+	go.text = "Go"
+	go.custom_minimum_size = Vector2(58, 52)
+	go.focus_mode = Control.FOCUS_NONE
+	go.add_theme_font_size_override("font_size", 16)
+	var town_name := String(record.get("name", "a town"))
+	go.pressed.connect(func():
+		if camera_rig != null:
+			camera_rig.snap_to(at)
+			GameState.announce("Surveying %s." % town_name))
+	row.add_child(go)
+	var label := Label.new()
+	label.text = "%s\nPop %d  ·  out of sight  ·  %d m away\n " % [town_name,
+		(record.get("folk", []) as Array).size(), int(round(Vector2(at.x - cam.x, at.z - cam.z).length()))]
+	label.add_theme_font_size_override("font_size", 15)
+	label.add_theme_color_override("font_color", Color(0.78, 0.8, 0.86))
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(label)
+	return row
 
 
 func _roster_row(vil: Village, cam: Vector3) -> Control:

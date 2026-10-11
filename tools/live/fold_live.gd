@@ -95,6 +95,12 @@ func _initialize() -> void:
 	var records: Array = saves.village_memory.filter(func(r): return r.get("name", "") == "Foldwick")
 	check(standing.is_empty(), "the town the camera left behind is folded: no longer standing")
 	check(records.size() == 1, "and remembered, once (%d)" % records.size())
+	main.hud._rebuild_roster()
+	await process_frame
+	var listed: Array = main.hud._roster_list.find_children("*", "Label", true, false).map(
+		func(l): return String(l.text))
+	check(listed.any(func(t): return t.begins_with("Foldwick") and t.contains("out of sight")),
+		"your villages still list it, out of sight")
 	var runes_after: Array = main.miracles.known_runes()
 	check(runes_after == runes_before and runes_before.size() > 0,
 		"and what it taught you is not forgotten: %d runes before, %d after" % [runes_before.size(),

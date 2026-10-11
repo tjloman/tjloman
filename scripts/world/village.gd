@@ -2299,28 +2299,8 @@ func _rebuild(data: Dictionary) -> void:
 		# saved count; it does not add that many on top of whatever is there.
 		var short_by := int(trades[which]) - Workshop.how_many(self, which)
 		for i in maxi(short_by, 0):
-			# `spot_for` AND NOT `find_build_spot`. This asked for a spot in the
-			# building ring for every trade alike, so a dock restored from a
-			# save or a map was laid out in the town square like a shrine — on
-			# grass, with no harbour ever asked about. That is the dock that
-			# keeps turning up in a meadow: destroy it and the villagers rebuild
-			# it on the water, because THEIR door was guarded and this one was
-			# not. See Workshop.may_stand, which both now ask.
-			var shop_spot := Workshop.spot_for(which, self, world)
-			if shop_spot == Vector3.INF:
+			if not _raise_trade(which, world):
 				break
-			if not Workshop.may_stand(which, self, shop_spot, world):
-				# NOW THIS MEANS SOMETHING. With the duplicates gone, a refusal
-				# here is a building the town genuinely had and genuinely
-				# cannot have back — a harbour whose shoreline has changed
-				# under it, most likely — and that is worth saying out loud.
-				push_warning("%s: its save wants a %s and there is nowhere it "
-					% [village_name, which] + "may stand — leaving it out")
-				break
-			var shop := Workshop.create(which, self)
-			shop.position = to_local(shop_spot)
-			add_child(shop)
-			workshops.append(shop)
 	# ITS BARN'S STOCK, into the first barn it has back.
 	var kept: Dictionary = data.get("kept", {})
 	for w in workshops:
@@ -2349,6 +2329,33 @@ func _rebuild(data: Dictionary) -> void:
 			n.position = to_local(spot)
 			add_child(n)
 			nest = n
+
+
+## ONE OF ITS TRADES BACK, where that trade may stand. False when it may not.
+func _raise_trade(which: String, world: WorldGen) -> bool:
+	# `spot_for` AND NOT `find_build_spot`. This asked for a spot in the
+	# building ring for every trade alike, so a dock restored from a
+	# save or a map was laid out in the town square like a shrine — on
+	# grass, with no harbour ever asked about. That is the dock that
+	# keeps turning up in a meadow: destroy it and the villagers rebuild
+	# it on the water, because THEIR door was guarded and this one was
+	# not. See Workshop.may_stand, which both now ask.
+	var shop_spot := Workshop.spot_for(which, self, world)
+	if shop_spot == Vector3.INF:
+		return false
+	if not Workshop.may_stand(which, self, shop_spot, world):
+		# NOW THIS MEANS SOMETHING. With the duplicates gone, a refusal
+		# here is a building the town genuinely had and genuinely
+		# cannot have back — a harbour whose shoreline has changed
+		# under it, most likely — and that is worth saying out loud.
+		push_warning("%s: its save wants a %s and there is nowhere it "
+			% [village_name, which] + "may stand — leaving it out")
+		return false
+	var shop := Workshop.create(which, self)
+	shop.position = to_local(shop_spot)
+	add_child(shop)
+	workshops.append(shop)
+	return true
 
 
 ## Restore a village's lived state onto a freshly generated one. Its people are

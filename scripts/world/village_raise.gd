@@ -18,6 +18,8 @@ extends RefCounted
 
 ## People raised a frame. Each is about half a millisecond.
 const PEOPLE_A_FRAME := 6
+## Hands put to work a frame, by the charter. Each is about a tenth.
+const HANDS_A_FRAME := 20
 
 
 static func found(town: Village) -> void:
@@ -62,14 +64,33 @@ static func found(town: Village) -> void:
 		town.spawn_farm_at(spot)
 		if not await _next_frame(town):
 			return
-	# THE REST — its trades, its school, its stock, its rock — and nothing of
-	# what is already up is built twice: the rebuild builds UP TO the counts.
+	# ITS TRADES, a building a frame — each asks where it may stand.
+	var trades: Dictionary = record.get("trades", {})
+	for which: String in trades:
+		if not Workshop.TRADES.has(which):
+			continue
+		for i in maxi(int(trades[which]) - Workshop.how_many(town, which), 0):
+			var one := Ledger.swap(&"Village:founding", "one of its trades")
+			var stood := town._raise_trade(which, world)
+			Ledger.resume(one)
+			if not stood or not await _next_frame(town):
+				break
+		if not town.is_inside_tree():
+			return
+	# THE REST — its school, its stock, its rock — and nothing of what is
+	# already up is built twice: the rebuild builds UP TO the counts.
 	var clock := Ledger.swap(&"Village:founding", "the rest of it")
 	town._rebuild(record)
 	town._finish_restoring()
 	Chessboard.write_back(record, world)     # the herds and woods, as it stands
-	town._open_for_business()
+	town._refresh_roster()
+	town._retally()
 	Ledger.resume(clock)
+	# AND TO WORK, a few hands a frame: every one dealt before the town runs.
+	town.charter = await VillageCharter.deal_slowly(town, HANDS_A_FRAME)
+	if not town.is_inside_tree():
+		return
+	town.founded = true
 	town.process_mode = was
 
 
