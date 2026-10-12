@@ -186,8 +186,14 @@ def founding(fail):
     if loop.find("_look(") < 0 or loop.find("budget_usec > 0 and Time.get_ticks_usec() - began") \
             < loop.find("_look("):
         fail.append("BuildSearch.run does not check its budget after every spot")
+    # Switched back on last of all — after the charter is dealt — with nothing
+    # after it but the founding clock being handed back.
+    tail = staged.rstrip()
+    if tail.endswith(")") and "Ledger.resume(" in tail.splitlines()[-1]:
+        tail = "\n".join(tail.splitlines()[:-1]).rstrip()
     if "process_mode = Node.PROCESS_MODE_DISABLED" not in staged \
-            or not staged.rstrip().endswith("process_mode = was"):
+            or not tail.endswith("process_mode = was") \
+            or staged.rfind("_open_for_business()") > staged.rfind("process_mode = was"):
         fail.append("a half-founded town is left running before it has a charter")
     if staged.count("await get_tree().process_frame") < 2:
         fail.append("the founders or the houses are no longer spread over frames")

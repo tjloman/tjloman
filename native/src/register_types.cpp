@@ -1,5 +1,5 @@
 // THE DOOR GODOT COMES IN BY. `shade_library_init` is the entry_symbol named in
-// bin/shade/shade.gdextension; it registers the two classes, and from then on
+// bin/shade/shade.gdextension; it registers the classes, and from then on
 // GDScript can make them with ClassDB.instantiate (see scripts/shade.gd, which
 // never names them directly so the game still parses without this library).
 #include "register_types.h"
@@ -10,6 +10,7 @@
 #include <godot_cpp/core/defs.hpp>
 #include <godot_cpp/godot.hpp>
 
+#include "land_kernel.h"
 #include "shadow_baker.h"
 #include "shadow_sky.h"
 
@@ -21,6 +22,7 @@ void initialize_shade_module(ModuleInitializationLevel p_level) {
 	}
 	GDREGISTER_CLASS(ShadowBaker);
 	GDREGISTER_CLASS(ShadowSky);
+	GDREGISTER_CLASS(LandKernel);
 }
 
 void uninitialize_shade_module(ModuleInitializationLevel p_level) {

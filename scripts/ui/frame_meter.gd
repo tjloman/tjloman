@@ -95,6 +95,12 @@ const WORST_ROWS_SHOWN := 3
 ## printed. They are counted, and the line says how many instances are in the
 ## book and how many of them the renderer may reach.
 const VAST: Array[String] = ["Sky", "Sun", "Moon", "Horizon", "Star"]
+## The two walks of the world (see `_survey_some`): how many nodes a frame, and
+## how often a fresh walk begins.
+const SURVEY_SLICE := 400
+## And buildings a frame for the seating walk: each is five reads of the land.
+const SURVEY_SEATS := 40
+const SURVEY_EVERY := 3.0
 
 
 ## WHAT THE FRAME IS MADE OF, most recently measured. Public so a smoke test can
@@ -120,6 +126,13 @@ var _steps_seen := 0.0
 ## The wall clock at the last drawn frame. See `_process` — `delta` is world
 ## time and this meter has to report real time.
 var _tocked := 0
+var _survey: Array = []
+var _seats: Array = []
+var _survey_left := 0.0
+var _big := {}
+var _seat := {}
+var _big_line := ""
+var _seated_line := ""
 
 
 ## A PANEL CONTAINER AND NOT A CONTROL, and the difference is the whole of why
@@ -200,6 +213,7 @@ func _physics_process(_delta: float) -> void:
 
 
 func _process(delta: float) -> void:
+	Ledger.open(&"FrameMeter")
 	# The steps are counted whether or not anybody is looking, because the
 	# average has to be right the moment the meter is opened rather than four
 	# tenths of a second afterwards.
@@ -228,6 +242,12 @@ func _process(delta: float) -> void:
 	# here — once a frame, in the one place that is already once a frame.
 	Ledger.on = visible
 	Ledger.turn_the_page()
+	# AND THE METER PAYS FOR ITSELF, ON THE BILL. Everything below — the marks,
+	# and above all the readout, fifty lines of text laid out afresh — ran
+	# after the page had turned and before anything opened the next one, so it
+	# was charged to nobody and turned up as a frame that was slow for no
+	# reason anyone could see. Measured, it was most of the "unclocked" time.
+	Ledger.open(&"FrameMeter")
 	# EVERY FRAME, AND NOT EVERY REDRAW. The readout is rewritten two and a half
 	# times a second; a worst sampled there would miss most of the frames it
 	# exists to catch, and the spike a player looks up because of is exactly the
@@ -257,6 +277,7 @@ func _process(delta: float) -> void:
 		_peak(StringName("row " + String(row[0])), float(row[1]))
 	if not visible:
 		return
+	_survey_some()
 	_next -= delta
 	if _next > 0.0:
 		return
@@ -327,6 +348,8 @@ func _the_worst_frame() -> Array:
 	# WHAT THE HEAD WAS, when it can be told: nodes torn down land there, and a
 	# worst frame that lost thousands of them was a frame spent freeing.
 	out.append("   %-18s %8d  nodes that frame" % ["(the world)", Ledger.worst_nodes()])
+	var held := Ledger.worst_physics()
+	out.append("   %-18s %8d  pairs touching, %d bodies awake" % ["(physics)", held.x, held.y])
 	out.append("")
 	return out
 
@@ -345,90 +368,131 @@ func _the_worst_frame() -> Array:
 ## Walked at the rate the readout is rewritten rather than per frame, and only
 ## while the meter is open.
 func _worst_seated() -> String:
-	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-	if world == null:
-		return ""
-	var worst := 0.0
-	var named := ""
-	var at := Vector3.ZERO
-	for n in get_tree().get_nodes_in_group(WorldGen.SEATED):
-		var thing := n as Node3D
-		if thing == null or not is_instance_valid(thing):
-			continue
-		var here := thing.global_position
-		var half := float(thing.get_meta("seat_half", 2.5))
-		var under := world.settle_height(here.x, here.z, half) - here.y
-		if under > worst:
-			worst = under
-			named = thing.get_class() if not thing.has_meta("hover_name") \
-				else String(thing.get_meta("hover_name"))
-			at = here
-	if worst < 0.05:
-		return "buildings all sit on the ground"
-	return "worst seated: %s %.2fm under, at %.0f,%.0f" % [named, worst, at.x, at.z]
+	return _seated_line
 
 
-## THE BIGGEST DRAWN THING IN THE WORLD, whatever it is.
-##
-## Walks every drawn node once every EVERY seconds, and only while the meter is
-## open, which is the only reason a walk of six thousand nodes in GDScript is an
-## acceptable thing to do at all. It is a debugging instrument and it is priced
-## like one.
+## THE BIGGEST DRAWN THING IN THE WORLD, whatever it is, as the last whole
+## survey found it. See `_survey_some`.
 func _the_biggest_thing() -> String:
-	var worst := 0.0
-	var named := ""
-	var flock := ""
-	var at := Vector3.ZERO
-	var huge := 0
-	for n in get_tree().root.find_children("*", "GeometryInstance3D", true, false):
-		var vi := n as VisualInstance3D
-		if vi == null or not vi.is_visible_in_tree():
+	return _big_line
+
+
+## THE TWO WALKS OF THE WORLD, A SLICE A FRAME.
+##
+## The biggest drawn thing and the worst-seated building were each found by a
+## walk of everything there is — six thousand drawn nodes, three hundred
+## buildings each asked its ground — every time the readout was written, two and
+## a half times a second. Measured, writing the readout cost twenty-two
+## milliseconds, almost all of it these two: the meter was putting a hitch into
+## every frame it was opened to look at. Now each walk goes SURVEY_SLICE nodes a
+## frame, and says what it found when it has been round once.
+func _survey_some() -> void:
+	if _survey.is_empty():
+		_survey_left -= get_process_delta_time()
+		if _survey_left > 0.0:
+			return
+		_survey_left = SURVEY_EVERY
+		# THE TREE ITSELF, opened a node at a time: gathering every drawn node
+		# in one call was twenty milliseconds on its own.
+		_survey = [get_tree().root]
+		_seats = get_tree().get_nodes_in_group(WorldGen.SEATED)
+		_big = {"worst": 0.0, "named": "", "flock": "", "at": Vector3.ZERO, "huge": 0, "odd": ""}
+		_seat = {"worst": 0.0, "named": "", "at": Vector3.ZERO}
+	for i in SURVEY_SLICE:
+		if _survey.is_empty():
+			break
+		var next = _survey.pop_back()
+		if not is_instance_valid(next):
 			continue
-		var kin := vi.get_parent()
-		var skip := false
-		for word: String in VAST:
-			if vi.name.contains(word) or (kin != null and kin.name.contains(word)):
-				skip = true
-				break
-		if skip:
-			continue
-		# THE WORLD-SPACE BOX, THE ONLY WAY GODOT 4 HAS OF SAYING IT.
-		#
-		# `get_transformed_aabb()` is a Godot 3 method and does not exist here.
-		# It failed twice, differently: `var box := ...` would not COMPILE (no
-		# type to infer), and typing it by hand only moved the failure to the
-		# first frame the meter was opened, where the call itself does not
-		# exist. Transform times local box is the idiom this codebase already
-		# uses — see ModelBank._true_box.
-		var box: AABB = vi.global_transform * vi.get_aabb()
-		var across: float = box.size[box.get_longest_axis_index()]
-		# A NON-FINITE VERTEX makes an infinite box, and Godot draws that as a
-		# smear across the whole world. It is the likeliest way a thing gets to
-		# be a mile wide, and it must not be silently sorted to the bottom.
-		if not is_finite(across):
-			return "BIGGEST: %s/%s has a NON-FINITE box" \
-				% [String(kin.name) if kin != null else "?", vi.name]
-		if across > GIANT:
-			huge += 1
-		if across > worst:
-			worst = across
-			named = "%s/%s" % [String(kin.name) if kin != null else "?", vi.name]
-			at = box.get_center()
-			# AND HOW MANY OF IT THERE ARE, when what won is a scatter. A herd
-			# reading four hundred metres across with four hundred in its book
-			# and every one of them visible says what went wrong in one line.
-			flock = ""
-			var mmi := vi as MultiMeshInstance3D
-			if mmi != null and mmi.multimesh != null:
-				flock = " [%d of %d shown]" % [
-					mmi.multimesh.visible_instance_count
-						if mmi.multimesh.visible_instance_count >= 0
-						else mmi.multimesh.instance_count,
-					mmi.multimesh.instance_count]
-	if named == "":
-		return ""
-	return "big: %s %.0fm @ %.0f,%.0f%s%s" % [named.left(22), worst, at.x, at.z,
-		flock, "  (%d over %dm)" % [huge, int(GIANT)] if huge > 1 else ""]
+		_survey.append_array((next as Node).get_children())
+		if next is GeometryInstance3D:
+			_measure_one(next)
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	for i in SURVEY_SEATS:
+		if _seats.is_empty() or world == null:
+			break
+		_seat_one(world, _seats.pop_back())
+	if _survey.is_empty():
+		_publish_survey()
+
+
+## ONE DRAWN THING: is it the biggest yet?
+func _measure_one(n: Variant) -> void:
+	if not is_instance_valid(n):
+		return
+	var vi := n as VisualInstance3D
+	if vi == null or not vi.is_visible_in_tree():
+		return
+	var kin := vi.get_parent()
+	for word: String in VAST:
+		if vi.name.contains(word) or (kin != null and kin.name.contains(word)):
+			return
+	# THE WORLD-SPACE BOX, THE ONLY WAY GODOT 4 HAS OF SAYING IT.
+	#
+	# `get_transformed_aabb()` is a Godot 3 method and does not exist here.
+	# It failed twice, differently: `var box := ...` would not COMPILE (no
+	# type to infer), and typing it by hand only moved the failure to the
+	# first frame the meter was opened, where the call itself does not
+	# exist. Transform times local box is the idiom this codebase already
+	# uses — see ModelBank._true_box.
+	var box: AABB = vi.global_transform * vi.get_aabb()
+	var across: float = box.size[box.get_longest_axis_index()]
+	var name_of := "%s/%s" % [String(kin.name) if kin != null else "?", vi.name]
+	# A NON-FINITE VERTEX makes an infinite box, and Godot draws that as a
+	# smear across the whole world. It is the likeliest way a thing gets to
+	# be a mile wide, and it must not be silently sorted to the bottom.
+	if not is_finite(across):
+		_big["odd"] = name_of
+		return
+	if across > GIANT:
+		_big["huge"] = int(_big["huge"]) + 1
+	if across > float(_big["worst"]):
+		_big["worst"] = across
+		_big["named"] = name_of
+		_big["at"] = box.get_center()
+		# AND HOW MANY OF IT THERE ARE, when what won is a scatter. A herd
+		# reading four hundred metres across with four hundred in its book
+		# and every one of them visible says what went wrong in one line.
+		_big["flock"] = ""
+		var mmi := vi as MultiMeshInstance3D
+		if mmi != null and mmi.multimesh != null:
+			_big["flock"] = " [%d of %d shown]" % [
+				mmi.multimesh.visible_instance_count
+					if mmi.multimesh.visible_instance_count >= 0
+					else mmi.multimesh.instance_count,
+				mmi.multimesh.instance_count]
+
+
+## ONE BUILDING: how far under its ground is it?
+func _seat_one(world: WorldGen, n: Variant) -> void:
+	if not is_instance_valid(n):
+		return
+	var thing := n as Node3D
+	if thing == null:
+		return
+	var here := thing.global_position
+	var half := float(thing.get_meta("seat_half", 2.5))
+	var under := world.settle_height(here.x, here.z, half) - here.y
+	if under > float(_seat["worst"]):
+		_seat["worst"] = under
+		_seat["named"] = thing.get_class() if not thing.has_meta("hover_name") \
+			else String(thing.get_meta("hover_name"))
+		_seat["at"] = here
+
+
+func _publish_survey() -> void:
+	if String(_big["odd"]) != "":
+		_big_line = "BIGGEST: %s has a NON-FINITE box" % _big["odd"]
+	elif String(_big["named"]) != "":
+		var at: Vector3 = _big["at"]
+		var huge := int(_big["huge"])
+		_big_line = "big: %s %.0fm @ %.0f,%.0f%s%s" % [String(_big["named"]).left(22),
+			float(_big["worst"]), at.x, at.z, _big["flock"],
+			"  (%d over %dm)" % [huge, int(GIANT)] if huge > 1 else ""]
+	var seat_at: Vector3 = _seat["at"]
+	_seated_line = "buildings all sit on the ground" if float(_seat["worst"]) < 0.05 \
+		else "worst seated: %s %.2fm under, at %.0f,%.0f" % [_seat["named"],
+			float(_seat["worst"]), seat_at.x, seat_at.z]
 
 
 ## THE READOUT. Ordered so the first three lines answer the only question that

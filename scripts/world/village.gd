@@ -488,8 +488,10 @@ func _found_in_stages() -> void:
 			await get_tree().process_frame
 			if not is_inside_tree():
 				return
+	var settling := Ledger.swap(&"Village:founding", "its roll and its reach")
 	_assign_housing()
 	_update_influence()
+	Ledger.resume(settling)
 	BootTrail.mark("raising the houses of %s" % village_name)
 	var beds_wanted := int(float(_founding_count()) * FOUNDING_HOUSED)
 	var beds := 0
@@ -507,9 +509,14 @@ func _found_in_stages() -> void:
 		await get_tree().process_frame     # a house a frame
 		if not is_inside_tree():
 			return
+	# THE LAST OF IT ON THE FOUNDING CLOCK TOO: it runs as the coroutine
+	# resumes, before any node's turn, and unclocked it read as a stall at the
+	# head of the frame that nobody could name.
+	var opening := Ledger.swap(&"Village:founding", "open for business")
 	_assign_housing()
 	_open_for_business()
 	process_mode = was
+	Ledger.resume(opening)
 
 
 ## LOOK FOR GROUND A SLICE A FRAME, on the founding clock, until the search is

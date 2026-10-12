@@ -110,6 +110,7 @@ static var _worst_span := 0
 static var _nodes_then := -1
 static var _nodes_moved := 0
 static var _worst_nodes := 0
+static var _worst_physics := Vector2i.ZERO   # collision pairs, active bodies
 ## WHO ASKED FOR THE LAND. The meter could say "10,717 land reads" and not
 ## whose; every read is charged to whichever class has the clock open.
 static var _asked := {}
@@ -237,6 +238,13 @@ static func turn_the_page() -> void:
 		_worst_page = _page.duplicate()
 		_worst_rings = _rings.duplicate()
 		_worst_nodes = _nodes_moved
+		# AND WHAT THE PHYSICS WORLD HELD THEN. A stall in the solver's row is
+		# the engine's own step, and the only things that make that dear are
+		# how many bodies are awake and how many pairs of them touch — so a
+		# screenshot of a spike can say which it was.
+		_worst_physics = Vector2i(
+			int(Performance.get_monitor(Performance.PHYSICS_3D_COLLISION_PAIRS)),
+			int(Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS)))
 	_spent = {}
 	_rang = {}
 	_asked_page = _asked
@@ -342,3 +350,8 @@ static func forget_worst() -> void:
 ## How many nodes that worst frame's world gained (or, negative, lost).
 static func worst_nodes() -> int:
 	return _worst_nodes
+
+
+## The physics world at that worst frame: (collision pairs, active bodies).
+static func worst_physics() -> Vector2i:
+	return _worst_physics

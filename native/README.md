@@ -70,12 +70,31 @@ direction the light travels. So:
 | `src/shade_core.hpp` | C++ (no Godot) | The arithmetic: hull, support points, sun direction, stepping, choosing lights. Tested on its own. |
 | `src/shadow_baker.*` | C++ / godot-cpp | `ShadowBaker.bake(mesh)`, `bake_points(points)`: returns the hull as an `ArrayMesh`. |
 | `src/shadow_sky.*` | C++ / godot-cpp | `ShadowSky` node: `set_day`, `follow(light)`, `flash(...)`; writes the globals. |
-| `src/register_types.*` | C++ / godot-cpp | The entry point (`shade_library_init`) that registers both classes. |
+| `src/land_kernel.*` | C++ / godot-cpp | `LandKernel`: the land's heights, scars, a chunk's height grid, the drawn ground and the steer round trees — every one a twin of GDScript that runs without it (see below). |
+| `src/register_types.*` | C++ / godot-cpp | The entry point (`shade_library_init`) that registers the classes. |
+| `../scripts/kernel.gd` | GDScript | `Kernel`: the only door to `LandKernel`, by name through ClassDB, so the game parses without it. `--no-kernel` after `--` leaves it off. |
+| `../tools/live/kernel_live.gd` | GDScript test | Holds every kernel answer equal to its GDScript twin, at thousands of points. |
 | `../bin/shade/shade.gdextension` | config | Which library file Godot loads on which platform. |
 | `../shaders/baked_shadow.gdshader` | Godot shader | Flattens a hull onto the ground along the sun or a nearby light. |
 | `../project.godot` `[shader_globals]` | config | Declares the six global values the C++ writes and the shader reads. |
 | `../scripts/shade.gd` | GDScript | `Shade`: the only GDScript that talks to the C++. It names the classes only as strings, so the game parses without the library. |
 | `../tools/shade.py` | Python | Holds the system together: names agree, every miracle light goes through `Shade.light`, the core tests pass. |
+
+### The land kernel
+
+The same library carries `LandKernel`, which answers the questions every
+walker, beast and builder asks of the ground: the land's height (the seed's
+noise and every crater on it), a chunk's whole grid of heights in one call, the
+ground as a chunk draws it, and the way round the trees and rocks. Each was a
+few microseconds of GDScript asked thousands of times a second.
+
+**Every function in it is a twin.** Its GDScript original stays where it was
+(`WorldGen._seeded_height`, `TerrainScars._offset_here`, `Chunk._drawn_here`,
+`NavField._steer_here`) and is what runs when the library is not built.
+`tools/live/kernel_live.gd` asks both the same questions and fails if they
+disagree, so **change one, change the other**. Nothing in it decides anything:
+jobs, herds and everything else a villager does stay in GDScript, and adding
+to them never touches this.
 
 ### Doing things with it
 

@@ -160,6 +160,15 @@ func _rebuild() -> void:
 		# pebble to a thing the size of a hut, and routing round the pebble as
 		# though it were the hut is how a path takes the long way for nothing.
 		_add(rock.global_position, rock.girth() + 0.3, false)
+	# And the same obstacles to the land kernel, if it is built (Kernel).
+	var kernel := Kernel.land()
+	if kernel != null:
+		var rows := PackedFloat64Array()
+		for cell: Vector2i in _grid:
+			for o: Dictionary in _grid[cell]:
+				var p: Vector2 = o["p"]
+				rows.append_array([p.x, p.y, float(o["r"]), 1.0 if o["tree"] else 0.0])
+		kernel.set_obstacles(rows)
 
 
 func _add(pos: Vector3, radius: float, is_tree: bool) -> void:
@@ -174,6 +183,15 @@ func _add(pos: Vector3, radius: float, is_tree: bool) -> void:
 ## rocks. `ignore` is a world point whose obstacle is the mover's actual
 ## goal (the tree it's walking to chop) — so it isn't repelled from it.
 func steer(pos: Vector3, desired: Vector3, self_radius: float,
+		ignore := Vector3.INF, skip_trees := false) -> Vector3:
+	var kernel := Kernel.land()
+	if kernel != null:
+		return kernel.steer(pos, desired, self_radius, ignore, skip_trees)
+	return _steer_here(pos, desired, self_radius, ignore, skip_trees)
+
+
+## The GDScript twin of the kernel's `steer`, which is what runs without it.
+func _steer_here(pos: Vector3, desired: Vector3, self_radius: float,
 		ignore := Vector3.INF, skip_trees := false) -> Vector3:
 	var here := Vector2(pos.x, pos.z)
 	var des2 := Vector2(desired.x, desired.z)

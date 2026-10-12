@@ -175,6 +175,9 @@ var player_village: Village
 ## the only part of it that is real history — see TerrainScars, and `deform()`
 ## below for how a miracle actually moves the earth.
 var scars := TerrainScars.new()
+## THE LAND KERNEL (Kernel): the same questions asked in C++, or null where the
+## library is not built and every answer comes from the GDScript below.
+var _kernel: Object = null
 
 ## Standing water that is not the sea — rain caught in a hollow. See `flood`.
 var _ponds: Array[Dictionary] = []
@@ -311,6 +314,11 @@ func reseed(to: int) -> void:
 	# inside the wet country rather than claiming all of one side of it.
 	_jungle_noise.seed = world_seed + 3
 	_jungle_noise.frequency = 0.0065
+	# THE SAME NOISES, HANDED OVER: the kernel asks these very objects.
+	_kernel = Kernel.land()
+	scars.kernel = _kernel
+	if _kernel != null:
+		_kernel.set_noises(_height_noise, _detail_noise, _temp_noise, _wet_noise, _jungle_noise)
 
 
 func _process(delta: float) -> void:
@@ -378,6 +386,12 @@ func height_at(x: float, z: float) -> float:
 	# The seed, and then whatever has been DONE to the land since. Scars ride on
 	# top of the seed rather than replacing it, so a crater in a hillside is
 	# still a hillside. Costs one is_empty() check on an untouched world.
+	if _kernel != null:
+		if Ledger.on:
+			reads += 1
+			Ledger.land_read()
+		scars.kernel_ready()
+		return _kernel.height_at(x, z)
 	return seeded_height_at(x, z) + scars.offset_at(x, z)
 
 
@@ -409,6 +423,14 @@ func seeded_height_at(x: float, z: float) -> float:
 	# sweeps more ground than that in one search. Now the answers live in tiles
 	# of sixteen metres, eight kilobytes each, and are let go only when there
 	# are more than SHARED_TILES_MOST — and then only the ones far from the camera.
+	#
+	# IN C++ there is no store at all: five noise samples there cost less than
+	# looking an answer up here did (Kernel).
+	if _kernel != null:
+		if Ledger.on:
+			reads += 1
+			Ledger.land_read()
+		return _kernel.seeded_height_at(x, z)
 	var kx := roundi(x * SHARED_PER_METRE)
 	var kz := roundi(z * SHARED_PER_METRE)
 	var tile_key := Vector2i(floori(float(kx) / SHARED_TILE), floori(float(kz) / SHARED_TILE))

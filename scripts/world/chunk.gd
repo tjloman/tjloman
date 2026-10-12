@@ -471,7 +471,17 @@ func _build_terrain() -> void:
 	# keeping the lowest — the water pass needs it and it is free here.
 	_lowest = INF
 	_lowest_seeded = INF
-	for z in wide:
+	# THE WHOLE GRID IN ONE CALL, where the land kernel is built (Kernel): six
+	# hundred heights a chunk, each a few microseconds of interpreter here.
+	var kernel := Kernel.land()
+	if kernel != null:
+		world.scars.kernel_ready()
+		var grid: Dictionary = kernel.height_grid(position.x, position.z, step, wide)
+		heights = grid["heights"]
+		_lowest = grid["lowest"]
+		_lowest_seeded = grid["lowest_seeded"]
+		_deepest = grid["deepest"]
+	for z in (0 if kernel != null else wide):
 		for x in wide:
 			var wx := position.x + x * step
 			var wz := position.z + z * step
@@ -573,6 +583,14 @@ func _edge_high(a: float, b: float, fixed: float, along_x: bool, step: float) ->
 ## The drawn height at a point in this chunk's own metres — the two triangles
 ## `_cut_mesh` emits, split on the 0-2 diagonal.
 func _drawn_local(lx: float, lz: float) -> float:
+	var kernel := Kernel.land()
+	if kernel != null:
+		return kernel.drawn_local(_heights, _cells, lx, lz)
+	return _drawn_here(lx, lz)
+
+
+## The GDScript twin of the kernel's `drawn_local`, which is what runs without it.
+func _drawn_here(lx: float, lz: float) -> float:
 	var wide := _cells + 1
 	var step := WorldGen.CHUNK_SIZE / _cells
 	var u := lx / step

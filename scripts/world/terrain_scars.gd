@@ -97,6 +97,10 @@ var clock := 0.0
 ## How many times the scars have changed: added, reshaped or loaded. Part of
 ## WorldGen.land_edition.
 var edition := 0
+## THE LAND KERNEL (Kernel), told the scars whenever they change; null where the
+## library is not built.
+var kernel: Object = null
+var _kernel_edition := -1
 var _scars: Array[Dictionary] = []
 var _buckets := {}
 ## The union of every scar's footprint, for the early-out.
@@ -137,18 +141,44 @@ func add(kind: int, at: Vector2, radius: float, amount: float, rings := 3.0,
 
 ## How far the land at this point has been pushed from where the seed put it.
 func offset_at(x: float, z: float) -> float:
+	if kernel != null:
+		kernel_ready()
+		return kernel.offset_at(x, z)
+	return _offset_here(x, z)
+
+
+## THE KERNEL KNOWS THE SCARS AS THEY ARE NOW. One comparison when nothing has
+## changed; the whole list, flat, when something has.
+func kernel_ready() -> void:
+	if kernel == null or _kernel_edition == edition:
+		return
+	_kernel_edition = edition
+	var rows := PackedFloat64Array()
+	for scar: Dictionary in _scars:
+		rows.append_array([float(scar["kind"]), float(scar["x"]), float(scar["z"]),
+			float(scar["radius"]), float(scar["amount"]), float(scar.get("rings", 3.0))])
+	kernel.set_scars(rows)
+
+
+## The GDScript twin of the kernel's `offset_at`, which is what runs without it.
+func _offset_here(x: float, z: float) -> float:
 	if _scars.is_empty():
 		return 0.0
 	if x < _min.x or x > _max.x or z < _min.y or z > _max.y:
 		return 0.0
-	var bx := floori(x / BUCKET)
-	var bz := floori(z / BUCKET)
+	# THE ONE BUCKET THE POINT IS IN. A scar is filed under every bucket its
+	# footprint touches (`_index`), so this one holds every scar that can reach
+	# here — and ONLY once each. This read the nine buckets round the point and
+	# summed them all, so a crater filed under two buckets was dug twice and one
+	# on a corner four times: three metres asked for, six or twelve given,
+	# depending on where the line fell. And nine reads where one would do, on the
+	# question every walker, beast and builder asks of the land.
+	var here = _buckets.get(Vector2i(floori(x / BUCKET), floori(z / BUCKET)))
+	if here == null:
+		return 0.0
 	var total := 0.0
-	for dz in [-1, 0, 1]:
-		for dx in [-1, 0, 1]:
-			var here: Array = _buckets.get(Vector2i(bx + dx, bz + dz), [])
-			for scar: Dictionary in here:
-				total += _contribution(scar, x, z)
+	for scar: Dictionary in here:
+		total += _contribution(scar, x, z)
 	return total
 
 
@@ -170,30 +200,29 @@ func burn_at(x: float, z: float) -> Color:
 		return Color(0, 0, 0, 0)
 	if x < _min.x or x > _max.x or z < _min.y or z > _max.y:
 		return Color(0, 0, 0, 0)
-	var bx := floori(x / BUCKET)
-	var bz := floori(z / BUCKET)
 	var worst := 0.0
 	var tint := CHAR_COLOR
-	for dz in [-1, 0, 1]:
-		for dx in [-1, 0, 1]:
-			var here: Array = _buckets.get(Vector2i(bx + dx, bz + dz), [])
-			for scar: Dictionary in here:
-				var burn := float(scar.get("char", 0.0))
-				if burn <= 0.0:
-					continue
-				var ddx: float = x - float(scar["x"])
-				var ddz: float = z - float(scar["z"])
-				var radius: float = scar["radius"]
-				var d2 := ddx * ddx + ddz * ddz
-				if d2 >= radius * radius:
-					continue
-				# Hottest in the middle, gone by the rim.
-				var t := sqrt(d2) / radius
-				var stage := weathered(clock - float(scar.get("burned", 0.0)))
-				var strength := burn * pow(1.0 - t, 0.8) * stage.a
-				if strength > worst:
-					worst = strength
-					tint = Color(stage.r, stage.g, stage.b)
+	# The one bucket the point is in: see `offset_at`.
+	var here = _buckets.get(Vector2i(floori(x / BUCKET), floori(z / BUCKET)))
+	if here == null:
+		return Color(0, 0, 0, 0)
+	for scar: Dictionary in here:
+		var burn := float(scar.get("char", 0.0))
+		if burn <= 0.0:
+			continue
+		var ddx: float = x - float(scar["x"])
+		var ddz: float = z - float(scar["z"])
+		var radius: float = scar["radius"]
+		var d2 := ddx * ddx + ddz * ddz
+		if d2 >= radius * radius:
+			continue
+		# Hottest in the middle, gone by the rim.
+		var t := sqrt(d2) / radius
+		var stage := weathered(clock - float(scar.get("burned", 0.0)))
+		var strength := burn * pow(1.0 - t, 0.8) * stage.a
+		if strength > worst:
+			worst = strength
+			tint = Color(stage.r, stage.g, stage.b)
 	tint.a = minf(worst, 1.0)
 	return tint
 
@@ -405,8 +434,8 @@ static func reach_of(scar: Dictionary) -> Rect2:
 
 
 func _index(scar: Dictionary) -> void:
-	# Filed under every bucket its footprint touches, so the nine-bucket read
-	# above is guaranteed to find it.
+	# Filed under every bucket its footprint touches, so the one bucket a point
+	# is in is guaranteed to hold every scar that reaches it, once.
 	var reach := reach_of(scar)
 	var x0 := floori(reach.position.x / BUCKET)
 	var x1 := floori(reach.end.x / BUCKET)

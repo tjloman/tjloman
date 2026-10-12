@@ -392,36 +392,29 @@ func attend(child: Node, delta: float) -> void:
 	# is one they do on their feet. See Villager.sit_down.
 	var seated: bool = SEATED.has(_lesson[klass])
 	child.sit_down(seated and gap.length() <= 0.5)
-	if gap.length() > 0.5:
-		# NO ROUTING IN A SCHOOL YARD. `_move_toward` runs the obstacle steer
-		# and the shore probe for every body that uses it, every frame, and a
-		# probe is terrain samples. Seventy-seven children shuffling round a
-		# ring inside a village's own yard — on ground the village has already
-		# built on, two metres from where they are going, with nothing in
-		# between — need none of it. Straight at it instead.
-		var pace: float = Villager.WALK_SPEED * child._speed_factor() * 0.8
-		var step := gap.normalized() * pace * float(child._sim_scale)
-		child.velocity.x = step.x
-		child.velocity.z = step.y
-		child.velocity.y -= Villager.GRAVITY * delta
-		child.move_and_slide()
-		child.look_at(at - Vector3(step.x, 0.0, step.y), Vector3.UP)
-	elif seated and child.is_on_floor():
-		# SAT DOWN, AND THEREFORE DOING NOTHING. `_apply_gravity_only` ends in a
-		# move_and_slide, which is a physics query per body per frame — the last
-		# thing a school of seventy-seven was still paying for once the routing
-		# went. A child sitting on the ground in a ring is not falling and is
-		# not walking, so it does not need to be asked.
-		child.velocity = Vector3.ZERO
-		_face_the_middle(child, at)
-	else:
-		child._apply_gravity_only(delta)
-		# Facing the middle of its OWN class — a ring of backs is not a class.
-		# Bodies are modelled facing +Z and look_at aims -Z, so this looks at
-		# the point opposite, the same way _move_toward does.
-		_face_the_middle(child, at)
 	child.social = minf(float(child.social) + 3.0 * delta, 100.0)
 	child.happiness = minf(float(child.happiness) + 0.5 * delta, 100.0)
+	if gap.length() > 0.5:
+		# NO ROUTING IN A SCHOOL YARD, AND NO PHYSICS. Straight at the seat, a
+		# step on the ground as it is drawn — the walk every villager takes
+		# (VillagerFeet.step_by). This was a `move_and_slide` a child a turn, a
+		# shape cast against the land for a pupil two metres from its place:
+		# measured, a school was the dearest thing a town did, three tenths of
+		# a millisecond a pupil a turn against four hundredths for a stroll.
+		var pace: float = Villager.WALK_SPEED * child._speed_factor() * 0.8
+		var way := gap.normalized()
+		var step := way * minf(pace * delta, gap.length())
+		child.velocity = Vector3(way.x, 0.0, way.y) * pace    # what the pose reads
+		if VillagerFeet.step_by(child, Vector3(step.x, 0.0, step.y)):
+			child.look_at(child.global_position - Vector3(way.x, 0.0, way.y), Vector3.UP)
+		return
+	# IN ITS PLACE: on the ground, and turned to its class — once. A pupil
+	# sat in a ring does not need its facing set again every turn, and each
+	# `look_at` is a transform handed down to every part of its body.
+	VillagerFeet.stand(child, delta)
+	if child.get_meta("faced", Vector3.INF) != seat:
+		child.set_meta("faced", seat)
+		_face_the_middle(child, at)
 
 
 ## Turned toward its own class, wherever that class is standing. Bodies are

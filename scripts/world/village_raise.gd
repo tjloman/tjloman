@@ -44,8 +44,10 @@ static func found(town: Village) -> void:
 		Ledger.resume(one)
 		if i % PEOPLE_A_FRAME == PEOPLE_A_FRAME - 1 and not await _next_frame(town):
 			return
+	var settling := Ledger.swap(&"Village:founding", "its roll and its reach")
 	town._assign_housing()                # the roll counted, so the reach is theirs
 	town._update_influence()
+	Ledger.resume(settling)
 	for size in record.get("houses", []):
 		var search := town._build_search(world, town._house_room(int(size) as House.Size))
 		if not await town._search_slowly(search):
@@ -109,8 +111,10 @@ static func found(town: Village) -> void:
 	town.charter = await VillageCharter.deal_slowly(town, HANDS_A_FRAME)
 	if not town.is_inside_tree():
 		return
+	var opening := Ledger.swap(&"Village:founding", "switched on")
 	town.founded = true
 	town.process_mode = was
+	Ledger.resume(opening)
 
 
 ## THE RECORD AS FAR AS THE STEPS ABOVE GOT: houses, fields, trades and the

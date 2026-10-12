@@ -13,7 +13,11 @@ With GODOT set to a Godot binary, runs in a real engine, headless:
   tools/live/catch_live.gd        a thrown rock is caught in the air, strikes
                                   what is in its way and lies down in seconds,
                                   and the creature throws back what it catches;
-  tools/live/fold_slices_live.gd  a town's land is read a slice a frame.
+  tools/live/fold_slices_live.gd  a town's land is read a slice a frame;
+  tools/live/smooth_live.gd       craters as deep as asked, a crowd clock that
+                                  starves nobody, a meter that costs nothing;
+  tools/live/kernel_live.gd       the C++ land kernel and its GDScript twins give
+                                  the same answers (passes where it is not built).
 
 And always, the statements:
 
@@ -36,6 +40,18 @@ And always, the statements:
   9. A REMEMBERED TOWN'S LAST STEPS ARE A FRAME EACH, its school found on a
      sliced search, and nothing it could not place is searched for again in
      one frame (VillageRaise._as_placed).
+ 10. THE LAND'S SCARS ARE READ FROM THE ONE BUCKET A POINT IS IN: a scar is
+     filed in every bucket it touches, and reading nine summed it nine ways.
+ 11. A PUPIL WALKS TO ITS SEAT AS EVERYBODY WALKS, on the drawn ground, with
+     no physics query (Edubba.attend).
+ 12. THE CROWD CLOCK HAS A BUDGET A FRAME, however many physics steps the frame
+     runs, and a turn carried past it is booked for the next step, first in line.
+ 13. THE FRAME METER WALKS THE WORLD A SLICE A FRAME and bills itself.
+ 14. THE LAND KERNEL IS OPTIONAL AND TWINNED: Kernel never names the native
+     class, and every question it answers keeps the GDScript that answers it
+     without the library (WorldGen, TerrainScars, Chunk, NavField).
+ 15. A VILLAGER'S UPKEEP — needs, watchdog, hazards, label — runs twice a second
+     of their time, not every turn; on fire, every turn.
 """
 import os
 import pathlib
@@ -45,7 +61,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 LIVE = ("kill_live.gd", "typing_live.gd", "crowd_clock_live.gd", "seams_live.gd", "brush_live.gd",
-        "catch_live.gd", "fold_slices_live.gd")
+        "catch_live.gd", "fold_slices_live.gd", "smooth_live.gd", "kernel_live.gd")
 
 
 def body(text, name):
@@ -106,6 +122,34 @@ def source(fail):
     found = body(raise_src, "found")
     if '"the rest of it"' in found or "_as_placed(" not in found or "_search_slowly(school)" not in found:
         fail.append("a remembered town's last steps are one frame again, searches and all")
+    scars = (ROOT / "scripts/world/terrain_scars.gd").read_text()
+    if "[-1, 0, 1]" in body(scars, "offset_at") or "[-1, 0, 1]" in body(scars, "burn_at"):
+        fail.append("the land's scars are read from nine buckets and summed: craters dug twice and four times")
+    school = (ROOT / "scripts/world/edubba.gd").read_text()
+    if "move_and_slide(" in body(school, "attend") or "VillagerFeet.step_by(" not in body(school, "attend"):
+        fail.append("a pupil walks to its seat through the physics engine, a shape cast a turn")
+    clock = (ROOT / "scripts/crowd_clock.gd").read_text()
+    if "FRAME_BUDGET_USEC - _spent_usec" not in body(clock, "_physics_process") \
+            or "_clock_due = now + 1" not in body(clock, "_physics_process"):
+        fail.append("the crowd clock serves every booking in one step however long it takes, or "
+                    "a turn carried over is booked for no frame at all")
+    meter = (ROOT / "scripts/ui/frame_meter.gd").read_text()
+    if "find_children(" in body(meter, "_readout") or "find_children(" in body(meter, "_survey_some") \
+            or 'Ledger.open(&"FrameMeter")' not in body(meter, "_process"):
+        fail.append("the frame meter walks the world in one go, or charges its own work to nobody")
+    kernel = (ROOT / "scripts/kernel.gd").read_text()
+    chunk = (ROOT / "scripts/world/chunk.gd").read_text()
+    nav = (ROOT / "scripts/nav_field.gd").read_text()
+    if "LandKernel.new" in kernel or 'ClassDB.instantiate(&"LandKernel")' not in body(kernel, "land") \
+            or "_kernel.seeded_height_at(" not in body(world, "seeded_height_at") \
+            or "_seeded_height(" not in body(world, "seeded_height_at") \
+            or "_offset_here(" not in body(scars, "offset_at") or "_drawn_here(" not in body(chunk, "_drawn_local") \
+            or "_steer_here(" not in body(nav, "steer"):
+        fail.append("the land kernel is required, or one of its questions has lost its GDScript twin")
+    villager = (ROOT / "scripts/villager/villager.gd").read_text()
+    turn = body(villager, "take_turn")
+    if "_upkeep_owed >= UPKEEP_EVERY or burning" not in turn or "_tick_needs(owed_now)" not in turn:
+        fail.append("a villager's upkeep runs on every turn again, a third of the turn")
 
 
 def live(fail):

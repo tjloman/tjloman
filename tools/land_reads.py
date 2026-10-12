@@ -206,9 +206,12 @@ def live(fail):
     if not godot or not pathlib.Path(godot).exists():
         print("FAR TOWNS, FULL STORE: GODOT not set, not run in an engine here")
         return
+    # THE GDSCRIPT STORE, by name: with the land kernel built (Kernel) the land
+    # is asked in C++ and this store is never filled, so it is tested with the
+    # kernel left off — the store is what runs wherever the library is not.
     ran = subprocess.run([godot, "--headless", "--path", str(ROOT), "--script",
-                          "tools/live/land_tiles_live.gd"], capture_output=True,
-                         text=True, timeout=300)
+                          "tools/live/land_tiles_live.gd", "--", "--no-kernel"],
+                         capture_output=True, text=True, timeout=300)
     said = [ln for ln in ran.stdout.splitlines() if ln.startswith("  ")]
     print("FAR TOWNS, FULL STORE, in Godot:")
     for ln in said:

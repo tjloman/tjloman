@@ -34,6 +34,14 @@ extends Node
 ## (sim_stride's far band, 10, times the most relief, 4), so a booking never
 ## laps itself.
 const WHEEL := 64
+## WHAT ONE FRAME MAY SPEND ON TURNS, in microseconds, however many physics
+## steps it runs. Past it, whoever is still due waits for the next step, first
+## in line, and their turn when it comes covers both (`owed`). Without it a slow
+## frame fed itself: the engine runs two steps to catch up, every villager in
+## view is due in both, and the next frame is slower still — the meter's
+## PINNED, and the stutter that stays once it starts. Held, falling and burning
+## bodies never wait.
+const FRAME_BUDGET_USEC := 8000
 ## How often somebody taken out of the tree is looked at again. The engine does
 ## not process a node outside the tree, so neither does this — it just keeps
 ## their place.
@@ -71,6 +79,9 @@ var _focus := Vector3.ZERO
 var _strides: Array[int] = [1, 1, 1]
 var _near_frames := 0
 var _plots := {}      # Vector2i -> Array of villagers standing in it
+var _late: Array = []  # [villager, frame] pairs carried from a step that ran out
+var _budget_frame := -1   # the idle frame the budget below was counted in
+var _spent_usec := 0      # what this frame's steps have spent on turns so far
 
 
 ## A NEW VILLAGER JOINS THE CLOCK, from their own `_ready`. Their first turn is
@@ -111,6 +122,7 @@ static func clear() -> void:
 	if _the != null and is_instance_valid(_the):
 		for i in WHEEL:
 			_the._slots[i] = []
+		_the._late = []
 		_the._plots.clear()
 
 
@@ -134,14 +146,35 @@ func _physics_process(_delta: float) -> void:
 	# this node and not the physics frame count, and a booking for a frame
 	# nobody served must still come round. Past a whole wheel, every slot is
 	# due anyway.
+	var began := Time.get_ticks_usec()
+	if Engine.get_process_frames() != _budget_frame:
+		_budget_frame = Engine.get_process_frames()
+		_spent_usec = 0
+	var allowed := FRAME_BUDGET_USEC - _spent_usec
+	var waiting := _late
+	_late = []
 	for f in range(maxi(_last + 1, now - WHEEL + 1), now + 1):
 		var at := f % WHEEL
-		var slot: Array = _slots[at]
-		if slot.is_empty():
+		if not _slots[at].is_empty():
+			waiting.append_array(_slots[at])
+			_slots[at] = []
+	for i in range(0, waiting.size(), 2):
+		var who = waiting[i]
+		var booked := int(waiting[i + 1])
+		if Time.get_ticks_usec() - began > allowed and is_instance_valid(who) \
+				and not _hot(who):
+			# Only a booking still standing waits: one fetched forward since, or
+			# made twice, is nobody's turn, and kept it piled up past the crowd.
+			# It waits BOOKED, for the next step and first in line there.
+			if (who as Villager)._clock_due == booked and booked <= now:
+				(who as Villager)._clock_due = now + 1
+				_late.append(who)
+				_late.append(now + 1)
+			elif booked > now:
+				_serve(who, booked, now, step)      # a future slot: it keeps its place
 			continue
-		_slots[at] = []
-		for i in range(0, slot.size(), 2):
-			_serve(slot[i], int(slot[i + 1]), now, step)
+		_serve(who, booked, now, step)
+	_spent_usec += Time.get_ticks_usec() - began
 	_last = now
 	# The near band's census, for everybody served at once — each counted for
 	# every frame since they last asked, as asking every frame used to count

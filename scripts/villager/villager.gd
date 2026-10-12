@@ -39,6 +39,8 @@ const WALK_SPEED := 3.0
 const FLEE_SPEED := 5.5
 ## How many physics ticks a villager near the camera goes between thoughts.
 const BRAIN_TICKS := 3
+## How much of their own time passes between upkeeps (see `take_turn`).
+const UPKEEP_EVERY := 0.5
 ## How quickly a rested sleeper gets up by day, as a chance a second: about a
 ## second and a half on average, so a town wakes over a few seconds at dawn.
 const WAKE_RATE := 0.7
@@ -265,6 +267,7 @@ var _flee_from := Vector3.ZERO
 ## how near counts as there, and how far they have already coasted.
 var _brain_left := randi_range(1, BRAIN_TICKS)
 var _brain_owed := 0.0
+var _upkeep_owed := 0.0
 var _coast_to := Vector3.INF
 @warning_ignore("unused_private_class_variable")
 var _coast_arrive := 1.0
@@ -492,21 +495,29 @@ func take_turn(delta: float, owed: int) -> void:
 		_choose()
 		Spool.thought(Time.get_ticks_usec() - began)   # see Spool.turn_to_think
 	_tick_lifecycle(delta)
-	_tick_needs(delta)
-	_tick_watchdogs(delta)
-	_tick_hazards(delta)
-	# THE NAME OVER THEIR HEAD, only where it can be read. Two hundred Label3Ds
-	# is two hundred pieces of text being laid out and drawn, and in a crowd
-	# they are not legible anyway — a town at prayer was a white smear with
-	# "pray" in it somewhere. Near enough to read, and the rest is silence.
-	var shown := GameState.camera_focus.distance_squared_to(global_position) \
-		< Quality.label_distance() * Quality.label_distance()
-	if _label.visible != shown:
-		_label.visible = shown
-	if shown:
-		var status := VillagerWords.status_text(self)
-		if _label.text != status:  # Label3D re-renders on every assignment
-			_label.text = status
+	# UPKEEP, TWICE A SECOND OF THEIR TIME: needs, the watchdog, fire and water
+	# and the name over their head. Each is a sum over the time that passed,
+	# so half a second at once is the same half second — measured, the four
+	# were a third of a turn, paid on every one. On fire, every turn.
+	_upkeep_owed += delta
+	if _upkeep_owed >= UPKEEP_EVERY or burning:
+		var owed_now := _upkeep_owed
+		_upkeep_owed = 0.0
+		_tick_needs(owed_now)
+		_tick_watchdogs(owed_now)
+		_tick_hazards(owed_now)
+		# THE NAME OVER THEIR HEAD, only where it can be read. Two hundred
+		# Label3Ds is two hundred pieces of text being laid out and drawn, and in
+		# a crowd they are not legible anyway. Near enough to read, and the
+		# rest is silence.
+		var shown := GameState.camera_focus.distance_squared_to(global_position) \
+			< Quality.label_distance() * Quality.label_distance()
+		if _label.visible != shown:
+			_label.visible = shown
+		if shown:
+			var status := VillagerWords.status_text(self)
+			if _label.text != status:  # Label3D re-renders on every assignment
+				_label.text = status
 	if _animator != null:
 		_animator.play(VillagerPose.clip(self))
 
