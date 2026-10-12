@@ -33,6 +33,9 @@ And always, the statements:
      down; a thing caught in the air has landed nowhere (Blow); and a body the
      hand is handed is told it was picked up, as a grab tells it.
   8. ONE FOLD AT A TIME, ITS LAND READ IN SLICES (Chessboard._fold_some).
+  9. A REMEMBERED TOWN'S LAST STEPS ARE A FRAME EACH, its school found on a
+     sliced search, and nothing it could not place is searched for again in
+     one frame (VillageRaise._as_placed).
 """
 import os
 import pathlib
@@ -99,6 +102,10 @@ def source(fail):
     if "_begin_fold(" not in body(board, "_fold_the_far") or re.search(r"(?<![\w])fold\(town", body(board, "_fold_the_far")) \
             or "read_some(" not in body(board, "_fold_some"):
         fail.append("towns fold all at once again, their land read in one frame")
+    raise_src = (ROOT / "scripts/world/village_raise.gd").read_text()
+    found = body(raise_src, "found")
+    if '"the rest of it"' in found or "_as_placed(" not in found or "_search_slowly(school)" not in found:
+        fail.append("a remembered town's last steps are one frame again, searches and all")
 
 
 def live(fail):

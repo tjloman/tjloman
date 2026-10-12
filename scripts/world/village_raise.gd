@@ -77,14 +77,33 @@ static func found(town: Village) -> void:
 				break
 		if not town.is_inside_tree():
 			return
-	# THE REST — its school, its stock, its rock — and nothing of what is
-	# already up is built twice: the rebuild builds UP TO the counts.
-	var clock := Ledger.swap(&"Village:founding", "the rest of it")
-	town._rebuild(record)
+	# ITS SCHOOL, on a sliced search like a house's.
+	if bool(record.get("edubba", false)) and not town.has_edubba():
+		var school := town._build_search(world, Village.ROOM_ROUND_THE_SCHOOL)
+		if not await town._search_slowly(school):
+			return
+		town._raise_school(town._searched(school))
+		if not await _next_frame(town):
+			return
+	# THE REST, A PIECE A FRAME, each named on the meter. It was one frame —
+	# "the rest of it" — and on a PC it once stood at three quarters of a
+	# second without saying which part. Nothing is searched for here: what the
+	# steps above could not place is not asked about again in one frame
+	# (`_as_placed`), and is only said.
+	var clock := Ledger.swap(&"Village:founding", "its stock and its rock")
+	town._rebuild(_as_placed(town, record))
+	Ledger.resume(clock)
+	if not await _next_frame(town):
+		return
+	clock = Ledger.swap(&"Village:founding", "its roll")
 	town._finish_restoring()
-	Chessboard.write_back(record, world)     # the herds and woods, as it stands
 	town._refresh_roster()
 	town._retally()
+	Ledger.resume(clock)
+	if not await _next_frame(town):
+		return
+	clock = Ledger.swap(&"Village:founding", "its herds and woods")
+	Chessboard.write_back(record, world)     # what its hunting and felling left
 	Ledger.resume(clock)
 	# AND TO WORK, a few hands a frame: every one dealt before the town runs.
 	town.charter = await VillageCharter.deal_slowly(town, HANDS_A_FRAME)
@@ -92,6 +111,28 @@ static func found(town: Village) -> void:
 		return
 	town.founded = true
 	town.process_mode = was
+
+
+## THE RECORD AS FAR AS THE STEPS ABOVE GOT: houses, fields, trades and the
+## school as they now stand, so `_rebuild` builds none of them again in one
+## frame — a search that finds no room is the slowest one there is. What would
+## not fit is said, as `_rebuild` says it.
+static func _as_placed(town: Village, record: Dictionary) -> Dictionary:
+	var placed := record.duplicate()
+	var houses: Array = record.get("houses", [])
+	placed["houses"] = houses.slice(0, mini(houses.size(), town.houses.size()))
+	placed["farms"] = mini(int(record.get("farms", 0)), town.farms.size())
+	placed["edubba"] = town.has_edubba()
+	var trades := {}
+	var wanted: Dictionary = record.get("trades", {})
+	for which: String in wanted:
+		trades[which] = mini(int(wanted[which]), Workshop.how_many(town, which))
+	placed["trades"] = trades
+	if town.houses.size() < houses.size() or town.farms.size() < int(record.get("farms", 0)):
+		push_warning(("%s wanted %d house(s) and %d field(s) back and could place %d and %d "
+			+ "— no room for the rest.") % [town.village_name, houses.size(),
+				int(record.get("farms", 0)), town.houses.size(), town.farms.size()])
+	return placed
 
 
 static func _next_frame(town: Village) -> bool:

@@ -2270,15 +2270,7 @@ func _rebuild(data: Dictionary) -> void:
 			break
 		spawn_farm_at(spot)
 	if bool(data.get("edubba", false)) and not has_edubba():
-		var spot := find_build_spot(world, ROOM_ROUND_THE_SCHOOL)
-		if spot != Vector3.INF:
-			# Raised free: the materials were spent in the life being restored,
-			# and charging for it again would quietly rob every reloaded town.
-			var e := Edubba.new()
-			e.village = self
-			e.position = to_local(spot)
-			add_child(e)
-			edubba = e
+		_raise_school(find_build_spot(world, ROOM_ROUND_THE_SCHOOL))
 	if houses.size() != want_houses.size() or farms.size() != want_farms:
 		push_warning(("%s wanted %d house(s) and %d field(s) back from its "
 			+ "save and could place %d and %d — no room for the rest.")
@@ -2329,6 +2321,19 @@ func _rebuild(data: Dictionary) -> void:
 			n.position = to_local(spot)
 			add_child(n)
 			nest = n
+
+
+## ITS SCHOOL BACK, on `spot` (nothing if there was no room). Raised free: the
+## materials were spent in the life being restored, and charging for it again
+## would quietly rob every reloaded town.
+func _raise_school(spot: Vector3) -> void:
+	if spot == Vector3.INF:
+		return
+	var e := Edubba.new()
+	e.village = self
+	e.position = to_local(spot)
+	add_child(e)
+	edubba = e
 
 
 ## ONE OF ITS TRADES BACK, where that trade may stand. False when it may not.
