@@ -211,8 +211,8 @@ func _look_for_blaze(tree: SceneTree, here: Vector3, reach: float) -> void:
 	var best := reach
 	for n in tree.get_nodes_in_group(Affords.BURNABLE):
 		var thing := n as Node3D
-		# A carcass burning in a field is not the town's to save.
-		if thing == null or thing is Carcass or not Firefight.ablaze(thing):
+		# A carcass or a bush burning in a field is not the town's to save.
+		if thing == null or thing is Carcass or thing is ForageBush or not Firefight.ablaze(thing):
 			continue
 		var d := here.distance_to(thing.global_position)
 		if d < best and not _unreachable(tree, thing.global_position):

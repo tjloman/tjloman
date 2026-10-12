@@ -983,12 +983,13 @@ func _spread() -> void:
 		if tree.global_position.distance_to(global_position) < SPREAD_RADIUS:
 			if randf() < SPREAD_CHANCE:
 				tree.ignite()
+	# The brush beneath catches — and burns, and passes it on (ForageBush).
 	for b in get_tree().get_nodes_in_group("forage"):
-		var bush := b as Node3D
-		if is_instance_valid(bush) \
+		var bush := b as ForageBush
+		if bush != null and not bush.burning \
 				and bush.global_position.distance_to(global_position) < SPREAD_RADIUS * 0.7:
 			if randf() < SPREAD_CHANCE * 0.5:
-				bush.queue_free()  # kindling gone
+				bush.ignite()
 	# A nearby field catches the drifting embers.
 	for f in get_tree().get_nodes_in_group("farms"):
 		var farm := f as Farm

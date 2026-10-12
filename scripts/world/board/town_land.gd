@@ -69,70 +69,115 @@ var predators_now := 0.0
 var edition := -1       # the land edition it was read at
 var rings: Array = []   # per ring, a Dictionary of KEYS
 var _near := {}         # ring count -> the TownLand within it
+## A READING UNDER WAY (begin_read, read_some): where, whose ground is whose,
+## how far through the grid and then the chunks, and what it has seen so far.
+var _at := Vector2.ZERO
+var _others: Array = []
+var _next := 0
+var _next_cell := -1
+var _wet := {}
+var _dry := {}
+var _per_chunk := {}           # cell -> per-ring sample counts
+var _cells: Array = []
 
 
 ## READ THE LAND round `at`, out to REACH, keeping only ground nearer this town
 ## than any of `neighbours` (their positions on the ground plane).
 static func read(world: WorldGen, at: Vector3, neighbours: Array = []) -> TownLand:
+	var land := begin_read(world, at, neighbours)
+	while not land.read_some(world, -1):
+		pass
+	return land
+
+
+## THE SAME READING, A SLICE AT A TIME. A read is the board's slowest call —
+## seven hundred spots, each asked for its slope, its footprint and a dry line
+## home — and in one frame it was a fifth of a second on a PC, two thirds when
+## three towns folded together. Begun here; `read_some` goes on with it.
+static func begin_read(world: WorldGen, at: Vector3, neighbours: Array = []) -> TownLand:
 	var land := TownLand.new()
 	land.reach = REACH
 	land.edition = world.land_edition()
 	land.biome = world.biome_at(at.x, at.z)
-	var count := int(ceilf(REACH / RING))
-	for i in count:
+	for i in int(ceilf(REACH / RING)):
 		var ring := {}
 		for key: String in KEYS:
 			ring[key] = 0.0
 		land.rings.append(ring)
-	var here := Vector2(at.x, at.z)
-	var wet := {}
-	var dry := {}
-	var per_chunk := {}          # cell -> per-ring sample counts
+	land._at = Vector2(at.x, at.z)
+	land._others = neighbours
+	land._next = 0
+	land._next_cell = -1
+	return land
+
+
+## ON WITH THE READING until `until_usec` (Time.get_ticks_usec), or to the end
+## if that is negative. True when it is done and the land is whole.
+func read_some(world: WorldGen, until_usec: int) -> bool:
+	var count := rings.size()
 	var span := int(ceilf(REACH / SAMPLE))
-	for gx in range(-span, span + 1):
-		for gz in range(-span, span + 1):
-			var off := Vector2(gx, gz) * SAMPLE
-			if off.length() > REACH:
-				continue
-			var spot := here + off
-			if _theirs(spot, here, neighbours):
-				continue
-			var r := mini(int(off.length() / RING), count - 1)
-			var ring: Dictionary = land.rings[r]
-			var cell := WorldGen.cell_of(spot.x, spot.y)
-			if not per_chunk.has(cell):
-				var fresh := PackedInt32Array()       # a packed array is a value:
-				fresh.resize(count)                   # sized here, then stored
-				per_chunk[cell] = fresh
-			var tally: PackedInt32Array = per_chunk[cell]
-			tally[r] += 1
-			per_chunk[cell] = tally
-			if world.is_underwater(spot.x, spot.y):
-				wet[Vector2i(gx, gz)] = true
-				ring["water"] += 1.0
-				continue
-			dry[Vector2i(gx, gz)] = r
-			if off.length() <= BUILDS_OUT and _buildable(world, here, spot):
-				ring["room"] += 1.0
-				if world.slope_at(spot.x, spot.y) < FIELD_SLOPE \
-						and FIELD_BIOMES.has(world.biome_at(spot.x, spot.y)):
-					ring["fields"] += 1.0
-	for g: Vector2i in dry:
-		for step: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-			if wet.has(g + step):
-				land.rings[dry[g]]["shore"] += 1.0
-				break
+	var side := span * 2 + 1
+	while _next < side * side:
+		if until_usec >= 0 and Time.get_ticks_usec() >= until_usec:
+			return false
+		@warning_ignore("integer_division")
+		var gx := _next / side - span
+		var gz := _next % side - span
+		_next += 1
+		var off := Vector2(gx, gz) * SAMPLE
+		if off.length() > REACH:
+			continue
+		var spot := _at + off
+		if _theirs(spot, _at, _others):
+			continue
+		var r := mini(int(off.length() / RING), count - 1)
+		var ring: Dictionary = rings[r]
+		var cell := WorldGen.cell_of(spot.x, spot.y)
+		if not _per_chunk.has(cell):
+			var fresh := PackedInt32Array()       # a packed array is a value:
+			fresh.resize(count)                   # sized here, then stored
+			_per_chunk[cell] = fresh
+		var tally: PackedInt32Array = _per_chunk[cell]
+		tally[r] += 1
+		_per_chunk[cell] = tally
+		if world.is_underwater(spot.x, spot.y):
+			_wet[Vector2i(gx, gz)] = true
+			ring["water"] += 1.0
+			continue
+		_dry[Vector2i(gx, gz)] = r
+		if off.length() <= BUILDS_OUT and _buildable(world, _at, spot):
+			ring["room"] += 1.0
+			if world.slope_at(spot.x, spot.y) < FIELD_SLOPE \
+					and FIELD_BIOMES.has(world.biome_at(spot.x, spot.y)):
+				ring["fields"] += 1.0
+	if _next_cell < 0:
+		for g: Vector2i in _dry:
+			for step: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				if _wet.has(g + step):
+					rings[_dry[g]]["shore"] += 1.0
+					break
+		_cells = _per_chunk.keys()
+		_next_cell = 0
 	# A chunk is 48 m square: this many samples cover the whole of it.
 	var whole := pow(WorldGen.CHUNK_SIZE / SAMPLE, 2.0)
-	for cell: Vector2i in per_chunk:
+	while _next_cell < _cells.size():
+		if until_usec >= 0 and Time.get_ticks_usec() >= until_usec:
+			return false
+		var cell: Vector2i = _cells[_next_cell]
+		_next_cell += 1
 		var mid := (Vector2(cell) + Vector2(0.5, 0.5)) * WorldGen.CHUNK_SIZE
 		var kind := world.biome_at(mid.x, mid.y)
-		var counts: PackedInt32Array = per_chunk[cell]
+		var counts: PackedInt32Array = _per_chunk[cell]
 		for r in count:
 			if counts[r] > 0:
-				land._count_chunk(world, cell, kind, minf(float(counts[r]) / whole, 1.0), land.rings[r])
-	land._total(count)
-	return land
+				_count_chunk(world, cell, kind, minf(float(counts[r]) / whole, 1.0), rings[r])
+	_total(count)
+	_others = []
+	_wet = {}
+	_dry = {}
+	_per_chunk = {}
+	_cells = []
+	return true
 
 
 ## A LAND MADE UP, for the century harness: whatever it is handed, the rest bare.
@@ -270,9 +315,18 @@ func to_dict() -> Dictionary:
 		"edition": edition, "rings": rings}
 
 
+## A land read by an older game lacks what was counted since: an `_now` that
+## was never written is the land as it grew, and anything else is none. Without
+## it a ring short of `wood_now` stopped every step of that town with an error.
 static func from_dict(data: Dictionary) -> TownLand:
-	var land := made(data)
-	land.rings = (data.get("rings", []) as Array).duplicate(true)
+	var whole := data.duplicate()
+	var kept := (data.get("rings", []) as Array).duplicate(true)
+	for at: Dictionary in [whole] + kept:
+		for key: String in KEYS:
+			if not at.has(key):
+				at[key] = at.get(key.trim_suffix("_now"), 0.0)
+	var land := made(whole)
+	land.rings = kept
 	return land
 
 

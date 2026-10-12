@@ -122,7 +122,7 @@ def source(fail):
     if "land.near(build_reach(pop))" not in body(RULES, "step") \
             or "free >= house_room(size)" not in body(RULES, "_build"):
         fail.append("a town's numbers build past the room their reach gives them")
-    fold = body(BOARD, "fold")
+    fold = body(BOARD, "_put_away")      # what `fold` and the sliced fold both end in
     if "town.to_dict()" not in fold or "SaveGame.village_memory.append(record)" not in fold:
         fail.append("a folded town is not remembered as its own record")
     if "Chessboard.bring_up_to_date(" not in body(SAVE, "take_back") or "take_back(village)" not in body(SAVE, "recall"):

@@ -189,6 +189,11 @@ func _physics_process(delta: float) -> void:
 	if thing == null or not is_instance_valid(thing):
 		queue_free()
 		return
+	# CAUGHT. Frozen in a hand or in claws mid-flight, it has stopped dead
+	# without landing anywhere: the throw is over and nothing was struck.
+	if thing.freeze:
+		queue_free()
+		return
 	_left -= delta
 	# THROUGH THE GROUND. A throw at full speed crosses more than a metre a
 	# tick and can pass clean through the land's one-sided skin; under it,
@@ -281,6 +286,8 @@ static func lands(thing: Node3D, at: Vector3, speed: float, mass: float,
 			continue
 		var landed := force * (1.0 - TO_FLESH)
 		built.call("damage", landed)
+		if built is ForageBush:
+			continue          # brush flattened is nobody's loss, and no sin
 		# WHAT WAS ACTUALLY DONE, not what was thrown. This counted the whole
 		# force while the villager branch below counted only the share that
 		# reached them, so the same blow was charged at two different rates

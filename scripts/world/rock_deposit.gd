@@ -146,6 +146,25 @@ const FIREBALL_SECONDS := 8.0
 ## where it stood, so they are two rocks and not one rock drawn twice.
 const SPLIT_APART := 0.55
 
+## LOOSE — thrown, dropped, split off — it is a PROP until it lies still: on the
+## layer the hand's pick and the creature's eyes look on, so a rock in flight
+## can be caught, and it strikes people, beasts and trees as well as the land.
+## It used to fly on no layer at all (see `pick_up`) until the physics server
+## put it to sleep, and a ball on a hillside never sleeps: it rolled on for
+## minutes, through everyone, and nothing could take hold of it.
+const LOOSE_LAYER := 4
+const LOOSE_MASK := 1 | 2 | 4 | 8
+## ROLLING RESISTANCE, which a sphere in a physics engine does not have: the
+## share of its speed a rock on the ground loses each second. It still rolls
+## off a slope, and comes to rest on the flat a few metres on.
+const ROLLING_DRAG := 1.6
+## Slower than this for SETTLES_AFTER, on the ground, and it is scenery again.
+const SETTLES_BELOW := 0.6
+const SETTLES_AFTER := 0.4
+## And however steep the hill, it is laid down after this long, if slow enough.
+const LOOSE_MOST := 12.0
+const LAID_DOWN_BELOW := 2.5
+
 ## WHICH RUNG OF `WORTH` this one is. Set before it enters the tree; everything
 ## else about the rock follows from it. Ignored on a vein.
 var rung := 4
@@ -173,6 +192,8 @@ var _rain_time := 0.0
 var _fire_beat := 0.0
 var _glow: MeshInstance3D = null
 var _flames: Node3D = null
+var _loose_for := -1.0      # seconds since it was let go; -1 at rest
+var _still := 0.0
 
 
 func _init() -> void:
@@ -225,6 +246,7 @@ func _ready() -> void:
 	mass = heft()
 	# A rock that has been thrown and has come to rest is scenery again.
 	sleeping_state_changed.connect(_on_sleep_changed)
+	set_physics_process(false)        # until it is lifted or shaken loose
 	# A COLD ROCK COSTS NOTHING. `_process` is switched on by the first thing
 	# that warms it and switches itself off when the last of the heat is gone,
 	# so a hillside of two hundred stones runs no code at all — which is the
@@ -382,6 +404,8 @@ func split() -> void:
 ## back on the ground layer when it comes to rest; see `_on_sleep_changed`.
 func pick_up() -> void:
 	collision_layer = 0
+	_loose_for = -1.0
+	set_physics_process(true)     # to know the moment it is let go
 
 
 ## LET PHYSICS HAVE IT. Called when a rock is split off another — the hand's
@@ -391,6 +415,48 @@ func pick_up() -> void:
 func shake_loose() -> void:
 	freeze = false
 	sleeping = false
+	set_physics_process(true)
+
+
+## HELD, IT WAITS; LET GO, IT IS A PROP that rolls, slows and lies down. Runs
+## only from a pick-up or a shake to the moment it rests: a hillside of rocks
+## runs none of this.
+func _physics_process(delta: float) -> void:
+	Ledger.open(&"RockDeposit")
+	if freeze:
+		_loose_for = -1.0
+		return
+	if _loose_for < 0.0:
+		_loose_for = 0.0
+		_still = 0.0
+		collision_layer = LOOSE_LAYER
+		collision_mask = LOOSE_MASK
+	_loose_for += delta
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	var low := girth() * 0.6 + 0.35
+	var grounded := world != null \
+		and global_position.y - world.height_at(global_position.x, global_position.z) < low
+	if grounded:
+		var keep := exp(-ROLLING_DRAG * delta)
+		linear_velocity = Vector3(linear_velocity.x * keep, linear_velocity.y, linear_velocity.z * keep)
+		angular_velocity *= keep
+	var speed := linear_velocity.length()
+	_still = _still + delta if grounded and speed < SETTLES_BELOW else 0.0
+	if _still >= SETTLES_AFTER or (_loose_for > LOOSE_MOST and grounded and speed < LAID_DOWN_BELOW):
+		_lie_down()
+
+
+## AT REST, AND SCENERY AGAIN: frozen, on the ground layer with the hills.
+func _lie_down() -> void:
+	set_physics_process(false)
+	_loose_for = -1.0
+	if _banked():
+		return
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	freeze = true
+	collision_layer = 1
+	collision_mask = 1 | 4
 
 
 ## THE MOST HEAT THIS ROCK CAN HOLD, in seconds. Its worth, and nothing else.
@@ -683,6 +749,9 @@ func _on_sleep_changed() -> void:
 	# hills it came from — see `pick_up`.
 	set_deferred("freeze", true)
 	set_deferred("collision_layer", 1)
+	set_deferred("collision_mask", 1 | 4)
+	set_physics_process(false)
+	_loose_for = -1.0
 
 
 ## DROPPED ON A STOREHOUSE, IT IS STORES. The one place a rock stops being a

@@ -8,7 +8,12 @@ With GODOT set to a Godot binary, runs in a real engine, headless:
   tools/live/typing_live.gd       the map-name field lets go of the keyboard;
   tools/live/crowd_clock_live.gd  the crowd clock pays every villager, and
                                   walks nobody in a town held still;
-  tools/live/seams_live.gd        no cliff where one country meets another.
+  tools/live/seams_live.gd        no cliff where one country meets another;
+  tools/live/brush_live.gd        a forage bush burns, by every fire there is;
+  tools/live/catch_live.gd        a thrown rock is caught in the air, strikes
+                                  what is in its way and lies down in seconds,
+                                  and the creature throws back what it catches;
+  tools/live/fold_slices_live.gd  a town's land is read a slice a frame.
 
 And always, the statements:
 
@@ -22,6 +27,12 @@ And always, the statements:
   4. THE MAP-NAME FIELD LETS GO OF THE KEYS.
   5. THE LAND'S RUGGEDNESS IS BLENDED ACROSS BORDERS (WorldGen._rugged), never
      read off the biome, whose line made a step metres high.
+  6. THE BRUSH BURNS: a forage bush is BURNABLE, the fires that sweep trees by
+     name light it too, and a burning tree lights it rather than deleting it.
+  7. A THROWN ROCK IS A PROP, on a layer the hand's pick sees, until it lies
+     down; a thing caught in the air has landed nowhere (Blow); and a body the
+     hand is handed is told it was picked up, as a grab tells it.
+  8. ONE FOLD AT A TIME, ITS LAND READ IN SLICES (Chessboard._fold_some).
 """
 import os
 import pathlib
@@ -30,7 +41,8 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-LIVE = ("kill_live.gd", "typing_live.gd", "crowd_clock_live.gd", "seams_live.gd")
+LIVE = ("kill_live.gd", "typing_live.gd", "crowd_clock_live.gd", "seams_live.gd", "brush_live.gd",
+        "catch_live.gd", "fold_slices_live.gd")
 
 
 def body(text, name):
@@ -66,6 +78,27 @@ def source(fail):
         fail.append("the ruggedness changes at a line, not across a band")
     if "release_focus()" not in body(menu, "_input"):
         fail.append("the map-name field never lets go of the keyboard")
+    bush = (ROOT / "scripts/world/forage_bush.gd").read_text()
+    miracles = (ROOT / "scripts/miracles/miracle_manager.gd").read_text()
+    tree = (ROOT / "scripts/world/wild_tree.gd").read_text()
+    if "add_to_group(Affords.BURNABLE)" not in body(bush, "_ready") \
+            or "ForageBush.light_near(" not in body(miracles, "ignite_trees_near") \
+            or "queue_free()" in body(tree, "_spread"):
+        fail.append("the brush does not burn: no fire reaches a forage bush, or a burning tree deletes it")
+    rock = (ROOT / "scripts/world/rock_deposit.gd").read_text()
+    blow = (ROOT / "scripts/world/blow.gd").read_text()
+    hand = (ROOT / "scripts/player/divine_hand.gd").read_text()
+    if "collision_layer = LOOSE_LAYER" not in body(rock, "_physics_process") \
+            or "_lie_down()" not in body(rock, "_physics_process"):
+        fail.append("a thrown rock flies on no layer, out of the hand's reach, and rolls on for minutes")
+    if "thing.freeze" not in body(blow, "_physics_process"):
+        fail.append("a thing caught in the air is struck as if it landed where it was caught")
+    if '"pick_up"' not in body(hand, "force_hold"):
+        fail.append("a body put in the hand is never told it was picked up")
+    board = (ROOT / "scripts/world/board/chessboard.gd").read_text()
+    if "_begin_fold(" not in body(board, "_fold_the_far") or re.search(r"(?<![\w])fold\(town", body(board, "_fold_the_far")) \
+            or "read_some(" not in body(board, "_fold_some"):
+        fail.append("towns fold all at once again, their land read in one frame")
 
 
 def live(fail):

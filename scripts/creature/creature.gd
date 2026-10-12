@@ -234,7 +234,7 @@ var _play_toy: Animal = null
 var _carried: Node3D = null
 var _carry_intent := ""
 var _catch_target: Node3D = null
-var _catch_checked_id := 0  # one catch attempt per throw
+var _catch_checked := 0  # the hand's throw last tried for: one attempt each
 ## What it has learned it CANNOT eat, the hard way, one taste at a time.
 var _inedible := {}
 var _action_time := 2.0
@@ -872,6 +872,8 @@ func _type_of(node: Node) -> String:
 ## Carry out the mind's choice by driving the body's existing motor states.
 ## The door CreatureIntent comes back through: the same enactment, deferred.
 func enact_chosen(choice: Dictionary) -> void:
+	if state == State.CARRYING and _carried != null:
+		return    # chosen before it caught something: stale, and it would drop it
 	_enact(choice)
 
 
@@ -1153,11 +1155,11 @@ func _try_catch_throw() -> void:
 	var thrown := divine_hand.last_thrown
 	if thrown == null or not is_instance_valid(thrown) or thrown.is_queued_for_deletion():
 		return
-	if thrown.get_instance_id() == _catch_checked_id:
+	if divine_hand.throws == _catch_checked:
 		return
 	if global_position.distance_to(thrown.global_position) > 2.2 + scale.x:
 		return
-	_catch_checked_id = thrown.get_instance_id()  # one attempt per throw
+	_catch_checked = divine_hand.throws  # one attempt per throw
 	if attention < 35.0 or not can_lift(thrown):
 		return  # not watching your hand, or it is a hut and this is a whelp
 	var skill := clampf(catch_skill * 0.55, 0.12, 0.95)
@@ -1165,7 +1167,9 @@ func _try_catch_throw() -> void:
 		GameState.announce("Your creature lunged... and fumbled the catch. Practice.")
 		mood = maxf(mood - 2.0, 0.0)
 		return
-	_pick_up_thing(thrown, _intent_for(thrown))
+	# AND BACK IT GOES — a game of catch — unless it is something to eat.
+	var why := _intent_for(thrown)
+	_pick_up_thing(thrown, "toss_back" if thrown is RigidBody3D and why != "eat" else why)
 	_last_deed = "catch"
 	mood = minf(mood + 10.0, 100.0)
 	bond = minf(bond + 2.0, 100.0)
@@ -1248,10 +1252,12 @@ func _pick_up_thing(node: Node3D, why: String) -> void:
 	_carry_intent = why
 	if node is RigidBody3D:
 		(node as RigidBody3D).freeze = true
+		# Nor does it strike the arm that throws it (a loose rock hits bodies).
+		(node as RigidBody3D).add_collision_exception_with(self)
 	if node.has_method("pick_up"):   # rigid or not: see DivineHand._on_grab
 		node.call("pick_up")
 	state = State.CARRYING
-	_action_time = 1.4 if why in ["eat", "hurl"] else 5.0
+	_action_time = 1.4 if why in ["eat", "hurl", "toss_back"] else 5.0
 
 
 func _process_carrying(delta: float) -> void:
@@ -1294,6 +1300,13 @@ func _process_carrying(delta: float) -> void:
 			_action_time -= delta
 			if _action_time <= 0.0:
 				_eat_carried()
+		"toss_back":
+			_apply_gravity_only(delta)
+			_action_time -= delta
+			if _action_time <= 0.0:
+				CreatureThrowing.toss_back(self, _carried, divine_hand)
+				_carried = null
+				_decide()
 		"gift":
 			var village := CreatureEyes.home_village(get_tree())
 			if village == null:

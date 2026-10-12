@@ -834,6 +834,8 @@ func ignite_trees_near(pos: Vector3, radius: float) -> void:
 		var tree := t as WildTree
 		if is_instance_valid(tree) and tree.global_position.distance_to(pos) < radius:
 			tree.ignite()
+	# And the brush beneath them, which is drier than any of them.
+	ForageBush.light_near(get_tree(), pos, radius)
 
 
 ## FRIGHTEN WHAT IS NEAR, without hurting it. The sister of the two above for
@@ -1380,6 +1382,7 @@ func _lava_glare(at: Vector3, reach: float) -> OmniLight3D:
 
 ## Everything within reach catches, called now and then as the mountain climbs.
 func _scorch_around(at: Vector3, reach: float, potency: float) -> void:
+	ForageBush.light_near(get_tree(), at, reach)
 	for t in get_tree().get_nodes_in_group("trees"):
 		var tree := t as WildTree
 		if is_instance_valid(tree) and tree.global_position.distance_to(at) < reach:

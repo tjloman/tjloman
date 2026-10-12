@@ -40,10 +40,17 @@ const FOLD_AFTER := 8.0
 const AT_PRAYER := 0.04
 ## How often the board steps the folded towns and the road goes round, seconds.
 const ROUND_EVERY := 4.0
+## WHAT A FOLD MAY TAKE OF A FRAME, in microseconds, while it reads the land.
+## The read is the slow part — a fifth of a second on a PC in one go, two
+## thirds when three towns went at once — so ONE town folds at a time, its land
+## read this much a frame (TownLand.read_some), and only then is it put away.
+const FOLD_SLICE_USEC := 2500
 
 var _since := 0.0
 var _far := {}        # Village -> seconds it has been past the fold line
 var _round := 0.0
+var _folding: Village = null     # the town being folded, if one is
+var _reading: TownLand = null    # and its land, as far as it has been read
 
 
 func _ready() -> void:
@@ -54,6 +61,8 @@ func _process(delta: float) -> void:
 	Ledger.open(&"Chessboard")
 	_pray(delta)
 	_walk_the_road(delta)
+	if _reading != null:
+		_fold_some()
 	_since += delta
 	_round += delta
 	if _since < LOOK_EVERY:
@@ -170,11 +179,15 @@ func _fold_the_far(world: WorldGen, eye: Vector2i) -> void:
 			continue
 		seen[town] = true
 		_far[town] = float(_far.get(town, 0.0)) + LOOK_EVERY
-		if float(_far[town]) >= FOLD_AFTER:
-			fold(town, world)
+		if float(_far[town]) >= FOLD_AFTER and _reading == null:
+			_begin_fold(town, world)
 	for town in _far.keys():
 		if not seen.has(town):
 			_far.erase(town)
+	# BACK IN SIGHT, or held, before its land was read: it stays as it is.
+	if _reading != null and not seen.has(_folding):
+		_folding = null
+		_reading = null
 
 
 func _may_fold(town: Village) -> bool:
@@ -189,11 +202,44 @@ func _may_fold(town: Village) -> bool:
 
 
 ## FOLD A TOWN: its record, with its land read, into memory; its node freed.
+## All at once — what the board does is `_begin_fold`, a slice a frame.
 func fold(town: Village, world: WorldGen) -> void:
+	var here := Vector2(town.global_position.x, town.global_position.z)
+	_put_away(town, TownLand.read(world, town.global_position, neighbours(get_tree(), here, town)))
+
+
+## THE LAND ROUND IT, to be read a slice a frame (`_fold_some`).
+func _begin_fold(town: Village, world: WorldGen) -> void:
+	var here := Vector2(town.global_position.x, town.global_position.z)
+	_folding = town
+	_reading = TownLand.begin_read(world, town.global_position, neighbours(get_tree(), here, town))
+
+
+## A FRAME'S SLICE OF IT; and when the land is read, the town put away — if it
+## still may be: nobody lifted out of it since, and nobody freed it.
+func _fold_some() -> void:
+	var world := _world()
+	if world == null or not is_instance_valid(_folding) or _folding.is_queued_for_deletion():
+		_folding = null
+		_reading = null
+		return
+	var clock := Ledger.swap(&"Chessboard:fold", _folding.village_name)
+	var done := _reading.read_some(world, Time.get_ticks_usec() + FOLD_SLICE_USEC)
+	Ledger.resume(clock)
+	if not done:
+		return
+	var town := _folding
+	var land := _reading
+	_folding = null
+	_reading = null
+	if _may_fold(town):
+		_put_away(town, land)
+
+
+## ITS RECORD, WITH ITS LAND, into memory; its node freed.
+func _put_away(town: Village, land: TownLand) -> void:
 	var clock := Ledger.swap(&"Chessboard:fold", town.village_name)
 	var record := town.to_dict()
-	var here := Vector2(town.global_position.x, town.global_position.z)
-	var land := TownLand.read(world, town.global_position, neighbours(get_tree(), here, town))
 	record["land"] = land.to_dict()
 	# THE LARDERS START WHERE THE WORLD IS: the share of the beasts round it
 	# still alive, hunting and all, not a land restocked by being looked away from.

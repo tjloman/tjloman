@@ -203,6 +203,20 @@ static func send(thing_given: Variant, v: Vector3, gently := false) -> void:
 		thing.call("drop", v, gently)
 
 
+## PLAYING CATCH: what it caught of yours, lobbed back to where your hand is, to
+## be caught in the air — as far as its arm will send it, if the hand is
+## further. Right at its feet, it is set down.
+static func toss_back(who: Creature, thing: Node3D, hand_given: Variant) -> void:
+	var v := Vector3.ZERO
+	if is_instance_valid(hand_given):
+		var hand := hand_given as Node3D
+		var to := (hand.global_position - who.global_position) * Vector3(1.0, 0.0, 1.0)
+		v = arc_to(who, who.global_position + to.limit_length(reach(who) * 0.95), "lob")
+	if v != Vector3.ZERO:
+		who.mind.practise("throw", true)
+	send(thing, v, v == Vector3.ZERO)
+
+
 ## THE SHOT AT THE GRANARY, or ZERO if it is not going to try. Only the things
 ## a storehouse actually takes — throwing a villager at the barn is not
 ## provision — and only from a beast that has the rung for an aimed throw at

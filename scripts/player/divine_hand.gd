@@ -177,6 +177,9 @@ var casting := false
 ## The last thing this hand threw (not placed) — the creature watches
 ## for it, and may catch it out of the air.
 var last_thrown: Node3D = null
+## And how many throws there have been, so the same ball thrown again is a new
+## throw to catch — the creature tries once per throw, not once per thing.
+var throws := 0
 ## THE LEAD, while it is in your hand. See LeadRope — holding it puts the hand
 ## in lead mode: it does not grab, a tap on earth is "go there", and a hold on
 ## anything ties the rope off round it.
@@ -1173,6 +1176,7 @@ func _on_release() -> void:
 					_release_body(held_body, shot["vel"], false)
 					_begin_aftertouch(held_body, shot["curve"], shot["angular"])
 					last_thrown = held_body
+					throws += 1
 			held_body = null
 			state = HandState.IDLE
 			_stow_sling()
@@ -1513,6 +1517,8 @@ func force_hold(body: PhysicsBody3D) -> bool:
 	_begin_carry()
 	if body is RigidBody3D:
 		(body as RigidBody3D).freeze = true
+	if body.has_method("pick_up"):     # told, as a grab tells it: see _on_grab
+		body.call("pick_up")
 	return true
 
 
