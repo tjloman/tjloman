@@ -22,16 +22,6 @@ enum State {
 	FLEE, HELD, FALLING, PINNED, DYING, LEAVING, HIDDEN, MIGRATE,
 }
 
-## Names are drawn by sex, so a villager's name reads with its model.
-const FEMALE_NAMES: Array[String] = [
-	"Bess", "Dara", "Greta", "Isolde", "Kira", "Mabel",
-	"Opal", "Rosa", "Tilda", "Vera", "Yara", "Freya",
-]
-const MALE_NAMES: Array[String] = [
-	"Aldo", "Cormac", "Edwin", "Fen", "Hobb", "Jarek",
-	"Lomax", "Nol", "Pip", "Sten", "Ulf", "Wick",
-]
-
 const WALK_SPEED := 3.0
 ## How near the camera's focus a villager's label is worth drawing at all. In a
 ## crowd the labels overlap into an unreadable smear long before this, so the
@@ -1192,9 +1182,10 @@ func _sex_model() -> String:
 	return "villager_female" if is_female else "villager_male"
 
 
+## Drawn by sex, so a villager's name reads with its model, from a few thousand
+## and never one their town has given already (VillagerNames).
 func _random_name() -> String:
-	var pool := FEMALE_NAMES if is_female else MALE_NAMES
-	return pool[randi() % pool.size()]
+	return VillagerNames.pick(is_female, village)
 
 
 func sex_word() -> String:

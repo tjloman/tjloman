@@ -22,6 +22,9 @@ With GODOT set to a Godot binary, runs in a real engine, headless:
                                   firestorm fizzle, a fireblast goes off there,
                                   a lavaball throws burning boulders and sets as
                                   new floor; and fresh lava churns until it crusts.
+  tools/live/names_live.gd        thousands of names, read in the engine; no two
+                                  people in a town share one, and a town saved
+                                  full of Pips loses its repeats as it loads.
 
 And always, the statements:
 
@@ -72,7 +75,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 LIVE = ("kill_live.gd", "typing_live.gd", "crowd_clock_live.gd", "seams_live.gd", "brush_live.gd",
         "catch_live.gd", "fold_slices_live.gd", "smooth_live.gd", "kernel_live.gd",
-        "quench_live.gd")
+        "quench_live.gd", "names_live.gd")
 
 
 def body(text, name):

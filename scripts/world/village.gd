@@ -2379,6 +2379,7 @@ func from_dict(data: Dictionary) -> void:
 	if not folk.is_empty():
 		for v in my_villagers():
 			v.queue_free()
+		VillagerNames.forget(self)
 		for entry: Dictionary in folk:
 			_restore_villager(entry)
 	_finish_restoring()
@@ -2423,7 +2424,8 @@ func _restore_villager(entry: Dictionary) -> void:
 	add_child(v)
 	# Name and sex are set in _ready, so overwrite them once it is in the tree.
 	v.is_female = bool(entry.get("female", true))
-	v.villager_name = String(entry.get("name", v.villager_name))
+	v.villager_name = VillagerNames.bring_back(self, v.villager_name,
+		String(entry.get("name", "")), v.is_female)
 	v.morality = float(entry.get("morality", 20.0))
 	v.health = float(entry.get("health", 100.0))
 	v.weapon = String(entry.get("weapon", ""))

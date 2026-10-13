@@ -83,6 +83,7 @@ static func raise(entry: Dictionary, town: Village, at: Vector3, band: Dictionar
 	who.is_female = bool(entry.get("female", true))
 	if entry.has("name"):
 		who.villager_name = String(entry["name"])
+		VillagerNames.claim(town, who.villager_name)
 	who.morality = float(entry.get("morality", 20.0))
 	who.health = float(entry.get("health", 100.0))
 	who.weapon = String(entry.get("weapon", ""))
