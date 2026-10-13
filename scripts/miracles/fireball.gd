@@ -266,6 +266,11 @@ func _physics_process(delta: float) -> void:
 	if _fuse_left <= 0.0:
 		_go_off()
 		return
+	# THE WATER, before anything else — before it can skip off it (Blow) or
+	# sink through it. See Quench.
+	if Quench.in_water(self):
+		_meet_water()
+		return
 	# Arms the moment the hand lets go and it's genuinely in flight.
 	if not _armed and linear_velocity.length() > 2.0:
 		_armed = true
@@ -281,6 +286,23 @@ func _physics_process(delta: float) -> void:
 		if linear_velocity.length() < REST_SPEED \
 				or _rolling > float(KINDS[kind]["roll"]):
 			_go_off()
+
+
+## AT THE SURFACE: a gout fizzles there and does nothing more; a blast goes
+## off there, on the water, with a column of spray — and digs nothing, there
+## being no ground under it to dig (`_gouge` turns back over water).
+func _meet_water() -> void:
+	var top := Quench.surface_under(get_tree(), global_position)
+	var at := Vector3(global_position.x, top, global_position.z)
+	if bool(KINDS[kind]["digs"]):
+		global_position = at
+		linear_velocity = Vector3.ZERO
+		Quench.burst(get_tree().current_scene, at, heft("reach"))
+		_go_off()
+		return
+	_exploded = true
+	Quench.fizzle(get_tree().current_scene, at, grew)
+	queue_free()
 
 
 ## HELD, AND BURNING. Runs four times a second rather than every frame: this

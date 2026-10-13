@@ -71,6 +71,18 @@ func _physics_process(delta: float) -> void:
 	if _fuse_left <= 0.0:
 		_resolve()
 		return
+	# A FIRE MEETS THE WATER AT ITS SURFACE: lava sets there, and the rest
+	# fizzle (Quench.AT_THE_SURFACE). Anything else goes through, as it always has.
+	var at_water: String = Quench.AT_THE_SURFACE.get(miracle_name, "")
+	if at_water != "" and Quench.in_water(self):
+		global_position.y = Quench.surface_under(get_tree(), global_position)
+		if at_water == "fizzle":
+			_spent = true
+			Quench.fizzle(get_tree().current_scene, global_position)
+			queue_free()
+		else:
+			_resolve()
+		return
 	# Arms once genuinely thrown; a placed orb resolves when it settles.
 	if not _armed and linear_velocity.length() > 1.5:
 		_armed = true

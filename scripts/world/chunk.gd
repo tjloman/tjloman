@@ -154,6 +154,9 @@ static var _sea: StandardMaterial3D = null
 var world: WorldGen
 var cell := Vector2i.ZERO
 ## Set before the chunk enters the tree. See the class note above.
+## How many times its ground has been cut: anything laid on the ground asks
+## this to know when the ground under it has changed (see LavaSkin).
+var cuts := 0
 var terrain_only := false
 ## REAL TRUNKS ON A CHUNK THAT IS OTHERWISE ONLY SCENERY. See `plant_the_wood`:
 ## the wood ring reaches one cell further than the ring that is a place, on a
@@ -499,6 +502,7 @@ func _build_terrain() -> void:
 	var tint := _tint_grid(heights)
 
 	_heights = heights
+	cuts += 1
 	_cut_mesh(tint)
 	# Whatever stands on this ground was seated against a surface that has just
 	# been replaced — a coarse ring re-cut fine, a crater, or (for a village
@@ -506,6 +510,11 @@ func _build_terrain() -> void:
 	# WorldGen.reseat_over.
 	if world != null:
 		world.reseat_over(cell)
+
+
+## The side of one cell of this chunk's ground, in metres; 0 before it is cut.
+func ground_step() -> float:
+	return WorldGen.CHUNK_SIZE / _cells if _cells > 0 and not _heights.is_empty() else 0.0
 
 
 ## THE HEIGHT OF THE LAND AS IT IS ACTUALLY DRAWN HERE, in world metres.

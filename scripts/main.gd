@@ -1882,6 +1882,18 @@ func _shell(at: Vector3) -> void:
 	ball.burst()
 
 
+## Ground well clear of the water and near level, nearest `near`: a fixed spot
+## the land was regenerated under was on a shore, where a fireball digs nothing.
+func _dry_ground(near: Vector2) -> Vector3:
+	for ring in 40:
+		for i in 16:
+			var p := near + Vector2.from_angle(TAU * i / 16.0) * ring * 6.0
+			if world_gen.seeded_height_at(p.x, p.y) > WorldGen.WATER_LEVEL + 1.5 \
+					and world_gen.slope_at(p.x, p.y) < 0.3:
+				return Vector3(p.x, 0, p.y)
+	return Vector3(near.x, 0, near.y)
+
+
 func _worst_relief(around: Vector2, reach: float) -> float:
 	var worst := 0.0
 	for gz in 25:
@@ -1903,7 +1915,14 @@ func _smoke_test_earth() -> void:
 	print("SMOKE TEST: a crater — ground %.2f -> %.2f (%.2fm deep), colour %s -> %s" % [
 		before, after, before - after, str(before_color), str(burned)])
 	assert(after < before - 0.5, "a crater must actually sink the ground")
-	assert(burned.r < before_color.r, "and burn it black")
+	# FRESH, IT GLOWS — an ember, redder than the grass it burned — AND COOLED
+	# IT IS BLACK. It asked for black at once, from before the burn had a life.
+	assert(burned.r > burned.g and burned.r > before_color.r, "and set it glowing")
+	var now := world_gen.scars.clock
+	world_gen.scars.clock += TerrainScars.EMBER_SECONDS + TerrainScars.COOLING + 1.0
+	var cooled := world_gen.ground_color(spot.x, spot.y, after)
+	world_gen.scars.clock = now
+	assert(cooled.get_luminance() < before_color.get_luminance(), "and burn it black once it cools")
 
 	# The edge of a scar must reach exactly zero, or the world gets a cliff.
 	var rim := world_gen.height_at(spot.x + 9.2, spot.y)
@@ -1947,9 +1966,9 @@ func _smoke_test_earth() -> void:
 	# to survive a save. Round-trip them through the same path the disk uses.
 	var written := world_gen.scars.to_save()
 	var echo := TerrainScars.new()
-	echo.from_save(JSON.parse_string(JSON.stringify(written)) as Array)
+	echo.from_save(JSON.parse_string(JSON.stringify(written)))
 	print("SMOKE TEST: scars saved — %d written, %d read back, height %.3f vs %.3f" % [
-		written.size(), echo.count(),
+		(written.get("scars", []) as Array).size(), echo.count(),
 		world_gen.scars.offset_at(spot.x, spot.y), echo.offset_at(spot.x, spot.y)])
 	assert(is_equal_approx(world_gen.scars.offset_at(spot.x, spot.y),
 		echo.offset_at(spot.x, spot.y)), "a saved world must come back the same shape")
@@ -1966,7 +1985,7 @@ func _smoke_test_earth() -> void:
 	# somewhere past half a metre of relief it becomes a thing rain can stand
 	# in. So this also measures the merge and the DIG_FLOOR: four throws, one
 	# scar, and a floor it cannot dig past.
-	var dry := Vector3(150, 0, 250)
+	var dry := _dry_ground(Vector2(150, 250))
 	var before_shelling := world_gen.scars.count()
 	for throws in 5:
 		_shell(dry)
@@ -2057,12 +2076,14 @@ func _smoke_test_earth() -> void:
 	GameState.set_max_prayer_power(4000.0)
 	GameState.add_prayer_power(4000.0)
 	divine_hand.force_hold(Fireball.new())        # hand full: every orb is spare
+	divine_hand.global_position = Vector3(260.0, 12.0, -240.0)   # working far from home
 	for tries in 6:
 		miracles.cast_runes(["fire", "life", "sky"])   # a blend: several orbs
 	var near_home := 0
 	for n in miracles.get_children():
+		# The orbs, not everything the earlier steps cast by home (its food, clouds).
 		var orb := n as Node3D
-		if orb != null and Vector2(orb.global_position.x, orb.global_position.z) \
+		if (orb is MiracleOrb or orb is Fireball) and Vector2(orb.global_position.x, orb.global_position.z) \
 				.distance_to(Vector2(home.x, home.z)) < 12.0:
 			near_home += 1
 	print("SMOKE TEST: spare orbs from a blend — %d landed on the village" % near_home)

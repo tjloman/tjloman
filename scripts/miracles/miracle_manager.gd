@@ -1113,8 +1113,24 @@ func _buckle(world: WorldGen, at: Vector2, lift: float, step: int) -> void:
 	var fade := 1.0 - 0.09 * float(step)
 	var amount := lift * randf_range(0.75, 1.25) * fade * (-0.7 if down else 1.0)
 	amount = signf(amount) * minf(absf(amount), room)
-	world.pour(TerrainScars.Kind.BASIN, at,
+	var scar := world.pour(TerrainScars.Kind.BASIN, at,
 		QUAKE_BUMP_RADIUS * randf_range(0.8, 1.2), amount)
+	# A BUMP POURED INTO ONE ALREADY THERE IS ADDED TO IT AND WIDENED (see
+	# TerrainScars.deposit), up to thirty metres across — which lifts every
+	# bump already standing on it, out where the probes above never stood. Ten
+	# quakes on one spot stood the ground at half again the ceiling that way.
+	# So the whole footprint of what was poured is looked over, and the bump
+	# trimmed back by the worst of it.
+	var worst := 0.0
+	var reach := TerrainScars.reach_of(scar)
+	for gz in 5:
+		for gx in 5:
+			var probe := reach.position + reach.size * Vector2(gx / 4.0, gz / 4.0)
+			var here := world.scars.offset_at(probe.x, probe.y)
+			if absf(here) > absf(worst):
+				worst = here
+	if absf(worst) > QUAKE_RELIEF and signf(worst) == signf(float(scar["amount"])):
+		world.reshape(scar, float(scar["amount"]) - signf(worst) * (absf(worst) - QUAKE_RELIEF))
 
 
 ## Everyone and everything within reach is thrown about: people and beasts
@@ -1185,7 +1201,14 @@ func _cast_lavaball(pos: Vector3, potency := 1.0) -> void:
 ## the same bargain as building a hill.
 func _pour_lava(pos: Vector3, rise: float, reach: float, loud := false) -> void:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-	if world == null or world.is_underwater(pos.x, pos.z):
+	if world == null:
+		return
+	# INTO THE WATER it was refused outright, and nothing at all happened: it
+	# meets the water now, in steam and burning boulders, and its core sinks
+	# and sets as new floor (Quench).
+	var top := world.water_level_at(pos.x, pos.z)
+	if not is_inf(top) and world.is_underwater(pos.x, pos.z):
+		Quench.lava_into_water(self, world, Vector3(pos.x, top, pos.z), rise, reach, loud, lay_lava)
 		return
 	# MOLTEN ROCK IS THE HOTTEST THING IN THE GAME and it set nothing alive on
 	# fire: a lavaball landing in a herd of cattle scorched the ground at full
@@ -1193,25 +1216,7 @@ func _pour_lava(pos: Vector3, rise: float, reach: float, loud := false) -> void:
 	# same as every other fire.
 	ignite_trees_near(pos, reach)
 	ignite_animals_near(pos, reach)
-	var here := Vector2(pos.x, pos.z)
-	var hollow := world.scars.hollow_near(here, reach + 2.0)
-	if hollow.is_empty():
-		# LAVA BURNS THE GROUND IT LANDS ON, and glows while it does. Molten
-		# rock is the hottest thing in the game, so it goes down at full char
-		# and cools through the same ember-char-scrub life a fireball's mark
-		# does (TerrainScars.weathered) — which is what makes a volcano's flanks
-		# red while it is erupting and black an hour later.
-		world.pour(TerrainScars.Kind.BASIN, here, reach, rise, LAVA_CHAR)
-	else:
-		# Filling: move the hole's own amount toward zero by what was poured,
-		# never past it, so the ground levels off rather than becoming a mound
-		# in the middle of the old crater.
-		var left := float(hollow["amount"])
-		var filled := minf(left + rise * FILL_RATE, 0.0)
-		world.reshape(hollow, filled)
-		world.scars.scorch(hollow, LAVA_CHAR)
-		if filled >= -0.05 and loud:
-			GameState.announce("The crater is level again.")
+	lay_lava(Vector2(pos.x, pos.z), rise, reach, loud)
 	_lava_splash(pos, reach, loud)
 	# It burns what it lands on, and only that.
 	for t in get_tree().get_nodes_in_group("trees"):
@@ -1225,6 +1230,43 @@ func _pour_lava(pos: Vector3, rise: float, reach: float, loud := false) -> void:
 					and body.global_position.distance_to(pos) < reach \
 					and body.has_method("ignite"):
 				body.call("ignite")
+
+
+## THE LAVA SETS: into a hollow it fills, on open ground it piles — and, molten,
+## it churns until it crusts over (LavaSkin). `cooled` is lava that met water on
+## the way down (Quench): it sets as black rock at once, with no ember in it.
+func lay_lava(here: Vector2, rise: float, reach: float, loud := false, cooled := false) -> void:
+	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
+	if world == null:
+		return
+	var was_wet := world.is_underwater(here.x, here.y)
+	var hollow := world.scars.hollow_near(here, reach + 2.0)
+	var scar := hollow
+	if hollow.is_empty():
+		# LAVA BURNS THE GROUND IT LANDS ON, and glows while it does. Molten
+		# rock is the hottest thing in the game, so it goes down at full char
+		# and cools through the same ember-char-scrub life a fireball's mark
+		# does (TerrainScars.weathered) — which is what makes a volcano's flanks
+		# red while it is erupting and black an hour later.
+		scar = world.pour(TerrainScars.Kind.BASIN, here, reach, rise, LAVA_CHAR)
+	else:
+		# Filling: move the hole's own amount toward zero by what was poured,
+		# never past it, so the ground levels off rather than becoming a mound
+		# in the middle of the old crater.
+		var left := float(hollow["amount"])
+		var filled := minf(left + rise * FILL_RATE, 0.0)
+		world.reshape(hollow, filled)
+		world.scars.scorch(hollow, LAVA_CHAR)
+		if filled >= -0.05 and loud:
+			GameState.announce("The crater is level again.")
+	if cooled:
+		# SET COLD: past its ember already, and cut again in the colour it is.
+		scar["burned"] = world.scars.clock - TerrainScars.EMBER_SECONDS - TerrainScars.COOLING
+		world.rebuild_around(TerrainScars.reach_of(scar))
+		if was_wet and not world.is_underwater(here.x, here.y):
+			GameState.announce("The lava breaks the surface. New land rises out of the water.")
+	else:
+		LavaSkin.pour(world, here, reach)
 
 
 ## The look of a load landing: a brief spatter and a glow that cools.

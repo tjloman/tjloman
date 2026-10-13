@@ -17,7 +17,11 @@ With GODOT set to a Godot binary, runs in a real engine, headless:
   tools/live/smooth_live.gd       craters as deep as asked, a crowd clock that
                                   starves nobody, a meter that costs nothing;
   tools/live/kernel_live.gd       the C++ land kernel and its GDScript twins give
-                                  the same answers (passes where it is not built).
+                                  the same answers (passes where it is not built);
+  tools/live/quench_live.gd       fire meets water at its surface: a gout and a
+                                  firestorm fizzle, a fireblast goes off there,
+                                  a lavaball throws burning boulders and sets as
+                                  new floor; and fresh lava churns until it crusts.
 
 And always, the statements:
 
@@ -52,6 +56,12 @@ And always, the statements:
      without the library (WorldGen, TerrainScars, Chunk, NavField).
  15. A VILLAGER'S UPKEEP — needs, watchdog, hazards, label — runs twice a second
      of their time, not every turn; on fire, every turn.
+ 16. FIRE MEETS WATER AT ITS SURFACE (Quench): a fireball asks before anything
+     else; a conjured orb reads Quench.AT_THE_SURFACE; lava poured into water
+     is sent to Quench.lava_into_water rather than refused; and a burning rock
+     goes out in the water, not over it.
+ 17. FRESH LAVA CHURNS: what MiracleManager.lay_lava pours molten is laid over
+     with a LavaSkin, and what set in water is set cold.
 """
 import os
 import pathlib
@@ -61,7 +71,8 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 LIVE = ("kill_live.gd", "typing_live.gd", "crowd_clock_live.gd", "seams_live.gd", "brush_live.gd",
-        "catch_live.gd", "fold_slices_live.gd", "smooth_live.gd", "kernel_live.gd")
+        "catch_live.gd", "fold_slices_live.gd", "smooth_live.gd", "kernel_live.gd",
+        "quench_live.gd")
 
 
 def body(text, name):
@@ -150,6 +161,18 @@ def source(fail):
     turn = body(villager, "take_turn")
     if "_upkeep_owed >= UPKEEP_EVERY or burning" not in turn or "_tick_needs(owed_now)" not in turn:
         fail.append("a villager's upkeep runs on every turn again, a third of the turn")
+    fire = (ROOT / "scripts/miracles/fireball.gd").read_text()
+    orb = (ROOT / "scripts/miracles/miracle_orb.gd").read_text()
+    if "Quench.in_water(self)" not in body(fire, "_physics_process") \
+            or "Quench.fizzle(" not in body(fire, "_meet_water") or "_go_off()" not in body(fire, "_meet_water") \
+            or "Quench.AT_THE_SURFACE" not in body(orb, "_physics_process") \
+            or "Quench.lava_into_water(" not in body(miracles, "_pour_lava") \
+            or "water_level_at(" not in body(rock, "_drowned"):
+        fail.append("fire goes through the water as if it were not there: a gout sinks to the bed, "
+                    "a blast goes off under it, lava is refused")
+    lay = body(miracles, "lay_lava")
+    if "LavaSkin.pour(" not in lay or "TerrainScars.EMBER_SECONDS" not in lay:
+        fail.append("fresh lava lies flat and still, or lava set in water keeps its ember")
 
 
 def live(fail):

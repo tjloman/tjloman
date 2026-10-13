@@ -519,6 +519,8 @@ func _process(delta: float) -> void:
 	# IN THE WATER IT IS OUT, and that is the only thing that ends a burning
 	# rock outright. Asked of the ground rather than of the weather.
 	if _drowned():
+		if ablaze:
+			Quench.fizzle(get_tree().current_scene, global_position, 0.6)   # it hisses out
 		heat = 0.0
 		_go_cold()
 		return
@@ -541,9 +543,14 @@ func _process(delta: float) -> void:
 	_burn_around()
 
 
+## IN the water, not over it: a burning boulder a lavaball threw up out of a
+## lake is still burning in the air above it, and goes out when it comes down
+## into the water — or keeps burning on the shore. See Quench.
 func _drowned() -> bool:
 	var world := get_tree().get_first_node_in_group("world_gen") as WorldGen
-	return world != null and world.is_underwater(global_position.x, global_position.z)
+	if world == null or not world.is_underwater(global_position.x, global_position.z):
+		return false
+	return global_position.y <= world.water_level_at(global_position.x, global_position.z) + 0.3
 
 
 ## IT HAS CAUGHT. Past here it is not a hot rock, it is a fire — and a fire that
