@@ -40,6 +40,9 @@ func _initialize() -> void:
 	paused = false
 	main = current_scene
 	world = main.world_gen
+	# THE CREATURE SITS THIS OUT: it picks up fire within reach and flings it,
+	# which once caught the falling gout and threw it fifty metres up.
+	main.creature.process_mode = Node.PROCESS_MODE_DISABLED
 	await seconds(2.0)
 	print("FIRE MEETS WATER")
 	var deep := _water_near(Vector2.ZERO, 2.0)

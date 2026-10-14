@@ -71,6 +71,7 @@ static func _town(town: Village, folk: Array) -> Array:
 	var souls := folk.size()
 	var stage := TownFold._stage_for(float(souls))
 	var rows := [["Size", "%s of %d souls" % [STAGE_WORDS[stage], souls]]]
+	rows.append(["Names", "%s, mostly" % VillagerNames.tongue_title(town)])
 	if town.converted:
 		rows.append(["Faith", "believes in you (%d)" % roundi(town.belief)])
 	else:

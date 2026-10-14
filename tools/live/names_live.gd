@@ -10,7 +10,11 @@ extends SceneTree
 ##   4. a town naming four hundred newcomers gives four hundred names, none
 ##      twice and none its people already have;
 ##   5. a town brought back with ten men all called Pip keeps the first Pip and
-##      names the other nine afresh, all different (VillagerNames.bring_back).
+##      names the other nine afresh, all different (VillagerNames.bring_back);
+##   6. towns named as the world names them speak many different tongues, and a
+##      colony ("Ashford II") speaks as its mother town;
+##   7. a town names most of its newcomers in its own tongue;
+##   8. and its totem says which.
 ## Exits non-zero on failure. Names no class of the game's (see look.gd).
 
 const OLD: Array[String] = [
@@ -98,6 +102,48 @@ func _initialize() -> void:
 	check(back[0] == "Pip" and distinct.size() == 10 and back.count("Pip") == 1,
 		"ten Pips brought back: the first keeps it, the rest are %s" % ", ".join(back.slice(1, 5)))
 	town.queue_free()
+
+	# 6. Towns as the world names them (WorldGen._village_name), and colonies.
+	var tongues := {}
+	var colonies_agree := true
+	for first in ["Ash", "Thorn", "Elm", "Wold", "Bram", "Crag", "Fen", "Gild"]:
+		for second in ["ford", "dale", "holm", "wick", "stead"]:
+			var mother := Node.new()
+			mother.name = first + second
+			var colony := Node.new()
+			colony.name = first + second + " II"
+			tongues[names.tongue_of(mother)] = true
+			colonies_agree = colonies_agree and names.tongue_of(colony) == names.tongue_of(mother)
+			mother.free()
+			colony.free()
+	check(tongues.size() >= 10 and not tongues.has(""),
+		"forty towns speak %d different tongues" % tongues.size())
+	check(colonies_agree, "and every colony speaks as its mother town")
+
+	# 7. A town's newcomers, in its own tongue.
+	var thorn := Node.new()
+	thorn.name = "Thornholm"
+	root.add_child(thorn)
+	var id: String = names.tongue_of(thorn)
+	var own := 0
+	for i in 100:
+		var female := i % 2 == 0
+		if names.in_tongue(id, female).has(names.pick(female, thorn)):
+			own += 1
+	check(own >= 70, "Thornholm names %d of 100 newcomers in its own tongue (%s)"
+		% [own, names.tongue_title(thorn)])
+	thorn.queue_free()
+
+	# 8. The totem.
+	if home != null:
+		var reading: Dictionary = load("res://scripts/world/board/town_reading.gd").of(home)
+		var said := ""
+		for block: Dictionary in reading.get("blocks", []):
+			for row: Array in block.get("rows", []):
+				if String(row[0]) == "Names":
+					said = String(row[1])
+		check(said == names.tongue_title(home) + ", mostly",
+			"%s's totem says it names its people in %s" % [home.village_name, said])
 	_done()
 
 

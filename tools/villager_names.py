@@ -7,6 +7,13 @@ come from, and written to data/villager_names.json, which the game reads
 (scripts/villager/villager_names.gd). A town never gives out a name it has
 already given, so with this many two neighbouring towns share hardly any.
 
+EACH TOWN HAS ITS OWN WAY OF NAMING, one of the TONGUES below: the lists
+gathered into eighteen, each big enough to name a village. A town's tongue
+comes from its name (a colony's from its mother town's), and most of its
+children are named in it; the rest are named from anywhere, as travellers
+and marriages would have it, and so is anybody a full town has no name left
+for in its own.
+
 ADD A NAME by putting it in the right list below and running
 
     python3 tools/villager_names.py --write
@@ -14,11 +21,15 @@ ADD A NAME by putting it in the right list below and running
 Run bare (as the suite does) to check that:
   - the shipped file is exactly what these lists make;
   - there are at least MIN_EACH names for each sex, none repeated;
+  - every list belongs to exactly one tongue, and every tongue has at least
+    MIN_TONGUE names for each sex;
   - every name is plain letters, capitalised, short enough for the label over
     a villager's head, and on no list of names this game will not use;
   - the game reads the file, names every villager through VillagerNames, and
     hands nobody a name their town has already given, newborn or brought back
     from a save (a town saved with repeats loses them as it loads);
+  - a town names in its own tongue first, chosen from its name, and its
+    totem says which;
   - every export ships *.json, so the file goes out with the game.
 
 Written in ASCII, without accents, so every label font draws them.
@@ -32,6 +43,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "data/villager_names.json"
 MIN_EACH = 1500
+MIN_TONGUE = 50
 LONGEST = 12
 SHAPE = re.compile(r"^[A-Z][a-z]+$")
 # Names of tyrants and of gods people still pray to, and words a reader would
@@ -463,7 +475,7 @@ MALE = {
         Aidas Aigars Aivars Ansis Audrius Domas Eimantas Gintaras Ilmars Kaspars
         Kazys Linas Mantas Rokas Tomas Vaidas Viesturs
     """,
-    "finnish estonian sami": """
+    "finnish and estonian": """
         Aare Aarne Aatos Ahti Ailo Ants Antero Arvo Aslak Eero Eino Endel Heikki
         Heino Ilkka Ilmari Into Jaakko Jaan Jussi Kaapo Kalevi Kalju Kalle Kauko
         Lauri Lembit Martti Matti Meelis Mihkal Mikko Oiva Olli Onni Osmo Paavo
@@ -582,6 +594,31 @@ MALE = {
     """,
 }
 
+# THE TONGUES A TOWN CAN NAME ITS PEOPLE IN: (id, what the totem calls it, the
+# lists above it is gathered from). The id is what a town's name is hashed
+# against (VillagerNames.tongue_of), so adding a tongue moves only the towns
+# that would rather have it, and renaming one moves towns about: leave ids be.
+TONGUES = [
+    ("english", "English", ["english", "old english", "of the old lists"]),
+    ("celtic", "Gaelic and Welsh", ["irish and scots", "welsh breton cornish"]),
+    ("norse", "Norse", ["norse"]),
+    ("german", "German", ["german and frankish"]),
+    ("french", "French", ["french"]),
+    ("roman", "Roman and Italian", ["roman and italian"]),
+    ("greek", "Greek", ["greek"]),
+    ("hebrew", "Hebrew", ["hebrew"]),
+    ("slavic", "Slavic", ["slavic"]),
+    ("northern", "Baltic, Finnish and Magyar", ["baltic", "finnish and estonian", "hungarian"]),
+    ("iberian", "Spanish, Portuguese and Basque", ["spanish and portuguese", "basque"]),
+    ("persian", "Persian, Armenian and Georgian", ["persian", "armenian and georgian"]),
+    ("arabic", "Arabic", ["arabic"]),
+    ("steppe", "Turkic", ["turkish and steppe"]),
+    ("river", "Sumerian and Egyptian", ["the old river kingdoms"]),
+    ("african", "African", ["african"]),
+    ("indian", "Indian", ["indian"]),
+    ("eastern", "East Asian", ["east asian"]),
+]
+
 
 def build(groups):
     seen = []
@@ -594,8 +631,13 @@ def build(groups):
     return sorted(seen)
 
 
+def tongue(lists, groups):
+    return build({g: lists.get(g, "") for g in groups})
+
+
 def shipped_text():
-    data = {"female": build(FEMALE), "male": build(MALE)}
+    data = {"tongues": [{"id": tid, "title": title, "female": tongue(FEMALE, groups),
+                         "male": tongue(MALE, groups)} for tid, title, groups in TONGUES]}
     return json.dumps(data, indent=1) + "\n"
 
 
@@ -627,6 +669,21 @@ def check(fail):
         if banned:
             fail.append("%s names this game will not use: %s" % (sex, ", ".join(banned)))
         print("  %-6s %4d names from %d traditions" % (sex, len(names), len(groups)))
+        homes = [g for g in groups for _, _, gs in TONGUES if g in gs]
+        lost = sorted(set(groups) - set(homes))
+        twice_home = sorted({g for g in homes if homes.count(g) > 1})
+        if lost or twice_home:
+            fail.append("%s lists in no tongue (%s) or in two (%s): every list belongs to one"
+                        % (sex, ", ".join(lost) or "none", ", ".join(twice_home) or "none"))
+    small = ["%s (%d women, %d men)" % (tid, len(tongue(FEMALE, gs)), len(tongue(MALE, gs)))
+             for tid, _, gs in TONGUES
+             if min(len(tongue(FEMALE, gs)), len(tongue(MALE, gs))) < MIN_TONGUE]
+    if small:
+        fail.append("tongues too small to name a village (at least %d a sex): %s"
+                    % (MIN_TONGUE, ", ".join(small)))
+    print("  %d tongues, from %d to %d names a sex" % (len(TONGUES),
+          min(min(len(tongue(FEMALE, gs)), len(tongue(MALE, gs))) for _, _, gs in TONGUES),
+          max(max(len(tongue(FEMALE, gs)), len(tongue(MALE, gs))) for _, _, gs in TONGUES)))
     if not OUT.exists() or OUT.read_text() != shipped_text():
         fail.append("data/villager_names.json is not what these lists make: "
                     "run python3 tools/villager_names.py --write")
@@ -640,8 +697,15 @@ def check(fail):
     if "VillagerNames.pick(" not in body(villager, "_random_name") or "FEMALE_NAMES" in villager:
         fail.append("a villager is named from a list of its own again, not from VillagerNames")
     pick = body(script, "pick")
-    if "given.has(" not in pick or "given[chosen] = true" not in pick:
+    if "given.has(" not in body(script, "_fresh") or "given[chosen] = true" not in pick \
+            or "_fresh(names(female), given)" not in pick:
         fail.append("a town hands out names it has already given")
+    reading = (ROOT / "scripts/world/board/town_reading.gd").read_text()
+    if "_own(town, female)" not in pick or ".hash()" not in body(script, "tongue_of") \
+            or 'get_slice(" ", 0)' not in body(script, "tongue_of") \
+            or "VillagerNames.tongue_title(" not in body(reading, "_town"):
+        fail.append("a town does not name its people in a tongue of its own, chosen from its "
+                    "name, or its totem does not say which")
     village = (ROOT / "scripts/world/village.gd").read_text()
     migrant = (ROOT / "scripts/villager/migrant.gd").read_text()
     if "VillagerNames.bring_back(" not in body(village, "_restore_villager") \
