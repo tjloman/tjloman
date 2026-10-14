@@ -2044,6 +2044,8 @@ func _tick_hazards(delta: float) -> void:
 	var world := _world()
 	if world != null and Wading.drown(self, world, delta):
 		return        # spared, or gone under: nothing more this tick
+	if not burning and HotGround.underfoot(world, global_position):
+		ignite()      # standing in lava still molten (HotGround)
 	if burning:
 		health -= HAZARD_RATE * delta
 		if health <= 0.0:

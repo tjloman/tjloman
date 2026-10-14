@@ -40,8 +40,10 @@ func _initialize() -> void:
 	paused = false
 	main = current_scene
 	world = main.world_gen
-	# THE CREATURE SITS THIS OUT: it picks up fire within reach and flings it,
-	# which once caught the falling gout and threw it fifty metres up.
+	# THE CREATURE SITS THIS OUT: it picks up fire within reach and flings it.
+	# (It is not what, about one run in six, knocks the falling gout sideways
+	# at 17 m/s and up over the lake before it reaches the water: that is still
+	# unexplained, and fails check 1 when it happens.)
 	main.creature.process_mode = Node.PROCESS_MODE_DISABLED
 	await seconds(2.0)
 	print("FIRE MEETS WATER")

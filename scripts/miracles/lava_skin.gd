@@ -26,6 +26,7 @@ var _born := 0.0
 var _world: WorldGen = null
 var _skin: ShaderMaterial = null
 var _cuts := {}            # Vector2i chunk cell -> the cut it was laid over
+var _fear_due := 0.0       # the scar clock at which it next frightens anybody
 
 
 ## LAVA POURED HERE: the skin already molten near it warmed, or a new one laid.
@@ -43,11 +44,11 @@ static func pour(world: WorldGen, at: Vector2, reach: float) -> LavaSkin:
 	return laid
 
 
-## How molten it still is, 0..1, from how long ago it was last poured.
+## How molten it still is, 0..1, from how long ago it was last poured: the
+## land's own reckoning (TerrainScars.heat), so the glow and the heat people
+## keep away from go out together.
 static func heat_at(age: float) -> float:
-	if age < TerrainScars.EMBER_SECONDS:
-		return 1.0
-	return clampf(1.0 - (age - TerrainScars.EMBER_SECONDS) / TerrainScars.COOLING, 0.0, 1.0)
+	return TerrainScars.heat(age)
 
 
 func _ready() -> void:
@@ -72,6 +73,11 @@ func _process(_delta: float) -> void:
 	_skin.set_shader_parameter(&"heat", heat)
 	if _stale():
 		_drape()
+	# SEEN, AND RUN FROM: a pool still molten sends whoever is near it running,
+	# every few seconds rather than every frame (HotGround.frighten).
+	if heat >= HotGround.FEARED_ABOVE and _world.scars.clock >= _fear_due:
+		_fear_due = _world.scars.clock + HotGround.FRIGHTENS_EVERY
+		HotGround.frighten(Vector3(centre.x, _world.height_at(centre.x, centre.y), centre.y), radius)
 
 
 ## Poured on: hot again, and wide enough to cover the new pour too.
@@ -82,6 +88,7 @@ func _fresh(at: Vector2, reach: float) -> void:
 	else:
 		radius = maxf(radius, centre.distance_to(at) + reach)
 	_born = _world.scars.clock
+	_fear_due = _born          # a fresh pour is seen at once
 	_drape()
 
 

@@ -25,6 +25,9 @@ With GODOT set to a Godot binary, runs in a real engine, headless:
   tools/live/names_live.gd        thousands of names, read in the engine; no two
                                   people in a town share one, and a town saved
                                   full of Pips loses its repeats as it loads.
+  tools/live/hot_ground_live.gd   lava poured by a town is run from, walked round
+                                  (in town too), burns who stands in it, lies only
+                                  where it fell, and opens again once cool.
 
 And always, the statements:
 
@@ -65,6 +68,12 @@ And always, the statements:
      goes out in the water, not over it.
  17. FRESH LAVA CHURNS: what MiracleManager.lay_lava pours molten is laid over
      with a LavaSkin, and what set in water is set cold.
+ 18. BURNING EARTH IS FEARED AND WALKED ROUND (HotGround): every step a villager
+     takes asks the ground's heat, inside their own town as well as out
+     (VillagerFeet.walk, after the water check and not under it); standing in
+     it sets them alight; a molten pool frightens whoever can see it; and a
+     burning load merges only into ground that has burned (TerrainScars.deposit),
+     never into the broad basins a town stands on.
 """
 import os
 import pathlib
@@ -75,7 +84,8 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 LIVE = ("kill_live.gd", "typing_live.gd", "crowd_clock_live.gd", "seams_live.gd", "brush_live.gd",
         "catch_live.gd", "fold_slices_live.gd", "smooth_live.gd", "kernel_live.gd",
-        "quench_live.gd", "names_live.gd")
+        "quench_live.gd", "names_live.gd",
+        "hot_ground_live.gd")
 
 
 def body(text, name):
@@ -173,6 +183,16 @@ def source(fail):
             or "water_level_at(" not in body(rock, "_drowned"):
         fail.append("fire goes through the water as if it were not there: a gout sinks to the bed, "
                     "a blast goes off under it, lava is refused")
+    feet = (ROOT / "scripts/villager/villager_feet.gd").read_text()
+    skin = (ROOT / "scripts/miracles/lava_skin.gd").read_text()
+    if not re.search(r"^\tdir = HotGround\.heading\(", body(feet, "walk"), re.M) \
+            or "HotGround.underfoot(" not in body(villager, "_tick_hazards") \
+            or "HotGround.frighten(" not in body(skin, "_process") \
+            or '(char_amount > 0.0) != (float(scar.get("char", 0.0)) > 0.0)' not in body(scars, "deposit") \
+            or "clock >= _hot_until" not in body(scars, "heat_at"):
+        fail.append("villagers walk into burning earth again: a step does not ask its heat (or only "
+                    "outside town), standing in it is harmless, a pool frightens nobody, or lava "
+                    "merges into a town's ground")
     lay = body(miracles, "lay_lava")
     if "LavaSkin.pour(" not in lay or "TerrainScars.EMBER_SECONDS" not in lay:
         fail.append("fresh lava lies flat and still, or lava set in water keeps its ember")

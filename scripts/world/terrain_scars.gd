@@ -103,6 +103,9 @@ var kernel: Object = null
 var _kernel_edition := -1
 var _scars: Array[Dictionary] = []
 var _buckets := {}
+## THE WORLD CLOCK PAST WHICH NOTHING IS MOLTEN: the last burn's ember and its
+## cooling. Until then `heat_at` reads a bucket; after it, it reads nothing.
+var _hot_until := -INF
 ## The union of every scar's footprint, for the early-out.
 var _min := Vector2.ZERO
 var _max := Vector2.ZERO
@@ -132,6 +135,8 @@ func add(kind: int, at: Vector2, radius: float, amount: float, rings := 3.0,
 		# mark cool from ember to char to scrub. See `weathered`.
 		"burned": clock,
 	}
+	if char_amount > 0.0:
+		_hot_until = maxf(_hot_until, clock + EMBER_SECONDS + COOLING)
 	_scars.append(scar)
 	edition += 1
 	_index(scar)
@@ -227,6 +232,46 @@ func burn_at(x: float, z: float) -> Color:
 	return tint
 
 
+## HOW HOT THE GROUND IS HERE, 0..1: the strongest burn under the point, by its
+## char, falling to nothing at its rim, times how molten it still is (`heat`).
+## Lava is char 1, so the middle of a fresh pool reads 1. Asked by every step a
+## villager takes (HotGround), so it reads the one bucket the point is in, and
+## nothing at all once the last burn has cooled.
+func heat_at(x: float, z: float) -> float:
+	if clock >= _hot_until or x < _min.x or x > _max.x or z < _min.y or z > _max.y:
+		return 0.0
+	var here = _buckets.get(Vector2i(floori(x / BUCKET), floori(z / BUCKET)))
+	if here == null:
+		return 0.0
+	var hottest := 0.0
+	for scar: Dictionary in here:
+		var burn := float(scar.get("char", 0.0))
+		var age := clock - float(scar.get("burned", 0.0))
+		if burn <= 0.0 or age >= EMBER_SECONDS + COOLING:
+			continue
+		var ddx: float = x - float(scar["x"])
+		var ddz: float = z - float(scar["z"])
+		var radius: float = scar["radius"]
+		var d2 := ddx * ddx + ddz * ddz
+		if d2 >= radius * radius:
+			continue
+		hottest = maxf(hottest, burn * pow(1.0 - sqrt(d2) / radius, 0.8) * heat(age))
+	return hottest
+
+
+## Is any ground in the world still molten?
+func hot_anywhere() -> bool:
+	return clock < _hot_until
+
+
+## HOW MOLTEN A BURN THIS OLD STILL IS, 0..1: whole through its ember, and gone
+## by the end of its cooling — the same clock the colour keeps (`weathered`).
+static func heat(age: float) -> float:
+	if age < EMBER_SECONDS:
+		return 1.0
+	return clampf(1.0 - (age - EMBER_SECONDS) / COOLING, 0.0, 1.0)
+
+
 ## THE COLOUR OF A BURN THIS OLD, with its weight in the alpha. Pure arithmetic
 ## on the age in seconds — no state, so it gives the same answer to the mesh,
 ## to a test, and to anything that wants to ask ahead of time.
@@ -255,6 +300,7 @@ func scorch(scar: Dictionary, char_amount: float) -> void:
 		return
 	scar["char"] = maxf(float(scar.get("char", 0.0)), char_amount)
 	scar["burned"] = clock
+	_hot_until = maxf(_hot_until, clock + EMBER_SECONDS + COOLING)
 
 
 ## Is anything in the FAST part of the curve — the red-to-black cool, which is
@@ -355,10 +401,18 @@ func _contribution(scar: Dictionary, x: float, z: float) -> float:
 ## `char_amount` blackens as `add` does, and on a merge the darker of the two
 ## wins — so a spot shelled over and over is one scar, burned black, rather than
 ## a growing pile of them.
+##
+## BUT ONLY FIRE GROWS FIRE. A burning load merged into whatever unburned scar
+## of its kind it landed near, and a town's ground is two broad basins thirty
+## metres across: one lavaball poured in the square lifted the whole town by
+## its load and set every metre of it glowing, and its people were walking on
+## lava they could not see the edge of. A burning load joins only ground that
+## has burned, and an unburned one only ground that has not.
 func deposit(kind: int, at: Vector2, radius: float, amount: float,
 		char_amount := 0.0) -> Dictionary:
 	for scar in _scars:
-		if int(scar["kind"]) != kind:
+		if int(scar["kind"]) != kind \
+				or (char_amount > 0.0) != (float(scar.get("char", 0.0)) > 0.0):
 			continue
 		var centre := Vector2(float(scar["x"]), float(scar["z"]))
 		var gap := centre.distance_to(at)
@@ -374,6 +428,7 @@ func deposit(kind: int, at: Vector2, radius: float, amount: float,
 		scar["char"] = maxf(float(scar.get("char", 0.0)), char_amount)
 		if char_amount > 0.0:
 			scar["burned"] = clock      # a fresh strike re-reddens old char
+			_hot_until = maxf(_hot_until, clock + EMBER_SECONDS + COOLING)
 		reshape(scar, float(scar["amount"]) + amount,
 			maxf(float(scar["radius"]), radius) + gap * 0.35)
 		return scar
@@ -495,3 +550,7 @@ func from_save(data: Variant) -> void:
 			float(scar.get("radius", 8.0)), float(scar.get("amount", -2.0)),
 			float(scar.get("rings", 3.0)), float(scar.get("char", 0.0)))
 		made["burned"] = float(scar.get("burned", 0.0))
+	_hot_until = -INF
+	for scar in _scars:
+		if float(scar.get("char", 0.0)) > 0.0:
+			_hot_until = maxf(_hot_until, float(scar["burned"]) + EMBER_SECONDS + COOLING)

@@ -42,9 +42,12 @@ static func walk(who: Villager, target: Vector3, speed: float, delta: float,
 	# Inside its own circle the town took the shortcut to the meat and walked
 	# in after it, one soul at a time, each drowning leaving another corpse and
 	# another armful of joints in the water to draw the next.
+	var probe := maxf(1.7, speed * who._sim_scale * 0.05)
 	if not placed or not VillagerLook.at_home(who, target):
-		dir = NavField.water_route(who, who.global_position, dir, who._world(),
-			maxf(1.7, speed * who._sim_scale * 0.05))
+		dir = NavField.water_route(who, who.global_position, dir, who._world(), probe)
+	# AND NEVER ONTO GROUND STILL BURNING, at home or anywhere: a town's own
+	# square is exactly where a lavaball lands. See HotGround.
+	dir = HotGround.heading(who, who.global_position, dir, who._world(), probe)
 	if dir == Vector3.ZERO:
 		stand(who, delta)
 		return false
