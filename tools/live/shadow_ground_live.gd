@@ -15,7 +15,11 @@ extends SceneTree
 ##   2. it is the same shadow: the same area on the ground, to a percent;
 ##   3. and it is whole: every edge meets exactly one other, so no seam gaps
 ##      or doubles darker where the cuts meet;
-##   4. and it costs what it says: no more than MOST_CUTS squared the triangles.
+##   4. and it costs what it says: no more than MOST_CUTS squared the triangles;
+##   5. and the creature, grown to its full height and stood on a slope, lies
+##      on it too: its shadow is cut for the giant it grows to, not the whelp
+##      it was baked as (Shade.cast_parts `grows_to`), where uncut its forty-
+##      metre triangles went under every rise they crossed.
 ## Passes, and says so, where the library is not built: there are no baked
 ## shadows to lie anywhere. Names no class of the game's (see look.gd).
 
@@ -79,8 +83,8 @@ func _initialize() -> void:
 	for tree in slopes:
 		var raw: ArrayMesh = shade._baker.call(&"bake_points", shade._points_under(tree))
 		var fine: ArrayMesh = shade._fine(raw)
-		var a := _lay(raw, tree, sun)
-		var b := _lay(fine, tree, sun)
+		var a := _lay(raw, tree.global_transform, sun)
+		var b := _lay(fine, tree.global_transform, sun)
 		raw_under += a[0]
 		raw_area += a[1]
 		fine_under += b[0]
@@ -98,17 +102,40 @@ func _initialize() -> void:
 	var cuts: int = shade.MOST_CUTS
 	check(fine_tris <= raw_tris * cuts * cuts,
 		"%d triangles for these shadows, from %d" % [fine_tris, raw_tris])
+
+	# 5. The creature, full grown, on the steepest of those slopes.
+	var beast: Node = current_scene.creature
+	beast.process_mode = Node.PROCESS_MODE_DISABLED
+	beast.growth = 1.0
+	beast.call("_apply_stature")
+	var spot: Vector3 = slopes[0].global_position
+	beast.global_position = Vector3(spot.x, world.height_at(spot.x, spot.z), spot.z)
+	var cast: MeshInstance3D = null
+	for one in beast.find_children("Shadow", "MeshInstance3D", true, false):
+		if one.has_meta(&"shadow"):
+			cast = one
+	check(cast != null, "the creature has its baked shadow")
+	if cast != null:
+		var body: Node3D = cast.get_parent()
+		var raw: ArrayMesh = shade._baker.call(&"bake_points", shade._points_under(body))
+		var whole_raw := _lay(raw, cast.global_transform, sun)
+		var whole_cut := _lay(cast.mesh, cast.global_transform, sun)
+		var was_lost: float = whole_raw[0] / maxf(whole_raw[1], 0.001)
+		var now_lost: float = whole_cut[0] / maxf(whole_cut[1], 0.001)
+		check(now_lost <= was_lost * OF_BEFORE and now_lost < BURIED,
+			"the creature %.0fm tall: %.1f%% of its shadow under the hill (uncut %.1f%%), %d triangles"
+			% [beast.scale.y * 2.55, now_lost * 100.0, was_lost * 100.0, _corners(cast.mesh).size() / 3])
 	print("SHADOW GROUND LIVE: %s" % ("all pass" if fails == 0 else "%d FAILING" % fails))
 	quit(1 if fails > 0 else 0)
 
 
 ## The shadow laid as the shader lays it: [area under the ground, area in all],
 ## sampled over every triangle's face.
-func _lay(mesh: ArrayMesh, tree: Node3D, sun: Vector3) -> Array:
-	var origin := tree.global_position
+func _lay(mesh: ArrayMesh, xform: Transform3D, sun: Vector3) -> Array:
+	var origin := xform.origin
 	var flat := PackedVector3Array()
 	for v in _corners(mesh):
-		var w := tree.global_transform * v
+		var w := xform * v
 		var h := maxf(w.y - origin.y, 0.0)
 		var off := Vector2(sun.x, sun.z) / maxf(-sun.y, 1.0 / longest) * h
 		w.x += off.x

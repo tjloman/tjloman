@@ -195,7 +195,7 @@ def founding(fail):
             or not tail.endswith("process_mode = was") \
             or staged.rfind("_open_for_business()") > staged.rfind("process_mode = was"):
         fail.append("a half-founded town is left running before it has a charter")
-    if "await VillageRaise.turn(self)" not in staged or "VillageRaise.spend(" not in staged \
+    if "await VillageRaise.begin(self)" not in staged or "VillageRaise.done(began)" not in staged \
             or "await get_tree().process_frame" not in staged:
         fail.append("the founders or the houses are no longer spread over frames")
     if "_open_for_business()" not in staged:
@@ -206,11 +206,35 @@ def founding(fail):
     raise_src = (ROOT / "scripts/world/village_raise.gd").read_text()
     slowly = body(VILLAGE, "_search_slowly")
     if "VillageRaise.turn(self)" not in slowly or "VillageRaise.spend(" not in slowly \
-            or "await turn(town)" not in body(raise_src, "found") \
-            or "spend(Time.get_ticks_usec() - began)" not in body(raise_src, "found") \
+            or "await turn(town)" not in body(raise_src, "begin") \
+            or "spend(Time.get_ticks_usec() - began)" not in body(raise_src, "done") \
             or "_spent_now() >= FOUNDING_USEC" not in body(raise_src, "turn"):
         fail.append("towns founded together each keep their own pace and stack on one frame: "
                     "the founding budget is not shared")
+    # EVERY PIECE IN ITS TURN, not only the people and the searches: three
+    # towns finishing together put their last steps, untimed, on the one frame
+    # (founding_live, 20.8 ms). Each step that puts something up waits for
+    # room (begin) and books what it took (done) before the next one asks.
+    for name, text, opens, steps in (
+            ("Village._found_in_stages", staged, "VillageRaise.begin(self)",
+             ("_place_quarry(", "_spawn_founder(", "_assign_housing()", "_update_influence()",
+              "_raise_founding_house(", "_open_for_business()")),
+            ("VillageRaise.found", body(raise_src, "found"), "begin(town)",
+             ("_place_quarry(", "_take_fields(", "_restore_villager(", "_assign_housing()",
+              "_raise_founding_house(", "spawn_farm_at(", "_raise_trade(", "_raise_school(",
+              "_raise_nest(", "_rebuild(", "_finish_restoring()", "Chessboard.write_back("))):
+        for step in steps:
+            at = text.find(step)
+            if at < 0:
+                fail.append("%s no longer has the step %s to budget" % (name, step))
+            while at >= 0:
+                opened = text.rfind(opens, 0, at)
+                after, then = text.find("done(began)", at), text.find(opens, at)
+                if opened < 0 or text.rfind("done(began)", 0, at) > opened or after < 0 \
+                        or 0 <= then < after:
+                    fail.append("%s puts up %s outside the founding budget" % (name, step))
+                    break
+                at = text.find(step, at + 1)
     # AND A REMEMBERED TOWN'S NEST IS LOOKED FOR IN SLICES, not left to the
     # one-frame rebuild, where it was thirty to ninety milliseconds.
     if "town._build_search(world, CreatureNest.FOOTPRINT)" not in body(raise_src, "found") \

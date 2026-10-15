@@ -476,20 +476,28 @@ func _found_in_stages() -> void:
 	var rock := _build_search(world, ROOM_ROUND_THE_QUARRY)
 	if not await _search_slowly(rock):
 		return
+	var began: int = await VillageRaise.begin(self)
+	if began < 0:
+		return
 	var clock := Ledger.swap(&"Village:founding", "placing the rock")
 	_place_quarry(_searched(rock))
 	Ledger.resume(clock)
+	VillageRaise.done(began)
 	var count := _founding_count()
 	for i in count:
-		if not await VillageRaise.turn(self):
+		began = await VillageRaise.begin(self)
+		if began < 0:
 			return
-		var began := Time.get_ticks_usec()
 		_spawn_founder(i, count)
-		VillageRaise.spend(Time.get_ticks_usec() - began)
+		VillageRaise.done(began)
+	began = await VillageRaise.begin(self)
+	if began < 0:
+		return
 	var settling := Ledger.swap(&"Village:founding", "its roll and its reach")
 	_assign_housing()
 	_update_influence()
 	Ledger.resume(settling)
+	VillageRaise.done(began)
 	BootTrail.mark("raising the houses of %s" % village_name)
 	var beds_wanted := int(float(_founding_count()) * FOUNDING_HOUSED)
 	var beds := 0
@@ -499,7 +507,11 @@ func _found_in_stages() -> void:
 		var search := _build_search(world, _house_room(size))
 		if not await _search_slowly(search):
 			return
+		began = await VillageRaise.begin(self)
+		if began < 0:
+			return
 		var got := _raise_founding_house(_searched(search), size)
+		VillageRaise.done(began)
 		if got < 0:
 			break
 		beds += got
@@ -510,9 +522,13 @@ func _found_in_stages() -> void:
 	# THE LAST OF IT ON THE FOUNDING CLOCK TOO: it runs as the coroutine
 	# resumes, before any node's turn, and unclocked it read as a stall at the
 	# head of the frame that nobody could name.
+	began = await VillageRaise.begin(self)
+	if began < 0:
+		return
 	var opening := Ledger.swap(&"Village:founding", "open for business")
 	_assign_housing()
 	_open_for_business()
+	VillageRaise.done(began)
 	process_mode = was
 	Ledger.resume(opening)
 

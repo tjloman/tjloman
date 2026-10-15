@@ -42,32 +42,46 @@ static func found(town: Village) -> void:
 	var rock := town._build_search(world, Village.ROOM_ROUND_THE_QUARRY)
 	if not await town._search_slowly(rock):
 		return
+	var began: int = await begin(town)
+	if began < 0:
+		return
 	town._place_quarry(town._searched(rock))
 	var record := SaveGame.take_back(town, false)
+	if not record.is_empty():
+		town._take_fields(record)
+	done(began)
 	if record.is_empty():
 		town._found_in_stages()           # nothing remembered here after all
 		return
-	town._take_fields(record)
 	# PEOPLE, THEN ROOFS: the reach the builder lays out within is the reach of
 	# a town this many strong.
 	var folk: Array = record.get("folk", [])
 	for i in folk.size():
-		if not await turn(town):
+		began = await begin(town)
+		if began < 0:
 			return
 		var one := Ledger.swap(&"Village:founding", "one of its people")
-		var began := Time.get_ticks_usec()
 		town._restore_villager(folk[i])
-		spend(Time.get_ticks_usec() - began)
 		Ledger.resume(one)
+		done(began)
+	began = await begin(town)
+	if began < 0:
+		return
 	var settling := Ledger.swap(&"Village:founding", "its roll and its reach")
 	town._assign_housing()                # the roll counted, so the reach is theirs
 	town._update_influence()
 	Ledger.resume(settling)
+	done(began)
 	for size in record.get("houses", []):
 		var search := town._build_search(world, town._house_room(int(size) as House.Size))
 		if not await town._search_slowly(search):
 			return
-		if town._raise_founding_house(town._searched(search), int(size) as House.Size) < 0:
+		began = await begin(town)
+		if began < 0:
+			return
+		var raised := town._raise_founding_house(town._searched(search), int(size) as House.Size)
+		done(began)
+		if raised < 0:
 			break
 		if not await _next_frame(town):
 			return
@@ -78,7 +92,11 @@ static func found(town: Village) -> void:
 		var spot := town._searched(search)
 		if spot == Vector3.INF:
 			break
+		began = await begin(town)
+		if began < 0:
+			return
 		town.spawn_farm_at(spot)
+		done(began)
 		if not await _next_frame(town):
 			return
 	# ITS TRADES, a building a frame — each asks where it may stand.
@@ -87,9 +105,13 @@ static func found(town: Village) -> void:
 		if not Workshop.TRADES.has(which):
 			continue
 		for i in maxi(int(trades[which]) - Workshop.how_many(town, which), 0):
+			began = await begin(town)
+			if began < 0:
+				return
 			var one := Ledger.swap(&"Village:founding", "one of its trades")
 			var stood := town._raise_trade(which, world)
 			Ledger.resume(one)
+			done(began)
 			if not stood or not await _next_frame(town):
 				break
 		if not town.is_inside_tree():
@@ -99,7 +121,11 @@ static func found(town: Village) -> void:
 		var school := town._build_search(world, Village.ROOM_ROUND_THE_SCHOOL)
 		if not await town._search_slowly(school):
 			return
+		began = await begin(town)
+		if began < 0:
+			return
 		town._raise_school(town._searched(school))
+		done(began)
 		if not await _next_frame(town):
 			return
 	# ITS CREATURE'S NEST, on a sliced search like the school's. It was left to
@@ -110,7 +136,11 @@ static func found(town: Village) -> void:
 		var den := town._build_search(world, CreatureNest.FOOTPRINT)
 		if not await town._search_slowly(den):
 			return
+		began = await begin(town)
+		if began < 0:
+			return
 		town._raise_nest(town._searched(den))
+		done(began)
 		if not await _next_frame(town):
 			return
 	# THE REST, A PIECE A FRAME, each named on the meter. It was one frame —
@@ -118,21 +148,33 @@ static func found(town: Village) -> void:
 	# second without saying which part. Nothing is searched for here: what the
 	# steps above could not place is not asked about again in one frame
 	# (`_as_placed`), and is only said.
+	began = await begin(town)
+	if began < 0:
+		return
 	var clock := Ledger.swap(&"Village:founding", "its stock and its rock")
 	town._rebuild(_as_placed(town, record))
 	Ledger.resume(clock)
+	done(began)
 	if not await _next_frame(town):
+		return
+	began = await begin(town)
+	if began < 0:
 		return
 	clock = Ledger.swap(&"Village:founding", "its roll")
 	town._finish_restoring()
 	town._refresh_roster()
 	town._retally()
 	Ledger.resume(clock)
+	done(began)
 	if not await _next_frame(town):
+		return
+	began = await begin(town)
+	if began < 0:
 		return
 	clock = Ledger.swap(&"Village:founding", "its herds and woods")
 	Chessboard.write_back(record, world)     # what its hunting and felling left
 	Ledger.resume(clock)
+	done(began)
 	# AND TO WORK, a few hands a frame: every one dealt before the town runs.
 	town.charter = await VillageCharter.deal_slowly(town, HANDS_A_FRAME)
 	if not town.is_inside_tree():
@@ -164,6 +206,22 @@ static func _as_placed(town: Village, record: Dictionary) -> Dictionary:
 			+ "— no room for the rest.") % [town.village_name, houses.size(),
 				int(record.get("farms", 0)), town.houses.size(), town.farms.size()])
 	return placed
+
+
+## A PIECE OF FOUNDING IN ITS TURN: wait for room in this frame's budget, and
+## the clock it began at — -1 if the town was taken out of the world while it
+## waited. Hand that to `done` when the piece is put up. Every piece of a town
+## raised from its record goes through here, not only its people and its
+## searches: three towns finishing together put their last steps, untimed, on
+## the one frame.
+static func begin(town: Node) -> int:
+	if not await turn(town):
+		return -1
+	return Time.get_ticks_usec()
+
+
+static func done(began: int) -> void:
+	spend(Time.get_ticks_usec() - began)
 
 
 ## WAIT FOR ROOM in this frame's founding budget. False if the town was taken

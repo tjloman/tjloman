@@ -43,6 +43,11 @@ const SPLIT := 3.0
 const STRETCH := 3.0
 const MOST_CUTS := 4
 const CUTS_BY_TIER: Array[int] = [2, 3, MOST_CUTS]
+## AND A THING THAT GROWS is cut for the size it will grow to: the creature is
+## baked at a whelp's 2.5m and drawn at up to fifteen times that, so measured as
+## baked its shadow was never cut at all, and a metre-long edge lay forty-five
+## metres across the ground. There is one of it, so it may have more cuts.
+const GROWN_CUTS_BY_TIER: Array[int] = [6, 9, 12]
 const SHADER := preload("res://shaders/baked_shadow.gdshader")
 
 static var _sky: Node = null
@@ -105,11 +110,12 @@ static func cast(owner: MeshInstance3D, reach: float, key: Variant = null) -> vo
 
 ## A SHADOW FOR A THING MADE OF PARTS — a creature, a tree — every mesh under
 ## `root`, gathered into its space. Baked once per `key` when one is given.
-static func cast_parts(root: Node3D, reach: float, key: Variant = null) -> void:
+static func cast_parts(root: Node3D, reach: float, key: Variant = null,
+		grows_to := 1.0) -> void:
 	if not on() or root == null:
 		return
 	if key == null or not _hulls.has(key):
-		var hull: Variant = _fine(_baker.call(&"bake_points", _points_under(root)))
+		var hull: Variant = _fine(_baker.call(&"bake_points", _points_under(root)), grows_to)
 		if key == null:
 			_lay(root, hull, reach)
 			return
@@ -143,10 +149,12 @@ static func lights() -> Vector2i:
 	return Vector2i(int(_sky.call(&"get_burning")), int(_sky.call(&"get_alive")))
 
 
-## A TALL HULL, CUT FINER (see TALL). Anything else comes back as it was.
-static func _fine(hull: Variant) -> Variant:
+## A TALL HULL, CUT FINER (see TALL), measured at the size it will be drawn:
+## `grows_to` times as baked. Anything else comes back as it was.
+static func _fine(hull: Variant, grows_to := 1.0) -> Variant:
 	var mesh := hull as ArrayMesh
-	if mesh == null or mesh.get_surface_count() == 0 or mesh.get_aabb().size.y < TALL:
+	var big := maxf(grows_to, 1.0)
+	if mesh == null or mesh.get_surface_count() == 0 or mesh.get_aabb().size.y * big < TALL:
 		return hull
 	var arrays := mesh.surface_get_arrays(0)
 	var points: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
@@ -159,8 +167,9 @@ static func _fine(hull: Variant) -> Variant:
 	var longest := 0.0
 	for t in range(0, corners.size() - 2, 3):
 		for e in 3:
-			longest = maxf(longest, _on_the_ground(corners[t + e], corners[t + (e + 1) % 3]))
-	var cuts := clampi(ceili(longest / SPLIT), 1, CUTS_BY_TIER[Quality.effective_tier()])
+			longest = maxf(longest, _on_the_ground(corners[t + e], corners[t + (e + 1) % 3]) * big)
+	var most: int = (GROWN_CUTS_BY_TIER if big > 1.0 else CUTS_BY_TIER)[Quality.effective_tier()]
+	var cuts := clampi(ceili(longest / SPLIT), 1, most)
 	if cuts == 1:
 		return hull
 	# Each triangle a, b, c into cuts x cuts, wound as it was: the shader's

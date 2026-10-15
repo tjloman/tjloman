@@ -329,8 +329,9 @@ func _ready() -> void:
 			arm.rotation_degrees.z = 25 * side
 			_body.add_child(arm)
 
-	# The beast's own baked shadow: one, so it is baked from its parts as built.
-	Shade.cast_parts(_body, Quality.shadow_reach() * 2.0)
+	# The beast's own baked shadow: one, so it is baked from its parts as built
+	# — and cut for the size it will grow to, not the whelp it is (Shade._fine).
+	Shade.cast_parts(_body, Quality.shadow_reach() * 2.0, null, CreatureBody.MAX_SCALE)
 	# Its own light, at chest height, dark until dusk — and through Shade, so at
 	# night the villagers round it throw their shadows away from it.
 	_halo = Shade.light(self, Color.WHITE, 0.0, 5.0, Vector3(0, 1.6, 0))

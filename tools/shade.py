@@ -241,9 +241,18 @@ def ground(fail):
             or "_fine(_baker.call(&\"bake_points\"" not in body(SHADE, "cast_parts") \
             or "_on_the_ground(" not in body(SHADE, "_fine") \
             or "absf(a.y - b.y) * STRETCH" not in body(SHADE, "_on_the_ground") \
-            or "CUTS_BY_TIER[Quality.effective_tier()]" not in body(SHADE, "_fine"):
+            or "(GROWN_CUTS_BY_TIER if big > 1.0 else CUTS_BY_TIER)[Quality.effective_tier()]" \
+            not in body(SHADE, "_fine") \
+            or "_on_the_ground(corners[t + e], corners[t + (e + 1) % 3]) * big" \
+            not in body(SHADE, "_fine"):
         fail.append("a tall thing's shadow is baked as a few long flat triangles that cut through "
                     "the hill it lies on, or cut by its length in the air, not on the ground")
+    # THE CREATURE'S IS CUT FOR THE SIZE IT GROWS TO: baked as a whelp under TALL,
+    # it was never cut at all, and drawn fifteen times the size.
+    beast = (ROOT / "scripts/creature/creature.gd").read_text()
+    if not re.search(r"Shade\.cast_parts\(_body, [^\n]*CreatureBody\.MAX_SCALE\)", beast):
+        fail.append("the creature's shadow is cut for the whelp it was baked as, not the giant it "
+                    "grows to: its triangles lie forty metres across the hills")
 
 
 def core(fail):
