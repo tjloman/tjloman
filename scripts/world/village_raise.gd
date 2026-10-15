@@ -16,16 +16,29 @@ extends RefCounted
 ## its roofs and fields a frame each on a sliced search for ground, then the
 ## rest. It is held still until it stands, as a founding is.
 
-## People raised a frame. Each is about half a millisecond.
-const PEOPLE_A_FRAME := 6
+## THE FOUNDING BUDGET: how much of a frame every town being founded or raised
+## AT ONCE may spend between them. Each town used to keep only its own pace —
+## four founders, six people, one slice of search a frame — and three towns
+## coming into sight together all kept it on the same frame. Past the budget,
+## whoever is still waiting goes on next frame (`turn`, `spend`), the way
+## villagers' turns are dealt (CrowdClock.FRAME_BUDGET_USEC).
+const FOUNDING_USEC := 6000
 ## Hands put to work a frame, by the charter. Each is about a tenth.
 const HANDS_A_FRAME := 20
+
+static var _budget_frame := -1
+static var _budget_spent := 0
 
 
 static func found(town: Village) -> void:
 	var was := town.process_mode
 	town.process_mode = Node.PROCESS_MODE_DISABLED
 	var world := town.get_tree().get_first_node_in_group("world_gen") as WorldGen
+	# NOT ON THE FRAME IT WAS RAISED: that frame has the square, the store, the
+	# field and the pen to put up already, and the first slice of a search on
+	# top of them made it the town's dearest frame but one.
+	if not await _next_frame(town):
+		return
 	var rock := town._build_search(world, Village.ROOM_ROUND_THE_QUARRY)
 	if not await town._search_slowly(rock):
 		return
@@ -39,11 +52,13 @@ static func found(town: Village) -> void:
 	# a town this many strong.
 	var folk: Array = record.get("folk", [])
 	for i in folk.size():
-		var one := Ledger.swap(&"Village:founding", "one of its people")
-		town._restore_villager(folk[i])
-		Ledger.resume(one)
-		if i % PEOPLE_A_FRAME == PEOPLE_A_FRAME - 1 and not await _next_frame(town):
+		if not await turn(town):
 			return
+		var one := Ledger.swap(&"Village:founding", "one of its people")
+		var began := Time.get_ticks_usec()
+		town._restore_villager(folk[i])
+		spend(Time.get_ticks_usec() - began)
+		Ledger.resume(one)
 	var settling := Ledger.swap(&"Village:founding", "its roll and its reach")
 	town._assign_housing()                # the roll counted, so the reach is theirs
 	town._update_influence()
@@ -87,6 +102,17 @@ static func found(town: Village) -> void:
 		town._raise_school(town._searched(school))
 		if not await _next_frame(town):
 			return
+	# ITS CREATURE'S NEST, on a sliced search like the school's. It was left to
+	# `_rebuild`, which looks for room in one go — and a nest wants the most
+	# room of anything a town puts up, so the frame the town came back stood
+	# at thirty to ninety milliseconds, all of it this.
+	if bool(record.get("nest", false)) and town.nest == null:
+		var den := town._build_search(world, CreatureNest.FOOTPRINT)
+		if not await town._search_slowly(den):
+			return
+		town._raise_nest(town._searched(den))
+		if not await _next_frame(town):
+			return
 	# THE REST, A PIECE A FRAME, each named on the meter. It was one frame —
 	# "the rest of it" — and on a PC it once stood at three quarters of a
 	# second without saying which part. Nothing is searched for here: what the
@@ -127,6 +153,7 @@ static func _as_placed(town: Village, record: Dictionary) -> Dictionary:
 	placed["houses"] = houses.slice(0, mini(houses.size(), town.houses.size()))
 	placed["farms"] = mini(int(record.get("farms", 0)), town.farms.size())
 	placed["edubba"] = town.has_edubba()
+	placed["nest"] = town.nest != null
 	var trades := {}
 	var wanted: Dictionary = record.get("trades", {})
 	for which: String in wanted:
@@ -137,6 +164,30 @@ static func _as_placed(town: Village, record: Dictionary) -> Dictionary:
 			+ "— no room for the rest.") % [town.village_name, houses.size(),
 				int(record.get("farms", 0)), town.houses.size(), town.farms.size()])
 	return placed
+
+
+## WAIT FOR ROOM in this frame's founding budget. False if the town was taken
+## out of the world while it waited.
+static func turn(town: Node) -> bool:
+	while _spent_now() >= FOUNDING_USEC:
+		await town.get_tree().process_frame
+		if not town.is_inside_tree():
+			return false
+	return true
+
+
+## And book what a piece of founding cost against this frame's budget.
+static func spend(usec: int) -> void:
+	_spent_now()
+	_budget_spent += usec
+
+
+static func _spent_now() -> int:
+	var frame := Engine.get_process_frames()
+	if frame != _budget_frame:
+		_budget_frame = frame
+		_budget_spent = 0
+	return _budget_spent
 
 
 static func _next_frame(town: Village) -> bool:

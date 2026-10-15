@@ -195,12 +195,27 @@ def founding(fail):
             or not tail.endswith("process_mode = was") \
             or staged.rfind("_open_for_business()") > staged.rfind("process_mode = was"):
         fail.append("a half-founded town is left running before it has a charter")
-    if staged.count("await get_tree().process_frame") < 2:
+    if "await VillageRaise.turn(self)" not in staged or "VillageRaise.spend(" not in staged \
+            or "await get_tree().process_frame" not in staged:
         fail.append("the founders or the houses are no longer spread over frames")
     if "_open_for_business()" not in staged:
         fail.append("a staged town is never dealt its charter")
-    if "FOUNDERS_A_FRAME" not in staged:
-        fail.append("the founders a frame are not bounded")
+    # ONE BUDGET A FRAME FOR EVERY TOWN AT ONCE: the founders, a remembered
+    # town's people, and every slice of search for ground all wait their turn in
+    # it (VillageRaise.turn) and book what they took (VillageRaise.spend).
+    raise_src = (ROOT / "scripts/world/village_raise.gd").read_text()
+    slowly = body(VILLAGE, "_search_slowly")
+    if "VillageRaise.turn(self)" not in slowly or "VillageRaise.spend(" not in slowly \
+            or "await turn(town)" not in body(raise_src, "found") \
+            or "spend(Time.get_ticks_usec() - began)" not in body(raise_src, "found") \
+            or "_spent_now() >= FOUNDING_USEC" not in body(raise_src, "turn"):
+        fail.append("towns founded together each keep their own pace and stack on one frame: "
+                    "the founding budget is not shared")
+    # AND A REMEMBERED TOWN'S NEST IS LOOKED FOR IN SLICES, not left to the
+    # one-frame rebuild, where it was thirty to ninety milliseconds.
+    if "town._build_search(world, CreatureNest.FOOTPRINT)" not in body(raise_src, "found") \
+            or 'placed["nest"] = town.nest != null' not in body(raise_src, "_as_placed"):
+        fail.append("a remembered town looks for room for its nest in one frame")
     # AND IT IS BILLED TO ITSELF. Founding runs in _ready (a deferred add) and
     # in a coroutine resuming each frame — nobody's _process — so without its
     # own clock it was charged to whatever ran last, usually the physics row.
@@ -211,8 +226,9 @@ def founding(fail):
                 or "Ledger.resume(clock)" not in text:
             fail.append("%s runs without its own clock: the meter bills it to whoever "
                         "ran before" % step)
-    per = int(const("FOUNDERS_A_FRAME"))
-    print("A town over the horizon: %d founders a frame, then one house a frame." % per)
+    shared = const("FOUNDING_USEC", (ROOT / "scripts/world/village_raise.gd").read_text())
+    print("Towns founded together: %.0f ms of a frame between them, then one house a frame."
+          % (shared / 1000.0))
 
 
 def main():

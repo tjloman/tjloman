@@ -159,9 +159,6 @@ const FOUNDING_SIZES: Array[int] = [
 	House.Size.LONGHOUSE, House.Size.HOUSE, House.Size.HUT, House.Size.HOUSE,
 ]
 const FOUNDING_MOST := 24
-## How many founders a town founded over the horizon raises a frame. See
-## `_found_in_stages`.
-const FOUNDERS_A_FRAME := 4
 ## AND HOW LONG A FRAME IT MAY SPEND LOOKING FOR GROUND, in microseconds. One
 ## search for room was the whole 3.6-second frame; see BuildSearch.
 const FOUNDING_SLICE_USEC := 4000
@@ -465,8 +462,9 @@ func _deal_the_work() -> void:
 	SaveGame.recall(self)
 
 
-## THE SAME FOUNDING, SPREAD OVER FRAMES: FOUNDERS_A_FRAME people a frame, then
-## a house a frame. THE TOWN IS HELD STILL UNTIL IT IS DONE — every villager is
+## THE SAME FOUNDING, SPREAD OVER FRAMES: its founders as many a frame as the
+## founding budget every town shares will run to (VillageRaise.turn), then a
+## house a frame. THE TOWN IS HELD STILL UNTIL IT IS DONE — every villager is
 ## put to work by the charter before any of them runs (see `_open_for_business`),
 ## and a half-founded town has no charter yet — so it is switched off, and
 ## switched back on the frame it is whole. It is a hundred metres out, past the
@@ -483,11 +481,11 @@ func _found_in_stages() -> void:
 	Ledger.resume(clock)
 	var count := _founding_count()
 	for i in count:
+		if not await VillageRaise.turn(self):
+			return
+		var began := Time.get_ticks_usec()
 		_spawn_founder(i, count)
-		if i % FOUNDERS_A_FRAME == FOUNDERS_A_FRAME - 1:
-			await get_tree().process_frame
-			if not is_inside_tree():
-				return
+		VillageRaise.spend(Time.get_ticks_usec() - began)
 	var settling := Ledger.swap(&"Village:founding", "its roll and its reach")
 	_assign_housing()
 	_update_influence()
@@ -523,8 +521,12 @@ func _found_in_stages() -> void:
 ## done. False if the town was taken out of the world while it waited.
 func _search_slowly(search: BuildSearch) -> bool:
 	while true:
+		if not await VillageRaise.turn(self):
+			return false
 		var clock := Ledger.swap(&"Village:founding", "looking for ground")
+		var began := Time.get_ticks_usec()
 		var done := search.run(FOUNDING_SLICE_USEC)
+		VillageRaise.spend(Time.get_ticks_usec() - began)
 		Ledger.resume(clock)
 		if done:
 			return true
@@ -2319,15 +2321,21 @@ func _rebuild(data: Dictionary) -> void:
 		else:
 			quarry.stone_left = mini(left, quarry.stone_left)
 	if bool(data.get("nest", false)) and nest == null:
-		var spot := find_build_spot(world, CreatureNest.FOOTPRINT)
-		var beast := get_tree().get_first_node_in_group("creature") as Creature
-		if spot != Vector3.INF and beast != null:
-			var n := CreatureNest.new()
-			n.village = self
-			n.creature = beast
-			n.position = to_local(spot)
-			add_child(n)
-			nest = n
+		_raise_nest(find_build_spot(world, CreatureNest.FOOTPRINT))
+
+
+## ITS CREATURE'S NEST BACK, on `spot` (nothing if there was no room, or no
+## creature to sleep in it).
+func _raise_nest(spot: Vector3) -> void:
+	var beast := get_tree().get_first_node_in_group("creature") as Creature
+	if spot == Vector3.INF or beast == null:
+		return
+	var n := CreatureNest.new()
+	n.village = self
+	n.creature = beast
+	n.position = to_local(spot)
+	add_child(n)
+	nest = n
 
 
 ## ITS SCHOOL BACK, on `spot` (nothing if there was no room). Raised free: the

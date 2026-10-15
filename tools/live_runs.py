@@ -27,7 +27,10 @@ With GODOT set to a Godot binary, runs in a real engine, headless:
                                   full of Pips loses its repeats as it loads.
   tools/live/hot_ground_live.gd   lava poured by a town is run from, walked round
                                   (in town too), burns who stands in it, lies only
-                                  where it fell, and opens again once cool.
+                                  where it fell, and opens again once cool;
+  tools/live/founding_live.gd     three remembered towns raised at once stand whole,
+                                  nests and all, and never take more than a slice
+                                  of any frame between them.
 
 And always, the statements:
 
@@ -85,7 +88,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 LIVE = ("kill_live.gd", "typing_live.gd", "crowd_clock_live.gd", "seams_live.gd", "brush_live.gd",
         "catch_live.gd", "fold_slices_live.gd", "smooth_live.gd", "kernel_live.gd",
         "quench_live.gd", "names_live.gd",
-        "hot_ground_live.gd")
+        "hot_ground_live.gd", "founding_live.gd")
 
 
 def body(text, name):

@@ -118,6 +118,10 @@ static var _asked_page := {}
 ## THE SLOWEST SINGLE CALL: this page's, last page's, and the dearest since the
 ## meter opened — [class, tag] and microseconds. See `open`.
 static var _tag: Variant = null
+## The tag of a clock swapped away from, by name, so `resume` gives it back: a
+## founding step that raised a villager came back from the villager's clock as
+## "<null>", and the slowest-call line could not say which step it was.
+static var _outer_tags := {}
 static var _slowest := []
 static var _slowest_took := 0
 static var _slowest_page := []
@@ -172,6 +176,8 @@ static func open(what: StringName, tag: Variant = null) -> void:
 ## says which part of the work, for the slowest-call line (see `open`).
 static func swap(what: StringName, tag: Variant = null) -> StringName:
 	var was := _open
+	if on:
+		_outer_tags[was] = _tag
 	open(what, tag)
 	return was
 
@@ -185,7 +191,7 @@ static func resume(was: StringName) -> void:
 		_close(now)
 	_open = was
 	_since = now
-	_tag = null
+	_tag = _outer_tags.get(was, null)
 
 
 static func _close(now: int) -> void:
