@@ -45,9 +45,15 @@ else
     # Android is opt-in (./build.sh Android) — it needs the SDK installed.
 fi
 
-# Zip what shipped, ready to upload/send.
+# Zip what shipped, ready to upload/send. The baked-shadow library is not
+# embedded: the export puts it NEXT TO the executable, so it goes in the zip
+# beside it, or the game runs without shadows (native/README.md).
 cd builds
-[ -f hand-of-heavens-demo.x86_64 ] && zip -q -j hand-of-heavens-demo-linux.zip hand-of-heavens-demo.x86_64 && echo "==> builds/hand-of-heavens-demo-linux.zip"
-[ -f hand-of-heavens-demo.exe ] && zip -q -j hand-of-heavens-demo-windows.zip hand-of-heavens-demo.exe && echo "==> builds/hand-of-heavens-demo-windows.zip"
+[ -f hand-of-heavens-demo.x86_64 ] && rm -f hand-of-heavens-demo-linux.zip \
+    && zip -q -j hand-of-heavens-demo-linux.zip hand-of-heavens-demo.x86_64 $(ls libshade.linux.*.so 2>/dev/null) \
+    && echo "==> builds/hand-of-heavens-demo-linux.zip"
+[ -f hand-of-heavens-demo.exe ] && rm -f hand-of-heavens-demo-windows.zip \
+    && zip -q -j hand-of-heavens-demo-windows.zip hand-of-heavens-demo.exe $(ls libshade.windows.*.dll 2>/dev/null) \
+    && echo "==> builds/hand-of-heavens-demo-windows.zip"
 [ -f web/index.html ] && (cd web && zip -q -r ../hand-of-heavens-demo-web.zip .) && echo "==> builds/hand-of-heavens-demo-web.zip"
 echo "Done."

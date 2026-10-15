@@ -2052,7 +2052,10 @@ GODOT=~/Apps/godot ./build.sh   # if godot isn't on your PATH
 
 Notes:
 - Desktop builds are **single-file** (the game data is embedded in the
-  executable) — send the zip, they unzip and run. No installer.
+  executable) — send the zip, they unzip and run. No installer. The one
+  exception is the baked-shadow library, if built: the export puts it next to
+  the executable (`libshade.windows.template_release.x86_64.dll`), and
+  `build.sh` zips it in beside it. Keep the two in the same folder.
 - The Web build is exported **without threads**, so it runs from any
   static host — itch.io (upload `hand-of-heavens-demo-web.zip`, mark
   "played in browser"), GitHub Pages, or locally with
