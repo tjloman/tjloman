@@ -229,6 +229,21 @@ def ground(fail):
                     "drawn (%.0fm)" % (size * cell / 2.0, reach))
     if reread > step:
         fail.append("the ground is read less often than the sun moves")
+    # AND NOT IN IT: drawn a hair nearer the eye than where it lies, faded out
+    # past the map rather than laid on the foot's plane in the air, and the
+    # hull of anything tall cut finer as it is baked, so no long flat triangle
+    # cuts through a hillside (tools/live/shadow_ground_live.gd measures it).
+    if "VERTEX = eye * max(away - PULL - away * PULL_FAR, away * 0.5) / away;" not in vertex \
+            or "smoothstep(FADE_FROM, 0.5, out_of_map(w.xz))" not in vertex:
+        fail.append("the shadows are not pulled toward the eye, or not faded past the ground map: "
+                    "they go under hillsides in patches, or stand in the air far off")
+    if "_fine(_baker.call(&\"bake\"" not in body(SHADE, "cast") \
+            or "_fine(_baker.call(&\"bake_points\"" not in body(SHADE, "cast_parts") \
+            or "_on_the_ground(" not in body(SHADE, "_fine") \
+            or "absf(a.y - b.y) * STRETCH" not in body(SHADE, "_on_the_ground") \
+            or "CUTS_BY_TIER[Quality.effective_tier()]" not in body(SHADE, "_fine"):
+        fail.append("a tall thing's shadow is baked as a few long flat triangles that cut through "
+                    "the hill it lies on, or cut by its length in the air, not on the ground")
 
 
 def core(fail):

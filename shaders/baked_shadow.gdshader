@@ -37,8 +37,29 @@ const float LONGEST = 3.0;
 // sampled every two metres and blended, which can sit a few centimetres under
 // the triangles it was read from.
 const float LIFT = 0.08;
+// AND A HAIR NEARER THE EYE than where it lies: pulled toward the camera along
+// the line of sight, which leaves it exactly where it is on the screen and
+// changes only its depth — so a shadow drawn on a hillside is not swallowed in
+// patches by the ground between the map's two-metre samples. More far off,
+// where depth is coarser. Metres, and metres per metre away.
+const float PULL = 0.2;
+const float PULL_FAR = 0.0015;
+// GONE PAST THE EDGE OF THE MAP, faded over its last stretch rather than laid
+// on a flat plane through the caster's foot: out there, on a hill falling away,
+// that plane stood in the air and the shadows were black spikes in the sky.
+const float FADE_FROM = 0.42;
 
 varying float v_dark;
+
+// How far out of the middle of the map a point is, 0 at the middle and 0.5 at
+// its edge (more past it); 0 before there is a map at all.
+float out_of_map(vec2 xz) {
+	if (shade_ground_area.w <= 0.0) {
+		return 0.0;
+	}
+	vec2 uv = (xz - shade_ground_area.xy) / shade_ground_area.z - vec2(0.5);
+	return max(abs(uv.x), abs(uv.y));
+}
 
 // The ground under a point, or `otherwise` off the edge of the map (or before
 // there is one): the plane through the caster's foot, as before.
@@ -98,8 +119,10 @@ void vertex() {
 	// bank, across the dip — and under a villager held aloft, on the ground
 	// below rather than at its dangling feet.
 	w.y = ground_at(w.xz, origin.y) + LIFT;
-	VERTEX = (VIEW_MATRIX * vec4(w, 1.0)).xyz;
-	v_dark = dark;
+	vec3 eye = (VIEW_MATRIX * vec4(w, 1.0)).xyz;
+	float away = max(length(eye), 0.001);
+	VERTEX = eye * max(away - PULL - away * PULL_FAR, away * 0.5) / away;
+	v_dark = dark * (1.0 - smoothstep(FADE_FROM, 0.5, out_of_map(w.xz)));
 }
 
 void fragment() {
