@@ -121,19 +121,25 @@ if not named or vague:
 ledger_src = (ROOT / "scripts/ledger.gd").read_text()
 pages = "static func page_ms()" in ledger_src
 footed = "page - billed" in meter
-impossible = "counters disagree with the wall clock" in meter
-print("THE LEFTOVER IS %s, and an impossible script figure %s."
+# AND THE SCRIPT FIGURE CANNOT BE LARGER THAN ITS FRAME. It was Godot's
+# TIME_PROCESS + TIME_PHYSICS_PROCESS, which hold the drawing and are each the
+# worst frame of the last second, and the meter had to say so whenever the part
+# came out larger than the whole. It is read off the same page now — what the
+# rows counted, less the solver's row and the drawing's (FrameMeter
+# `_split_the_page`) — so it is a part of its frame by construction.
+impossible = "Ledger.counted() - drew - solved" in meter and "TIME_PROCESS" not in meter
+print("THE LEFTOVER IS %s, and the script figure %s."
       % ("subtracted from the same clock the rows use" if footed and pages
          else "STILL THE MONITORS MINUS THE WALL CLOCK",
-         "is called out" if impossible else "IS PRINTED AS IF IT WERE FINE"))
+         "is a part of its frame" if impossible else "IS GODOT'S, AND CAN BE LARGER THAN ITS FRAME"))
 if not pages or not footed:
     fail.append("the leftover row is still Godot's TIME_PROCESS minus the "
                 "ledger's wall clock — two different measurements, and their "
                 "difference is not milliseconds of anything")
 if not impossible:
-    fail.append("the meter prints a script time larger than the frame it is "
-                "part of without saying so; a meter that cannot tell you it is "
-                "wrong is not a measurement, it is a claim")
+    fail.append("the meter's script time is not read off the page it is part of, so it "
+                "can print a script time larger than its frame — Godot's TIME_PROCESS "
+                "holds the drawing and is the worst frame of the last second")
 
 # -- AND THE LEDGER'S OWN STORY HAS TO BE TRUE -------------------------------
 ledger = (ROOT / "scripts/ledger.gd").read_text()

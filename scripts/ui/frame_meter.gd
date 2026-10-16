@@ -7,12 +7,18 @@ extends PanelContainer
 ## Everything after that question is guessing, and guessing is how you spend a
 ## week making the fast half faster.
 ##
-## THE SPLIT IS THE WHOLE POINT. Godot will tell you what its own GDScript cost
-## (`TIME_PROCESS`, `TIME_PHYSICS_PROCESS`) and what it asked the GPU to draw
-## (draw calls, primitives). If the script time is most of the frame, the
-## simulation is the problem and no amount of turning the picture down will help.
-## If the script time is small and the frame is huge, the work is in the driver
-## or the fragment pass and the simulation is innocent.
+## THE SPLIT IS THE WHOLE POINT. Every part of the frame is on the ledger's
+## page, one clock for all of it: the scripts, the engine's physics solve
+## (ENGINE_ROW), and the drawing with the wait for the screen (DRAW_ROW). If the
+## script time is most of the frame, the simulation is the problem and no amount
+## of turning the picture down will help. If the drawing is, the work is in the
+## driver or the fragment pass and the simulation is innocent.
+##
+## NOT GODOT'S OWN `TIME_PROCESS`, which this used to read. It runs from the
+## first _process to the end of the DRAW, so it holds the drawing, and it is the
+## worst single frame of the last second, set once a second (main.cpp,
+## Main::iteration). "Script" came out larger than the frame it was part of, and
+## the frame less that read "draw 0.0 ms" on a phone spending half of it drawing.
 ##
 ## AND THEN THERE IS THE THIRD THING, which is the one this was built to catch.
 ##
@@ -54,6 +60,23 @@ const ENGINE_LAST := 1000
 ## What the engine's own work is called on the bill. Parenthesised like
 ## "(unclocked)", because it is not a class anybody wrote — see the bill.
 const ENGINE_ROW := &"(the solver)"
+## AND WHAT EVERYTHING AFTER THE LAST SCRIPT OF THE FRAME IS CALLED: the deferred
+## calls and frees, the drawing, and the wait for the next refresh of the screen
+## (or the frame cap). This meter runs last in the idle frame, so the clock it
+## opened for itself stayed open through all of that — and on a phone
+## "FrameMeter" came back at 25 to 36 ms of a 50 ms frame, the dearest row on
+## the bill, for a readout rewritten twice a second. The meter hands its clock
+## on to this the moment its own work is done, as `_physics_process` hands the
+## solver's to ENGINE_ROW.
+const DRAW_ROW := &"(draw+wait)"
+## THE BILL'S DEAREST ROWS, and no more: the rest are tenths of a millisecond,
+## and on a phone they pushed the end of the readout off the screen.
+const BILL_ROWS := 12
+## THE BARE COUNTER (see `cycle`): its one line is rewritten this often, in a
+## larger hand than the whole readout's.
+const BARE_EVERY := 0.5
+const FONT := 13
+const BARE_FONT := 16
 
 ## WHAT IS THAT BAND ACROSS THE SKY.
 ##
@@ -103,12 +126,16 @@ const SURVEY_SEATS := 40
 const SURVEY_EVERY := 3.0
 
 
-## WHAT THE FRAME IS MADE OF, most recently measured. Public so a smoke test can
-## assert on the same numbers the player is looking at.
+## WHAT THE FRAME IS MADE OF, most recently measured, off the ledger's page
+## (see `_split_the_page`). Public so a smoke test can assert on the same
+## numbers the player is looking at.
 var frame_ms := 0.0
-var process_ms := 0.0
-var physics_ms := 0.0
+var script_ms := 0.0
+var solver_ms := 0.0
+var draw_ms := 0.0
 var steps := 0.0
+## Showing one bare line rather than the whole readout. See `cycle`.
+var bare := false
 
 var _label: Label
 var _next := 0.0
@@ -133,6 +160,8 @@ var _big := {}
 var _seat := {}
 var _big_line := ""
 var _seated_line := ""
+## The panel is to be shrunk to what it says, after a change of mode. See `_fit`.
+var _refit := false
 
 
 ## A PANEL CONTAINER AND NOT A CONTROL, and the difference is the whole of why
@@ -177,15 +206,7 @@ func _ready() -> void:
 	process_priority = ENGINE_LAST
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT,
-		Control.PRESET_MODE_MINSIZE, 16)
-	# INWARD FROM THE CORNER, both ways, said out loud. The default grows END,
-	# which from a TOP edge points down the screen and from a RIGHT edge points
-	# off it — so one of these two is load-bearing and the other only looks it,
-	# and writing only the load-bearing one is how the next person learns the
-	# wrong rule.
-	grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	grow_vertical = Control.GROW_DIRECTION_END
+	_pin()
 	var skin := StyleBoxFlat.new()
 	skin.bg_color = Color(0.05, 0.06, 0.08, 0.72)
 	skin.content_margin_left = 10.0
@@ -197,9 +218,34 @@ func _ready() -> void:
 	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# A FIXED-WIDTH READOUT. Numbers that move about while you are reading them
 	# off a phone in one hand are numbers you read wrong.
-	_label.add_theme_font_size_override("font_size", 13)
+	_label.add_theme_font_size_override("font_size", FONT)
 	_label.add_theme_constant_override("line_spacing", 2)
 	add_child(_label)
+
+
+## F7, AND THE FRAMES BUTTON: the whole readout, then one bare line, then
+## nothing, and round again.
+##
+## The whole readout is fifty lines, and on a phone the bottom of it is off the
+## screen; while playing, all anybody wants of it is the frame rate. The bare
+## line is that — frames a second, the frame, the worst of the last PEAK_HOLD
+## seconds — and it costs what a shut meter costs: the ledger is off for it and
+## the world is not walked. Says whether this press opened the whole readout,
+## which is a fresh sitting (HUD._toggle_frames).
+func cycle() -> bool:
+	if not visible:
+		visible = true
+		bare = false
+	elif not bare:
+		bare = true
+	else:
+		visible = false
+		bare = false
+	_label.add_theme_font_size_override("font_size", BARE_FONT if bare else FONT)
+	_label.text = ""
+	_next = 0.0
+	_refit = true
+	return visible and not bare
 
 
 ## COUNTED, NOT TIMED. Every physics tick between two drawn frames is one the
@@ -219,8 +265,6 @@ func _process(delta: float) -> void:
 	# tenths of a second afterwards.
 	_steps_seen = lerpf(_steps_seen, float(_ticks), BLEND)
 	_ticks = 0
-	var now := Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
-	var fixed := Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
 	# THE WALL CLOCK, AND NOT `delta`.
 	#
 	# `delta` has already been through Engine.time_scale, and this game runs the
@@ -235,12 +279,11 @@ func _process(delta: float) -> void:
 	var whole := float(tick - _tocked) / 1000.0 if _tocked > 0 else delta * 1000.0
 	_tocked = tick
 	frame_ms = lerpf(frame_ms, whole, BLEND)
-	process_ms = lerpf(process_ms, now, BLEND)
-	physics_ms = lerpf(physics_ms, fixed, BLEND)
 	steps = _steps_seen
-	# THE LEDGER IS ON ONLY WHILE SOMEBODY IS READING IT, and its page turns
-	# here — once a frame, in the one place that is already once a frame.
-	Ledger.on = visible
+	# THE LEDGER IS ON ONLY WHILE SOMEBODY IS READING IT — the whole readout,
+	# not the bare line, which reads nothing but the clock — and its page turns
+	# here, once a frame, in the one place that is already once a frame.
+	Ledger.on = visible and not bare
 	Ledger.turn_the_page()
 	# AND THE METER PAYS FOR ITSELF, ON THE BILL. Everything below — the marks,
 	# and above all the readout, fifty lines of text laid out afresh — ran
@@ -259,10 +302,6 @@ func _process(delta: float) -> void:
 	# nobody is reading it, which is what makes it free.
 	_age_peaks(delta)
 	_worst = _peak(&"frame", whole)
-	_peak(&"script", now + fixed)
-	_peak(&"_process", now)
-	_peak(&"_physics", fixed)
-	_peak(&"draw", maxf(whole - now - fixed, 0.0))
 	_peak(&"calls", Performance.get_monitor(
 		Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
 	_peak(&"queue", float(Spool.waiting()))
@@ -273,16 +312,85 @@ func _process(delta: float) -> void:
 	WorldGen.reads = 0
 	_shared = WorldGen.shared_reads
 	WorldGen.shared_reads = 0
-	for row: Array in Ledger.rows():
-		_peak(StringName("row " + String(row[0])), float(row[1]))
+	_split_the_page()
 	if not visible:
+		return
+	if bare:
+		_bare_line(delta)
 		return
 	_survey_some()
 	_next -= delta
+	if _next <= 0.0:
+		_next = EVERY
+		_label.text = _readout()
+		_fit()
+	# AND FROM HERE TO THE NEXT FRAME'S FIRST SCRIPT IS THE DRAWING: see DRAW_ROW.
+	# Last, so the readout just written is the meter's, and nothing after it is.
+	Ledger.open(DRAW_ROW)
+
+
+## THE FRAME, SPLIT THREE WAYS off the page just turned — one frame on one
+## clock: the drawing and the wait for the screen (DRAW_ROW), the engine's
+## physics solve (ENGINE_ROW), and every script, which is the rest of what was
+## counted. And each row's worst, sampled here, every frame.
+func _split_the_page() -> void:
+	var drew := 0.0
+	var solved := 0.0
+	for row: Array in Ledger.rows():
+		_peak(StringName("row " + String(row[0])), float(row[1]))
+		if row[0] == DRAW_ROW:
+			drew = float(row[1])
+		elif row[0] == ENGINE_ROW:
+			solved = float(row[1])
+	var scripted := maxf(Ledger.counted() - drew - solved, 0.0)
+	script_ms = lerpf(script_ms, scripted, BLEND)
+	solver_ms = lerpf(solver_ms, solved, BLEND)
+	draw_ms = lerpf(draw_ms, drew, BLEND)
+	_peak(&"script", scripted)
+	_peak(&"solver", solved)
+	_peak(&"draw", drew)
+
+
+## THE BARE LINE, rewritten every BARE_EVERY: frames a second, the frame, and
+## its worst — and the frame cap, when the cap is what is holding it there.
+func _bare_line(delta: float) -> void:
+	_next -= delta
 	if _next > 0.0:
 		return
-	_next = EVERY
-	_label.text = _readout()
+	_next = BARE_EVERY
+	# HELD BY THE CAP when the frame sits on the cap's period, not merely
+	# inside it: a frame faster than the cap is a frame the cap is holding back
+	# only if it is the cap's own length.
+	var cap := Quality.fps_cap
+	var held := cap > 0 and absf(frame_ms - 1000.0 / float(cap)) <= 1000.0 / float(cap) * 0.08
+	_label.text = "%.1f fps   %.1f ms   worst %.0f%s" % [1000.0 / maxf(frame_ms, 0.001),
+		frame_ms, _worst, "   (cap %d)" % cap if held else ""]
+	_fit()
+
+
+## SHRUNK TO WHAT IT SAYS, against its corner, after a change of mode. A
+## Control grows to its content by itself and never shrinks back, so the bare
+## line kept the width of the whole readout it had just been. Only then: done
+## at every rewrite, the panel would twitch with the width of the numbers.
+func _fit() -> void:
+	if not _refit:
+		return
+	_refit = false
+	reset_size()
+	_pin()
+
+
+## TO THE TOP-RIGHT CORNER, at the size of what it says.
+func _pin() -> void:
+	set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT,
+		Control.PRESET_MODE_MINSIZE, 16)
+	# INWARD FROM THE CORNER, both ways, said out loud. The default grows END,
+	# which from a TOP edge points down the screen and from a RIGHT edge points
+	# off it — so one of these two is load-bearing and the other only looks it,
+	# and writing only the load-bearing one is how the next person learns the
+	# wrong rule.
+	grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	grow_vertical = Control.GROW_DIRECTION_END
 
 
 ## EVERY MARK GETS OLDER, whether or not anything asked after it this frame.
@@ -499,21 +607,16 @@ func _publish_survey() -> void:
 ## matters — which half of the machine is spending the frame — and everything
 ## below them is there to explain whichever one it turns out to be.
 func _readout() -> String:
-	var scripted := process_ms + physics_ms
-	var elsewhere := maxf(frame_ms - scripted, 0.0)
 	var rows := PackedStringArray()
 	rows.append("%.1f ms   %.1f fps   (worst %.0f)"
 		% [frame_ms, 1000.0 / maxf(frame_ms, 0.001), _worst])
 	rows.append("")
-	rows.append(_with_peak("script  %6.1f ms  %3d%%   %s"
-		% [scripted, int(_share(scripted)), _bar(_share(scripted))], _seen(&"script")))
-	rows.append(_with_peak("   _process   %6.1f" % process_ms, _seen(&"_process")))
-	rows.append(_with_peak("   _physics   %6.1f  x%.1f steps/frame%s"
-		% [physics_ms, steps, "  <-- PINNED" if _spiralling() else ""],
-		_seen(&"_physics")))
-	rows.append(_with_peak("draw    %6.1f ms  %3d%%   %s"
-		% [elsewhere, int(_share(elsewhere)), _bar(_share(elsewhere))],
-		_seen(&"draw")))
+	rows.append(_with_peak("script     %6.1f ms  %3d%%   %s"
+		% [script_ms, int(_share(script_ms)), _bar(_share(script_ms))], _seen(&"script")))
+	rows.append(_with_peak("solver     %6.1f ms  x%.1f steps/frame%s"
+		% [solver_ms, steps, "  <-- PINNED" if _spiralling() else ""], _seen(&"solver")))
+	rows.append(_with_peak("draw+wait  %6.1f ms  %3d%%   %s"
+		% [draw_ms, int(_share(draw_ms)), _bar(_share(draw_ms))], _seen(&"draw")))
 	rows.append("")
 	rows.append("%s land reads (peak %s), %s shared"
 		% [_thousands(_land), _thousands(int(_seen(&"land"))), _thousands(_shared)])
@@ -554,51 +657,29 @@ func _readout() -> String:
 	# climbing is a population problem and a row whose EACH is climbing is a
 	# code problem, and they want opposite fixes. Working that out by hand off a
 	# photograph of a phone is exactly the sort of arithmetic nobody does.
-	rows.append("WHERE THE SCRIPT WENT      ms     x   each   peak")
-	for row: Array in Ledger.rows():
+	rows.append("WHERE THE FRAME WENT       ms     x   each   peak")
+	var bill := Ledger.rows()
+	for row: Array in bill.slice(0, BILL_ROWS):
 		if float(row[1]) < 0.05:
 			continue
 		var ran := maxi(int(row[2]), 1)
 		rows.append("   %-18s %6.1f %5d %6.3f %6.1f"
 			% [row[0], row[1], row[2], float(row[1]) / float(ran),
 				_seen(StringName("row " + String(row[0])))])
-	# WHAT THE BILL COMES TO, against what Godot says the scripts cost. A row is
-	# an UPPER BOUND — see Ledger — and when the total passes the engine's own
-	# figure the rows are absorbing the solver and each other, so it says so
-	# rather than letting the biggest row be read as a culprit.
-	var billed := Ledger.counted()
-	# AND THE ENGINE'S OWN FIGURE HAS TO BE POSSIBLE. `script` comes from
-	# Performance.TIME_PROCESS + TIME_PHYSICS_PROCESS, and a screenshot came
-	# back with it reading 67.5ms inside a 16.9ms frame — a part four times its
-	# own whole. Whatever those monitors count on that device, it is not
-	# milliseconds of this frame, and the leftover row used to be that
-	# impossible number minus an honest one.
+	if bill.size() > BILL_ROWS:
+		rows.append("   ...and %d more, under %.1f ms each"
+			% [bill.size() - BILL_ROWS, float(bill[BILL_ROWS - 1][1])])
+	# WHAT NO ROW HOLDS, footed against the page: the same clock as every row,
+	# so the subtraction is between two real numbers. With the solver and the
+	# drawing on rows of their own, the ledger's baton runs the whole frame and
+	# this reads nothing; if it ever reads more, a gap has opened between two
+	# clocks and that is worth seeing. (It used to be footed against Godot's own
+	# TIME_PROCESS, which holds the drawing and is a per-second worst — see the
+	# header — and a screenshot came back with "script" four times its frame.)
 	var page := Ledger.page_ms()
-	if scripted > frame_ms * 1.25 and frame_ms > 0.0:
-		rows.append("   script reads %.1f in a %.1f ms frame — the engine's own"
-			% [scripted, frame_ms])
-		rows.append("   counters disagree with the wall clock here; the rows")
-		rows.append("   below are wall clock and are the ones to trust.")
-	if billed > scripted * 1.05:
-		rows.append("   %-18s %6.1f  of %.1f  <-- OVER-BILLED"
-			% ["(counted)", billed, scripted])
-		rows.append("   rows include the solver and each other; read them as")
-		rows.append("   an order, not as milliseconds.")
-	else:
-		# WHAT IS LEFT IS THE ENGINE, and it is worth naming as such now that
-		# every callback in the game is clocked. The ledger's baton is
-		# continuous — everything after the first clock of a page is on
-		# somebody's bill — so this row is the HEAD of the frame: the physics
-		# server's own step, its broadphase and solver, and the transform
-		# propagation, before a line of script runs. It is not a class anybody
-		# can go and optimise, and reading it as one wasted an evening.
-		# FOOTED AGAINST THE PAGE, not against the monitors — same clock as
-		# the rows, so the subtraction is between two real numbers. What is
-		# left is the frame outside any clock: the engine's own step before the
-		# first script of the page runs, and the drawing and the wait for the
-		# screen after the last one.
-		rows.append("   %-18s %6.1f  of %.1f ms of frame"
-			% ["(unclocked)", maxf(page - billed, 0.0), page])
+	var billed := Ledger.counted()
+	rows.append("   %-18s %6.1f  of %.1f ms of frame"
+		% ["(unclocked)", maxf(page - billed, 0.0), page])
 	rows.append("")
 	for line in _the_worst_frame():
 		rows.append(line)

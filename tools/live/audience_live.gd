@@ -176,7 +176,8 @@ func call_it() -> void:
 	check(hud._praise_scold.visible
 		and not hud._praise_scold.get_global_rect().intersects(hud._frames.get_global_rect()),
 		"Praise and Scold stand clear of the open frame meter")
-	hud._toggle_frames()
+	while hud._frames.visible:              # full, then the bare line, then shut
+		hud._toggle_frames()
 	var said: Dictionary = hand.audience.greeting
 	print("    it says: %s — \"%s\"" % [said.get("mood", "?"), said.get("line", "")])
 	check(String(said.get("line", "")) != "", "it greets you")

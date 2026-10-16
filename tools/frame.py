@@ -131,8 +131,8 @@ print("   ...so the clock alone is worth roughly %.1fx from 6.6 fps."
 # -- THE INSTRUMENT ----------------------------------------------------------
 print()
 says = {
-    "the script/draw split": "TIME_PROCESS",
-    "the physics time": "TIME_PHYSICS_PROCESS",
+    "the drawing, on a row of its own": "DRAW_ROW",
+    "the physics solve, on one": "ENGINE_ROW",
     "the draw calls": "RENDER_TOTAL_DRAW_CALLS_IN_FRAME",
     "when they are pinned": "max_physics_steps_per_frame",
 }
@@ -440,16 +440,73 @@ if not turned or not shuts:
                 "the clock left open by the last class of the frame — which is "
                 "then charged the whole gap to the next frame")
 
+# AND THE SPLIT IS READ OFF THE PAGE, NOT OFF GODOT'S OWN MONITORS.
+# TIME_PROCESS runs from the first _process to the end of the DRAW, and it and
+# TIME_PHYSICS_PROCESS are each the worst single frame of the last second, set
+# once a second (main.cpp, Main::iteration). The frame less the two read
+# "draw 0.0 ms" on a phone spending half its frame drawing.
+#
+# AND THE DRAWING IS BILLED TO ITSELF. The meter runs last in the idle frame, so
+# the clock it opened for its own work stayed open through the deferred calls,
+# the drawing and the wait for the screen: "FrameMeter 35.9 ms" on that phone,
+# the dearest row on the bill, for a readout rewritten twice a second. Its last
+# word is to hand the clock on to DRAW_ROW, as _physics_process hands the
+# solver's to ENGINE_ROW; and the head of the readout reads those two rows.
+monitors = "TIME_PROCESS" in code(METER) or "TIME_PHYSICS_PROCESS" in code(METER)
+tail = [r.strip() for r in body_of(METER, "_process") if r.strip()]
+handed = bool(tail) and tail[-1] == "Ledger.open(DRAW_ROW)"
+split = body_of(METER, "_split_the_page")
+read = any("DRAW_ROW" in r for r in split) and any("ENGINE_ROW" in r for r in split) \
+    and any("Ledger.counted()" in r for r in split) \
+    and any("draw_ms" in r for r in body_of(METER, "_readout"))
+print("THE SPLIT is read off %s; the drawing is billed %s."
+      % ("the page" if read and not monitors else "GODOT'S PER-SECOND WORSTS",
+         "to itself" if handed else "TO THE METER"))
+if monitors or not read:
+    fail.append("the meter's script/solver/draw split is not read off the ledger's page — "
+                "Godot's TIME_PROCESS holds the drawing and is the worst frame of the last "
+                "second, so the frame less it read 'draw 0.0 ms' on a phone drawing half the frame")
+if not handed:
+    fail.append("the meter's last word is not to hand its clock to DRAW_ROW, so it is billed "
+                "for the drawing and the wait for the screen — 'FrameMeter 35.9 ms', the "
+                "dearest row on a phone's bill, for a readout rewritten twice a second")
+
+# AND F7 GOES ROUND THREE WAYS: the whole readout, a bare frame rate that costs
+# what a shut meter costs, and nothing. Fifty lines are off the bottom of a
+# phone's screen, and while playing all anybody wants of them is the one number.
+turn = body_of(METER, "cycle")
+proc = body_of(METER, "_process")
+gate = next((i for i, r in enumerate(proc) if r.strip() == "if bare:"), None)
+walk = next((i for i, r in enumerate(proc) if "_survey_some()" in r), None)
+three = any("bare = true" in r for r in turn) and any("visible = false" in r for r in turn) \
+    and "_frames.cycle()" in "\n".join(body_of(HUD, "_toggle_frames"))
+cheap = "Ledger.on = visible and not bare" in "\n".join(proc) \
+    and gate is not None and walk is not None and gate < walk \
+    and not any("_readout(" in r or "_survey_some(" in r for r in body_of(METER, "_bare_line"))
+print("F7 GOES %s; the bare line %s."
+      % ("full, bare, shut" if three else "ONLY ON AND OFF",
+         "keeps the ledger off and walks nothing" if cheap else "COSTS WHAT THE WHOLE READOUT COSTS"))
+if not three:
+    fail.append("F7 only opens and shuts the whole readout — fifty lines, most of them off the "
+                "bottom of a phone — with no bare frame rate between")
+if not cheap:
+    fail.append("the bare frame rate runs the ledger, walks the world or writes the whole "
+                "readout, so it costs what the meter it was meant to replace costs")
+bill = body_of(METER, "_readout")
+if not any("slice(0, BILL_ROWS)" in r for r in bill):
+    fail.append("the bill prints every row it has, tenths of a millisecond and all, and the "
+                "end of the readout falls off the bottom of a phone's screen")
+
 # AND THE COUNT IS REPORTED ALONGSIDE THE COST.
 # The COUNT and the PER-CALL cost both, because the total alone cannot tell a
 # population problem from a code problem and those want opposite fixes.
 bills = "row[2]" in code(METER) and "Ledger.rows()" in code(METER) \
     and any("float(row[1]) / float(" in r for r in body_of(METER, "_readout"))
-# NOT THE NAME `counted` — the COMPARISON. A meter that reads the total and
-# prints it is not a meter that can tell you its rows are absorbing the solver;
-# it has to say so when the bill passes what the engine charged.
-gap = any("Ledger.counted()" in r for r in body_of(METER, "_readout")) \
-    and any(re.search(r"billed > scripted", r) for r in body_of(METER, "_readout"))
+# AND WHAT NO ROW HOLDS IS PRINTED, footed against the page on the same clock:
+# a gap between two clocks has to show, not vanish into the rows.
+gap = any("Ledger.counted()" in r and "Ledger.page_ms()" not in r
+          for r in body_of(METER, "_readout")) \
+    and any("Ledger.page_ms()" in r for r in body_of(METER, "_readout"))
 grows = "OBJECT_ORPHAN_NODE_COUNT" in code(METER)
 print("THE METER PRINTS the bill: %s, the unaccounted gap: %s, orphans: %s"
       % ("yes" if bills else "NO", "yes" if gap else "NO",
@@ -459,10 +516,8 @@ if not bills:
                 "one call costs, so a population that is growing looks exactly "
                 "like code that got slower — and they want opposite fixes")
 if not gap:
-    fail.append("the meter does not compare the bill against what the engine "
-                "charged, so it cannot tell you when its own rows are absorbing "
-                "the solver and each other — which is how `Animal 141.7ms` was "
-                "printed under a physics total of 33.2")
+    fail.append("the meter does not print what the bill leaves out of the frame, so a "
+                "gap between two clocks vanishes into the rows instead of showing")
 if not grows:
     fail.append("the meter does not report orphaned nodes, which is the one "
                 "counter that says outright whether something is being leaked")
@@ -534,19 +589,23 @@ if drops is None or shuts is None or drops > shuts:
 if "_slowest_ever_took = 0" not in "\n".join(body_of(LEDGER, "forget_worst")):
     fail.append("the slowest call is not forgotten with the worst frame, so one "
                 "stall sits on the meter for the rest of the session")
+# In an engine: the ledger by hand (ledger_live), and the meter in the game —
+# F7 round three ways, the bare line cheap, the drawing on its own row
+# (meter_live).
 godot = os.environ.get("GODOT", "")
 if godot and pathlib.Path(godot).exists():
-    ran = subprocess.run([godot, "--headless", "--path", str(ROOT), "--script",
-                          "tools/live/ledger_live.gd"], capture_output=True,
-                         text=True, timeout=120)
-    checks = [ln for ln in ran.stdout.splitlines() if ln.rstrip().endswith(("yes", "NO"))]
-    print("   in Godot: %d checks, %s" % (len(checks), "all pass"
-                                         if ran.returncode == 0 else "FAILING"))
-    if ran.returncode != 0:
-        fail.append("in Godot:\n" + "\n".join(
-            ln for ln in checks if ln.rstrip().endswith("NO")))
+    for test in ("ledger_live.gd", "meter_live.gd"):
+        ran = subprocess.run([godot, "--headless", "--path", str(ROOT), "--script",
+                              "tools/live/" + test], capture_output=True,
+                             text=True, timeout=300)
+        checks = [ln for ln in ran.stdout.splitlines() if ln.rstrip().endswith(("yes", "NO"))]
+        print("   %s in Godot: %d checks, %s" % (test, len(checks), "all pass"
+                                                if ran.returncode == 0 else "FAILING"))
+        if ran.returncode != 0:
+            fail.append("%s in Godot:\n" % test + "\n".join(
+                ln for ln in checks if ln.rstrip().endswith("NO")))
 else:
-    print("   GODOT not set: the ledger was not run in an engine here")
+    print("   GODOT not set: the ledger and the meter were not run in an engine here")
 
 print()
 if fail:
