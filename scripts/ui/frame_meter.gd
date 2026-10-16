@@ -746,9 +746,9 @@ func _readout() -> Array:
 	var ever := Ledger.slowest_call(true)
 	var slow := PackedStringArray()
 	for said: Array in [["now", now], ["ever", ever]]:
-		var call: Array = said[1]
-		if not call.is_empty():
-			slow.append("%s: %s %.1f ms%s" % [said[0], call[0], call[2], _doing(call[0], call[1])])
+		var one: Array = said[1]
+		if not one.is_empty():
+			slow.append("%s: %s %.1f ms%s" % [said[0], one[0], one[2], _doing(one[0], one[1])])
 	for line: String in _the_worst_frame():
 		if line != "":
 			slow.append(line.strip_edges(true, false))
