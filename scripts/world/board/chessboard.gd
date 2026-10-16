@@ -73,7 +73,12 @@ func _process(delta: float) -> void:
 		return
 	var eye := WorldGen.cell_of(GameState.camera_focus.x, GameState.camera_focus.z)
 	_fold_the_far(world, eye)
-	_unfold_the_near(world, eye)
+	# ONE TOWN RAISED A LOOK, and another look the very next frame if one was:
+	# a town's first frame — its square, store, field and pen (Village._ready)
+	# — cannot be cut in two, and three raised in one look put all three on
+	# one frame, past the founding budget they then share (VillageRaise.turn).
+	if _unfold_the_near(world, eye):
+		_since = LOOK_EVERY
 	if _round >= ROUND_EVERY:
 		_round = 0.0
 		_step_the_folded(world)
@@ -263,7 +268,9 @@ func _put_away(town: Village, land: TownLand) -> void:
 	Ledger.resume(clock)
 
 
-func _unfold_the_near(world: WorldGen, eye: Vector2i) -> void:
+## A REMEMBERED TOWN IN REACH AND NOT STANDING, raised; true if one was. One a
+## call — see `_process`.
+func _unfold_the_near(world: WorldGen, eye: Vector2i) -> bool:
 	var live: Array = get_tree().get_nodes_in_group("village")
 	for record: Dictionary in SaveGame.village_memory.duplicate():
 		if bool(record.get("home", false)):
@@ -279,8 +286,10 @@ func _unfold_the_near(world: WorldGen, eye: Vector2i) -> void:
 			v.global_position.x, v.global_position.z).distance_to(spot) < SaveGame.SAME_TOWN)
 		if not standing:
 			var clock := Ledger.swap(&"Chessboard:unfold", String(record.get("name", "")))
-			live.append(world.raise_record(record))
+			world.raise_record(record)
 			Ledger.resume(clock)
+			return true
+	return false
 
 
 ## THE PRAYERS OF THE FAITHFUL OUT OF SIGHT, each second.

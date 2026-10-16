@@ -11,15 +11,19 @@ extends SceneTree
 ##   2. no frame spends more than MOST_MS of itself founding them, between all
 ##      three (VillageRaise.turn / spend: one budget, shared), where a nest
 ##      looked for in one frame was thirty to ninety milliseconds on its own —
-##      and so no single founding step is that long either;
+##      and so no single founding step is that long either; and the board
+##      raises them a frame apart (Chessboard._unfold_the_near), where all
+##      three first frames on one were 19 to 30 ms;
 ##   3. and the meter names the step that was slowest even when its clock was
 ##      lent to something else and given back (Ledger.resume): a founding step
 ##      that raised a villager came back as "<null>".
 ## Exits non-zero on failure. Names no class of the game's (see look.gd).
 
-## The founding budget (VillageRaise.FOUNDING_USEC) and the steps nobody can
-## cut in two — a town's first frame, its roll — with room for one each.
-const MOST_MS := 18.0
+## The founding budget (VillageRaise.FOUNDING_USEC, 6 ms) and the one step
+## nobody can cut in two that may share its frame — a town's first, its square
+## (5 to 7 ms headless), towns being raised a frame apart. 10.7 to 11.2 ms over
+## four runs; it was 18 while the board raised them all in one look.
+const MOST_MS := 14.0
 const TOWNS := 3
 const SOULS := 120
 

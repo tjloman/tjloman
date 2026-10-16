@@ -240,6 +240,20 @@ def founding(fail):
     if "town._build_search(world, CreatureNest.FOOTPRINT)" not in body(raise_src, "found") \
             or 'placed["nest"] = town.nest != null' not in body(raise_src, "_as_placed"):
         fail.append("a remembered town looks for room for its nest in one frame")
+    # AND ONE REMEMBERED TOWN RAISED A FRAME. A town's first frame — its square,
+    # store, field and pen (Village._ready) — cannot be cut in two, and the
+    # board raised every remembered town in reach in one look: three coming
+    # into sight together were 19 to 30 ms of founding on one frame
+    # (founding_live). It raises one, and looks again the next frame.
+    board = (ROOT / "scripts/world/board/chessboard.gd").read_text()
+    near = body(board, "_unfold_the_near")
+    looks = body(board, "_process")
+    raised = near.find("world.raise_record(record)")
+    if raised < 0 or near.count("raise_record(") != 1 \
+            or not re.match(r"\s*Ledger\.resume\(clock\)\s*return true", near[raised + 26:]) \
+            or not re.search(r"if _unfold_the_near\(world, eye\):\s*_since = LOOK_EVERY", looks):
+        fail.append("the board raises every remembered town in reach in one look, and their "
+                    "first frames, which cannot be cut in two, stack on one frame")
     # AND IT IS BILLED TO ITSELF. Founding runs in _ready (a deferred add) and
     # in a coroutine resuming each frame — nobody's _process — so without its
     # own clock it was charged to whatever ran last, usually the physics row.
