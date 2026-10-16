@@ -492,6 +492,26 @@ if not three:
 if not cheap:
     fail.append("the bare frame rate runs the ledger, walks the world or writes the whole "
                 "readout, so it costs what the meter it was meant to replace costs")
+# AND THE WHOLE READOUT FOLDS: a line a section, all of them on a phone's screen,
+# and a section's line tapped to open its detail. Folded to begin with, and a
+# folded section's detail is never laid out — that text is the readout's cost.
+lay = body_of(METER, "_lay_out")
+folds = re.search(r"^var _open := \{\}$", code(METER), re.M) is not None \
+    and any("pressed.connect(_fold.bind(" in r for r in body_of(METER, "_build_sections")) \
+    and any("more.visible = open" in r for r in lay) \
+    and next((i for i, r in enumerate(lay) if "if more.visible:" in r), 99) \
+    < next((i for i, r in enumerate(lay) if "more.text = " in r), -1) \
+    and any("_lay_out(_readout())" in r for r in body_of(METER, "_process"))
+print("THE WHOLE READOUT %s." % ("folds, a line a section, tapped open"
+                                 if folds else "IS ONE BLOCK, OFF THE BOTTOM OF A PHONE"))
+if not folds:
+    fail.append("the whole readout does not fold to a line a section, folded to begin "
+                "with, a tap opening one — fifty lines are off the bottom of a phone, "
+                "and a folded section's detail laid out anyway is cost for nothing")
+# AND THE SLOWEST CALL IS A SCRIPT'S: the engine's own rows are not calls.
+if 'not String(_open).begins_with("(")' not in "\n".join(body_of(LEDGER, "_close")):
+    fail.append("the engine's own rows can be the slowest call — 'slowest call: "
+                "FrameMeter 35.8 ms' was the drawing, and hid the slowest script")
 bill = body_of(METER, "_readout")
 if not any("slice(0, BILL_ROWS)" in r for r in bill):
     fail.append("the bill prints every row it has, tenths of a millisecond and all, and the "

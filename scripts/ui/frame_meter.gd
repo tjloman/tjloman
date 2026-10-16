@@ -77,6 +77,12 @@ const BILL_ROWS := 12
 const BARE_EVERY := 0.5
 const FONT := 13
 const BARE_FONT := 16
+## THE WHOLE READOUT'S SECTIONS, in order (see `_readout`): folded, each is one
+## line, and all of them together fit a phone's screen.
+const SECTIONS: Array[StringName] = [&"frame", &"split", &"bill", &"slowest", &"land",
+	&"drawing", &"world", &"tuning"]
+## A section's line is a thing to tap with a thumb, so it is at least this tall.
+const HEAD_HEIGHT := 24.0
 
 ## WHAT IS THAT BAND ACROSS THE SKY.
 ##
@@ -162,6 +168,17 @@ var _big_line := ""
 var _seated_line := ""
 ## The panel is to be shrunk to what it says, after a change of mode. See `_fit`.
 var _refit := false
+## The sections' lines (Buttons) and what each says opened (Labels), by name,
+## in `_list`; and the names of the ones tapped open, for as long as the game
+## runs. None, to begin with: folded, the whole readout fits the screen.
+var _list: VBoxContainer
+var _heads := {}
+var _details := {}
+var _open := {}
+## The biggest drawn thing's width and the worst-seated building's depth, as
+## the last survey found them, for the sections' one lines.
+var _big_across := 0.0
+var _sunk := 0.0
 
 
 ## A PANEL CONTAINER AND NOT A CONTROL, and the difference is the whole of why
@@ -214,13 +231,13 @@ func _ready() -> void:
 	skin.content_margin_top = 8.0
 	skin.content_margin_bottom = 8.0
 	add_theme_stylebox_override("panel", skin)
+	# THE BARE LINE, and the sections of the whole readout: one or the other.
 	_label = Label.new()
 	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# A FIXED-WIDTH READOUT. Numbers that move about while you are reading them
-	# off a phone in one hand are numbers you read wrong.
-	_label.add_theme_font_size_override("font_size", FONT)
-	_label.add_theme_constant_override("line_spacing", 2)
+	_label.add_theme_font_size_override("font_size", BARE_FONT)
+	_label.visible = false
 	add_child(_label)
+	_build_sections()
 
 
 ## F7, AND THE FRAMES BUTTON: the whole readout, then one bare line, then
@@ -241,7 +258,8 @@ func cycle() -> bool:
 	else:
 		visible = false
 		bare = false
-	_label.add_theme_font_size_override("font_size", BARE_FONT if bare else FONT)
+	_label.visible = bare
+	_list.visible = not bare
 	_label.text = ""
 	_next = 0.0
 	_refit = true
@@ -322,7 +340,7 @@ func _process(delta: float) -> void:
 	_next -= delta
 	if _next <= 0.0:
 		_next = EVERY
-		_label.text = _readout()
+		_lay_out(_readout())
 		_fit()
 	# AND FROM HERE TO THE NEXT FRAME'S FIRST SCRIPT IS THE DRAWING: see DRAW_ROW.
 	# Last, so the readout just written is the meter's, and nothing after it is.
@@ -378,6 +396,61 @@ func _fit() -> void:
 	_refit = false
 	reset_size()
 	_pin()
+
+
+## THE SECTIONS: a line each, tapped to open (see `_fold`). Only the lines take
+## a touch — the panel, and what an open section says, let it through to the
+## world as the meter always has.
+func _build_sections() -> void:
+	_list = VBoxContainer.new()
+	_list.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_list.add_theme_constant_override("separation", 0)
+	add_child(_list)
+	var flat := StyleBoxEmpty.new()
+	for what: StringName in SECTIONS:
+		var head := Button.new()
+		head.flat = true
+		head.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		head.focus_mode = Control.FOCUS_NONE
+		head.custom_minimum_size.y = HEAD_HEIGHT
+		head.add_theme_font_size_override("font_size", FONT)
+		for state: StringName in [&"normal", &"hover", &"pressed", &"hover_pressed", &"focus"]:
+			head.add_theme_stylebox_override(state, flat)
+		head.pressed.connect(_fold.bind(what))
+		var more := Label.new()
+		more.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		more.add_theme_font_size_override("font_size", FONT)
+		more.add_theme_constant_override("line_spacing", 2)
+		more.visible = false
+		_list.add_child(head)
+		_list.add_child(more)
+		_heads[what] = head
+		_details[what] = more
+
+
+## A SECTION TAPPED: opened if it was folded, folded if it was open, and the
+## readout rewritten now rather than at its next turn, so the tap answers.
+func _fold(what: StringName) -> void:
+	if _open.has(what):
+		_open.erase(what)
+	else:
+		_open[what] = true
+	_next = 0.0
+	_refit = true
+
+
+## THE SECTIONS ON SCREEN: each its one line, marked + folded or - open, and an
+## open one's detail under it. A folded section's detail is not set at all —
+## laying out text nobody is shown is most of what a readout costs.
+func _lay_out(sections: Array) -> void:
+	for one: Array in sections:
+		var what: StringName = one[0]
+		var open := _open.has(what)
+		(_heads[what] as Button).text = "%s %-8s %s" % ["-" if open else "+", what, one[1]]
+		var more: Label = _details[what]
+		more.visible = open and String(one[2]) != ""
+		if more.visible:
+			more.text = "    " + String(one[2]).replace("\n", "\n    ")
 
 
 ## TO THE TOP-RIGHT CORNER, at the size of what it says.
@@ -597,57 +670,35 @@ func _publish_survey() -> void:
 		_big_line = "big: %s %.0fm @ %.0f,%.0f%s%s" % [String(_big["named"]).left(22),
 			float(_big["worst"]), at.x, at.z, _big["flock"],
 			"  (%d over %dm)" % [huge, int(GIANT)] if huge > 1 else ""]
+	_big_across = float(_big["worst"])
+	_sunk = float(_seat["worst"])
 	var seat_at: Vector3 = _seat["at"]
 	_seated_line = "buildings all sit on the ground" if float(_seat["worst"]) < 0.05 \
 		else "worst seated: %s %.2fm under, at %.0f,%.0f" % [_seat["named"],
 			float(_seat["worst"]), seat_at.x, seat_at.z]
 
 
-## THE READOUT. Ordered so the first three lines answer the only question that
-## matters — which half of the machine is spending the frame — and everything
-## below them is there to explain whichever one it turns out to be.
-func _readout() -> String:
-	var rows := PackedStringArray()
-	rows.append("%.1f ms   %.1f fps   (worst %.0f)"
-		% [frame_ms, 1000.0 / maxf(frame_ms, 0.001), _worst])
-	rows.append("")
-	rows.append(_with_peak("script     %6.1f ms  %3d%%   %s"
+## THE READOUT, A SECTION AT A TIME: each [its name, its one line, its detail].
+## Folded, every section is its one line, and the whole fits a phone's screen —
+## fifty lines did not, and the half that mattered was off the bottom of it; a
+## section tapped open shows its detail (`_lay_out`). The first two answer the
+## only question that matters — which part of the machine is spending the
+## frame — and the rest are there to explain whichever it turns out to be.
+func _readout() -> Array:
+	var out := []
+	out.append([&"frame", "%.1f ms   %.1f fps   (worst %.0f)"
+		% [frame_ms, 1000.0 / maxf(frame_ms, 0.001), _worst],
+		"%d%% of frames over the line, %d stalls ignored"
+		% [int(Quality.share_over() * 100.0), Quality.stalls_ignored()]])
+	var split := PackedStringArray()
+	split.append(_with_peak("script     %6.1f ms  %3d%%   %s"
 		% [script_ms, int(_share(script_ms)), _bar(_share(script_ms))], _seen(&"script")))
-	rows.append(_with_peak("solver     %6.1f ms  x%.1f steps/frame%s"
+	split.append(_with_peak("solver     %6.1f ms  x%.1f steps/frame%s"
 		% [solver_ms, steps, "  <-- PINNED" if _spiralling() else ""], _seen(&"solver")))
-	rows.append(_with_peak("draw+wait  %6.1f ms  %3d%%   %s"
+	split.append(_with_peak("draw+wait  %6.1f ms  %3d%%   %s"
 		% [draw_ms, int(_share(draw_ms)), _bar(_share(draw_ms))], _seen(&"draw")))
-	rows.append("")
-	rows.append("%s land reads (peak %s), %s shared"
-		% [_thousands(_land), _thousands(int(_seen(&"land"))), _thousands(_shared)])
-	# AND WHOSE: the three classes that asked most.
-	var askers := Ledger.land_rows()
-	if not askers.is_empty():
-		var who := PackedStringArray()
-		for row: Array in askers.slice(0, 3):
-			who.append("%s %s" % [row[0], _thousands(int(row[1]))])
-		rows.append("   by " + ", ".join(who))
-	# THE SLOWEST SINGLE CALL, now and since the meter opened: one thing taking
-	# a second, or many things a millisecond each, and what it was doing.
-	for ever: bool in [false, true]:
-		var slow := Ledger.slowest_call(ever)
-		if not slow.is_empty():
-			rows.append("%s %s %.1f ms%s" % ["   slowest ever:" if ever else "slowest call:",
-				slow[0], slow[2], _doing(slow[0], slow[1])])
-	rows.append("%d draw calls (peak %d), %s primitives"
-		% [int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
-			int(_seen(&"calls")),
-			_thousands(int(Performance.get_monitor(
-				Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)))])
-	rows.append("%d nodes, %d bodies, %d ORPHANS" % [
-		int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
-		int(Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS)),
-		int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT))])
-	rows.append(_what_is_here())
-	var biggest := _the_biggest_thing()
-	if biggest != "":
-		rows.append(biggest)
-	rows.append("")
+	out.append([&"split", "script %.1f   solver %.1f   draw+wait %.1f ms%s"
+		% [script_ms, solver_ms, draw_ms, "   PINNED" if _spiralling() else ""], "\n".join(split)])
 	# THE BILL. What each numerous class cost this frame and how many of them
 	# ran — the second number matters as much as the first, because a game that
 	# starts at twenty frames and decays to ten is a game where something is
@@ -657,17 +708,24 @@ func _readout() -> String:
 	# climbing is a population problem and a row whose EACH is climbing is a
 	# code problem, and they want opposite fixes. Working that out by hand off a
 	# photograph of a phone is exactly the sort of arithmetic nobody does.
-	rows.append("WHERE THE FRAME WENT       ms     x   each   peak")
+	# Folded, it is the three dearest scripts: the engine's two rows are the
+	# split's.
+	# EACH NUMBER SAYS WHAT IT IS, rather than standing under a heading: the
+	# readout's font is not a fixed width, and columns of it drift apart.
 	var bill := Ledger.rows()
+	var table := PackedStringArray()
+	var dearest := PackedStringArray()
 	for row: Array in bill.slice(0, BILL_ROWS):
 		if float(row[1]) < 0.05:
 			continue
 		var ran := maxi(int(row[2]), 1)
-		rows.append("   %-18s %6.1f %5d %6.3f %6.1f"
+		table.append("%s   %.1f ms   x%d   %.3f each   peak %.1f"
 			% [row[0], row[1], row[2], float(row[1]) / float(ran),
 				_seen(StringName("row " + String(row[0])))])
+		if dearest.size() < 3 and not (StringName(row[0]) in [DRAW_ROW, ENGINE_ROW]):
+			dearest.append("%s %.1f" % [row[0], row[1]])
 	if bill.size() > BILL_ROWS:
-		rows.append("   ...and %d more, under %.1f ms each"
+		table.append("...and %d more, under %.1f ms each"
 			% [bill.size() - BILL_ROWS, float(bill[BILL_ROWS - 1][1])])
 	# WHAT NO ROW HOLDS, footed against the page: the same clock as every row,
 	# so the subtraction is between two real numbers. With the solver and the
@@ -678,20 +736,56 @@ func _readout() -> String:
 	# header — and a screenshot came back with "script" four times its frame.)
 	var page := Ledger.page_ms()
 	var billed := Ledger.counted()
-	rows.append("   %-18s %6.1f  of %.1f ms of frame"
-		% ["(unclocked)", maxf(page - billed, 0.0), page])
-	rows.append("")
-	for line in _the_worst_frame():
-		rows.append(line)
-	rows.append(_worst_seated())
-	rows.append("%d%% of frames over the line, %d stalls ignored"
-		% [int(Quality.share_over() * 100.0), Quality.stalls_ignored()])
-	rows.append("tier %s (%s)   3D at %d%%   physics %d Hz" % [
+	table.append("(unclocked)   %.1f of %.1f ms of frame" % [maxf(page - billed, 0.0), page])
+	out.append([&"bill", ", ".join(dearest) if not dearest.is_empty() else "nothing clocked yet",
+		"\n".join(table)])
+	# THE SLOWEST SINGLE CALL, now and since the meter opened: one thing taking
+	# a second, or many things a millisecond each, and what it was doing — and
+	# what the worst frame since then was made of.
+	var now := Ledger.slowest_call(false)
+	var ever := Ledger.slowest_call(true)
+	var slow := PackedStringArray()
+	for said: Array in [["now", now], ["ever", ever]]:
+		var call: Array = said[1]
+		if not call.is_empty():
+			slow.append("%s: %s %.1f ms%s" % [said[0], call[0], call[2], _doing(call[0], call[1])])
+	for line: String in _the_worst_frame():
+		if line != "":
+			slow.append(line.strip_edges(true, false))
+	out.append([&"slowest", "nothing yet" if now.is_empty() else "%s %.1f ms%s" % [now[0], now[2],
+		"   (ever: %s %.1f)" % [ever[0], ever[2]] if not ever.is_empty() else ""], "\n".join(slow)])
+	# HOW HARD THE LAND WAS ASKED, and by whom.
+	var who := PackedStringArray()
+	for row: Array in Ledger.land_rows().slice(0, 5):
+		who.append("%s %s" % [row[0], _thousands(int(row[1]))])
+	out.append([&"land", "%s reads (peak %s), %s shared"
+		% [_thousands(_land), _thousands(int(_seen(&"land"))), _thousands(_shared)],
+		"by " + ", ".join(who) if not who.is_empty() else ""])
+	# WHAT WAS DRAWN, and the biggest thing in the world (see GIANT): its width
+	# is on the one line, so a pig 812 m across is seen without opening it.
+	out.append([&"drawing", "%d calls, %s prims, biggest %.0fm"
+		% [int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+			_thousands(int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))),
+			_big_across],
+		"%d calls at the peak\n%s" % [int(_seen(&"calls")), _the_biggest_thing()]])
+	# WHAT IS STANDING IN THE WORLD — and, on the one line, anything leaking or
+	# sunk, which is never meant to be there at all.
+	var orphans := int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT))
+	var here := _what_is_here()
+	if orphans > 0:
+		here += ", %d ORPHANS" % orphans
+	if _sunk >= 0.05:
+		here += ", a building SUNK"
+	out.append([&"world", here, "%d nodes, %d bodies, %d orphans\n%s" % [
+		int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
+		int(Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS)), orphans,
+		_worst_seated()]])
+	out.append([&"tuning", "%s (%s), 3D at %d%%, physics %d Hz" % [
 		Quality.Tier.keys()[Quality.effective_tier()], Quality.heat_word(),
-		int(Quality.render_scale() * 100.0), Engine.physics_ticks_per_second])
-	rows.append("%d thinking a frame, %d in the line (worst %d)"
-		% [Spool.served(), Spool.waiting(), int(_seen(&"queue"))])
-	return "\n".join(rows)
+		int(Quality.render_scale() * 100.0), Engine.physics_ticks_per_second],
+		"%d thinking a frame, %d in the line (worst %d)"
+		% [Spool.served(), Spool.waiting(), int(_seen(&"queue"))]])
+	return out
 
 
 ## IS THE PHYSICS CLOCK RUNNING AWAY? Pinned at the ceiling means the frame is

@@ -197,7 +197,13 @@ static func resume(was: StringName) -> void:
 static func _close(now: int) -> void:
 	var took := now - _since
 	_spent[_open] = int(_spent.get(_open, 0)) + took
-	if took > _slowest_took:
+	# THE SLOWEST CALL IS A SCRIPT'S. The engine's own rows — "(the solver)",
+	# "(draw+wait)", see FrameMeter — are not calls anybody can go and make
+	# faster, and on a phone the drawing is the longest stretch of almost every
+	# frame: "slowest call: FrameMeter 35.8 ms" was the drawing, billed to the
+	# meter. Their stalls are in the worst frame's rows. (Asked only of a call
+	# that beats the slowest yet, which is seldom.)
+	if took > _slowest_took and not String(_open).begins_with("("):
 		_slowest_took = took
 		_slowest = [String(_open), _tag]
 

@@ -54,6 +54,14 @@ func _initialize() -> void:
 	ever = ledger.slowest_call(true)
 	check(not ever.is_empty() and ever[0] == "Stall" and float(ever[2]) >= 140.0,
 		"a real 150 ms call while it is open is still the slowest")
+	# The engine's own rows are not calls anybody can make faster: a long wait
+	# for the screen is not the slowest call.
+	ledger.open(&"(draw+wait)")
+	OS.delay_msec(200)
+	page(ledger, true)
+	ever = ledger.slowest_call(true)
+	check(not ever.is_empty() and ever[0] == "Stall",
+		"200 ms on the engine's own row is not the slowest call (%s)" % [ever])
 	ledger.forget_worst()
 	check(ledger.slowest_call(true).is_empty(), "a fresh sitting forgets the slowest call")
 	print("LEDGER LIVE: %s" % ("all pass" if fails == 0 else "%d FAILING" % fails))
