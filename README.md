@@ -2045,10 +2045,18 @@ Then either export from the editor (*Project → Export… → Export Project*),
 or pack everything from the terminal:
 
 ```sh
-./build.sh              # Linux + Windows + Web, zipped in builds/
-./build.sh Web          # just one platform
-GODOT=~/Apps/godot ./build.sh   # if godot isn't on your PATH
+./build.sh                  # Android, Windows, Linux: the files to send testers
+./build.sh Windows          # just one
+./build.sh Android Web      # or a few, by name: Android, Windows, Linux, Web
 ```
+
+It all runs on your machine and ends by listing what is ready in `builds/`:
+the `.apk`, and a zip each for Windows and Linux. It finds the editor as
+`$GODOT`, else `godot` on your PATH, else `~/Apps/godot/Godot_v4.7-stable_linux.x86_64`
+(from fish, point it elsewhere with `env GODOT=$HOME/... ./build.sh` — fish
+does not expand `~` after `=`). One platform failing does not stop the others,
+and it says which failed. It also says when a build would go out without its
+baked-shadow library (native/README.md) and how to build that library.
 
 Notes:
 - Desktop builds are **single-file** (the game data is embedded in the
@@ -2101,7 +2109,7 @@ on any phone, not store-ready). One-time setup on your machine:
 Then:
 
 ```sh
-./build.sh Android          # -> builds/hand-of-heavens-demo.apk
+./build.sh Android          # -> builds/hand-of-heavens-demo.apk (plain ./build.sh does it too)
 adb install builds/hand-of-heavens-demo.apk   # or copy to the phone and tap it
 ```
 
